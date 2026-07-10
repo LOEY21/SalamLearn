@@ -33,13 +33,10 @@ Because real, finished illustration assets exist for this exact screen, the impl
 
 Source: `Designs-20260710T141643Z-2-001/Asset-Designs/`. Files to be copied into `prjct/assets/images/adventure_map/` (new subfolder) before implementation:
 
-- `bg 2.png` / `bg 3.png` — two candidate full map backgrounds. **Decision needed during implementation kickoff:** pick one (or composite), since only one can be the actual scrollable background.
-- Map node-state badges (Locked/Available/Current/Completed) and per-destination icons — extracted from the icon-pack sheets as individual assets (the sheets themselves are reference layouts, not directly usable — each icon needs isolating into its own PNG/SVG, likely via the original design tool if source files exist, otherwise cropped from the sheet).
-- Activity-type icons (Flashcard/Quiz/Story/Tracing/Match/Sort/Listen/Read) for the module-open transition and Backpack tab.
-- Noor Energy lantern icons (full/empty states) for the TopBar energy pill.
+- `bg 2.png` — **selected** as the map background (over `bg 3.png`). It has no text baked in, which is more flexible: destination-name labels are rendered as separate Flutter `Text` overlays at each of the 5 node positions actually in use, instead of being locked into the image at all 7 illustrated spots.
+- Map node-state badges (Locked/Available/Current/Completed), per-module accent icons, Noor Energy lantern states, and a handful of decorations (~15–20 icons total) — **redrawn as Flutter vector icons** (`CustomPainter` or bundled SVGs) rather than sliced from the reference sheets. The sheets are composite reference layouts, not individually exportable files, and the actual footprint needed for this phase is small enough that redrawing is faster and easier to maintain than an asset-extraction pass.
+- Activity-type icons (Flashcard/Quiz/Story/Tracing/Match/Sort/Listen/Read) for the module-open transition and Backpack tab — same redraw-as-vector approach.
 - UI button styles (Primary/Secondary/Tertiary/Disabled) as a reference for updated `SoftCard`/button treatments on Learner screens.
-
-**Open question for implementation:** the icon-pack sheets are composite reference images, not individual exportable assets — someone (owner or a design pass) needs to slice these into individual files, or redraw the small set actually needed (roughly 15–20 icons: 5 module accents, 4 node states, 5 energy lantern states, a handful of decorations) as Flutter vector icons instead, which may be faster than asset-slicing given the small actual footprint needed for this phase.
 
 ## Data model additions
 
@@ -53,7 +50,7 @@ Two small, additive Hive-backed pieces of new state — both local-only for this
 ### `NoorEnergyState` (new, Hive-backed)
 - `current: int` (0–5), `maxEnergy: int` (5), `lastDepletedAt: DateTime?`, `restingUntil: DateTime?`
 - Depletes by 1 each time a learner *starts* an activity (not per-question — matches the asset pack's "Noor Energy is resting" framing, i.e. a session-level cost, not a per-mistake cost, to avoid punishing learning attempts too harshly for young kids).
-- Recovers 1 energy every N hours (recommend 2 hours, configurable) up to `maxEnergy`, or fully on next calendar day — **exact recovery cadence needs the project owner's confirmation before implementation**, this is a game-design/pedagogy call, not a technical one.
+- Recovers fully at the next local-calendar-day boundary (simplest rule to reason about and explain to a child — "come back tomorrow" — rather than a mid-session countdown timer). Treated as a placeholder default, easy to change to a partial-hourly-recovery model later without touching anything downstream of `NoorEnergyState`.
 - When `current == 0`: module-open taps show a "Noor Energy is resting" sheet (matching the asset pack's illustration) instead of opening the module; the sheet shows time-until-next-recovery.
 - Parent/Teacher accounts are unaffected — this only gates the Learner's own module access.
 
@@ -78,7 +75,7 @@ Two small, additive Hive-backed pieces of new state — both local-only for this
 
 ## Typography
 
-Register Fredoka (bold weights for headings/stats), Baloo 2 (SemiBold, secondary headings), Nunito (body text), and Cairo (Arabic script text) via `google_fonts` package (new dependency) or bundled font assets if offline-reliability is a concern (this app is offline-first — **recommend bundling font files as assets rather than `google_fonts`' network-fetch-on-first-use behavior**, to avoid a blank-font flash on a learner's first offline launch). Scoped via a new `learnerTextTheme` in `app_theme.dart`, applied only within the Learner Hub's route subtree — Parent/Teacher dashboards keep the current theme untouched.
+Register Fredoka (bold weights for headings/stats), Baloo 2 (SemiBold, secondary headings), Nunito (body text), and Cairo (Arabic script text) as **bundled font assets** (not the `google_fonts` package's network-fetch-on-first-use behavior) — this app is offline-first, and a blank-font flash on a learner's first offline launch would be a real regression. Scoped via a new `learnerTextTheme` in `app_theme.dart`, applied only within the Learner Hub's route subtree — Parent/Teacher dashboards keep the current theme untouched.
 
 ## Color palette additions
 
@@ -101,13 +98,6 @@ New tokens to add to `AppColors` (additive, nothing existing removed/renamed):
 - `hallmark` (anti-AI-slop) check and `impeccable` (UX polish) pass before calling any redesigned screen done.
 - `flutter-flutter-add-widget-test` for new/materially-changed widgets.
 - `verify` skill drive-through on a running emulator before considering the phase complete — this redesign has no meaningful test-only surface, it must be visually driven.
-
-## Open questions for the project owner (need answers before an implementation plan can be finalized)
-
-1. Which map background — `bg 2.png` or `bg 3.png` — is the one to build against?
-2. Icon-pack sheets are composite reference images, not sliced assets — slice them (who does this?) or redraw the ~15–20 icons actually needed as Flutter vector icons instead?
-3. Noor Energy recovery cadence (how many hours per +1 energy, or full daily reset)?
-4. Bundle the new fonts as offline assets, or accept the `google_fonts` package's first-launch network fetch?
 
 ## Testing
 
