@@ -13,9 +13,9 @@ class LearnerXpNotifier extends Notifier<int> {
   @override
   int build() => _settings.get('learnerXp') as int? ?? 0;
 
-  /// Will be called when a module's DFD-simulator flow reaches `finished`
-  /// (see `module_placeholder_screen.dart`'s `_runDfdSimulation`) — that
-  /// wiring is a later task, not yet implemented.
+  /// Called at the `awardingBadges` step of a module's DFD-simulator flow
+  /// (see `module_placeholder_screen.dart`'s `_runDfdSimulation`), one step
+  /// before the flow reaches `finished`.
   void addXp(int amount) {
     final next = state + amount;
     state = next;
