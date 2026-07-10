@@ -1,18 +1,22 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:salamlearn/data/local/hive_boxes.dart';
 import 'package:salamlearn/logic/learner/learner_xp_provider.dart';
 
+import '../../test_helpers/hive_test_setup.dart';
+
 void main() {
+  late Directory tempDir;
+
   setUp(() async {
-    Hive.init('test/.hive_tmp');
-    await Hive.openBox<dynamic>(HiveBoxes.settings);
+    tempDir = await setUpTestHive();
   });
 
   tearDown(() async {
-    await Hive.box<dynamic>(HiveBoxes.settings).clear();
-    await Hive.close();
+    await tearDownTestHive(tempDir);
   });
 
   test('starts at 0 when nothing stored yet', () {
