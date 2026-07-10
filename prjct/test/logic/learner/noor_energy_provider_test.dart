@@ -63,4 +63,20 @@ void main() {
     final state = container.read(noorEnergyProvider);
     expect(state.current, 5);
   });
+
+  test(
+    'rebuilding on the same day does not re-refill already-consumed energy',
+    () {
+      final container1 = ProviderContainer();
+      addTearDown(container1.dispose);
+      container1.read(noorEnergyProvider.notifier).consume();
+      container1.read(noorEnergyProvider.notifier).consume();
+      expect(container1.read(noorEnergyProvider).current, 3);
+
+      // Fresh container/notifier instance, same underlying Hive box, same day.
+      final container2 = ProviderContainer();
+      addTearDown(container2.dispose);
+      expect(container2.read(noorEnergyProvider).current, 3);
+    },
+  );
 }

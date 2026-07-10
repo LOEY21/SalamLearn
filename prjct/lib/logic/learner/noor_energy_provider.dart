@@ -55,5 +55,5 @@ class NoorEnergyNotifier extends Notifier<NoorEnergyState> {
 
 final noorEnergyProvider =
     NotifierProvider<NoorEnergyNotifier, NoorEnergyState>(
-  NoorEnergyNotifier.new,
-);
+      NoorEnergyNotifier.new,
+    );
