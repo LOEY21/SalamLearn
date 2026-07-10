@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(Get-ChildItem *)"
+      "PowerShell(Get-ChildItem *)",
+      "Bash(flutter analyze *)"
     ]
   },
   "hooks": {
@@ -19,5 +20,8 @@
       }
     ]
   },
-  "description": "Impeccable design detector: runs after Edit/Write/MultiEdit on UI files and surfaces findings as system reminders."
+  "description": "Impeccable design detector: runs after Edit/Write/MultiEdit on UI files and surfaces findings as system reminders.",
+  "enabledMcpjsonServers": [
+    "claude-flow"
+  ]
 }

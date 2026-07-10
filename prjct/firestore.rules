@@ -1,0 +1,255 @@
+rules_version = '2';
+
+// SalamLearn Firestore security rules (Phase 9 of the backend plan).
+//
+// ARCHITECTURE NOTE: dashboards still only ever read from Hive locally
+// ("only Hive is queried by the UI") — the one exception is the "sign in
+// on any device" flow (`SessionNotifier.signIn`'s remote fallback), which
+// looks up a parent/teacher's non-credential profile fields by
+// `firebaseUid` once Firebase Auth has already verified the password.
+// That's why `/parents` and `/teachers` get a scoped `allow read` below
+// (owner-only, via `firebaseUid == request.auth.uid`) while every other
+// collection stays read-denied by the blanket rule at the bottom.
+//
+// IMPORTANT: the query behind that lookup filters by `firebaseUid`, not
+// `email` — Firestore rejects a *query* outright (not just its results)
+// unless it can statically prove every possible match satisfies the
+// rule. A `where('email', ...)` filter can't prove that (nothing ties
+// `email` to `request.auth.uid` in the rule below), so it's always
+// denied, even for the caller's own document. Filtering by the exact
+// `firebaseUid` just authenticated as matches the rule directly, so
+// Firestore can verify it ahead of time. Don't "simplify" that lookup
+// back to querying by email.
+//
+// OWNERSHIP MODEL: a parent/teacher doc is "claimed" by whichever Firebase
+// Auth user registered it — `firebaseUid` is set at registration time
+// (see `ParentRepository.register`/`TeacherRepository.register`) and is
+// null if that registration happened offline. A null `firebaseUid` means
+// that account's data can still be *pushed* by SyncManager once it's
+// online, but it can never pass these owner-scoped rules until the owner
+// re-registers or otherwise establishes a Firebase session — there's no
+// retroactive linking possible (the plaintext password is gone the
+// instant it's hashed).
+//
+// KNOWN LIMITATION (flagging honestly rather than hiding it): Firebase
+// Auth tracks one signed-in user per app install, not one per local role.
+// If a single device has both a registered Parent and a registered
+// Teacher account, whichever one registered *last* is Firebase's
+// "currently signed in" user for every subsequent sync — the rules below
+// correctly reject that session writing to the *other* role's documents,
+// but can't distinguish "which local role is active in-app" the way Hive
+// data does. This only matters for shared multi-role devices; the common
+// single-parent-per-device case is unaffected.
+//
+// KNOWN SIMPLIFICATION: `progress` and `assigned_modules` records only
+// carry a `learnerId`/`classId`, not a reverse index of which teacher
+// owns that class. Security rules can only `get()` a specific known
+// document path, not run a query — so "is this teacher's class enrolling
+// this learner?" isn't cleanly expressible without denormalizing a
+// classId onto every progress record. Until that's done, these two
+// collections only require *some* authenticated SalamLearn account
+// (parent or teacher), not a proven ownership chain. Recommended real
+// fix: add `classId` to `ProgressRecord`/mirror it, then tighten this.
+//
+// ADMIN OVERSIGHT PANEL: `/admins/{uid}` is a bootstrap-only allowlist — no
+// client (not even a signed-in admin) can ever create/update/delete a
+// document in it; every write path is denied since no `allow create /
+// update / delete` is declared for that collection and the blanket rule at
+// the bottom only grants `read`. The project owner adds a doc there
+// (id == the admin's Firebase Auth uid, any placeholder field) by hand via
+// the Firebase console or Admin SDK — this is what stops a normal signed-up
+// parent/teacher from ever granting themselves admin by writing to their
+// own account doc (see the RBAC note: never let a client create its own
+// privileged role).
+//
+// ADMIN ACCOUNT MANAGEMENT: admins can additionally create/delete
+// parent/teacher/learner docs (the admin web panel's "add/remove user"
+// feature) and delete their dependent classes/enrollments/progress/
+// assigned_modules/consents (cascade cleanup on removal). Every admin
+// `create` is schema-validated by an `isValidX()` function below — the
+// same requirement as any other write path — so an admin session can't be
+// used to write arbitrary/oversized documents. Admins never get `update`
+// on parent/teacher/learner docs (only create + delete) — editing someone
+// else's profile fields isn't part of this feature and would need its own
+// validated transition rules; deleting and re-adding covers the "remove a
+// user" / "add a user" use case without that extra surface.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function ownsParentDoc(parentId) {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/parents/$(parentId)).data.firebaseUid == request.auth.uid;
+    }
+
+    function ownsTeacherDoc(teacherId) {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/teachers/$(teacherId)).data.firebaseUid == request.auth.uid;
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string &&
+        dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // Admin-created parent doc — matches the field set FirestoreMirror.pushParent
+    // writes, plus a real `firebaseUid` pointing at an account the admin
+    // panel just created via a secondary Firebase Auth app instance (never
+    // the admin's own uid — that would let the admin masquerade as this
+    // parent for the owner-scoped rules below).
+    function isValidNewParent(data) {
+      return data.keys().hasOnly(['fullName', 'email', 'mobileNumber', 'createdAt', 'firebaseUid']) &&
+        data.keys().hasAll(['fullName', 'email', 'createdAt', 'firebaseUid']) &&
+        data.fullName is string && data.fullName.size() > 0 && data.fullName.size() < 100 &&
+        isValidEmail(data.email) &&
+        (!('mobileNumber' in data) || data.mobileNumber == null || (data.mobileNumber is string && data.mobileNumber.size() < 30)) &&
+        isValidDateString(data.createdAt) &&
+        data.firebaseUid is string && data.firebaseUid != request.auth.uid;
+    }
+
+    function isValidNewTeacher(data) {
+      return data.keys().hasOnly(['fullName', 'school', 'email', 'firebaseUid', 'mobileNumber', 'createdAt']) &&
+        data.keys().hasAll(['fullName', 'email', 'createdAt', 'firebaseUid']) &&
+        data.fullName is string && data.fullName.size() > 0 && data.fullName.size() < 100 &&
+        (!('school' in data) || data.school == null || (data.school is string && data.school.size() < 100)) &&
+        isValidEmail(data.email) &&
+        (!('mobileNumber' in data) || data.mobileNumber == null || (data.mobileNumber is string && data.mobileNumber.size() < 30)) &&
+        isValidDateString(data.createdAt) &&
+        data.firebaseUid is string && data.firebaseUid != request.auth.uid;
+    }
+
+    // Admin-created learner doc — no `firebaseUid`/credential fields exist
+    // for learners at all (see FirestoreMirror.pushLearner); `parentId`
+    // must point at a parent doc that already exists so the learner isn't
+    // orphaned from creation.
+    function isValidNewLearner(data) {
+      return data.keys().hasOnly(['parentId', 'name', 'age', 'avatar', 'gradeLevel', 'username', 'createdAt']) &&
+        data.keys().hasAll(['parentId', 'name', 'age', 'avatar', 'gradeLevel', 'createdAt']) &&
+        data.parentId is string &&
+        exists(/databases/$(database)/documents/parents/$(data.parentId)) &&
+        data.name is string && data.name.size() > 0 && data.name.size() < 60 &&
+        data.age is int && data.age >= 3 && data.age <= 18 &&
+        data.avatar is string && data.avatar.size() < 10 &&
+        data.gradeLevel is string && data.gradeLevel.size() < 30 &&
+        (!('username' in data) || data.username == null || (data.username is string && data.username.size() < 40)) &&
+        isValidDateString(data.createdAt);
+    }
+
+    // Default deny for every collection not given an explicit `allow read`
+    // below — see the architecture note.
+    match /{document=**} {
+      allow read: if false;
+    }
+
+    // Bootstrap-only allowlist — see "ADMIN OVERSIGHT PANEL" note above.
+    // No `allow create/update/delete` anywhere means every client write is
+    // denied by default, including from an already-admin account.
+    match /admins/{uid} {
+      allow read: if false;
+    }
+
+    match /parents/{parentId} {
+      // FR-7.2 "sign in on any device" — `signIn`'s remote fallback queries
+      // this collection by `firebaseUid` (the exact uid Firebase Auth just
+      // handed back after verifying the password) so the query filter
+      // itself matches this rule's condition — see the architecture note's
+      // "IMPORTANT" paragraph for why querying by email instead doesn't work.
+      allow read: if isAdmin() || (isSignedIn() && resource.data.firebaseUid == request.auth.uid);
+      allow create: if (isSignedIn() && request.resource.data.firebaseUid == request.auth.uid) ||
+        (isAdmin() && isValidNewParent(request.resource.data));
+      allow update: if resource.data.firebaseUid == request.auth.uid;
+      allow delete: if isAdmin() || resource.data.firebaseUid == request.auth.uid;
+    }
+
+    match /teachers/{teacherId} {
+      // See `/parents/{parentId}` doc above — same reasoning.
+      allow read: if isAdmin() || (isSignedIn() && resource.data.firebaseUid == request.auth.uid);
+      allow create: if (isSignedIn() && request.resource.data.firebaseUid == request.auth.uid) ||
+        (isAdmin() && isValidNewTeacher(request.resource.data));
+      allow update: if resource.data.firebaseUid == request.auth.uid;
+      allow delete: if isAdmin() || resource.data.firebaseUid == request.auth.uid;
+    }
+
+    match /learners/{learnerId} {
+      // FR-7.2 "sign in on any device" also pulls a parent's existing
+      // children down onto the new device — `LearnerRepository` (via
+      // `SessionNotifier.createPin`'s remote-linked branch) queries this
+      // collection by `parentId`, which is exactly the field `ownsParentDoc`
+      // checks, so Firestore can prove the query is safe the same way the
+      // `/parents` lookup above works.
+      allow read: if isAdmin() || ownsParentDoc(resource.data.parentId);
+      allow create: if ownsParentDoc(request.resource.data.parentId) ||
+        (isAdmin() && isValidNewLearner(request.resource.data));
+      allow update: if ownsParentDoc(request.resource.data.parentId);
+      allow delete: if isAdmin() || ownsParentDoc(resource.data.parentId);
+    }
+
+    // Read is open to any signed-in account (not owner-scoped) — FR-6.1's
+    // invitation-code join needs a *parent's* device (which has no
+    // ownership relationship to the class at all) to look a class up by
+    // its code alone. The code itself is the authorization token here, the
+    // same reasoning `firestore_mirror.dart`'s `fetchClassByInvitationCode`
+    // doc explains; this is a deliberate widening, not an oversight.
+    match /classes/{classId} {
+      allow read: if isSignedIn();
+      allow create, update: if ownsTeacherDoc(request.resource.data.teacherId);
+      allow delete: if isAdmin() || ownsTeacherDoc(resource.data.teacherId);
+    }
+
+    // Enrollment linking a class to a learner is writable by either side
+    // of the relationship — the class's teacher or the learner's parent.
+    match /enrollments/{enrollmentId} {
+      allow read: if isAdmin();
+      allow create, update: if
+        ownsTeacherDoc(get(/databases/$(database)/documents/classes/$(request.resource.data.classId)).data.teacherId) ||
+        ownsParentDoc(get(/databases/$(database)/documents/learners/$(request.resource.data.learnerId)).data.parentId);
+      allow delete: if isAdmin() ||
+        ownsTeacherDoc(get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId) ||
+        ownsParentDoc(get(/databases/$(database)/documents/learners/$(resource.data.learnerId)).data.parentId);
+    }
+
+    // See "KNOWN SIMPLIFICATION" above — any signed-in SalamLearn account
+    // can write, not just a verified owner of this specific learner/class.
+    match /progress/{progressId} {
+      allow read: if isAdmin();
+      allow delete: if isAdmin();
+      allow create, update: if isSignedIn();
+    }
+
+    match /assigned_modules/{assignmentId} {
+      allow read: if isAdmin();
+      allow delete: if isAdmin();
+      allow create, update: if isSignedIn();
+    }
+
+    // Teacher-authored freeform lessons (title/instructions/body). Same
+    // simplification as progress/assigned_modules above — no reverse index
+    // from classId to teacherId to check true ownership against yet.
+    match /custom_lessons/{lessonId} {
+      allow read: if isAdmin();
+      allow delete: if isAdmin();
+      allow create, update: if isSignedIn();
+    }
+
+    // Consent is currently keyed by a single 'device' string (see
+    // ConsentRepository) rather than a parent id, so there's no ownership
+    // chain to check yet — same simplification as progress/assignments.
+    match /consents/{consentId} {
+      allow read: if isAdmin();
+      allow write: if isSignedIn();
+    }
+  }
+}

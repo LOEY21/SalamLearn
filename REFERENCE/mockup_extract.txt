@@ -1,0 +1,265 @@
+--- page 1 ---
+CAPSTONE PROJECT — SUPPLEMENTARY DESIGN DOCUMENT
+SalamLearn
+High-Fidelity Mockup Documentation
+An Offline-First, Interactive Mobile Educational Application for the
+Philippine Refined Elementary Madrasah Curriculum (ALIVE) —
+Grade 1
+Prepared by: ____________________________
+Program: ____________________________
+Adviser: ____________________________
+Date: July 2026
+--- page 2 ---
+
+--- page 3 ---
+Table of Contents
+1. Introduction
+2. User Roles (Actors)
+3. Visual Design Rationale
+4. High-Fidelity Mockups
+4.1  Onboarding & System Initialization
+4.2  Authentication Gate (PIN Lock)
+4.3  Student Hub
+4.4  Parent Analytics Dashboard (Phone & Monitor)
+4.5  Teacher Class Dashboard (Phone & Monitor)
+4.6  Classroom Cast Screen (16:9 Presentation)
+4.7  Parental Consent (RA 10173 Disclosure)
+4.8  Settings & Data Lifecycle
+5. Notes & Scope Exclusions
+--- page 4 ---
+1. Introduction
+SalamLearn is an offline-first, interactive mobile educational application designed to augment the traditional
+pedagogical methods of the Philippine Madrasah system. The mockups documented in this section align with
+the Department of Education's (DepEd) Refined Elementary Madrasah Curriculum (ALIVE) for Grade 1
+learners. To address localized constraints such as intermittent internet connectivity, restriction of classroom
+devices to the educator only, and shared device usage at home, the underlying architecture relies on a local
+caching framework (Hive) alongside a unified Flutter codebase.
+This document presents high-fidelity mockups — rendered in the intended color palette and iconography —
+for the primary screens of the system, and maps each screen to the functional requirement (FR) modules
+defined in the system specification. Where a screen is used on more than one form factor, the phone and
+monitor/tablet layouts are shown side by side in a single figure to make the responsive relationship explicit.
+2. User Roles (Actors)
+Actor Access Description
+Learner (Child) Restricted Interacts only with the Student Hub and core educational
+modules. Cannot access settings, exit the app, or view
+external links. Operates the device 1-to-1, exclusively at home.
+Parent / GuardianAdmin
+(PIN)
+Requires a 4-digit PIN. Full CRUD rights over the child's
+profile, data synchronization, and privacy consents.
+Asatidz (Teacher) Admin
+(PIN)
+Requires a 4-digit PIN. Creates class sections, enrolls
+students, views progress dashboards, assigns take-home
+modules, and operates presentation-level casting overrides
+during live classroom sessions.
+--- page 5 ---
+3. Visual Design Rationale
+The mockups use the “Madrasah Classic” palette — a deep teal and warm gold on a cream base — chosen
+to read as a school / madrasah product rather than a generic children's app, while remaining warm and legible
+for learners aged 5–11 (NFR — Usability, ISO/IEC 25010 child HCI guidelines).
+Cream background
+#FAF6EC
+Deep teal (primary)
+#0F6E56
+Warm gold (secondary)
+#EF9F27
+Coral (alerts / badges)
+#D85A30
+Ink text
+#2C2C2A
+Teal is used for primary navigation and actions across all three actor experiences; gold marks rewards,
+highlights, and the learner's identity elements (avatar, streak); coral is reserved for alerts and achievement
+badges so it retains visual weight.
+--- page 6 ---
+4.1  Onboarding & System Initialization
+Module 1 — Onboarding & System Initialization  FR-1.1 FR-1.2 FR-1.3
+
+SalamLearn
+Assets verified
+512MB free · 500MB required
+Instructional language
+English Filipino
+Continue
+Figure 4.1 — Onboarding & system initialization screen
+On launch, the system silently verifies the integrity of cached offline assets (.mp3, .png, .json) and confirms
+available storage meets the 500MB floor, surfacing a high-priority alert if it does not (FR-1.1, FR-1.2). The
+learner's instructional language (English or Filipino) for non-Arabic UI text is set here (FR-1.3).
+--- page 7 ---
+4.2  Authentication Gate (PIN Lock)
+Module 2 — Authentication & Profile Management  FR-2.1 FR-2.3
+Parent Teacher
+
+Enter 4-digit PIN
+1 2 3
+4 5 6
+7 8 9
+0 
+Figure 4.2 — Shared Parent / Teacher PIN authentication gate
+A single PIN-entry pattern gates both the Parent and Teacher administrative surfaces, keeping the Learner
+locked out of settings and exit controls. This corresponds to the encrypted 4-digit PIN created during profile
+setup (FR-2.3) and sits on top of the dual-state (online Firebase / offline hashed) authentication model (FR-
+2.1).
+--- page 8 ---
+4.3  Student Hub
+Module 3 — Student Hub & Rewards  FR-3.1 FR-3.2 FR-3.3
+A Hi, Ali!
+5 day streak
+
+Lesson 1
+
+Lesson 2
+
+Lesson 3
+
+Lesson 4
+Digital backpack
+Figure 4.3 — Student Hub (Learner-facing dashboard)
+A text-minimal, high-contrast dashboard with large touch targets sized for ages 5–11 (FR-3.1). Lesson tiles
+are shown as generic placeholders in this mockup set — see Section 5 for scope notes. The streak tracker
+(FR-3.2) encourages daily routine engagement, and the Digital Backpack (FR-3.3) surfaces badges earned
+from completed milestones. This screen is Learner-only and has no monitor/cast equivalent — it is never cast
+to an external display (see Figure 4.6).
+--- page 9 ---
+4.4  Parent Analytics Dashboard (Phone & Monitor)
+Module 5 — Parent Analytics Dashboard  FR-5.1 FR-5.2 FR-7.2
+Ali's progress 
+Accuracy
+82%
+Time
+24m
+Practice accuracy weak points this
+week.
+  
+PHONE
+
+
+
+
+
+Ali's progress Sync now
+Accuracy
+82%
+Time on task
+24m
+Errors
+3
+Streak
+5 days
+Practice recommended based on recent
+errors.
+Review last week's weak points together.
+MONITOR / TABLET
+Figure 4.4 — Parent analytics dashboard: phone layout (left) and wide/monitor layout (right), same data
+Raw local gameplay telemetry (accuracy, errors, time-on-task) is rendered into visual charts (FR-5.1), paired
+with automated, curriculum-aligned prompts suggesting physical practice or mediation based on recorded
+weak points (FR-5.2). The sync icon exposes the manual push-to-cloud trigger used once Wi-Fi is detected
+(FR-7.2). On the wider layout, metric cards expand from a 2-up to a 4-up row and the chart/suggestion panel
+sit side by side instead of stacked — the underlying content and requirements are identical between the two.
+--- page 10 ---
+4.5  Teacher Class Dashboard (Phone & Monitor)
+Module 6 — Teacher & Offline Classroom Mode  FR-6.1 FR-6.2 FR-6.3 FR-6.5 FR-6.6
+FR-6.7
+Grade 1 · A 
+Ali
+Yusra
+Hamza
+Assign homework
+Hot seat
+Cast to class
+PHONE
+
+
+
+
+
+Grade 1 · Section A Assign Cast
+Student Completion Mastery
+Ali High
+Yusra Medium
+Hamza Needs help
+Hot seat
+Choral
+Override
+MONITOR / TABLET
+Figure 4.5 — Teacher class dashboard: phone layout (left) and wide/monitor layout (right), same data
+Teachers manage class sections and enrollment via invitation codes (FR-6.1), review aggregated completion
+and mastery telemetry per student (FR-6.2), and assign take-home modules that surface in the Learner's
+home-mode Student Hub (FR-6.3). On the wider layout the per-student rows become a full data table with
+additional columns, and the Hot Seat (FR-6.6), Choral controller (FR-6.7), and progression override (FR-6.5)
+actions move into a persistent side panel instead of a stacked button list.
+--- page 11 ---
+4.6  Classroom Cast Screen (16:9 Presentation)
+Module 6 — Teacher & Offline Classroom Mode  FR-6.4 FR-6.6 FR-6.7
+Casting from ustadzah's deviceHot seat: Ali Choral repeat
+Lesson content area (module design pending)
+Question 3 of 5
+Figure 4.6 — Classroom cast screen, forced 16:9 landscape (monitor/TV only, no phone equivalent)
+When the Teacher casts to an external projector or TV, the UI automatically scales and locks to 16:9
+landscape so a single device can present to the whole class under a zero-student-device classroom model
+(FR-6.4). This screen exists only in the cast/monitor form factor — the Teacher's own phone continues to
+show the control screen from Figure 4.5 while this view is what the class sees. Hot Seat (FR-6.6) lets one
+volunteer solve directly on the host device while classmates observe; the Choral controller (FR-6.7) triggers
+whole-class repetition audio (Talqeen) without progression locks.
+--- page 12 ---
+4.7  Parental Consent (RA 10173 Disclosure)
+Module 2 — Authentication & Profile Management  FR-2.2
+
+Privacy & data consent
+To personalize your child’s learning
+and share progress with your
+Teacher, SalamLearn stores
+gameplay activity (accuracy, time-
+on-task, errors) locally on this
+device under RA 10173. This data
+is never sold and stays on-device
+unless synced to your Teacher
+when Wi-Fi is available.
+ I consent to local telemetry
+collection for my child’s learning
+progress.
+A timestamp is logged the moment you
+agree.
+Decline I agree
+Figure 4.7 — Parental consent screen, shown during profile setup
+Before a Learner profile can be created, the Parent must review a plain-language disclosure of what telemetry
+is collected and why, then explicitly opt in. Accepting logs a timestamp confirming consent under the
+Philippine Data Privacy Act of 2012 (RA 10173) (FR-2.2). The “I agree” action stays disabled until the
+consent checkbox is ticked, so consent cannot be skipped or defaulted-into.
+--- page 13 ---
+4.8  Settings & Data Lifecycle
+Module 7 — Settings & Data Lifecycle  FR-7.1 FR-7.2 FR-7.3
+Settings
+Audio (FR-7.1)
+Background audio
+UI sound effects
+Pronunciation voice
+Sync (FR-7.2)
+Last synced: 2 hours
+ago
+ Sync
+now
+Data (FR-7.3)
+Permanently erases all locally stored
+progress and profile data on this device
+(“Right to be Forgotten”).
+Erase all local data
+Figure 4.8 — Settings & data lifecycle screen
+Independent volume sliders let the Parent or Teacher tune background audio, UI sound effects, and
+pronunciation voices separately (FR-7.1). The sync row duplicates the manual push-to-cloud trigger from the
+Parent dashboard (FR-7.2) so it is reachable even without opening the analytics view. The data section
+exposes the local erasure protocol (Hive.deleteFromDisk()) required to satisfy the “Right to be
+Forgotten” constraint (FR-7.3); this destructive action is visually separated in a warning-tinted card and
+should require a confirmation step before executing.
+--- page 14 ---
+5. Notes & Scope Exclusions
+Module 4 — Core Educational Modules (FR-4.1–FR-4.5) is intentionally excluded from this mockup set.
+Per the project team's specification notes, the specific game mechanics for this module (Tactile Recognition /
+tracing engine, Pronunciation Audio Mapper, Qur'an/Hadith media playback controller, Sirah/Aqidah
+storyboard, and the Fiqh/Taharah collision-and-array engine) are not yet finalized. Wherever a screen would
+otherwise surface Module 4 content — the Student Hub lesson tiles (Figure 4.3) and the classroom cast
+content area (Figure 4.6) — a generic placeholder is shown instead so the surrounding layout can still be
+reviewed independently of the final game designs.
+With the addition of Figures 4.7 and 4.8, every functional requirement module in the specification except
+Module 4 now has a corresponding mockup: Module 1 (4.1), Module 2 (4.2, 4.7), Module 3 (4.3), Module 5
+(4.4), Module 6 (4.5, 4.6), and Module 7 (4.8).
