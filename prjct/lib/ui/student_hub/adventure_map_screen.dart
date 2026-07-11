@@ -241,12 +241,9 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen> {
 /// `map_background.png`. Falls back to the still image while the video
 /// decodes (or if it fails to load) so there's never a blank/black frame.
 ///
-/// `BoxFit.contain` (not `cover`) — the source video's own framing is
-/// tighter than the map's tall scroll canvas, so `cover` cropped away
-/// edges of the map on every screen. `contain` shows the whole shot
-/// uncropped, and the extra `0.92` scale pulls back a touch further so
-/// the map's edges never touch the viewport edge. Cream fills the
-/// letterboxed margin either way, matching the Scaffold background.
+/// `BoxFit.cover` — same framing the static image always used. (A prior
+/// `contain` + scale-down pass was reverted: it left dead cream space
+/// below the map instead of filling the screen.)
 class _MapVideoBackground extends StatefulWidget {
   const _MapVideoBackground();
 
@@ -294,10 +291,9 @@ class _MapVideoBackgroundState extends State<_MapVideoBackground> {
     return ColoredBox(
       color: AppColors.cream,
       child: _ready
-          ? Transform.scale(
-              scale: 0.92,
+          ? ClipRect(
               child: FittedBox(
-                fit: BoxFit.contain,
+                fit: BoxFit.cover,
                 child: SizedBox(
                   width: _controller.value.size.width,
                   height: _controller.value.size.height,
@@ -307,7 +303,7 @@ class _MapVideoBackgroundState extends State<_MapVideoBackground> {
             )
           : Image.asset(
               'assets/images/adventure_map/map_background.png',
-              fit: BoxFit.contain,
+              fit: BoxFit.cover,
             ),
     );
   }
