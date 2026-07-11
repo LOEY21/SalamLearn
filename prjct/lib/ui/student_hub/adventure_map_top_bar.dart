@@ -159,7 +159,8 @@ class _Lantern extends StatefulWidget {
   State<_Lantern> createState() => _LanternState();
 }
 
-class _LanternState extends State<_Lantern> with SingleTickerProviderStateMixin {
+class _LanternState extends State<_Lantern>
+    with SingleTickerProviderStateMixin {
   late final _flicker = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 2200),
@@ -169,6 +170,25 @@ class _LanternState extends State<_Lantern> with SingleTickerProviderStateMixin 
   void initState() {
     super.initState();
     if (widget.lit) _flicker.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _Lantern oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // `AdventureMapTopBar` rebuilds this list with no keys, so Flutter
+    // reuses each `_LanternState` by position as `noorEnergyProvider`
+    // changes (e.g. right after `_onNodeTap` consumes one, or after the
+    // daily reset restores them) — without this, a lantern that goes
+    // lit->unlit keeps flickering forever with no visible effect, and one
+    // that goes unlit->lit never starts.
+    if (oldWidget.lit != widget.lit) {
+      if (widget.lit) {
+        _flicker.repeat(reverse: true);
+      } else {
+        _flicker.stop();
+        _flicker.value = 0;
+      }
+    }
   }
 
   @override

@@ -67,8 +67,7 @@ class AdventureMapScreen extends ConsumerStatefulWidget {
   const AdventureMapScreen({super.key});
 
   @override
-  ConsumerState<AdventureMapScreen> createState() =>
-      _AdventureMapScreenState();
+  ConsumerState<AdventureMapScreen> createState() => _AdventureMapScreenState();
 }
 
 class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen> {
@@ -322,7 +321,8 @@ class _Sparkle extends StatefulWidget {
   State<_Sparkle> createState() => _SparkleState();
 }
 
-class _SparkleState extends State<_Sparkle> with SingleTickerProviderStateMixin {
+class _SparkleState extends State<_Sparkle>
+    with SingleTickerProviderStateMixin {
   late final _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 4800),
@@ -425,6 +425,12 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     duration: const Duration(milliseconds: 320),
   );
   Timer? _entranceTimer;
+  late final _animations = Listenable.merge([
+    _entrance,
+    _idleTilt,
+    _pulse,
+    _wobble,
+  ]);
 
   @override
   void initState() {
@@ -432,12 +438,41 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     _entranceTimer = Timer(widget.entranceDelay, () {
       if (mounted) _entrance.forward();
     });
-    if (widget.state == _NodeState.current ||
-        widget.state == _NodeState.available) {
-      _idleTilt.repeat(reverse: true);
+    _syncContinuousAnimations(previousState: null);
+  }
+
+  @override
+  void didUpdateWidget(covariant _MapNode oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // This screen stays mounted underneath `/module/:id` (a sibling
+    // top-level route, not an indexed-stack branch) — the learner going in
+    // and back out advances `recentModuleProvider`, so the same `_MapNode`
+    // instance (matched by `ValueKey(module.id)`) can flip between
+    // available/current/completed without ever being recreated. Without
+    // this, a node that just became current would never start pulsing, and
+    // one that just finished would keep tilting forever.
+    if (oldWidget.state != widget.state) {
+      _syncContinuousAnimations(previousState: oldWidget.state);
     }
-    if (widget.state == _NodeState.current) {
+  }
+
+  void _syncContinuousAnimations({required _NodeState? previousState}) {
+    final wantsTilt =
+        widget.state == _NodeState.current ||
+        widget.state == _NodeState.available;
+    if (wantsTilt && !_idleTilt.isAnimating) {
+      _idleTilt.repeat(reverse: true);
+    } else if (!wantsTilt && _idleTilt.isAnimating) {
+      _idleTilt.stop();
+      _idleTilt.value = 0;
+    }
+
+    final wantsPulse = widget.state == _NodeState.current;
+    if (wantsPulse && !_pulse.isAnimating) {
       _pulse.repeat(reverse: true);
+    } else if (!wantsPulse && _pulse.isAnimating) {
+      _pulse.stop();
+      _pulse.value = 0;
     }
   }
 
@@ -474,7 +509,10 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     final (bg, fg) = _colorsFor(widget.state);
 
     Widget icon = switch (widget.state) {
-      _NodeState.locked => const Icon(Icons.lock_rounded, color: Color(0xFF7A8B85)),
+      _NodeState.locked => const Icon(
+        Icons.lock_rounded,
+        color: Color(0xFF7A8B85),
+      ),
       _NodeState.completed => Icon(Icons.check_rounded, color: fg, size: 28),
       _ => Icon(widget.module.icon, color: fg),
     };
@@ -485,7 +523,7 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
       child: Column(
         children: [
           AnimatedBuilder(
-            animation: Listenable.merge([_entrance, _idleTilt, _pulse, _wobble]),
+            animation: _animations,
             builder: (context, child) {
               final entranceT = _overshoot.transform(_entrance.value);
               final tiltT = Curves.easeInOut.transform(_idleTilt.value);
@@ -494,12 +532,15 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
 
               final scale = 0.5 + 0.5 * entranceT;
               final opacity = entranceT.clamp(0.0, 1.0);
-              final tiltAngle = (widget.state == _NodeState.current ||
+              final tiltAngle =
+                  (widget.state == _NodeState.current ||
                       widget.state == _NodeState.available)
-                  ? (tiltT * 2 - 1) * 0.07 // ±4deg in radians
+                  ? (tiltT * 2 - 1) *
+                        0.07 // ±4deg in radians
                   : 0.0;
               final wobbleDx = widget.state == _NodeState.locked
-                  ? (wobbleT < 0.5 ? -4.0 : 4.0) * (1 - (wobbleT - 0.5).abs() * 2)
+                  ? (wobbleT < 0.5 ? -4.0 : 4.0) *
+                        (1 - (wobbleT - 0.5).abs() * 2)
                   : 0.0;
               final glowSpread = isCurrent ? 6 + 6 * pulseT : 0.0;
 
@@ -528,7 +569,10 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: bg,
-                                border: Border.all(color: Colors.white, width: 4),
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 4,
+                                ),
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black.withValues(alpha: 0.25),
@@ -537,7 +581,9 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
                                   ),
                                   if (isCurrent)
                                     BoxShadow(
-                                      color: AppColors.gold.withValues(alpha: 0.35),
+                                      color: AppColors.gold.withValues(
+                                        alpha: 0.35,
+                                      ),
                                       blurRadius: 0,
                                       spreadRadius: glowSpread,
                                     ),
@@ -610,6 +656,7 @@ class _MascotAvatarState extends State<_MascotAvatar>
     duration: const Duration(milliseconds: 300),
   );
   Timer? _bubbleTimer;
+  late final _mascotAnimations = Listenable.merge([_enter, _bob]);
 
   @override
   void initState() {
@@ -668,7 +715,7 @@ class _MascotAvatarState extends State<_MascotAvatar>
               },
             ),
             AnimatedBuilder(
-              animation: Listenable.merge([_enter, _bob]),
+              animation: _mascotAnimations,
               builder: (context, child) {
                 double dy;
                 double scale;
@@ -706,10 +753,7 @@ class _MascotAvatarState extends State<_MascotAvatar>
                     opacity: opacity,
                     child: Transform.translate(
                       offset: Offset(0, dy),
-                      child: Transform.scale(
-                        scale: scale,
-                        child: child,
-                      ),
+                      child: Transform.scale(scale: scale, child: child),
                     ),
                   ),
                 );
@@ -751,7 +795,10 @@ class _MascotAvatarState extends State<_MascotAvatar>
                 );
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   border: Border.all(color: AppColors.gold, width: 2),
