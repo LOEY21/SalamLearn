@@ -561,6 +561,7 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
                           color: Colors.transparent,
                           shape: const CircleBorder(),
                           child: InkWell(
+                            key: ValueKey('node-badge-${widget.module.id}'),
                             customBorder: const CircleBorder(),
                             onTap: _handleTap,
                             child: Container(

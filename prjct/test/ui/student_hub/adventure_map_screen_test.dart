@@ -44,6 +44,11 @@ class _FakeProgressionOverrideNotifier extends ProgressionOverrideNotifier {
   bool build() => true;
 }
 
+class _FakeProgressionOverrideOffNotifier extends ProgressionOverrideNotifier {
+  @override
+  bool build() => false;
+}
+
 void main() {
   testWidgets('shows one node per core module', (tester) async {
     final router = GoRouter(
@@ -72,4 +77,60 @@ void main() {
     expect(find.text('Sounds'), findsOneWidget);
     expect(find.text('Stories'), findsOneWidget);
   });
+
+  testWidgets(
+    'tapping an unassigned module node shows the locked dialog, not the module',
+    (tester) async {
+      final router = GoRouter(
+        initialLocation: '/',
+        routes: [
+          GoRoute(path: '/', builder: (_, _) => const AdventureMapScreen()),
+          GoRoute(
+            path: '/module/:id',
+            builder: (_, state) =>
+                Text('module ${state.pathParameters['id']}'),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            learnerXpProvider.overrideWith(_FakeLearnerXpNotifier.new),
+            noorEnergyProvider.overrideWith(_FakeNoorEnergyNotifier.new),
+            // Override off (no debug bypass) + a learner-less/teacher-less
+            // session (both providers resolve to `null`/empty without
+            // touching Hive) — every module reads as genuinely unassigned.
+            progressionOverrideProvider.overrideWith(
+              _FakeProgressionOverrideOffNotifier.new,
+            ),
+            sessionProvider.overrideWith(_FakeSessionNotifier.new),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+
+      // Tap via the node badge's own Key, not the "Tracing" text — the
+      // label pill sits below the badge as a Column sibling, outside the
+      // actual InkWell hit-test region, so tapping the text itself would
+      // silently hit nothing.
+      //
+      // This screen has genuinely infinite-repeating animations (ambient
+      // background breathing, Noor Energy lantern flicker) — pumpAndSettle
+      // never returns here. Advance explicitly instead, same pattern this
+      // repo already uses for other continuously-animated screens.
+      await tester.tap(find.byKey(const ValueKey('node-badge-tracing')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Tracing is Locked'), findsOneWidget);
+      expect(find.textContaining('module tracing'), findsNothing);
+
+      await tester.tap(find.text('OK'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Tracing is Locked'), findsNothing);
+    },
+  );
 }
