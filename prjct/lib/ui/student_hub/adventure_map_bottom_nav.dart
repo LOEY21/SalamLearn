@@ -33,13 +33,23 @@ class AdventureMapBottomNav extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          // Parchment, not stark white — the flat white pill read as a
+          // clinical system chrome floating over the painterly map. A warm
+          // cream base + a hand-drawn-style border + a brown-tinted shadow
+          // make the bar feel like a carved signpost belonging to the map's
+          // world, matching the "You are here" / node-label plaques.
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [AppColors.surface, AppColors.cream],
+          ),
           borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: AppColors.creamBorder, width: 2),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x47000000),
-              blurRadius: 24,
-              offset: Offset(0, 10),
+              color: Color(0x3B4A3A1E),
+              blurRadius: 22,
+              offset: Offset(0, 8),
             ),
           ],
         ),
