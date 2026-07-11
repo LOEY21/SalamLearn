@@ -52,7 +52,7 @@ const _allBadges = [
     id: 'perfect_score',
     icon: '⭐',
     label: 'Perfect Score',
-    color: Color(0xFF9C6FE0),
+    color: AppColors.adventurePurple,
   ),
   _BadgeDef(
     id: 'bookworm',
@@ -155,7 +155,7 @@ class ProfileScreen extends ConsumerWidget {
                       icon: Icons.notifications_rounded,
                       label: 'Notifications',
                       sublabel: 'Manage your alerts',
-                      iconBg: const Color(0xFF5BC4A0),
+                      iconBg: AppColors.adventureBlue,
                       onTap: () => NotificationsSheet.show(context),
                     ),
                   ),
@@ -665,8 +665,8 @@ class _StatsBento extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.creamBorder),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.creamBorder, width: 1.5),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0A2C2C2A),
@@ -859,7 +859,7 @@ class _BadgeChipState extends State<_BadgeChip> {
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
           decoration: BoxDecoration(
             color: unlocked ? widget.badge.color.withValues(alpha: 0.12) : const Color(0xFFF0EDE8),
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: unlocked
                   ? widget.badge.color.withValues(alpha: 0.35)
@@ -1026,15 +1026,15 @@ class _ActionRowState extends State<_ActionRow> {
         curve: Curves.easeOut,
         child: Material(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
           child: InkWell(
             onTap: widget.onTap,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(20),
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: AppColors.creamBorder),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.creamBorder, width: 1.5),
               ),
               child: Row(
                 children: [

@@ -142,7 +142,7 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(28),
         boxShadow: const [
           BoxShadow(
             color: Color(0x1F0A4F3E),
@@ -213,7 +213,7 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.coral,
+                      color: AppColors.adventurePurple,
                       borderRadius: BorderRadius.circular(99),
                       border: Border.all(color: Colors.white24),
                     ),
@@ -271,9 +271,12 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
     return Container(
       height: 50,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.creamBorder, width: 1.5),
+        boxShadow: const [
+          BoxShadow(color: Color(0x1A000000), blurRadius: 6, offset: Offset(0, 2)),
+        ],
       ),
       padding: const EdgeInsets.all(4),
       child: Row(
@@ -285,7 +288,7 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
                 duration: const Duration(milliseconds: 200),
                 decoration: BoxDecoration(
                   color: _selectedTab == 0 ? AppColors.teal : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 alignment: Alignment.center,
                 child: Row(
@@ -316,8 +319,8 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 decoration: BoxDecoration(
-                  color: _selectedTab == 1 ? AppColors.teal : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
+                  color: _selectedTab == 1 ? AppColors.adventureBlue : Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 alignment: Alignment.center,
                 child: Row(
@@ -388,7 +391,7 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: earned
               ? badge.color.withValues(alpha: 0.35)
@@ -405,9 +408,9 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(24),
         child: InkWell(
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(24),
           onTap: () => _showBadgeDetails(context, badge, earned),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
@@ -496,10 +499,10 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: unlocked
-              ? AppColors.mintBorder
+              ? AppColors.adventureGreen.withValues(alpha: 0.35)
               : AppColors.creamBorder,
           width: 1.5,
         ),
@@ -513,9 +516,9 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(24),
         child: InkWell(
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(24),
           onTap: () => _showGearDetails(context, item),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
@@ -525,12 +528,12 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
                   child: Container(
                     decoration: BoxDecoration(
                       color: unlocked
-                          ? AppColors.mint.withValues(alpha: 0.5)
+                          ? AppColors.adventureGreen.withValues(alpha: 0.12)
                           : AppColors.neutralTint,
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: unlocked
-                            ? AppColors.mintBorder
+                            ? AppColors.adventureGreen
                             : const Color(0xFFCFC7B4),
                         width: 2,
                       ),
@@ -565,7 +568,7 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
-                    color: unlocked ? AppColors.teal : AppColors.textMuted,
+                    color: unlocked ? AppColors.adventureGreen : AppColors.textMuted,
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -576,7 +579,7 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
                      minHeight: 5,
                      backgroundColor: AppColors.neutralTint,
                      valueColor: AlwaysStoppedAnimation(
-                       unlocked ? AppColors.teal : AppColors.gold,
+                       unlocked ? AppColors.adventureGreen : AppColors.gold,
                      ),
                   ),
                 ),
@@ -776,12 +779,12 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
                       height: 100,
                       decoration: BoxDecoration(
                         color: unlocked
-                            ? AppColors.mint.withValues(alpha: 0.5)
+                            ? AppColors.adventureGreen.withValues(alpha: 0.12)
                             : AppColors.neutralTint,
                         shape: BoxShape.circle,
                         border: Border.all(
                           color: unlocked
-                              ? AppColors.mintBorder
+                              ? AppColors.adventureGreen
                               : const Color(0xFFCFC7B4),
                           width: 3.5,
                         ),
@@ -829,7 +832,9 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: unlocked ? AppColors.mint : AppColors.neutralTint,
+                        color: unlocked
+                            ? AppColors.adventureGreen.withValues(alpha: 0.14)
+                            : AppColors.neutralTint,
                         borderRadius: BorderRadius.circular(99),
                       ),
                       child: Text(
@@ -837,7 +842,7 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w900,
-                          color: unlocked ? AppColors.teal : AppColors.textMuted,
+                          color: unlocked ? AppColors.adventureGreen : AppColors.textMuted,
                         ),
                       ),
                     ),
