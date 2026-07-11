@@ -1068,22 +1068,17 @@ import '../theme/app_colors.dart';
 import 'adventure_map_top_bar.dart';
 import 'noor_energy_resting_sheet.dart';
 
-// Final positions recorded from the approved Task 7 HTML preview
-// (docs/superpowers/specs — dumps/adventure_map_preview/preview.html,
-// bg 2.png background, 390x1821 canvas). Fraction of the background
-// image's height, 0=top 1=bottom.
+// Placeholder positions (fraction of the background image's height, 0=top
+// 1=bottom) — replace with the values recorded from the approved Task 7
+// HTML preview. Evenly spaced bottom-to-top so the map is fully functional
+// before that preview exists.
 const _nodePositions = <String, double>{
-  'tracing': 0.824,     // top: 1500px of 1821px canvas
-  'flashcards': 0.620,  // top: 1130px — "Sounds"
-  'recitation': 0.439,  // top: 800px — "Qur'an & Hadith" (current, approved)
-  'stories': 0.258,     // top: 470px
-  'sorting': 0.077,     // top: 140px — locked this phase
+  'tracing': 0.85,
+  'flashcards': 0.65,
+  'recitation': 0.45,
+  'stories': 0.25,
+  'sorting': 0.08,
 };
-
-// All 5 nodes sit at the same horizontal position in the approved preview
-// (.node { left: 130px } of a 390px-wide canvas — the path is drawn as a
-// roughly straight vertical band in bg 2.png, not winding left-right).
-const _nodeLeftFraction = 130 / 390;
 
 class AdventureMapScreen extends ConsumerStatefulWidget {
   const AdventureMapScreen({super.key});
@@ -1187,7 +1182,7 @@ class _MapNode extends StatelessWidget {
     final size = isCurrent ? 76.0 : 62.0;
     return Positioned(
       top: mapHeight * topFraction - size / 2,
-      left: 130, // matches the approved Task 7 preview's .node { left: 130px }
+      left: 160,
       child: GestureDetector(
         onTap: onTap,
         child: Container(
@@ -1225,7 +1220,7 @@ class _MascotAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Positioned(
       top: mapHeight * topFraction - 120,
-      left: 66, // sits just left of the node badge, matching the approved preview
+      left: 90,
       child: SizedBox(
         width: 60,
         height: 60,
