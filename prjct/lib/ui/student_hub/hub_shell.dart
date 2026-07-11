@@ -41,6 +41,15 @@ class _HubShellState extends State<HubShell> {
       canPop: false,
       child: Scaffold(
         backgroundColor: Colors.white,
+        // The floating pill nav reserves no opaque strip of its own — it
+        // floats with margin over whatever's beneath it. Without
+        // `extendBody`, Scaffold shortens `body` to end right above it,
+        // which on Home cuts the scrollable Adventure Map short well
+        // before its actual bottom. `extendBody: true` lets each tab's
+        // content draw the full screen height; the map screen itself adds
+        // matching bottom padding so its own real content doesn't end up
+        // permanently hidden under the nav bar.
+        extendBody: true,
         body: AnimatedOpacity(
           duration: _fadeDuration,
           curve: Curves.easeOut,
