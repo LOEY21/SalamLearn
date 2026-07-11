@@ -164,7 +164,11 @@ class _ItemState extends State<_Item> {
                         widget.emoji,
                         style: TextStyle(fontSize: active ? 22 : 20),
                       )
-                    : LearnerAvatar(avatar: avatar, size: active ? 24 : 20),
+                    // Much larger than the emoji tabs — the learner's face
+                    // was barely legible at 20/24. A white ring + the
+                    // avatar's own shadow make it read as a real profile
+                    // pic sitting in the pill.
+                    : LearnerAvatar(avatar: avatar, size: active ? 40 : 34),
               ),
               const SizedBox(height: 2),
               AnimatedDefaultTextStyle(
