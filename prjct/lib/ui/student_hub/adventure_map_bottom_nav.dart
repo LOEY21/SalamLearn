@@ -36,22 +36,29 @@ class AdventureMapBottomNav extends StatelessWidget {
           ],
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _Item(icon: Icons.map_rounded, label: 'Home', active: active == HubTab.home, onTap: onHomeTap),
-            _Item(
-              icon: Icons.leaderboard_rounded,
-              label: 'Ranks',
-              active: active == HubTab.leaderboard,
-              onTap: onLeaderboardTap,
+            Expanded(
+              child: _Item(icon: Icons.map_rounded, label: 'Home', active: active == HubTab.home, onTap: onHomeTap),
             ),
-            _Item(
-              icon: Icons.backpack_rounded,
-              label: 'Backpack',
-              active: active == HubTab.backpack,
-              onTap: onBackpackTap,
+            Expanded(
+              child: _Item(
+                icon: Icons.leaderboard_rounded,
+                label: 'Ranks',
+                active: active == HubTab.leaderboard,
+                onTap: onLeaderboardTap,
+              ),
             ),
-            _Item(icon: Icons.face_rounded, label: 'Me', active: active == HubTab.profile, onTap: onProfileTap),
+            Expanded(
+              child: _Item(
+                icon: Icons.backpack_rounded,
+                label: 'Backpack',
+                active: active == HubTab.backpack,
+                onTap: onBackpackTap,
+              ),
+            ),
+            Expanded(
+              child: _Item(icon: Icons.face_rounded, label: 'Me', active: active == HubTab.profile, onTap: onProfileTap),
+            ),
           ],
         ),
       ),
@@ -77,7 +84,7 @@ class _Item extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          padding: const EdgeInsets.symmetric(vertical: 6),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
