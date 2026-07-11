@@ -2,11 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:salamlearn/logic/auth/session.dart';
 import 'package:salamlearn/logic/learner/learner_xp_provider.dart';
 import 'package:salamlearn/logic/learner/noor_energy_provider.dart';
 import 'package:salamlearn/ui/student_hub/adventure_map_screen.dart';
 import 'package:salamlearn/ui/teacher_dashboard/teacher_dashboard_screen.dart'
     show ProgressionOverrideNotifier, progressionOverrideProvider;
+
+/// `AdventureMapScreen.build()` reads `sessionProvider` directly (to pick
+/// the current learner's avatar for the mascot), independent of the
+/// `_isModuleAssigned` short-circuit below — needs its own Hive-free fake.
+class _FakeSessionNotifier extends SessionNotifier {
+  @override
+  SessionState build() => const SessionState();
+}
 
 /// No real Hive I/O — `AdventureMapScreen` renders `AdventureMapTopBar`,
 /// which reads these two Hive-backed providers in `build()`. Without an
@@ -53,6 +62,7 @@ void main() {
           progressionOverrideProvider.overrideWith(
             _FakeProgressionOverrideNotifier.new,
           ),
+          sessionProvider.overrideWith(_FakeSessionNotifier.new),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),

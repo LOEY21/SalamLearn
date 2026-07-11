@@ -30,7 +30,7 @@ class AdventureMapBottomNav extends StatelessWidget {
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(28),
           boxShadow: const [
-            BoxShadow(color: Color(0x2E000000), blurRadius: 20, offset: Offset(0, 6)),
+            BoxShadow(color: Color(0x47000000), blurRadius: 24, offset: Offset(0, 10)),
           ],
         ),
         child: Row(
