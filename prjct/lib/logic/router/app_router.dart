@@ -20,10 +20,10 @@ import '../../ui/onboarding/splash_screen.dart';
 import '../../ui/parent_dashboard/edit_child_profile_screen.dart';
 import '../../ui/parent_dashboard/parent_dashboard_screen.dart';
 import '../../ui/settings/settings_screen.dart';
+import '../../ui/student_hub/adventure_map_screen.dart';
 import '../../ui/student_hub/backpack_screen.dart';
 import '../../ui/student_hub/hub_shell.dart';
 import '../../ui/student_hub/profile_screen.dart';
-import '../../ui/student_hub/student_hub_screen.dart';
 import '../../ui/teacher_dashboard/cast_screen.dart';
 import '../../ui/teacher_dashboard/class_detail_screen.dart';
 import '../../ui/teacher_dashboard/classroom_management_screen.dart';
@@ -154,7 +154,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/hub',
-                builder: (_, _) => const StudentHubScreen(),
+                builder: (_, _) => const AdventureMapScreen(),
               ),
             ],
           ),
