@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../logic/auth/session.dart';
 import '../../logic/learner/noor_energy_provider.dart';
@@ -202,12 +203,7 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen> {
               height: _mapHeight,
               child: Stack(
                 children: [
-                  Positioned.fill(
-                    child: Image.asset(
-                      'assets/images/adventure_map/map_background.png',
-                      fit: BoxFit.cover,
-                    ),
-                  ),
+                  const Positioned.fill(child: _MapVideoBackground()),
                   const Positioned.fill(child: _AmbientBreathing()),
                   const _MapSparkles(),
                   for (final (i, module) in coreModules.indexed)
@@ -237,6 +233,82 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen> {
           const SafeArea(child: AdventureMapTopBar()),
         ],
       ),
+    );
+  }
+}
+
+/// Looping muted video behind the map nodes, replacing the static
+/// `map_background.png`. Falls back to the still image while the video
+/// decodes (or if it fails to load) so there's never a blank/black frame.
+///
+/// `BoxFit.contain` (not `cover`) — the source video's own framing is
+/// tighter than the map's tall scroll canvas, so `cover` cropped away
+/// edges of the map on every screen. `contain` shows the whole shot
+/// uncropped, and the extra `0.92` scale pulls back a touch further so
+/// the map's edges never touch the viewport edge. Cream fills the
+/// letterboxed margin either way, matching the Scaffold background.
+class _MapVideoBackground extends StatefulWidget {
+  const _MapVideoBackground();
+
+  @override
+  State<_MapVideoBackground> createState() => _MapVideoBackgroundState();
+}
+
+class _MapVideoBackgroundState extends State<_MapVideoBackground> {
+  late final _controller = VideoPlayerController.asset(
+    'assets/videos/adventure_map_loop.mp4',
+  );
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initVideo();
+  }
+
+  // No video decoder platform channel exists in the widget-test
+  // environment (and might not on some desktop targets either) —
+  // `initialize()` throws there. Caught here so the still-image fallback
+  // in `build()` renders instead of crashing the whole screen.
+  Future<void> _initVideo() async {
+    try {
+      await _controller.initialize();
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    await _controller.setLooping(true);
+    await _controller.setVolume(0);
+    await _controller.play();
+    if (mounted) setState(() => _ready = true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppColors.cream,
+      child: _ready
+          ? Transform.scale(
+              scale: 0.92,
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: SizedBox(
+                  width: _controller.value.size.width,
+                  height: _controller.value.size.height,
+                  child: VideoPlayer(_controller),
+                ),
+              ),
+            )
+          : Image.asset(
+              'assets/images/adventure_map/map_background.png',
+              fit: BoxFit.contain,
+            ),
     );
   }
 }
