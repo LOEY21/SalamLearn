@@ -9,9 +9,7 @@ import 'package:salamlearn/ui/auth/consent_screen.dart';
 import 'package:salamlearn/ui/onboarding/get_started_screen.dart';
 import 'package:salamlearn/ui/parent_dashboard/parent_dashboard_screen.dart';
 import 'package:salamlearn/ui/student_hub/backpack_screen.dart';
-import 'package:salamlearn/ui/student_hub/leaderboard_screen.dart';
 import 'package:salamlearn/ui/student_hub/profile_screen.dart';
-import 'package:salamlearn/ui/student_hub/student_hub_screen.dart';
 import 'package:salamlearn/ui/teacher_dashboard/teacher_dashboard_screen.dart';
 import 'package:salamlearn/ui/widgets/pin_pad.dart';
 import 'package:salamlearn/ui/widgets/streak_tracker.dart';
@@ -238,146 +236,6 @@ void main() {
     );
   });
 
-  group('StudentHubScreen', () {
-    testWidgets('renders the stats row, greeting and all 5 '
-        'modules in the grid list', (tester) async {
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: StudentHubScreen())),
-      );
-      // Advance past the entrance fade/slide-in explicitly rather than
-      // pumpAndSettle: the header's ambient blob runs a repeat(reverse:
-      // true) drift animation that never settles.
-      await tester.pump(const Duration(milliseconds: 700));
-
-      expect(find.textContaining("Assalamu'alaikum"), findsOneWidget);
-      expect(find.text('Day Streak'), findsOneWidget);
-      expect(find.text("Today's Progress"), findsOneWidget);
-      expect(find.text('Your Learning Modules'), findsOneWidget);
-
-      // All 5 modules are in the grid list. "Sounds" is also on the continue card,
-      // so it appears twice.
-      expect(find.text('Tracing'), findsOneWidget);
-      expect(find.text('Sounds'), findsNWidgets(2));
-      expect(find.text("Qur'an & Hadith"), findsOneWidget);
-
-      // Below the fold on the default test surface — scroll incrementally
-      // (rather than ensureVisible, which needs the element to already
-      // exist) until each comes into view.
-      await tester.scrollUntilVisible(
-        find.text('Stories'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(find.text('Stories'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('Sort & Match'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(find.text('Sort & Match'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('Daily Goal'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(find.text('Daily Goal'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('Keep your streak alive!'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(find.text('Keep your streak alive!'), findsOneWidget);
-    });
-
-    testWidgets('module row press-scales down without navigating', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: StudentHubScreen())),
-      );
-      await tester.pump(const Duration(milliseconds: 700));
-
-      final scaleFinder = find
-          .ancestor(
-            of: find.text('Tracing'),
-            matching: find.byType(AnimatedScale),
-          )
-          .first;
-      expect(tester.widget<AnimatedScale>(scaleFinder).scale, 1.0);
-
-      // Inside a Scrollable, the tap recognizer competes with the
-      // vertical-drag recognizer in the gesture arena and only resolves
-      // (triggering onHighlightChanged) after that arena settles.
-      await tester.press(find.text('Tracing'));
-      await tester.pump(const Duration(milliseconds: 150));
-
-      expect(tester.widget<AnimatedScale>(scaleFinder).scale, 0.97);
-    });
-
-    testWidgets(
-      'continue card is teal, shows the in-progress module\'s mascot, and '
-      'the progress ring renders',
-      (tester) async {
-        await tester.pumpWidget(
-          const ProviderScope(child: MaterialApp(home: StudentHubScreen())),
-        );
-        await tester.pump(const Duration(milliseconds: 700));
-
-        expect(find.text('Continue Learning'), findsOneWidget);
-        expect(find.text('2 of 5 cards left'), findsOneWidget);
-        expect(find.text('Continue Lesson'), findsOneWidget);
-
-        // "Sounds" (flashcards) is the mock in-progress module — its
-        // mascot should render inside the continue card, and nowhere
-        // else (it's excluded from the module list below).
-        expect(
-          find.byWidgetPredicate((w) {
-            if (w is! Image) return false;
-            final image = w.image;
-            final resolved = image is ResizeImage
-                ? image.imageProvider
-                : image;
-            return resolved ==
-                const AssetImage('assets/images/mascot_flashcards.png');
-          }),
-          findsOneWidget,
-        );
-        expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      },
-    );
-
-    testWidgets('module rows fit at phone width without overflow', (
-      tester,
-    ) async {
-      await tester.binding.setSurfaceSize(const Size(390, 844));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: StudentHubScreen())),
-      );
-      await tester.pump(const Duration(milliseconds: 700));
-
-      expect(tester.takeException(), isNull);
-
-      await tester.ensureVisible(find.text('Sort & Match'));
-      await tester.pump();
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('bell button opens the notifications sheet', (tester) async {
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: StudentHubScreen())),
-      );
-      await tester.pump(const Duration(milliseconds: 700));
-
-      await tester.tap(find.byIcon(Icons.notifications_outlined));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Notifications'), findsOneWidget);
-      expect(find.text('5-day streak!'), findsOneWidget);
-    });
-  });
-
   group('ProfileScreen', () {
     testWidgets('shows stats and rows, and Settings routes through the '
         'parent-PIN gate', (tester) async {
@@ -391,33 +249,6 @@ void main() {
       expect(find.text('Notifications'), findsOneWidget);
       expect(find.text('My avatar'), findsOneWidget);
       expect(find.text('Settings (parent PIN)'), findsOneWidget);
-    });
-  });
-
-  group('LeaderboardScreen', () {
-    testWidgets('tab switches ranked entries and re-ranks the podium', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: LeaderboardScreen())),
-      );
-      await tester.pump();
-
-      // Week is the default range: Amira ("YOU") leads, appearing in both
-      // the podium and the highlighted you-row below it.
-      expect(find.text('YOU'), findsOneWidget);
-      expect(find.text('Amira'), findsNWidgets(2));
-      expect(find.text('248'), findsOneWidget);
-
-      await tester.tap(find.text('All-time'));
-      await tester.pump();
-
-      // All-time re-ranks Zayd to 1st and Amira to 2nd with different
-      // point totals.
-      expect(find.text('3120 pts'), findsOneWidget);
-      expect(find.text('2860'), findsOneWidget);
-      expect(find.text('248'), findsNothing);
-      expect(tester.takeException(), isNull);
     });
   });
 

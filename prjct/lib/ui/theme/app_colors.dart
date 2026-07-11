@@ -25,4 +25,11 @@ abstract final class AppColors {
   static const neutralTint = Color(0xFFF4F2ED);
 
   static const tealDark = Color(0xFF0A4F3E);
+
+  // Adventure Map palette additions (2026-07-10 Learner Hub redesign spec).
+  // Named `adventure*` to avoid colliding with the existing `mintGreen`
+  // token, which is a different, already-used shade.
+  static const adventureBlue = Color(0xFF72C9F8);
+  static const adventurePurple = Color(0xFF6C63D6);
+  static const adventureGreen = Color(0xFF5B9A1E);
 }

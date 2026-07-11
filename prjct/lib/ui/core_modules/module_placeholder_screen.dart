@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
 
+import '../../logic/learner/learner_xp_provider.dart';
 import '../../logic/recent_module_provider.dart';
 import '../theme/app_colors.dart';
 import 'module_lessons.dart';
@@ -263,6 +264,7 @@ class _ModulePlaceholderScreenState
     ref
         .read(unlockedBadgesProvider.notifier)
         .unlockBadge('${widget.moduleId.toUpperCase()} Master');
+    ref.read(learnerXpProvider.notifier).addXp(50);
     await Future<void>.delayed(const Duration(milliseconds: 1000));
 
     // 5. Internet Connection Available?
