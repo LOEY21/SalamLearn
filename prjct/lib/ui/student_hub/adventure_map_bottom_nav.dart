@@ -70,7 +70,7 @@ class AdventureMapBottomNav extends StatelessWidget {
   }
 }
 
-class _Item extends StatelessWidget {
+class _Item extends StatefulWidget {
   const _Item({
     required this.emoji,
     required this.label,
@@ -87,28 +87,74 @@ class _Item extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<_Item> createState() => _ItemState();
+}
+
+class _ItemState extends State<_Item> {
+  static const _duration = Duration(milliseconds: 200);
+  // Playful-archetype overshoot (motion-design spec) — the active tab's
+  // pill/icon settle with a slight bounce rather than easing flatly in.
+  static const _bounce = Cubic(0.34, 1.56, 0.64, 1.0);
+
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    final color = active ? AppColors.teal : AppColors.textMuted;
-    return Material(
-      color: active ? AppColors.mint : Colors.transparent,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+    final active = widget.active;
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _pressed ? 0.92 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: _duration,
+          curve: _bounce,
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+          decoration: BoxDecoration(
+            gradient: active
+                ? const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppColors.teal, AppColors.adventureGreen],
+                  )
+                : null,
+            color: active ? null : Colors.transparent,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                      color: AppColors.teal.withValues(alpha: 0.35),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(emoji, style: const TextStyle(fontSize: 20)),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
+              AnimatedScale(
+                scale: active ? 1.15 : 1.0,
+                duration: _duration,
+                curve: _bounce,
+                child: Text(
+                  widget.emoji,
+                  style: TextStyle(fontSize: active ? 22 : 20),
                 ),
+              ),
+              const SizedBox(height: 2),
+              AnimatedDefaultTextStyle(
+                duration: _duration,
+                style: TextStyle(
+                  color: active ? Colors.white : AppColors.textMuted,
+                  fontSize: 10,
+                  fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                ),
+                child: Text(widget.label),
               ),
             ],
           ),
