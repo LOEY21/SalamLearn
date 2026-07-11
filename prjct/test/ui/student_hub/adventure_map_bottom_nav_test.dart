@@ -12,7 +12,6 @@ void main() {
           body: AdventureMapBottomNav(
             active: HubTab.home,
             onHomeTap: () {},
-            onLeaderboardTap: () {},
             onBackpackTap: () => tapped = true,
             onProfileTap: () {},
           ),

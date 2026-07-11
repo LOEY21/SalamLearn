@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'adventure_map_bottom_nav.dart';
 import 'hub_bottom_nav.dart';
 
-/// Shell for the Home / Leaderboard / Backpack / Profile tabs, backing
+/// Shell for the Home / Backpack / Profile tabs, backing
 /// `StatefulShellRoute.indexedStack` in the router. Each branch's
 /// Navigator (and therefore its scroll position, animation controllers,
 /// selected range, etc.) stays alive underneath an `IndexedStack` — tabs
@@ -51,9 +51,8 @@ class _HubShellState extends State<HubShell> {
           child: AdventureMapBottomNav(
             active: HubTab.values[widget.navigationShell.currentIndex],
             onHomeTap: () => _switchTo(0),
-            onLeaderboardTap: () => _switchTo(1),
-            onBackpackTap: () => _switchTo(2),
-            onProfileTap: () => _switchTo(3),
+            onBackpackTap: () => _switchTo(1),
+            onProfileTap: () => _switchTo(2),
           ),
         ),
       ),

@@ -11,14 +11,12 @@ class AdventureMapBottomNav extends StatelessWidget {
     super.key,
     required this.active,
     required this.onHomeTap,
-    required this.onLeaderboardTap,
     required this.onBackpackTap,
     required this.onProfileTap,
   });
 
   final HubTab active;
   final VoidCallback onHomeTap;
-  final VoidCallback onLeaderboardTap;
   final VoidCallback onBackpackTap;
   final VoidCallback onProfileTap;
 
@@ -39,14 +37,6 @@ class AdventureMapBottomNav extends StatelessWidget {
           children: [
             Expanded(
               child: _Item(icon: Icons.map_rounded, label: 'Home', active: active == HubTab.home, onTap: onHomeTap),
-            ),
-            Expanded(
-              child: _Item(
-                icon: Icons.leaderboard_rounded,
-                label: 'Ranks',
-                active: active == HubTab.leaderboard,
-                onTap: onLeaderboardTap,
-              ),
             ),
             Expanded(
               child: _Item(

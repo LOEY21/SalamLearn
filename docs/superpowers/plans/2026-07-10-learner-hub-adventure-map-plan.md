@@ -1286,14 +1286,15 @@ git commit -m "Add Adventure Map screen and route it as the Home tab"
 
 ---
 
-## Task 12: Restyle Backpack/Leaderboard/Profile tab chrome
+## Task 12: Restyle Backpack/Profile tab chrome
+
+**Note:** the Leaderboard tab was removed from the Learner Hub entirely (owner request, after Task 10) — `leaderboard_screen.dart`, its route, its `HubTab.leaderboard` value, and its test were deleted. This task now only covers the remaining 2 tabs.
 
 **Files:**
 - Modify: `prjct/lib/ui/student_hub/backpack_screen.dart`
-- Modify: `prjct/lib/ui/student_hub/leaderboard_screen.dart`
 - Modify: `prjct/lib/ui/student_hub/profile_screen.dart`
 
-This task is a **visual-only pass** — no data/logic changes, so no new tests (existing widget tests for these 3 screens must still pass unchanged). Each screen's top-level `Scaffold` background and card styling gets updated to reference the new `AppColors.adventure*` tokens and `Fredoka`/`Baloo2` fonts from Tasks 1 and 8, matching the Adventure Map's visual language. Exact styling changes are visual-judgment calls made live against the running app (per the `impeccable` skill), not prescribable as exact diffs here — this step is deliberately open-ended on *how much* restyling, bounded by: content, data bindings, and navigation behavior in these 3 files must not change.
+This task is a **visual-only pass** — no data/logic changes, so no new tests (existing widget tests for these 2 screens must still pass unchanged). Each screen's top-level `Scaffold` background and card styling gets updated to reference the new `AppColors.adventure*` tokens and `Fredoka`/`Baloo2` fonts from Tasks 1 and 8, matching the Adventure Map's visual language. Exact styling changes are visual-judgment calls made live against the running app (per the `impeccable` skill), not prescribable as exact diffs here — this step is deliberately open-ended on *how much* restyling, bounded by: content, data bindings, and navigation behavior in these 2 files must not change.
 
 - [ ] **Step 1: Run the existing test suite for these 3 screens first, to capture the baseline**
 
@@ -1313,8 +1314,8 @@ Expected: same pass count as Step 1's baseline (styling changes must not change 
 
 ```bash
 cd prjct
-git add lib/ui/student_hub/backpack_screen.dart lib/ui/student_hub/leaderboard_screen.dart lib/ui/student_hub/profile_screen.dart
-git commit -m "Restyle Backpack/Leaderboard/Profile tabs to match Adventure Map visual language"
+git add lib/ui/student_hub/backpack_screen.dart lib/ui/student_hub/profile_screen.dart
+git commit -m "Restyle Backpack/Profile tabs to match Adventure Map visual language"
 ```
 
 ---
@@ -1338,7 +1339,7 @@ Invoke the `impeccable` skill for a hierarchy/spacing/typography/states review o
 
 - [ ] **Step 4: `verify` skill drive-through on a running emulator**
 
-Invoke the `verify` skill. Manually drive: Home tab loads scrolled to the current node → tap an unlocked node → Noor Energy decrements by 1 → module opens → complete it (Validate & Submit) → XP increases by 50 → back to Home → node now shows completed state → deplete all 5 Noor Energy by opening 5 modules → 6th tap shows the resting sheet instead of navigating → BottomNav switches correctly across all 4 tabs → TopBar pills stay correct across tab switches.
+Invoke the `verify` skill. Manually drive: Home tab loads scrolled to the current node → tap an unlocked node → Noor Energy decrements by 1 → module opens → complete it (Validate & Submit) → XP increases by 50 → back to Home → node now shows completed state → deplete all 5 Noor Energy by opening 5 modules → 6th tap shows the resting sheet instead of navigating → BottomNav switches correctly across all 3 tabs (Home/Backpack/Me — Leaderboard was removed) → TopBar pills stay correct across tab switches.
 
 - [ ] **Step 5: Build and install on a connected device/emulator**
 

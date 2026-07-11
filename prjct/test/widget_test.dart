@@ -9,7 +9,6 @@ import 'package:salamlearn/ui/auth/consent_screen.dart';
 import 'package:salamlearn/ui/onboarding/get_started_screen.dart';
 import 'package:salamlearn/ui/parent_dashboard/parent_dashboard_screen.dart';
 import 'package:salamlearn/ui/student_hub/backpack_screen.dart';
-import 'package:salamlearn/ui/student_hub/leaderboard_screen.dart';
 import 'package:salamlearn/ui/student_hub/profile_screen.dart';
 import 'package:salamlearn/ui/student_hub/student_hub_screen.dart';
 import 'package:salamlearn/ui/teacher_dashboard/teacher_dashboard_screen.dart';
@@ -391,33 +390,6 @@ void main() {
       expect(find.text('Notifications'), findsOneWidget);
       expect(find.text('My avatar'), findsOneWidget);
       expect(find.text('Settings (parent PIN)'), findsOneWidget);
-    });
-  });
-
-  group('LeaderboardScreen', () {
-    testWidgets('tab switches ranked entries and re-ranks the podium', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: LeaderboardScreen())),
-      );
-      await tester.pump();
-
-      // Week is the default range: Amira ("YOU") leads, appearing in both
-      // the podium and the highlighted you-row below it.
-      expect(find.text('YOU'), findsOneWidget);
-      expect(find.text('Amira'), findsNWidgets(2));
-      expect(find.text('248'), findsOneWidget);
-
-      await tester.tap(find.text('All-time'));
-      await tester.pump();
-
-      // All-time re-ranks Zayd to 1st and Amira to 2nd with different
-      // point totals.
-      expect(find.text('3120 pts'), findsOneWidget);
-      expect(find.text('2860'), findsOneWidget);
-      expect(find.text('248'), findsNothing);
-      expect(tester.takeException(), isNull);
     });
   });
 
