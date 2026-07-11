@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../logic/auth/session.dart';
+import '../theme/app_colors.dart';
 import 'adventure_map_bottom_nav.dart';
 import 'hub_bottom_nav.dart';
 
@@ -10,16 +13,16 @@ import 'hub_bottom_nav.dart';
 /// selected range, etc.) stays alive underneath an `IndexedStack` — tabs
 /// never rebuild on switch, only the visible one changes. A brief fade
 /// gives the switch a soft crossfade instead of an instant, jarring cut.
-class HubShell extends StatefulWidget {
+class HubShell extends ConsumerStatefulWidget {
   const HubShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   @override
-  State<HubShell> createState() => _HubShellState();
+  ConsumerState<HubShell> createState() => _HubShellState();
 }
 
-class _HubShellState extends State<HubShell> {
+class _HubShellState extends ConsumerState<HubShell> {
   static const _fadeDuration = Duration(milliseconds: 140);
   double _opacity = 1;
 
@@ -34,13 +37,19 @@ class _HubShellState extends State<HubShell> {
 
   @override
   Widget build(BuildContext context) {
+    final learnerAvatar = ref.watch(sessionProvider).learner?.avatar;
     // PopScope blocks the system back gesture: the learner cannot exit
     // to role selection without a grown-up (role lock requirement) — this
     // now guards all 4 tabs uniformly since they share this one Scaffold.
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        // Was `Colors.white`: every tab's real background is cream-toned
+        // (AppColors.cream/neutralTint), so during the crossfade dip below
+        // the white showed through as a one-frame flash against them.
+        // Matching the shared cream tone here makes the fade genuinely
+        // invisible instead of a colour pop on every tab switch.
+        backgroundColor: AppColors.cream,
         // The floating pill nav reserves no opaque strip of its own — it
         // floats with margin over whatever's beneath it. Without
         // `extendBody`, Scaffold shortens `body` to end right above it,
@@ -62,6 +71,7 @@ class _HubShellState extends State<HubShell> {
             onHomeTap: () => _switchTo(0),
             onBackpackTap: () => _switchTo(1),
             onProfileTap: () => _switchTo(2),
+            learnerAvatar: learnerAvatar,
           ),
         ),
       ),

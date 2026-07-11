@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../widgets/learner_avatar.dart';
 import 'hub_bottom_nav.dart' show HubTab;
 
 /// Floating rounded-pill bottom nav replacing `HubBottomNav`'s flat bar —
@@ -13,12 +14,17 @@ class AdventureMapBottomNav extends StatelessWidget {
     required this.onHomeTap,
     required this.onBackpackTap,
     required this.onProfileTap,
+    this.learnerAvatar,
   });
 
   final HubTab active;
   final VoidCallback onHomeTap;
   final VoidCallback onBackpackTap;
   final VoidCallback onProfileTap;
+
+  /// The signed-in learner's own avatar — shown on the "Me" tab instead of
+  /// a generic emoji so the nav reflects who's actually using the app.
+  final String? learnerAvatar;
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +64,7 @@ class AdventureMapBottomNav extends StatelessWidget {
             Expanded(
               child: _Item(
                 emoji: '🙂',
+                avatar: learnerAvatar,
                 label: 'Me',
                 active: active == HubTab.profile,
                 onTap: onProfileTap,
@@ -76,15 +83,21 @@ class _Item extends StatefulWidget {
     required this.label,
     required this.active,
     required this.onTap,
+    this.avatar,
   });
 
   // Literal emoji glyphs, not IconData — matches the approved preview's
   // `<span class="icon">🗺️</span>` etc. exactly (dumps/adventure_map_preview
-  // /preview.html), rather than a Material-icon approximation.
+  // /preview.html), rather than a Material-icon approximation. Used as a
+  // fallback when [avatar] isn't set (or the learner hasn't picked one yet).
   final String emoji;
   final String label;
   final bool active;
   final VoidCallback onTap;
+
+  /// When set, renders the learner's own avatar instead of [emoji] — only
+  /// the "Me" tab passes this.
+  final String? avatar;
 
   @override
   State<_Item> createState() => _ItemState();
@@ -92,8 +105,12 @@ class _Item extends StatefulWidget {
 
 class _ItemState extends State<_Item> {
   static const _duration = Duration(milliseconds: 200);
-  // Playful-archetype overshoot (motion-design spec) — the active tab's
-  // pill/icon settle with a slight bounce rather than easing flatly in.
+  // Playful-archetype overshoot (motion-design spec) — but overshoot only
+  // ever gets applied to *scale* below. A `BoxDecoration` tween (color/
+  // gradient/shadow) can't handle a curve whose output leaves [0, 1] —
+  // `Color.lerp` extrapolates past the two endpoint colors, which read as a
+  // one-frame flash of an out-of-palette colour every time the active tab
+  // changes. Container decoration always eases with a plain curve instead.
   static const _bounce = Cubic(0.34, 1.56, 0.64, 1.0);
 
   bool _pressed = false;
@@ -101,6 +118,7 @@ class _ItemState extends State<_Item> {
   @override
   Widget build(BuildContext context) {
     final active = widget.active;
+    final avatar = widget.avatar;
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
       onTapCancel: () => setState(() => _pressed = false),
@@ -112,7 +130,7 @@ class _ItemState extends State<_Item> {
         curve: Curves.easeOut,
         child: AnimatedContainer(
           duration: _duration,
-          curve: _bounce,
+          curve: Curves.easeOut,
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
           decoration: BoxDecoration(
             gradient: active
@@ -141,10 +159,12 @@ class _ItemState extends State<_Item> {
                 scale: active ? 1.15 : 1.0,
                 duration: _duration,
                 curve: _bounce,
-                child: Text(
-                  widget.emoji,
-                  style: TextStyle(fontSize: active ? 22 : 20),
-                ),
+                child: avatar == null
+                    ? Text(
+                        widget.emoji,
+                        style: TextStyle(fontSize: active ? 22 : 20),
+                      )
+                    : LearnerAvatar(avatar: avatar, size: active ? 24 : 20),
               ),
               const SizedBox(height: 2),
               AnimatedDefaultTextStyle(
