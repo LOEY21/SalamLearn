@@ -393,7 +393,10 @@ class _ProfileHeroState extends State<_ProfileHero>
             child: FadeTransition(
               opacity: _nameFade,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(20),
@@ -819,10 +822,7 @@ class _BadgeShowcase extends StatelessWidget {
               final isUnlocked =
                   unlockedIds.contains(labelKey) ||
                   unlockedIds.contains(badge.id);
-              return _BadgeChip(
-                badge: badge,
-                isUnlocked: isUnlocked,
-              );
+              return _BadgeChip(badge: badge, isUnlocked: isUnlocked);
             },
           ),
         ),
@@ -858,7 +858,9 @@ class _BadgeChipState extends State<_BadgeChip> {
           width: 76,
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
           decoration: BoxDecoration(
-            color: unlocked ? widget.badge.color.withValues(alpha: 0.12) : const Color(0xFFF0EDE8),
+            color: unlocked
+                ? widget.badge.color.withValues(alpha: 0.12)
+                : const Color(0xFFF0EDE8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: unlocked
