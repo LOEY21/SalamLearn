@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'adventure_map_bottom_nav.dart';
 import 'hub_bottom_nav.dart';
 
 /// Shell for the Home / Leaderboard / Backpack / Profile tabs, backing
@@ -47,7 +48,7 @@ class _HubShellState extends State<HubShell> {
           child: widget.navigationShell,
         ),
         bottomNavigationBar: SafeArea(
-          child: HubBottomNav(
+          child: AdventureMapBottomNav(
             active: HubTab.values[widget.navigationShell.currentIndex],
             onHomeTap: () => _switchTo(0),
             onLeaderboardTap: () => _switchTo(1),
