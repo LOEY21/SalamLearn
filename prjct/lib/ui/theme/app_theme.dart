@@ -128,4 +128,36 @@ abstract final class AppTheme {
           base.labelSmall!.copyWith(fontSize: 12, color: AppColors.textMuted),
     );
   }
+
+  /// Kid-facing text theme for the Learner Hub subtree only — Fredoka for
+  /// headings/stats, Nunito for body text, per the Adventure Map design
+  /// spec's typography section. Parent/Teacher screens keep `light()`'s
+  /// default Material text theme untouched.
+  static TextTheme learnerTextTheme(TextTheme base) {
+    return base.copyWith(
+      displayLarge: base.displayLarge!.copyWith(
+        fontFamily: 'Fredoka',
+        fontWeight: FontWeight.w700,
+        color: AppColors.ink,
+      ),
+      headlineMedium: base.headlineMedium!.copyWith(
+        fontFamily: 'Fredoka',
+        fontWeight: FontWeight.w700,
+        color: AppColors.ink,
+      ),
+      titleLarge: base.titleLarge!.copyWith(
+        fontFamily: 'Baloo2',
+        fontWeight: FontWeight.w600,
+        color: AppColors.ink,
+      ),
+      bodyLarge: base.bodyLarge!.copyWith(
+        fontFamily: 'Nunito',
+        color: AppColors.ink,
+      ),
+      bodyMedium: base.bodyMedium!.copyWith(
+        fontFamily: 'Nunito',
+        color: AppColors.textMuted,
+      ),
+    );
+  }
 }
