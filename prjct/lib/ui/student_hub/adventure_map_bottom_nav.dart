@@ -58,6 +58,7 @@ class AdventureMapBottomNav extends StatelessWidget {
             Expanded(
               child: _Item(
                 emoji: '🗺️',
+                iconAsset: 'assets/images/adventure_map/tab_map.png',
                 label: 'Home',
                 active: active == HubTab.home,
                 onTap: onHomeTap,
@@ -66,6 +67,7 @@ class AdventureMapBottomNav extends StatelessWidget {
             Expanded(
               child: _Item(
                 emoji: '🎒',
+                iconAsset: 'assets/images/adventure_map/tab_backpack.png',
                 label: 'Backpack',
                 active: active == HubTab.backpack,
                 onTap: onBackpackTap,
@@ -94,12 +96,12 @@ class _Item extends StatefulWidget {
     required this.active,
     required this.onTap,
     this.avatar,
+    this.iconAsset,
   });
 
-  // Literal emoji glyphs, not IconData — matches the approved preview's
-  // `<span class="icon">🗺️</span>` etc. exactly (dumps/adventure_map_preview
-  // /preview.html), rather than a Material-icon approximation. Used as a
-  // fallback when [avatar] isn't set (or the learner hasn't picked one yet).
+  // Render priority: [avatar] (learner's own pic, Me tab) > [iconAsset]
+  // (the custom cartoon PNGs the owner supplied for Home/Backpack) >
+  // [emoji] (fallback if neither is set / the asset can't load).
   final String emoji;
   final String label;
   final bool active;
@@ -108,6 +110,9 @@ class _Item extends StatefulWidget {
   /// When set, renders the learner's own avatar instead of [emoji] — only
   /// the "Me" tab passes this.
   final String? avatar;
+
+  /// When set, renders a bundled PNG glyph instead of [emoji].
+  final String? iconAsset;
 
   @override
   State<_Item> createState() => _ItemState();
@@ -169,16 +174,7 @@ class _ItemState extends State<_Item> {
                 scale: active ? 1.15 : 1.0,
                 duration: _duration,
                 curve: _bounce,
-                child: avatar == null
-                    ? Text(
-                        widget.emoji,
-                        style: TextStyle(fontSize: active ? 22 : 20),
-                      )
-                    // Much larger than the emoji tabs — the learner's face
-                    // was barely legible at 20/24. A white ring + the
-                    // avatar's own shadow make it read as a real profile
-                    // pic sitting in the pill.
-                    : LearnerAvatar(avatar: avatar, size: active ? 40 : 34),
+                child: _icon(active, avatar, widget.iconAsset, widget.emoji),
               ),
               const SizedBox(height: 2),
               AnimatedDefaultTextStyle(
@@ -195,5 +191,23 @@ class _ItemState extends State<_Item> {
         ),
       ),
     );
+  }
+
+  // Render priority: learner avatar (Me) > bundled PNG (Home/Backpack) >
+  // emoji fallback. Avatar is sized large (learner's face); PNG glyphs sit
+  // at the icon scale of the emoji they replace.
+  Widget _icon(bool active, String? avatar, String? iconAsset, String emoji) {
+    if (avatar != null) {
+      return LearnerAvatar(avatar: avatar, size: active ? 40 : 34);
+    }
+    if (iconAsset != null) {
+      return Image.asset(
+        iconAsset,
+        width: active ? 26 : 24,
+        height: active ? 26 : 24,
+        fit: BoxFit.contain,
+      );
+    }
+    return Text(emoji, style: TextStyle(fontSize: active ? 22 : 20));
   }
 }
