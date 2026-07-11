@@ -12,8 +12,7 @@ class LearnerSetupScreen extends ConsumerStatefulWidget {
   const LearnerSetupScreen({super.key});
 
   @override
-  ConsumerState<LearnerSetupScreen> createState() =>
-      _LearnerSetupScreenState();
+  ConsumerState<LearnerSetupScreen> createState() => _LearnerSetupScreenState();
 }
 
 class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
@@ -78,7 +77,9 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
-          title: Text(_step == 0 ? 'Create Learner Profile' : 'Choose Your Avatar'),
+          title: Text(
+            _step == 0 ? 'Create Learner Profile' : 'Choose Your Avatar',
+          ),
           backgroundColor: Colors.white,
           foregroundColor: AppColors.ink,
           elevation: 0,
@@ -144,7 +145,10 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                     child: Text(
                       "Re-enter your own account password to confirm it's really "
                       'you creating this profile.',
-                      style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.textMuted,
+                      ),
                     ),
                   ),
                   _TextField(
@@ -172,31 +176,41 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
 
                         if (firstName.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please enter first name')),
+                            const SnackBar(
+                              content: Text('Please enter first name'),
+                            ),
                           );
                           return;
                         }
                         if (lastName.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please enter last name')),
+                            const SnackBar(
+                              content: Text('Please enter last name'),
+                            ),
                           );
                           return;
                         }
                         if (gradeLevel.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please enter grade level')),
+                            const SnackBar(
+                              content: Text('Please enter grade level'),
+                            ),
                           );
                           return;
                         }
                         if (username.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please enter username')),
+                            const SnackBar(
+                              content: Text('Please enter username'),
+                            ),
                           );
                           return;
                         }
                         if (parentPassword.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please confirm your password')),
+                            const SnackBar(
+                              content: Text('Please confirm your password'),
+                            ),
                           );
                           return;
                         }
@@ -217,7 +231,10 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                         children: [
                           Text(
                             'Next: Choose Avatar',
-                            style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
+                            style: TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                           SizedBox(width: 8),
                           Icon(Icons.arrow_forward_rounded, size: 18),
@@ -253,7 +270,7 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                     children: [
                       Expanded(
                         child: _AvatarSelectionCard(
-                          imagePath: 'assets/images/boy_mascot_full_body.jpg',
+                          imagePath: 'assets/images/boy_mascot_full_body.png',
                           label: 'Amir (Boy Mascot)',
                           isSelected: _avatar == 'boy_mascot',
                           themeColor: AppColors.teal,
@@ -264,7 +281,7 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                       const SizedBox(width: 16),
                       Expanded(
                         child: _AvatarSelectionCard(
-                          imagePath: 'assets/images/girl_mascot_full_body.jpg',
+                          imagePath: 'assets/images/girl_mascot_full_body.png',
                           label: 'Zara (Girl Mascot)',
                           isSelected: _avatar == 'girl_mascot',
                           themeColor: AppColors.gold,
@@ -283,7 +300,10 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppColors.ink,
-                              side: const BorderSide(color: AppColors.creamBorder, width: 2),
+                              side: const BorderSide(
+                                color: AppColors.creamBorder,
+                                width: 2,
+                              ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(15),
                               ),
@@ -291,7 +311,10 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                             onPressed: () => setState(() => _step = 0),
                             child: const Text(
                               'Back',
-                              style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
+                              style: TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ),
@@ -318,7 +341,9 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                                   ? '$firstName $lastName'
                                   : '$firstName ${_middleNameC.text.trim()} $lastName';
 
-                              final from = GoRouterState.of(context).uri.queryParameters['from'];
+                              final from = GoRouterState.of(
+                                context,
+                              ).uri.queryParameters['from'];
                               ref
                                   .read(sessionProvider.notifier)
                                   .createLearner(
@@ -330,13 +355,18 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                                   )
                                   .then((_) {
                                     if (context.mounted) {
-                                      context.go(from == 'parent' ? '/parent' : '/hub');
+                                      context.go(
+                                        from == 'parent' ? '/parent' : '/hub',
+                                      );
                                     }
                                   });
                             },
                             child: const Text(
                               'Create Profile',
-                              style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
+                              style: TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ),
@@ -416,7 +446,9 @@ class _TextFieldState extends State<_TextField> {
         suffixIcon: widget.obscureText
             ? IconButton(
                 icon: Icon(
-                  _obscured ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  _obscured
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
                   color: AppColors.textMuted,
                   size: 20,
                 ),
@@ -493,8 +525,14 @@ class _AvatarSelectionCard extends StatelessWidget {
           ),
           child: Column(
             children: [
+              // Transparent full-body PNG — sits directly on the card with
+              // no inner rounded clip (the old ClipRRect cropped the
+              // mascot's feet/hands). A soft tinted disc behind it grounds
+              // the figure so it doesn't float, and the illustration itself
+              // is much larger than before (was 130) so the child can
+              // actually see who they're picking.
               SizedBox(
-                height: 130,
+                height: 180,
                 child: AnimatedBuilder(
                   animation: floatAnimation,
                   builder: (context, child) {
@@ -506,12 +544,26 @@ class _AvatarSelectionCard extends StatelessWidget {
                       child: child,
                     );
                   },
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Image.asset(
-                      imagePath,
-                      fit: BoxFit.contain,
-                    ),
+                  child: Stack(
+                    alignment: Alignment.bottomCenter,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Container(
+                          height: 22,
+                          margin: const EdgeInsets.symmetric(horizontal: 18),
+                          decoration: BoxDecoration(
+                            color: themeColor.withValues(
+                              alpha: isSelected ? 0.16 : 0.08,
+                            ),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                      ),
+                      Positioned.fill(
+                        child: Image.asset(imagePath, fit: BoxFit.contain),
+                      ),
+                    ],
                   ),
                 ),
               ),
