@@ -20,7 +20,8 @@ class EditChildProfileScreen extends ConsumerStatefulWidget {
   const EditChildProfileScreen({super.key});
 
   @override
-  ConsumerState<EditChildProfileScreen> createState() => _EditChildProfileScreenState();
+  ConsumerState<EditChildProfileScreen> createState() =>
+      _EditChildProfileScreenState();
 }
 
 class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
@@ -72,12 +73,14 @@ class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
   Future<void> _save(LearnerProfile learner) async {
     final name = _nameC.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a name')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please enter a name')));
       return;
     }
-    await ref.read(sessionProvider.notifier).updateLearnerProfile(
+    await ref
+        .read(sessionProvider.notifier)
+        .updateLearnerProfile(
           name: name,
           age: _age,
           avatar: _avatar,
@@ -117,7 +120,9 @@ class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
               if (dialogContext.mounted) Navigator.of(dialogContext).pop();
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${learner.name}\'s profile was deleted')),
+                SnackBar(
+                  content: Text('${learner.name}\'s profile was deleted'),
+                ),
               );
               context.go('/parent');
             },
@@ -168,7 +173,10 @@ class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             const _Label('Full Name'),
-                            _Input(controller: _nameC, hint: 'e.g. Nurhana Ali'),
+                            _Input(
+                              controller: _nameC,
+                              hint: 'e.g. Nurhana Ali',
+                            ),
                             const SizedBox(height: 14),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -189,14 +197,18 @@ class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
                               min: 5,
                               max: 11,
                               divisions: 6,
-                              onChanged: (v) => setState(() => _age = v.round()),
+                              onChanged: (v) =>
+                                  setState(() => _age = v.round()),
                             ),
                             const SizedBox(height: 14),
                             const _Label('Grade Level'),
                             _Input(controller: _gradeC, hint: 'e.g. Grade 1'),
                             const SizedBox(height: 14),
                             const _Label('Username'),
-                            _Input(controller: _usernameC, hint: 'e.g. nurhana_ali'),
+                            _Input(
+                              controller: _usernameC,
+                              hint: 'e.g. nurhana_ali',
+                            ),
                             const SizedBox(height: 14),
                             const _Label('Mascot Avatar'),
                             const SizedBox(height: 8),
@@ -204,23 +216,27 @@ class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
                               children: [
                                 Expanded(
                                   child: _AvatarSelectionCard(
-                                    imagePath: 'assets/images/boy_mascot_full_body.jpg',
+                                    imagePath:
+                                        'assets/images/boy_mascot_full_body.png',
                                     label: 'Amir (Boy)',
                                     isSelected: _avatar == 'boy_mascot',
                                     themeColor: AppColors.teal,
                                     floatAnimation: _mascotFloatController,
-                                    onTap: () => setState(() => _avatar = 'boy_mascot'),
+                                    onTap: () =>
+                                        setState(() => _avatar = 'boy_mascot'),
                                   ),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: _AvatarSelectionCard(
-                                    imagePath: 'assets/images/girl_mascot_full_body.jpg',
+                                    imagePath:
+                                        'assets/images/girl_mascot_full_body.png',
                                     label: 'Zara (Girl)',
                                     isSelected: _avatar == 'girl_mascot',
                                     themeColor: AppColors.gold,
                                     floatAnimation: _mascotFloatController,
-                                    onTap: () => setState(() => _avatar = 'girl_mascot'),
+                                    onTap: () =>
+                                        setState(() => _avatar = 'girl_mascot'),
                                   ),
                                 ),
                               ],
@@ -238,11 +254,15 @@ class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
                               child: const Text('Save Changes'),
                             ),
                             const SizedBox(height: 20),
-                            const Divider(height: 1, color: AppColors.creamBorder),
+                            const Divider(
+                              height: 1,
+                              color: AppColors.creamBorder,
+                            ),
                             const SizedBox(height: 16),
                             Text(
                               'Danger Zone',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
                                     color: AppColors.coral,
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -251,7 +271,10 @@ class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
                             Text(
                               'Permanently delete ${learner.name}\'s profile and '
                               'progress. This cannot be undone.',
-                              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textMuted,
+                              ),
                             ),
                             const SizedBox(height: 12),
                             OutlinedButton.icon(
@@ -262,7 +285,10 @@ class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                              icon: const Icon(
+                                Icons.delete_outline_rounded,
+                                size: 18,
+                              ),
                               label: const Text('Delete Child Profile'),
                               onPressed: () => _confirmDelete(learner),
                             ),
@@ -311,7 +337,10 @@ class _Input extends StatelessWidget {
         hintText: hint,
         filled: true,
         fillColor: AppColors.neutralTint,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: AppColors.creamBorder),
@@ -391,10 +420,7 @@ class _AvatarSelectionCard extends StatelessWidget {
                   },
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.asset(
-                      imagePath,
-                      fit: BoxFit.contain,
-                    ),
+                    child: Image.asset(imagePath, fit: BoxFit.contain),
                   ),
                 ),
               ),
