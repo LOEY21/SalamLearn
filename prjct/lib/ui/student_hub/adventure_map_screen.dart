@@ -193,14 +193,11 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen> {
             controller: _scrollController,
             // `HubShell`'s outer Scaffold uses `extendBody: true` so the
             // floating pill nav doesn't shorten this screen's visible
-            // height — but that means the nav now floats *over* the last
-            // stretch of scrollable content instead of reserving its own
-            // space. This bottom padding is what actually lets that last
-            // stretch (the map's true bottom) scroll clear above the nav
-            // rather than staying permanently hidden underneath it.
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).padding.bottom + 110,
-            ),
+            // height. No bottom padding here — matching the approved
+            // preview exactly, the nav simply floats *over* whatever's
+            // currently at the bottom of the scroll, the same way it does
+            // in dumps/adventure_map_preview/preview.html. Padding here
+            // would just add dead cream space past the image's real end.
             child: SizedBox(
               height: _mapHeight,
               child: Stack(

@@ -30,24 +30,38 @@ class AdventureMapBottomNav extends StatelessWidget {
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(28),
           boxShadow: const [
-            BoxShadow(color: Color(0x47000000), blurRadius: 24, offset: Offset(0, 10)),
+            BoxShadow(
+              color: Color(0x47000000),
+              blurRadius: 24,
+              offset: Offset(0, 10),
+            ),
           ],
         ),
         child: Row(
           children: [
             Expanded(
-              child: _Item(icon: Icons.map_rounded, label: 'Home', active: active == HubTab.home, onTap: onHomeTap),
+              child: _Item(
+                emoji: '🗺️',
+                label: 'Home',
+                active: active == HubTab.home,
+                onTap: onHomeTap,
+              ),
             ),
             Expanded(
               child: _Item(
-                icon: Icons.backpack_rounded,
+                emoji: '🎒',
                 label: 'Backpack',
                 active: active == HubTab.backpack,
                 onTap: onBackpackTap,
               ),
             ),
             Expanded(
-              child: _Item(icon: Icons.face_rounded, label: 'Me', active: active == HubTab.profile, onTap: onProfileTap),
+              child: _Item(
+                emoji: '🙂',
+                label: 'Me',
+                active: active == HubTab.profile,
+                onTap: onProfileTap,
+              ),
             ),
           ],
         ),
@@ -57,9 +71,17 @@ class AdventureMapBottomNav extends StatelessWidget {
 }
 
 class _Item extends StatelessWidget {
-  const _Item({required this.icon, required this.label, required this.active, required this.onTap});
+  const _Item({
+    required this.emoji,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
 
-  final IconData icon;
+  // Literal emoji glyphs, not IconData — matches the approved preview's
+  // `<span class="icon">🗺️</span>` etc. exactly (dumps/adventure_map_preview
+  // /preview.html), rather than a Material-icon approximation.
+  final String emoji;
   final String label;
   final bool active;
   final VoidCallback onTap;
@@ -78,9 +100,16 @@ class _Item extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: color, size: 22),
+              Text(emoji, style: const TextStyle(fontSize: 20)),
               const SizedBox(height: 2),
-              Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700)),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ],
           ),
         ),
