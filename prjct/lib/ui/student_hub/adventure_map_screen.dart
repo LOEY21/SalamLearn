@@ -2,60 +2,88 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../data/curriculum_data.dart';
 import '../../logic/auth/session.dart';
 import '../../logic/learner/noor_energy_provider.dart';
 import '../../logic/recent_module_provider.dart';
 import '../../logic/teacher/teacher_providers.dart';
+import '../core_modules/lesson_player_screen.dart';
 import '../core_modules/module_registry.dart';
 import '../teacher_dashboard/teacher_dashboard_screen.dart'
     show progressionOverrideProvider;
 import '../theme/app_colors.dart';
 import '../widgets/learner_avatar.dart';
 import 'adventure_map_top_bar.dart';
+import 'destination_levels_sheet.dart';
 import 'noor_energy_resting_sheet.dart';
 
-/// Matches module ids to the free-text module names teachers pick when
-/// assigning homework — same matching rules `StudentHubScreen` used before
-/// this screen replaced it (kept in sync here since assignment gating is
-/// still module-name-based on the teacher side).
+/// Matches destination ids to the free-text module names teachers pick
+/// when assigning homework — same matching rules `StudentHubScreen` used
+/// before this screen replaced it (kept in sync here since assignment
+/// gating is still module-name-based on the teacher side). Re-keyed from
+/// the original 5 placeholder module ids to the 7 real destinations the
+/// Wireframe 0.3 curriculum port introduced.
 bool _doesModuleNameMatchId(String name, String id) {
   final cleanName = name.toLowerCase();
   return switch (id) {
-    'tracing' => cleanName.contains('tracing') || cleanName.contains('alif'),
-    'flashcards' =>
-      cleanName.contains('song') ||
-          cleanName.contains('practice') ||
-          cleanName.contains('flashcards') ||
-          cleanName.contains('sounds'),
-    'recitation' =>
-      cleanName.contains('recitation') ||
+    'village-of-salaam' =>
+      cleanName.contains('greeting') ||
+          cleanName.contains('salaam') ||
+          cleanName.contains('expression') ||
+          cleanName.contains('dua'),
+    'desert-of-letters' =>
+      cleanName.contains('tracing') ||
+          cleanName.contains('alif') ||
+          cleanName.contains('alphabet') ||
+          cleanName.contains('letter') ||
+          cleanName.contains('harakat'),
+    'garden-of-words' =>
+      cleanName.contains('vocabulary') ||
+          cleanName.contains('vocab') ||
+          cleanName.contains('word') ||
+          cleanName.contains('sounds') ||
+          cleanName.contains('flashcards'),
+    'river-of-sirah' =>
+      cleanName.contains('sirah') ||
+          cleanName.contains('recitation') ||
           cleanName.contains('pronunciation') ||
           cleanName.contains('ج') ||
           cleanName.contains('qur\'an') ||
-          cleanName.contains('hadith'),
-    'sorting' =>
-      cleanName.contains('sequence') ||
+          cleanName.contains('hadith') ||
+          cleanName.contains('stories') ||
+          cleanName.contains('story') ||
+          cleanName.contains('prophet'),
+    'masjid-of-salah' =>
+      cleanName.contains('salah') ||
+          cleanName.contains('prayer') ||
+          cleanName.contains('wudu') ||
+          cleanName.contains('fiqh'),
+    'mountain-of-iman' =>
+      cleanName.contains('aqidah') ||
+          cleanName.contains('iman') ||
+          cleanName.contains('values') ||
+          cleanName.contains('sequence') ||
           cleanName.contains('matcher') ||
           cleanName.contains('sort') ||
           cleanName.contains('match'),
-    'stories' => cleanName.contains('stories') || cleanName.contains('story'),
+    'quran-corner' =>
+      cleanName.contains('quran review') ||
+          cleanName.contains('qur\'an review') ||
+          cleanName.contains('knowledge'),
     _ => false,
   };
 }
 
-// Final positions recorded from the approved Task 7 HTML preview
-// (dumps/adventure_map_preview/preview.html, bg 2.png background,
-// 390x1821 canvas). Fraction of the background image's height, 0=top
-// 1=bottom.
-const _nodePositions = <String, double>{
-  'tracing': 0.824, // top: 1500px of 1821px canvas
-  'flashcards': 0.620, // top: 1130px — "Sounds"
-  'recitation': 0.439, // top: 800px — "Qur'an & Hadith" (current, approved)
-  'stories': 0.258, // top: 470px
-  'sorting': 0.077, // top: 140px — locked this phase
+// First-pass even interpolation across the map height for the 7 real
+// destinations (was 5 hand-tuned fractions recorded from the approved Task 7
+// HTML preview). These 7 have NOT been visually tuned against the actual
+// map background art yet — same tuning pass the original 5 got — treat as
+// a placeholder layout until checked against the real artwork.
+final _nodePositions = <String, double>{
+  for (final (i, module) in coreModules.indexed)
+    module.id: 0.824 - i * (0.824 - 0.077) / (coreModules.length - 1),
 };
 
 /// The exact overshoot easing the approved preview uses everywhere (nodes,
@@ -80,7 +108,7 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final currentId = ref.read(recentModuleProvider) ?? 'tracing';
+      final currentId = ref.read(recentModuleProvider) ?? coreModules.first.id;
       final fraction = _nodePositions[currentId] ?? 0.5;
       final target = (_mapHeight * fraction) - 300;
       _scrollController.jumpTo(target.clamp(0, _mapHeight));
@@ -166,6 +194,13 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen> {
     );
   }
 
+  // No real progress-tracking backend exists yet (placeholder phase, per
+  // this repo's standing constraint) — nothing is ever actually marked
+  // "completed" here, so every level in `DestinationLevelsSheet` reads as
+  // unlocked-from-scratch. Real completion tracking is a follow-up, not
+  // part of this port.
+  static const _completedLessons = <String>{};
+
   void _onNodeTap(ModuleInfo module, bool isAssigned) {
     if (!isAssigned) {
       _showLockedDialog(module.title);
@@ -176,9 +211,27 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen> {
       showNoorEnergyRestingSheet(context);
       return;
     }
-    ref.read(noorEnergyProvider.notifier).consume();
-    ref.read(recentModuleProvider.notifier).interactWith(module.id);
-    context.go('/module/${module.id}');
+    final destination = curriculum.firstWhere(
+      (d) => d.id == module.destinationId,
+    );
+    DestinationLevelsSheet.show(
+      context,
+      destination: destination,
+      completedLessons: _completedLessons,
+      noorEnergy: energy.current,
+      onStartLesson: (lesson, isNewLevel) {
+        ref.read(noorEnergyProvider.notifier).consume();
+        ref.read(recentModuleProvider.notifier).interactWith(module.id);
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => LessonPlayerScreen(
+              lesson: lesson,
+              onClose: () => Navigator.of(context).pop(),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
