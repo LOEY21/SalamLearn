@@ -214,31 +214,42 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
 
   Widget _buildActivityContent(Color lessonColor) {
     final activity = _activity;
+    // `key: ValueKey(activity.id)` matters here, not just style: two
+    // consecutive activities of the same type (e.g. two flashcard
+    // activities back to back) are the same widget type at the same tree
+    // position, so without a distinct key Flutter reuses the previous
+    // activity's State — its flip/card-index/done-set — instead of
+    // starting the new activity fresh.
     return switch (activity.type) {
       ActivityType.flashcard => FlashcardActivity(
+        key: ValueKey(activity.id),
         cards: activity.cards!,
         xp: activity.xp,
         color: lessonColor,
         onComplete: _handleActivityComplete,
       ),
       ActivityType.quiz => QuizActivity(
+        key: ValueKey(activity.id),
         questions: activity.questions!,
         xp: activity.xp,
         color: lessonColor,
         onComplete: _handleActivityComplete,
       ),
       ActivityType.story => StoryActivity(
+        key: ValueKey(activity.id),
         panels: activity.panels!,
         xp: activity.xp,
         onComplete: _handleActivityComplete,
       ),
       ActivityType.match => MatchActivity(
+        key: ValueKey(activity.id),
         pairs: activity.pairs!,
         xp: activity.xp,
         color: lessonColor,
         onComplete: _handleActivityComplete,
       ),
       ActivityType.sort => SortActivity(
+        key: ValueKey(activity.id),
         items: activity.items!,
         bucketA: activity.bucketA!,
         bucketB: activity.bucketB!,
