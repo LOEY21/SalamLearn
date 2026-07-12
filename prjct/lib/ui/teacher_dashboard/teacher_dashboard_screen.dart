@@ -3749,18 +3749,25 @@ class _HotSeatSheetState extends ConsumerState<_HotSeatSheet> {
   }
 }
 
-/// FR-6.6 manual selection — a scrollable grid of the active class's
-/// students; tapping one hands the (learnerId, name) pair straight to
-/// [onPicked]. The "Draw lots" wheel mode is added in a later task.
-class _HotSeatStudentPicker extends StatelessWidget {
+/// FR-6.6 student selection — either tap a name (manual) or spin
+/// [_HotSeatWheel] (randomized "draw lots"); both resolve to the same
+/// (learnerId, name) handoff via [onPicked].
+class _HotSeatStudentPicker extends StatefulWidget {
   const _HotSeatStudentPicker({required this.roster, required this.onPicked});
 
   final List<Map<String, dynamic>> roster;
   final void Function(String learnerId, String name) onPicked;
 
   @override
+  State<_HotSeatStudentPicker> createState() => _HotSeatStudentPickerState();
+}
+
+class _HotSeatStudentPickerState extends State<_HotSeatStudentPicker> {
+  bool _drawLots = false;
+
+  @override
   Widget build(BuildContext context) {
-    if (roster.isEmpty) {
+    if (widget.roster.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 16),
         child: Text(
@@ -3770,36 +3777,242 @@ class _HotSeatStudentPicker extends StatelessWidget {
       );
     }
 
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final student in roster)
-          InkWell(
-            onTap: () => onPicked(
-              student['learnerId'] as String,
-              student['name'] as String,
-            ),
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.neutralTint,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.creamBorder),
-              ),
-              child: Text(
-                student['name'] as String,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.ink,
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => setState(() => _drawLots = false),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: _drawLots ? null : AppColors.mint,
+                  foregroundColor: AppColors.teal,
                 ),
+                child: const Text('Pick manually'),
               ),
             ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => setState(() => _drawLots = true),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: _drawLots ? AppColors.mint : null,
+                  foregroundColor: AppColors.teal,
+                ),
+                child: const Text('Draw lots'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (_drawLots)
+          _HotSeatWheel(roster: widget.roster, onPicked: widget.onPicked)
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final student in widget.roster)
+                InkWell(
+                  onTap: () => widget.onPicked(
+                    student['learnerId'] as String,
+                    student['name'] as String,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.neutralTint,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.creamBorder),
+                    ),
+                    child: Text(
+                      student['name'] as String,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
       ],
     );
   }
+}
+
+/// FR-6.6 randomized selection — a segmented spinning wheel (one segment
+/// per roster student) matching the approved `dumps/hot_seat_wheel_mock.html`
+/// mock: a fixed AnimationController spin with a decelerating curve,
+/// landing on a random student.
+class _HotSeatWheel extends StatefulWidget {
+  const _HotSeatWheel({required this.roster, required this.onPicked});
+
+  final List<Map<String, dynamic>> roster;
+  final void Function(String learnerId, String name) onPicked;
+
+  @override
+  State<_HotSeatWheel> createState() => _HotSeatWheelState();
+}
+
+class _HotSeatWheelState extends State<_HotSeatWheel>
+    with SingleTickerProviderStateMixin {
+  static const _segmentColors = [
+    AppColors.teal,
+    AppColors.gold,
+    AppColors.coral,
+    AppColors.mintGreen,
+    AppColors.adventureBlue,
+    AppColors.adventurePurple,
+  ];
+
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2500),
+  );
+  late final Animation<double> _spin = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+
+  bool _spinning = false;
+  double _restingTurns = 0;
+  Tween<double> _spinTween = Tween<double>(begin: 0, end: 0);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _spinWheel() {
+    if (_spinning || widget.roster.isEmpty) return;
+    final winnerIndex = Random().nextInt(widget.roster.length);
+    final segmentTurns = 1 / widget.roster.length;
+    // Land the pointer (fixed at the top) on the middle of the winning
+    // segment, plus a few extra full turns for visual flourish.
+    final targetTurns =
+        4 + 1 - (segmentTurns * winnerIndex + segmentTurns / 2);
+
+    setState(() => _spinning = true);
+    _controller.reset();
+    _spinTween = Tween<double>(
+      begin: _restingTurns,
+      end: _restingTurns + targetTurns,
+    );
+    _controller.forward().whenComplete(() {
+      if (!mounted) return;
+      setState(() {
+        _spinning = false;
+        _restingTurns = (_restingTurns + targetTurns) % 1;
+      });
+      final winner = widget.roster[winnerIndex];
+      widget.onPicked(winner['learnerId'] as String, winner['name'] as String);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final roster = widget.roster;
+
+    return Column(
+      children: [
+        SizedBox(
+          width: 240,
+          height: 240,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              AnimatedBuilder(
+                animation: _spin,
+                builder: (context, child) {
+                  final turns = _spinTween.evaluate(_spin);
+                  return Transform.rotate(
+                    angle: turns * 2 * pi,
+                    child: child,
+                  );
+                },
+                child: CustomPaint(
+                  size: const Size(240, 240),
+                  painter: _WheelPainter(
+                    labels: roster.map((s) => s['name'] as String).toList(),
+                    colors: _segmentColors,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.arrow_drop_down_rounded,
+                size: 40,
+                color: AppColors.ink,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        FilledButton(
+          onPressed: _spinning ? null : _spinWheel,
+          style: FilledButton.styleFrom(backgroundColor: AppColors.teal),
+          child: Text(_spinning ? 'Spinning…' : 'Spin the wheel'),
+        ),
+      ],
+    );
+  }
+}
+
+class _WheelPainter extends CustomPainter {
+  _WheelPainter({required this.labels, required this.colors});
+
+  final List<String> labels;
+  final List<Color> colors;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    final segmentAngle = 2 * pi / labels.length;
+
+    for (var i = 0; i < labels.length; i++) {
+      final paint = Paint()..color = colors[i % colors.length];
+      final startAngle = -pi / 2 + segmentAngle * i;
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        startAngle,
+        segmentAngle,
+        true,
+        paint,
+      );
+
+      final labelAngle = startAngle + segmentAngle / 2;
+      final labelOffset = Offset(
+        center.dx + cos(labelAngle) * radius * 0.62,
+        center.dy + sin(labelAngle) * radius * 0.62,
+      );
+      final painter = TextPainter(
+        text: TextSpan(
+          text: labels[i],
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      painter.paint(
+        canvas,
+        labelOffset - Offset(painter.width / 2, painter.height / 2),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _WheelPainter oldDelegate) =>
+      oldDelegate.labels != labels;
 }
 
 class _DrawingCanvas extends StatefulWidget {

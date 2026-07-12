@@ -177,5 +177,34 @@ void main() {
       expect(find.text('Done'), findsNothing);
       expect(find.textContaining("Saved to Amir Ali's progress"), findsOneWidget);
     });
+
+    testWidgets('draw lots spins the wheel and advances to the canvas with a picked student', (
+      tester,
+    ) async {
+      await tester.runAsync(_seedTeacherWithOneStudent);
+
+      await _pumpTeacherDashboard(tester);
+
+      await tester.tap(find.text('Hot seat').first);
+      await _pumpSettled(tester);
+
+      await tester.tap(find.text('Draw lots'));
+      await tester.pump();
+      expect(find.text('Spin the wheel'), findsOneWidget);
+
+      await tester.tap(find.text('Spin the wheel'));
+      // The wheel's spin animation runs ~2.5s (matches the approved mock).
+      // A single large `pump(duration)` only advances the ticker one frame,
+      // which isn't enough for the AnimationController to register
+      // completion — pump in smaller steps so the ticker actually crosses
+      // its completion threshold.
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await _pumpSettled(tester);
+
+      expect(find.text('Hot Seat: Amir Ali'), findsOneWidget);
+      expect(find.text('Done'), findsOneWidget);
+    });
   });
 }
