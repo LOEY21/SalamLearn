@@ -3861,8 +3861,12 @@ class _DrawingCanvasState extends State<_DrawingCanvas> {
       final minY = allPoints.map((p) => p.dy).reduce(min);
       final maxY = allPoints.map((p) => p.dy).reduce(max);
       final box = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-      final canvasArea = box == null ? 1.0 : box.size.width * box.size.height;
-      final coverage = ((maxX - minX) * (maxY - minY)) / canvasArea;
+      final canvasArea = box == null ? 0.0 : box.size.width * box.size.height;
+      // Guard against a zero-area RenderBox (unmeasured/mid-resize frame)
+      // producing NaN — 0/0 isn't caught by clamp() the way Infinity is.
+      final coverage = canvasArea <= 0
+          ? 0.0
+          : ((maxX - minX) * (maxY - minY)) / canvasArea;
       accuracy = (coverage * 100).clamp(0.0, 100.0);
     }
 
