@@ -3926,6 +3926,7 @@ class _HotSeatWheelState extends State<_HotSeatWheel>
           width: 240,
           height: 240,
           child: Stack(
+            clipBehavior: Clip.none,
             alignment: Alignment.center,
             children: [
               AnimatedBuilder(
@@ -3945,10 +3946,16 @@ class _HotSeatWheelState extends State<_HotSeatWheel>
                   ),
                 ),
               ),
-              const Icon(
-                Icons.arrow_drop_down_rounded,
-                size: 40,
-                color: AppColors.ink,
+              // Fixed pointer at the top edge, matching the approved mock's
+              // `.pointer` (positioned above the wheel, pointing down at
+              // whichever segment lands under it) — not centered on the hub.
+              const Positioned(
+                top: -18,
+                child: Icon(
+                  Icons.arrow_drop_down_rounded,
+                  size: 40,
+                  color: AppColors.ink,
+                ),
               ),
             ],
           ),
