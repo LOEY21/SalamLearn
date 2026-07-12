@@ -1,12 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
 
+import '../../data/curriculum_data.dart';
 import '../../data/local/hive_boxes.dart';
 import '../../data/models/class_section.dart';
 import '../../data/models/custom_lesson.dart';
+import '../../data/models/lesson_folder.dart';
 import '../../data/repositories/class_repository.dart';
 import '../../data/repositories/custom_lesson_repository.dart';
 import '../../data/repositories/learner_repository.dart';
+import '../../data/repositories/lesson_folder_repository.dart';
 import '../../data/repositories/progress_repository.dart';
 import '../auth/session.dart';
 
@@ -63,6 +66,23 @@ class TeacherClassController extends Notifier<ClassSection?> {
     if (match.isEmpty) return;
     await _settings.put('activeClassId', classId);
     state = match.first;
+  }
+
+  /// Deletes an owned class (FR-6.1's inverse — a teacher can retire a
+  /// section they created). If the deleted class was active, falls back
+  /// to another owned class, or null if none remain.
+  Future<void> deleteClass(String classId) async {
+    final teacherId = ref.read(sessionProvider).activeTeacherId;
+    if (teacherId == null) return;
+    await _classes.deleteClass(classId);
+    final remaining = _classes.byTeacherId(teacherId);
+    if (remaining.isEmpty) {
+      await _settings.delete('activeClassId');
+      state = null;
+    } else if (state?.id == classId) {
+      await _settings.put('activeClassId', remaining.first.id);
+      state = remaining.first;
+    }
   }
 
   Future<void> regenerateInvitationCode() async {
@@ -227,3 +247,144 @@ final learnerCustomLessonsProvider =
           .map((e) => e.classId);
       return CustomLessonRepository().byClassIds(classIds);
     });
+
+/// A class's saved Module Library folders (FR-6.8), most recently updated
+/// first — backs `module_library_screen.dart`. Plain Hive read like
+/// [classCustomLessonsProvider]; callers `ref.invalidate` this after
+/// create/update/delete since Hive box writes aren't natively observable.
+final classLessonFoldersProvider = Provider.family<List<LessonFolder>, String>(
+  (ref, classId) => LessonFolderRepository().byClassId(classId),
+);
+
+/// One module's aggregated classroom telemetry (FR-6.2). Built from every
+/// enrolled learner's [ProgressRecord]s for that module — there is no
+/// field on [ProgressRecord] distinguishing Classroom Mode (cast/hot-seat)
+/// telemetry from solo Student Hub play, and core modules are still
+/// placeholders per the project's "no real telemetry yet" scope note, so
+/// this indexes all recorded activity rather than a Classroom-Mode-only
+/// subset. Closing that gap for real would mean adding an
+/// `isClassroomMode` field to [ProgressRecord] (Hive model + adapter bump)
+/// and wiring it from the casting/hot-seat flow.
+class ModuleHealth {
+  const ModuleHealth({
+    required this.moduleId,
+    required this.moduleName,
+    required this.completionRate,
+    required this.avgAccuracy,
+    required this.avgErrors,
+    required this.trend,
+    required this.healthIndex,
+    required this.hasActivity,
+  });
+
+  final String moduleId;
+  final String moduleName;
+  final double completionRate;
+  final double avgAccuracy;
+  final double avgErrors;
+  final double? trend;
+  final int healthIndex;
+  final bool hasActivity;
+}
+
+/// Pure aggregation, no Riverpod dependency — kept as a standalone function
+/// so [classHealthIndexProvider] is a one-line wrapper and the logic itself
+/// is directly unit-testable without a `ProviderContainer`.
+List<ModuleHealth> computeClassHealthIndex(String classId) {
+  final classes = ClassRepository();
+  final progress = ProgressRepository();
+  final enrollments = classes.byClassId(classId);
+  final rosterSize = enrollments.length;
+  final now = DateTime.now();
+  final weekAgo = now.subtract(const Duration(days: 7));
+  final twoWeeksAgo = now.subtract(const Duration(days: 14));
+
+  return curriculum.map((destination) {
+    final moduleId = destination.id.toString();
+
+    if (rosterSize == 0) {
+      return ModuleHealth(
+        moduleId: moduleId,
+        moduleName: destination.name,
+        completionRate: 0,
+        avgAccuracy: 0,
+        avgErrors: 0,
+        trend: null,
+        healthIndex: 0,
+        hasActivity: false,
+      );
+    }
+
+    final allRecords = <dynamic>[];
+    var learnersWithActivity = 0;
+    for (final enrollment in enrollments) {
+      final learnerRecords = progress
+          .byLearnerId(enrollment.learnerId)
+          .where((r) => r.moduleId == moduleId)
+          .toList();
+      if (learnerRecords.isNotEmpty) learnersWithActivity += 1;
+      allRecords.addAll(learnerRecords);
+    }
+
+    if (allRecords.isEmpty) {
+      return ModuleHealth(
+        moduleId: moduleId,
+        moduleName: destination.name,
+        completionRate: 0,
+        avgAccuracy: 0,
+        avgErrors: 0,
+        trend: null,
+        healthIndex: 0,
+        hasActivity: false,
+      );
+    }
+
+    final completionRate = learnersWithActivity / rosterSize;
+    final avgAccuracy =
+        allRecords.map((r) => r.strokeAccuracyPct as double).reduce((a, b) => a + b) /
+            allRecords.length;
+    final avgErrors =
+        allRecords.map((r) => r.sequencingErrors as int).reduce((a, b) => a + b) /
+            allRecords.length;
+
+    final thisWeek = allRecords.where((r) => (r.completedAt as DateTime).isAfter(weekAgo));
+    final priorWeek = allRecords.where(
+      (r) =>
+          (r.completedAt as DateTime).isAfter(twoWeeksAgo) &&
+          (r.completedAt as DateTime).isBefore(weekAgo),
+    );
+    double? trend;
+    if (thisWeek.isNotEmpty && priorWeek.isNotEmpty) {
+      final thisWeekAvg =
+          thisWeek.map((r) => r.strokeAccuracyPct as double).reduce((a, b) => a + b) /
+              thisWeek.length;
+      final priorWeekAvg =
+          priorWeek.map((r) => r.strokeAccuracyPct as double).reduce((a, b) => a + b) /
+              priorWeek.length;
+      trend = thisWeekAvg - priorWeekAvg;
+    }
+
+    final healthIndex = (0.4 * completionRate * 100 +
+            0.4 * avgAccuracy +
+            0.2 * (100 - avgErrors * 20).clamp(0, 100))
+        .clamp(0, 100)
+        .round();
+
+    return ModuleHealth(
+      moduleId: moduleId,
+      moduleName: destination.name,
+      completionRate: completionRate,
+      avgAccuracy: avgAccuracy,
+      avgErrors: avgErrors,
+      trend: trend,
+      healthIndex: healthIndex,
+      hasActivity: true,
+    );
+  }).toList();
+}
+
+/// Class Health Index (FR-6.2) for the given classId — backs
+/// `_ClassHealthSection` on the Teacher Dashboard's Classroom tab.
+final classHealthIndexProvider = Provider.family<List<ModuleHealth>, String>(
+  (ref, classId) => computeClassHealthIndex(classId),
+);
