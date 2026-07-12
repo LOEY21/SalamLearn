@@ -1,0 +1,149 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Hot Seat — Draw Lots Wheel Mock</title>
+<style>
+  :root {
+    --teal: #0F6E56;
+    --teal-dark: #0A4F3E;
+    --gold: #EF9F27;
+    --coral: #D85A30;
+    --mint-green: #5BC4A0;
+    --adventure-blue: #72C9F8;
+    --adventure-purple: #6C63D6;
+    --cream: #FAF6EC;
+    --ink: #2C2C2A;
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    background: var(--cream);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .wheel-wrap {
+    position: relative;
+    width: 280px;
+    height: 280px;
+  }
+  .pointer {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 14px solid transparent;
+    border-right: 14px solid transparent;
+    border-top: 22px solid var(--ink);
+    z-index: 2;
+  }
+  .wheel {
+    width: 280px;
+    height: 280px;
+    border-radius: 50%;
+    border: 6px solid white;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+    background: conic-gradient(
+      var(--teal) 0deg 72deg,
+      var(--gold) 72deg 144deg,
+      var(--coral) 144deg 216deg,
+      var(--mint-green) 216deg 288deg,
+      var(--adventure-blue) 288deg 360deg
+    );
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 2.5s cubic-bezier(0.17, 0.67, 0.12, 0.99);
+  }
+  .wheel-labels {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+  }
+  .wheel-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    font-size: 13px;
+    font-weight: 700;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+    transform-origin: 0 0;
+  }
+  .hub {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 36px; height: 36px;
+    background: white;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  }
+  button {
+    padding: 12px 28px;
+    border-radius: 999px;
+    border: none;
+    background: var(--teal);
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  #result {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+    min-height: 22px;
+  }
+</style>
+</head>
+<body>
+  <div class="wheel-wrap">
+    <div class="pointer"></div>
+    <div class="wheel" id="wheel">
+      <div class="wheel-labels" id="labels"></div>
+      <div class="hub"></div>
+    </div>
+  </div>
+  <button id="spin">Spin the wheel</button>
+  <div id="result"></div>
+
+<script>
+  const names = ["Ali", "Yusra", "Hamza", "Amina", "Bilal"];
+  const labelsEl = document.getElementById("labels");
+  const segmentDeg = 360 / names.length;
+  names.forEach((name, i) => {
+    const el = document.createElement("div");
+    el.className = "wheel-label";
+    const angle = segmentDeg * i + segmentDeg / 2;
+    el.style.transform = `rotate(${angle}deg) translate(90px, -6px)`;
+    el.textContent = name;
+    labelsEl.appendChild(el);
+  });
+
+  const wheel = document.getElementById("wheel");
+  const result = document.getElementById("result");
+  let currentRotation = 0;
+
+  document.getElementById("spin").addEventListener("click", () => {
+    const winnerIndex = Math.floor(Math.random() * names.length);
+    // Land the pointer (fixed at top, 0deg) on the middle of the winning
+    // segment: rotate so that segment's midpoint reaches 0deg, plus a few
+    // extra full spins for visual flourish.
+    const targetMidpoint = segmentDeg * winnerIndex + segmentDeg / 2;
+    const extraSpins = 4 * 360;
+    currentRotation += extraSpins + (360 - targetMidpoint) - (currentRotation % 360);
+    wheel.style.transform = `rotate(${currentRotation}deg)`;
+    result.textContent = "";
+    setTimeout(() => {
+      result.textContent = `Picked: ${names[winnerIndex]}`;
+    }, 2600);
+  });
+</script>
+</body>
+</html>
