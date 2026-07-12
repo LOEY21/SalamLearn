@@ -20,6 +20,10 @@
 - `AppColors` (in `lib/ui/theme/app_colors.dart`) is the only palette to use — no new colors.
 - `dart:math` is already imported at the top of `teacher_dashboard_screen.dart` (line 1), so `max`, `min`, and `Random` are available unprefixed with no new import.
 - Existing test seeding pattern: `test/test_helpers/hive_test_setup.dart`'s `setUpTestHive()`/`tearDownTestHive()` bootstrap a temp-dir Hive instance with every adapter/box the app uses except `custom_lessons`/`lesson_folders` (not needed here). No existing test seeds a full teacher+class+enrolled-student scenario — Task 2 adds that seeding helper.
+- **Always pump `TeacherDashboardScreen` via the `_pumpTeacherDashboard(tester)` helper, not raw `pumpWidget`.** It's defined once in `hot_seat_test.dart` (Task 2 adds it) and handles two things every test needs: (1) `TeacherDashboardScreen.build()` calls `GoRouterState.of(context)` directly (for a `?tab=` query param) — a bare `MaterialApp(home: TeacherDashboardScreen())` throws immediately, it needs a real `GoRouter` ancestor; (2) the screen needs a `430x900` surface — anything narrower (including the `400x800` "phone" size `widget_test.dart` uses elsewhere) overflows `_DrawingCanvas`'s top row (pre-existing layout quirk, not something this plan fixes).
+- **Seed via `tester.runAsync(_seedTeacherWithOneStudent)`, not a bare `await`.** The seed helper does real Hive writes and a `Random.secure()`-backed password hash; calling it directly inside a `testWidgets` body (not `setUp`) deadlocks under this binding's test zone — confirmed by isolating each step. `runAsync` runs it on the real event loop instead, which is Flutter's documented fix for genuine async/IO work inside a widget-test body. (Calling it from `setUp()` instead would also work, since `setUp` isn't inside that zone — `runAsync` was chosen so each test can seed its own data inline.)
+- **`find.text('Amir Ali')` matches twice once the Hot Seat sheet is open** — once in the dashboard's own student roster behind the sheet, once in the picker grid. The sheet's copy is always the later match in the tree (bottom sheets mount via the root `Overlay`), so use `find.text('Amir Ali').last` when tapping, and `findsNWidgets(2)` (not `findsOneWidget`) when just asserting presence while the sheet is open.
+- **`pumpAndSettle()` hangs forever in this test file — use `_pumpSettled(tester)` instead.** `TeacherDashboardScreen`'s `_ClassroomHero` (line ~2769) starts an unconditional ambient "breathing" `AnimationController..repeat(reverse: true)` once a real teacher/class is loaded (it doesn't render at all in an empty/unauthenticated state, which is why this wasn't obvious before). `pumpAndSettle()` waits for all animations to finish and this one never does, so it hangs for minutes until the test framework kills it. `test/ui/teacher_dashboard/hot_seat_test.dart` already defines a `_pumpSettled(WidgetTester tester)` helper (bounded `pump()` + `pump(Duration(milliseconds: 600))`) — use that everywhere instead of `pumpAndSettle()` in this file. Task 2's test snippet below already uses it; the code shown for Tasks 3-4 has been updated to match.
 - **Known pre-existing issue, not in scope:** `test/widget_test.dart`'s `TeacherDashboardScreen` group (`phone layout...` / `wide layout...` tests) already fails on `master` before this plan — it asserts hardcoded text (`'Ali'`, `'Grade 1 · Section A'`) left over from before the Hive-backed migration, and no seeding happens in that test. Do not fix it as part of this plan; it's an unrelated regression. The new tests below use their own file so they aren't affected by it.
 
 ---
@@ -215,12 +219,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hive/hive.dart';
 
 import 'package:salamlearn/data/local/hive_boxes.dart';
 import 'package:salamlearn/data/repositories/class_repository.dart';
 import 'package:salamlearn/data/repositories/learner_repository.dart';
-import 'package:salamlearn/data/repositories/progress_repository.dart';
 import 'package:salamlearn/data/repositories/teacher_repository.dart';
 import 'package:salamlearn/ui/teacher_dashboard/teacher_dashboard_screen.dart';
 
@@ -265,6 +269,44 @@ Future<_Seed> _seedTeacherWithOneStudent() async {
   return _Seed(teacherId: teacher.id, classId: section.id, learnerId: learner.id!);
 }
 
+/// `TeacherDashboardScreen`'s `_ClassroomHero` runs a perpetual ambient
+/// "breathing" animation (`..repeat(reverse: true)`) once real teacher/class
+/// data is loaded — `pumpAndSettle()` waits forever on an animation that
+/// never settles. Pump a fixed number of frames instead, long enough for
+/// one-shot entrance/transition animations (sheet open, hero entrance) to
+/// finish.
+Future<void> _pumpSettled(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 600));
+}
+
+/// Pumps `TeacherDashboardScreen` the way it actually needs to be hosted:
+/// - Real `GoRouter`, not a bare `MaterialApp(home: ...)` — the screen reads
+///   `GoRouterState.of(context)` directly in `build()` (for the `?tab=`
+///   query param), which throws without a real router ancestor.
+/// - A `430x900` surface — the default test surface (and even the
+///   `400x800` phone size used elsewhere in this repo's `widget_test.dart`)
+///   is too narrow for `_DrawingCanvas`'s top row (letter dropdown + Clear
+///   Canvas button), causing a RenderFlex overflow that flutter_test treats
+///   as a test failure. This is a pre-existing `_DrawingCanvas` layout
+///   quirk, not something to fix as part of this plan — widening the test
+///   surface sidesteps it.
+Future<void> _pumpTeacherDashboard(WidgetTester tester) async {
+  await tester.binding.setSurfaceSize(const Size(430, 900));
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+
+  final router = GoRouter(
+    initialLocation: '/teacher',
+    routes: [
+      GoRoute(path: '/teacher', builder: (_, _) => const TeacherDashboardScreen()),
+    ],
+  );
+  await tester.pumpWidget(
+    ProviderScope(child: MaterialApp.router(routerConfig: router)),
+  );
+  await _pumpSettled(tester);
+}
+
 void main() {
   late Directory tempDir;
 
@@ -280,26 +322,32 @@ void main() {
     testWidgets('picker shows the active class roster and advances to the canvas on tap', (
       tester,
     ) async {
-      await _seedTeacherWithOneStudent();
+      // The seed helper does real Hive writes + a Random.secure()-backed
+      // password hash — calling it directly inside a testWidgets body (not
+      // setUp) deadlocks under this binding's test zone. `runAsync` runs it
+      // on the real event loop instead, matching Flutter's documented fix
+      // for genuine async/IO work inside a widget test body.
+      await tester.runAsync(_seedTeacherWithOneStudent);
 
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(home: TeacherDashboardScreen()),
-        ),
-      );
-      await tester.pumpAndSettle();
+      await _pumpTeacherDashboard(tester);
 
       await tester.tap(find.text('Hot seat').first);
-      await tester.pumpAndSettle();
+      await _pumpSettled(tester);
 
-      expect(find.text('Amir Ali'), findsOneWidget);
+      // "Amir Ali" appears twice once the sheet is open: once in the
+      // dashboard's own student roster behind the sheet, once in the
+      // picker grid — the sheet's copy is the later one in the tree
+      // (bottom sheets mount via the root Overlay, after the page body).
+      expect(find.text('Amir Ali'), findsNWidgets(2));
       expect(find.text('Done'), findsNothing);
 
-      await tester.tap(find.text('Amir Ali'));
-      await tester.pumpAndSettle();
+      await tester.tap(find.text('Amir Ali').last);
+      await _pumpSettled(tester);
 
+      // The canvas step's Done button doesn't exist until Task 3 — this
+      // task only proves the picker successfully hands off to the canvas.
       expect(find.text('Hot Seat: Amir Ali'), findsOneWidget);
-      expect(find.text('Done'), findsOneWidget);
+      expect(find.text('Clear Canvas'), findsOneWidget);
     });
   });
 }
@@ -310,13 +358,7 @@ void main() {
 Run: `flutter test test/ui/teacher_dashboard/hot_seat_test.dart`
 Expected: FAIL — `find.text('Amir Ali')` finds nothing (picker doesn't exist yet; today's sheet jumps straight to the tracing canvas with no roster).
 
-- [ ] **Step 3: Add the import**
-
-In `lib/ui/teacher_dashboard/teacher_dashboard_screen.dart`, after the existing `import '../../data/repositories/class_repository.dart';` (line 9), add:
-
-```dart
-import '../../data/repositories/progress_repository.dart';
-```
+- [ ] **Step 3: (skipped)** No new import needed in `teacher_dashboard_screen.dart` for this task — `ProgressRepository` isn't called until Task 3, and adding an unused import now would fail `flutter analyze`.
 
 - [ ] **Step 4: Replace `_openHotSeat` and add the picker/sheet widgets**
 
@@ -511,30 +553,31 @@ git commit -m "Add Hot Seat manual student picker (FR-6.6)"
 ### Task 3: Heuristic telemetry + Done button on the tracing canvas
 
 **Files:**
-- Modify: `lib/ui/teacher_dashboard/teacher_dashboard_screen.dart` (`_DrawingCanvasState`, currently around line 3475-3559)
+- Modify: `lib/ui/teacher_dashboard/teacher_dashboard_screen.dart` (`_DrawingCanvasState`, currently around line 3475-3559; also needs a new import)
 - Modify: `test/ui/teacher_dashboard/hot_seat_test.dart`
 
 - [ ] **Step 1: Write the failing test**
 
-Add to the `group('Hot Seat', ...)` block in `test/ui/teacher_dashboard/hot_seat_test.dart`, after the existing test:
+First, add back the `ProgressRepository` import Task 2 deliberately left out (it was unused until now). In `test/ui/teacher_dashboard/hot_seat_test.dart`, after `import 'package:salamlearn/data/repositories/learner_repository.dart';`, add:
+
+```dart
+import 'package:salamlearn/data/repositories/progress_repository.dart';
+```
+
+Then add this test to the `group('Hot Seat', ...)` block, after the existing test:
 
 ```dart
     testWidgets('Done writes a progress record for the picked student and closes the sheet', (
       tester,
     ) async {
-      final seed = await _seedTeacherWithOneStudent();
+      final seed = await tester.runAsync(_seedTeacherWithOneStudent);
 
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(home: TeacherDashboardScreen()),
-        ),
-      );
-      await tester.pumpAndSettle();
+      await _pumpTeacherDashboard(tester);
 
       await tester.tap(find.text('Hot seat').first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Amir Ali'));
-      await tester.pumpAndSettle();
+      await _pumpSettled(tester);
+      await tester.tap(find.text('Amir Ali').last);
+      await _pumpSettled(tester);
 
       // A short drag on the tracing canvas, so the heuristic has real
       // stroke data to compute from.
@@ -545,9 +588,9 @@ Add to the `group('Hot Seat', ...)` block in `test/ui/teacher_dashboard/hot_seat
       await tester.pump();
 
       await tester.tap(find.text('Done'));
-      await tester.pumpAndSettle();
+      await _pumpSettled(tester);
 
-      final records = ProgressRepository().byLearnerId(seed.learnerId);
+      final records = ProgressRepository().byLearnerId(seed!.learnerId);
       expect(records, hasLength(1));
       expect(records.first.assignedByTeacher, isTrue);
       expect(records.first.moduleId, startsWith('hot_seat_'));
@@ -558,12 +601,20 @@ Add to the `group('Hot Seat', ...)` block in `test/ui/teacher_dashboard/hot_seat
     });
 ```
 
+(`tester.runAsync` returns `T?` — the `!` on `seed!.learnerId` is safe here since a `null` would only happen if `runAsync` itself threw, which would already have failed the test before this line.)
+
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `flutter test test/ui/teacher_dashboard/hot_seat_test.dart`
 Expected: FAIL — no `Done` button exists yet on the canvas, so `find.text('Done')` before the tap already finds nothing and the tap step throws.
 
-- [ ] **Step 3: Rewrite `_DrawingCanvasState`**
+- [ ] **Step 3: Add the import and rewrite `_DrawingCanvasState`**
+
+In `lib/ui/teacher_dashboard/teacher_dashboard_screen.dart`, add this import after the existing `import '../../data/repositories/class_repository.dart';` (near line 9):
+
+```dart
+import '../../data/repositories/progress_repository.dart';
+```
 
 Replace the whole `_DrawingCanvasState` class body (currently `lib/ui/teacher_dashboard/teacher_dashboard_screen.dart:3475-3559`, i.e. everything from `class _DrawingCanvasState extends State<_DrawingCanvas> {` through its closing `}` right before `class _SketchPainter`):
 
@@ -759,17 +810,12 @@ Add to `test/ui/teacher_dashboard/hot_seat_test.dart`'s `group('Hot Seat', ...)`
     testWidgets('draw lots spins the wheel and advances to the canvas with a picked student', (
       tester,
     ) async {
-      await _seedTeacherWithOneStudent();
+      await tester.runAsync(_seedTeacherWithOneStudent);
 
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(home: TeacherDashboardScreen()),
-        ),
-      );
-      await tester.pumpAndSettle();
+      await _pumpTeacherDashboard(tester);
 
       await tester.tap(find.text('Hot seat').first);
-      await tester.pumpAndSettle();
+      await _pumpSettled(tester);
 
       await tester.tap(find.text('Draw lots'));
       await tester.pump();
@@ -778,7 +824,7 @@ Add to `test/ui/teacher_dashboard/hot_seat_test.dart`'s `group('Hot Seat', ...)`
       await tester.tap(find.text('Spin the wheel'));
       // The wheel's spin animation runs ~2.5s (matches the approved mock).
       await tester.pump(const Duration(milliseconds: 2600));
-      await tester.pumpAndSettle();
+      await _pumpSettled(tester);
 
       expect(find.text('Hot Seat: Amir Ali'), findsOneWidget);
       expect(find.text('Done'), findsOneWidget);

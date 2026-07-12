@@ -20,7 +20,7 @@ import '../widgets/soft_card.dart';
 /// plain in-memory Notifier like before.
 class ProgressionOverrideNotifier extends Notifier<bool> {
   @override
-  bool build() => true;
+  bool build() => false;
 
   void toggle(bool value) => state = value;
 }
@@ -52,13 +52,16 @@ class TeacherDashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // See `ParentDashboardScreen.build`'s matching comment and
-    // `SessionNotifier.verifyActiveAccountStillExists`'s doc — catches this
-    // teacher account having been removed via the admin web panel.
-    ref.listen(accountStillExistsProvider, (_, next) {
-      next.whenData((stillExists) {
-        if (stillExists) return;
-        showDialog<void>(
+    // Watches the teacher's Firestore document in real time. If the admin
+    // web panel deletes it, the stream emits false immediately and this
+    // listener fires — showing the warning dialog without needing a page
+    // reload or app restart. Uses `prev` vs `next` to fire only once:
+    // after the dialog shows and navigates away, the stream auto-disposes.
+    ref.listen(accountStreamProvider, (prev, next) {
+      next.whenData((stillExists) async {
+        if (stillExists || prev?.asData?.value == false) return;
+        if (!context.mounted) return;
+        await showDialog<void>(
           context: context,
           barrierDismissible: false,
           builder: (dialogContext) => AlertDialog(
@@ -69,20 +72,22 @@ class TeacherDashboardScreen extends ConsumerWidget {
             ),
             title: const Text('Account no longer available'),
             content: const Text(
-              'This account was removed by an administrator. Please sign in again or create a new account.',
+              'This account was removed by an administrator. '
+              'Your data will no longer sync. Please contact your school '
+              'administrator if you believe this was a mistake.',
             ),
             actions: [
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: AppColors.teal),
-                onPressed: () {
-                  Navigator.of(dialogContext).pop();
-                  context.go('/roles');
-                },
+                onPressed: () => Navigator.of(dialogContext).pop(),
                 child: const Text('OK'),
               ),
             ],
           ),
         );
+        if (!context.mounted) return;
+        context.go('/roles');
+        await ref.read(sessionProvider.notifier).logout();
       });
     });
 
@@ -1745,34 +1750,7 @@ class _ActionColumn extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: const [
-            Text(
-              'Hot Seat Tracing Mode',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.ink,
-              ),
-            ),
-            SizedBox(height: 4),
-            Text(
-              "Enables student to trace letters directly on the teacher's device.",
-              style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-            ),
-            SizedBox(height: 16),
-            _DrawingCanvas(),
-          ],
-        ),
-      ),
+      builder: (context) => const _HotSeatSheet(),
     );
   }
 
@@ -3697,8 +3675,142 @@ class _DashedDivider extends StatelessWidget {
   }
 }
 
+/// FR-6.6 — the Hot Seat bottom sheet's content. Step-driven: shows
+/// [_HotSeatStudentPicker] first (reading the active class's roster off
+/// [teacherRosterProvider]), then swaps to [_DrawingCanvas] once a student
+/// is picked, matching the design spec's "picker step → canvas step" flow.
+class _HotSeatSheet extends ConsumerStatefulWidget {
+  const _HotSeatSheet();
+
+  @override
+  ConsumerState<_HotSeatSheet> createState() => _HotSeatSheetState();
+}
+
+class _HotSeatSheetState extends ConsumerState<_HotSeatSheet> {
+  String? _pickedLearnerId;
+  String? _pickedName;
+
+  void _pick(String learnerId, String name) {
+    setState(() {
+      _pickedLearnerId = learnerId;
+      _pickedName = name;
+    });
+  }
+
+  void _onSaved(String name) {
+    Navigator.of(context).pop();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Saved to $name's progress")),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final roster = ref.watch(teacherRosterProvider);
+    final pickedName = _pickedName;
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            pickedName == null ? 'Hot Seat Tracing Mode' : 'Hot Seat: $pickedName',
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.ink,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            pickedName == null
+                ? 'Pick which student is up before launching the tracing canvas.'
+                : "Enables the student to trace letters directly on this device.",
+            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 16),
+          if (pickedName == null)
+            _HotSeatStudentPicker(roster: roster, onPicked: _pick)
+          else
+            _DrawingCanvas(
+              learnerId: _pickedLearnerId!,
+              studentName: pickedName,
+              onSaved: _onSaved,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// FR-6.6 manual selection — a scrollable grid of the active class's
+/// students; tapping one hands the (learnerId, name) pair straight to
+/// [onPicked]. The "Draw lots" wheel mode is added in a later task.
+class _HotSeatStudentPicker extends StatelessWidget {
+  const _HotSeatStudentPicker({required this.roster, required this.onPicked});
+
+  final List<Map<String, dynamic>> roster;
+  final void Function(String learnerId, String name) onPicked;
+
+  @override
+  Widget build(BuildContext context) {
+    if (roster.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Text(
+          'No students enrolled yet — enroll students first.',
+          style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final student in roster)
+          InkWell(
+            onTap: () => onPicked(
+              student['learnerId'] as String,
+              student['name'] as String,
+            ),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.neutralTint,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.creamBorder),
+              ),
+              child: Text(
+                student['name'] as String,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.ink,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _DrawingCanvas extends StatefulWidget {
-  const _DrawingCanvas();
+  const _DrawingCanvas({
+    required this.learnerId,
+    required this.studentName,
+    required this.onSaved,
+  });
+
+  final String learnerId;
+  final String studentName;
+  final ValueChanged<String> onSaved;
 
   @override
   State<_DrawingCanvas> createState() => _DrawingCanvasState();
