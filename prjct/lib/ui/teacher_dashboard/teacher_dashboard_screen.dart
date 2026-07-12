@@ -355,6 +355,13 @@ class _PhoneLayoutState extends ConsumerState<_PhoneLayout>
                           child: _ClassManagementEntryCard(),
                         ),
                         const SizedBox(height: 22),
+                        const _SectionLabel('CLASS HEALTH'),
+                        const SizedBox(height: 10),
+                        const _StaggerFadeIn(
+                          delay: Duration(milliseconds: 120),
+                          child: _ActiveClassHealthSection(),
+                        ),
+                        const SizedBox(height: 22),
                         const _SectionLabel('CREATE A CLASS'),
                         const SizedBox(height: 10),
                         const _StaggerFadeIn(
@@ -681,6 +688,13 @@ class _WideLayoutState extends ConsumerState<_WideLayout>
                                     _StaggerFadeIn(
                                       delay: Duration(milliseconds: 60),
                                       child: _ClassManagementEntryCard(),
+                                    ),
+                                    SizedBox(height: 16),
+                                    _SectionLabel('CLASS HEALTH'),
+                                    SizedBox(height: 10),
+                                    _StaggerFadeIn(
+                                      delay: Duration(milliseconds: 120),
+                                      child: _ActiveClassHealthSection(),
                                     ),
                                     SizedBox(height: 16),
                                     _SectionLabel('CREATE A CLASS'),
@@ -1616,6 +1630,20 @@ class _ModuleHealthRow extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// Resolves the currently-active class before handing off to
+/// [ClassHealthSection] — kept separate so [ClassHealthSection] itself
+/// only depends on a plain `classId`, not the active-class provider.
+class _ActiveClassHealthSection extends ConsumerWidget {
+  const _ActiveClassHealthSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final section = ref.watch(teacherClassControllerProvider);
+    if (section == null) return const SizedBox.shrink();
+    return ClassHealthSection(classId: section.id);
   }
 }
 
