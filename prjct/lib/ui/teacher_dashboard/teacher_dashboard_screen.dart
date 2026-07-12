@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
 
 import '../../data/repositories/class_repository.dart';
+import '../../data/repositories/progress_repository.dart';
 import '../../logic/auth/session.dart';
 import '../../logic/settings/settings_providers.dart';
 import '../../logic/sync/sync_manager.dart';
@@ -3819,8 +3820,63 @@ class _DrawingCanvas extends StatefulWidget {
 class _DrawingCanvasState extends State<_DrawingCanvas> {
   final List<Offset?> _points = [];
   String _selectedLetter = 'ج';
+  final _canvasKey = GlobalKey();
+  final Stopwatch _stopwatch = Stopwatch()..start();
 
   static const _letterGlyphs = {'ا': 'ا', 'ب': 'ب', 'ج': 'ج', 'د': 'د'};
+
+  @override
+  void dispose() {
+    _stopwatch.stop();
+    super.dispose();
+  }
+
+  /// Heuristic telemetry — no real handwriting-recognition engine exists
+  /// yet (matches this app's placeholder-module convention for core
+  /// learning engines). `sequencingErrors` is the pen-lift count (more
+  /// separate strokes than one continuous letter = more trouble);
+  /// `strokeAccuracyPct` is the drawn strokes' bounding-box coverage of the
+  /// canvas. Upgrade path: swap in a real stroke-scoring pass once a real
+  /// tracing engine module exists.
+  Future<void> _finishAttempt() async {
+    final segments = <List<Offset>>[];
+    var current = <Offset>[];
+    for (final point in _points) {
+      if (point == null) {
+        if (current.isNotEmpty) segments.add(current);
+        current = [];
+      } else {
+        current.add(point);
+      }
+    }
+    if (current.isNotEmpty) segments.add(current);
+
+    final sequencingErrors = segments.isEmpty ? 0 : segments.length - 1;
+
+    var accuracy = 0.0;
+    final allPoints = segments.expand((s) => s).toList();
+    if (allPoints.isNotEmpty) {
+      final minX = allPoints.map((p) => p.dx).reduce(min);
+      final maxX = allPoints.map((p) => p.dx).reduce(max);
+      final minY = allPoints.map((p) => p.dy).reduce(min);
+      final maxY = allPoints.map((p) => p.dy).reduce(max);
+      final box = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+      final canvasArea = box == null ? 1.0 : box.size.width * box.size.height;
+      final coverage = ((maxX - minX) * (maxY - minY)) / canvasArea;
+      accuracy = (coverage * 100).clamp(0.0, 100.0);
+    }
+
+    await ProgressRepository().writeProgress(
+      learnerId: widget.learnerId,
+      moduleId: 'hot_seat_$_selectedLetter',
+      strokeAccuracyPct: accuracy,
+      sequencingErrors: sequencingErrors,
+      timeOnTaskSeconds: _stopwatch.elapsed.inSeconds,
+      assignedByTeacher: true,
+    );
+
+    if (mounted) widget.onSaved(widget.studentName);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3856,6 +3912,7 @@ class _DrawingCanvasState extends State<_DrawingCanvas> {
         AspectRatio(
           aspectRatio: 1.4,
           child: Container(
+            key: _canvasKey,
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
@@ -3894,6 +3951,19 @@ class _DrawingCanvasState extends State<_DrawingCanvas> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: _finishAttempt,
+            icon: const Icon(Icons.check_circle_outline_rounded),
+            label: const Text('Done'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.teal,
+              foregroundColor: Colors.white,
             ),
           ),
         ),

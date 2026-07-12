@@ -9,6 +9,7 @@ import 'package:hive/hive.dart';
 import 'package:salamlearn/data/local/hive_boxes.dart';
 import 'package:salamlearn/data/repositories/class_repository.dart';
 import 'package:salamlearn/data/repositories/learner_repository.dart';
+import 'package:salamlearn/data/repositories/progress_repository.dart';
 import 'package:salamlearn/data/repositories/teacher_repository.dart';
 import 'package:salamlearn/ui/teacher_dashboard/teacher_dashboard_screen.dart';
 
@@ -129,6 +130,52 @@ void main() {
       // task only proves the picker successfully hands off to the canvas.
       expect(find.text('Hot Seat: Amir Ali'), findsOneWidget);
       expect(find.text('Clear Canvas'), findsOneWidget);
+    });
+
+    testWidgets('Done writes a progress record for the picked student and closes the sheet', (
+      tester,
+    ) async {
+      final seed = await tester.runAsync(_seedTeacherWithOneStudent);
+
+      await _pumpTeacherDashboard(tester);
+
+      await tester.tap(find.text('Hot seat').first);
+      await _pumpSettled(tester);
+      await tester.tap(find.text('Amir Ali').last);
+      await _pumpSettled(tester);
+
+      // A short drag on the tracing canvas, so the heuristic has real
+      // stroke data to compute from.
+      await tester.dragFrom(
+        tester.getCenter(find.byType(AspectRatio)),
+        const Offset(60, 0),
+      );
+      await tester.pump();
+
+      // `_finishAttempt` does a real Hive write (disk I/O) before popping
+      // the sheet. Like `_seedTeacherWithOneStudent`, real async I/O
+      // triggered inside a `testWidgets` body needs `runAsync` to actually
+      // progress — plain `pump()`/`pump(duration)` calls alone leave it
+      // stuck pending indefinitely.
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Done'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await tester.pump();
+      });
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      final records = ProgressRepository().byLearnerId(seed!.learnerId);
+      expect(records, hasLength(1));
+      expect(records.first.assignedByTeacher, isTrue);
+      expect(records.first.moduleId, startsWith('hot_seat_'));
+
+      // Sheet closed and confirmation shown.
+      expect(find.text('Done'), findsNothing);
+      expect(find.textContaining("Saved to Amir Ali's progress"), findsOneWidget);
     });
   });
 }
