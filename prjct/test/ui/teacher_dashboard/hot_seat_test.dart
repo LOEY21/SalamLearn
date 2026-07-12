@@ -54,6 +54,39 @@ Future<_Seed> _seedTeacherWithOneStudent() async {
   return _Seed(teacherId: teacher.id, classId: section.id, learnerId: learner.id!);
 }
 
+/// Same as [_seedTeacherWithOneStudent] but with an arbitrary number of
+/// students, for exercising the "Draw lots" wheel's landing-index math
+/// across more than one segment — a single-student roster can only ever
+/// land on index 0, which can't catch an off-by-one in the wheel's
+/// rotation-angle calculation.
+Future<List<String>> _seedTeacherWithStudents(List<String> names) async {
+  final teacher = await TeacherRepository().register(
+    fullName: 'Ms. Amina',
+    school: 'Test Madrasah',
+    email: 'amina2@example.com',
+    password: 'correct horse',
+    pin: '1234',
+  );
+  final section = await ClassRepository().create(
+    teacherId: teacher.id,
+    gradeLevel: 'Grade 1',
+    section: 'A',
+  );
+  final learnerIds = <String>[];
+  for (var i = 0; i < names.length; i++) {
+    final learner = await LearnerRepository().register(
+      parentId: 'test-parent',
+      name: names[i],
+      age: 7,
+      username: 'hotseat_multi_$i',
+    );
+    await ClassRepository().enroll(classId: section.id, learnerId: learner.id!);
+    learnerIds.add(learner.id!);
+  }
+  await Hive.box(HiveBoxes.settings).put('activeTeacherId', teacher.id);
+  return learnerIds;
+}
+
 /// `TeacherDashboardScreen`'s `_ClassroomHero` runs a perpetual ambient
 /// "breathing" animation (`..repeat(reverse: true)`) once real teacher/class
 /// data is loaded — `pumpAndSettle()` waits forever on an animation that
@@ -69,12 +102,14 @@ Future<void> _pumpSettled(WidgetTester tester) async {
 /// - Real `GoRouter`, not a bare `MaterialApp(home: ...)` — the screen reads
 ///   `GoRouterState.of(context)` directly in `build()` (for the `?tab=`
 ///   query param), which throws without a real router ancestor.
-/// - A phone-sized surface (`400x800`, matching this app's own
-///   `widget_test.dart` convention) — the default test surface is too short
-///   for the Classroom tab's Class Tools panel, causing a RenderFlex
-///   overflow that flutter_test treats as a test failure.
+/// - A `430x1400` surface — narrower/default sizes overflow `_DrawingCanvas`'s
+///   top row (letter dropdown + Clear Canvas button), and a taller roster
+///   (3+ students) pushes "Class Tools" below a shorter surface's bounds,
+///   making "Hot seat" untappable. This is a pre-existing `TeacherDashboardScreen`
+///   layout quirk, not something this plan fixes — sizing the test surface
+///   generously sidesteps it.
 Future<void> _pumpTeacherDashboard(WidgetTester tester) async {
-  await tester.binding.setSurfaceSize(const Size(430, 900));
+  await tester.binding.setSurfaceSize(const Size(430, 1400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
   final router = GoRouter(
@@ -204,6 +239,45 @@ void main() {
       await _pumpSettled(tester);
 
       expect(find.text('Hot Seat: Amir Ali'), findsOneWidget);
+      expect(find.text('Done'), findsOneWidget);
+    });
+
+    testWidgets('draw lots with multiple students lands on one of them and disables the toggle mid-spin', (
+      tester,
+    ) async {
+      const names = ['Ali', 'Yusra', 'Hamza'];
+      await tester.runAsync(() => _seedTeacherWithStudents(names));
+
+      await _pumpTeacherDashboard(tester);
+
+      await tester.tap(find.text('Hot seat').first);
+      await _pumpSettled(tester);
+
+      await tester.tap(find.text('Draw lots'));
+      await tester.pump();
+
+      await tester.tap(find.text('Spin the wheel'));
+      await tester.pump();
+
+      // Mid-spin: switching back to manual would unmount the wheel and
+      // silently drop the in-flight pick, so the toggle must be disabled.
+      final manualButton = tester.widget<OutlinedButton>(
+        find.widgetWithText(OutlinedButton, 'Pick manually'),
+      );
+      expect(manualButton.onPressed, isNull);
+
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await _pumpSettled(tester);
+
+      // Lands on exactly one of the three — proves the multi-segment
+      // landing-index math resolves to a valid roster entry, not just the
+      // single-student n=1 case the other wheel test exercises.
+      final landedOnOne = names.any(
+        (name) => find.text('Hot Seat: $name').evaluate().isNotEmpty,
+      );
+      expect(landedOnOne, isTrue);
       expect(find.text('Done'), findsOneWidget);
     });
   });

@@ -3764,6 +3764,7 @@ class _HotSeatStudentPicker extends StatefulWidget {
 
 class _HotSeatStudentPickerState extends State<_HotSeatStudentPicker> {
   bool _drawLots = false;
+  bool _wheelSpinning = false;
 
   @override
   Widget build(BuildContext context) {
@@ -3784,7 +3785,11 @@ class _HotSeatStudentPickerState extends State<_HotSeatStudentPicker> {
           children: [
             Expanded(
               child: OutlinedButton(
-                onPressed: () => setState(() => _drawLots = false),
+                // Disabled mid-spin — switching away would unmount the
+                // wheel and silently drop the in-flight pick.
+                onPressed: _wheelSpinning
+                    ? null
+                    : () => setState(() => _drawLots = false),
                 style: OutlinedButton.styleFrom(
                   backgroundColor: _drawLots ? null : AppColors.mint,
                   foregroundColor: AppColors.teal,
@@ -3795,7 +3800,9 @@ class _HotSeatStudentPickerState extends State<_HotSeatStudentPicker> {
             const SizedBox(width: 8),
             Expanded(
               child: OutlinedButton(
-                onPressed: () => setState(() => _drawLots = true),
+                onPressed: _wheelSpinning
+                    ? null
+                    : () => setState(() => _drawLots = true),
                 style: OutlinedButton.styleFrom(
                   backgroundColor: _drawLots ? AppColors.mint : null,
                   foregroundColor: AppColors.teal,
@@ -3807,7 +3814,12 @@ class _HotSeatStudentPickerState extends State<_HotSeatStudentPicker> {
         ),
         const SizedBox(height: 16),
         if (_drawLots)
-          _HotSeatWheel(roster: widget.roster, onPicked: widget.onPicked)
+          _HotSeatWheel(
+            roster: widget.roster,
+            onPicked: widget.onPicked,
+            onSpinningChanged: (spinning) =>
+                setState(() => _wheelSpinning = spinning),
+          )
         else
           Wrap(
             spacing: 8,
@@ -3851,10 +3863,15 @@ class _HotSeatStudentPickerState extends State<_HotSeatStudentPicker> {
 /// mock: a fixed AnimationController spin with a decelerating curve,
 /// landing on a random student.
 class _HotSeatWheel extends StatefulWidget {
-  const _HotSeatWheel({required this.roster, required this.onPicked});
+  const _HotSeatWheel({
+    required this.roster,
+    required this.onPicked,
+    required this.onSpinningChanged,
+  });
 
   final List<Map<String, dynamic>> roster;
   final void Function(String learnerId, String name) onPicked;
+  final ValueChanged<bool> onSpinningChanged;
 
   @override
   State<_HotSeatWheel> createState() => _HotSeatWheelState();
@@ -3892,14 +3909,21 @@ class _HotSeatWheelState extends State<_HotSeatWheel>
 
   void _spinWheel() {
     if (_spinning || widget.roster.isEmpty) return;
-    final winnerIndex = Random().nextInt(widget.roster.length);
-    final segmentTurns = 1 / widget.roster.length;
+    // Captured once at spin start — the parent disables the manual/wheel
+    // toggle while spinning, but the roster itself could still change
+    // (a student unenrolled mid-spin); indexing this captured copy instead
+    // of re-reading `widget.roster` in `whenComplete` keeps `winnerIndex`
+    // valid regardless.
+    final roster = widget.roster;
+    final winnerIndex = Random().nextInt(roster.length);
+    final segmentTurns = 1 / roster.length;
     // Land the pointer (fixed at the top) on the middle of the winning
     // segment, plus a few extra full turns for visual flourish.
     final targetTurns =
         4 + 1 - (segmentTurns * winnerIndex + segmentTurns / 2);
 
     setState(() => _spinning = true);
+    widget.onSpinningChanged(true);
     _controller.reset();
     _spinTween = Tween<double>(
       begin: _restingTurns,
@@ -3911,7 +3935,8 @@ class _HotSeatWheelState extends State<_HotSeatWheel>
         _spinning = false;
         _restingTurns = (_restingTurns + targetTurns) % 1;
       });
-      final winner = widget.roster[winnerIndex];
+      widget.onSpinningChanged(false);
+      final winner = roster[winnerIndex];
       widget.onPicked(winner['learnerId'] as String, winner['name'] as String);
     });
   }
