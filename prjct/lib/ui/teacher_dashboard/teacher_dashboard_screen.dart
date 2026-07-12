@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData, SystemUiOverlayStyle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
@@ -20,7 +20,7 @@ import '../widgets/soft_card.dart';
 /// plain in-memory Notifier like before.
 class ProgressionOverrideNotifier extends Notifier<bool> {
   @override
-  bool build() => false;
+  bool build() => true;
 
   void toggle(bool value) => state = value;
 }
@@ -90,6 +90,9 @@ class TeacherDashboardScreen extends ConsumerWidget {
     // `ParentDashboardScreen.build` — same "no PopScope here fell through
     // to go_router's default history-pop, silently landing on the role
     // picker with `pinVerified` still true" bug.
+    final tabParam = GoRouterState.of(context).uri.queryParameters['tab'];
+    final initialTab = int.tryParse(tabParam ?? '') ?? 0;
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -99,7 +102,9 @@ class TeacherDashboardScreen extends ConsumerWidget {
         builder: (context, constraints) {
           final wide =
               constraints.maxWidth >= 800 && constraints.maxHeight >= 550;
-          return wide ? const _WideLayout() : const _PhoneLayout();
+          return wide
+              ? _WideLayout(initialTab: initialTab)
+              : _PhoneLayout(initialTab: initialTab);
         },
       ),
     );
@@ -223,7 +228,9 @@ Color avatarColor(String mastery) => switch (mastery) {
 // ---------------------------------------------------------------- phone
 
 class _PhoneLayout extends ConsumerStatefulWidget {
-  const _PhoneLayout();
+  const _PhoneLayout({this.initialTab = 0});
+
+  final int initialTab;
 
   @override
   ConsumerState<_PhoneLayout> createState() => _PhoneLayoutState();
@@ -232,6 +239,12 @@ class _PhoneLayout extends ConsumerStatefulWidget {
 class _PhoneLayoutState extends ConsumerState<_PhoneLayout>
     with SingleTickerProviderStateMixin {
   int _currentTab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentTab = widget.initialTab;
+  }
 
   // Same tab-switch treatment as the Learner Hub's `HubShell`: fade the
   // outgoing tab out, swap content, fade the new one in.
@@ -275,11 +288,11 @@ class _PhoneLayoutState extends ConsumerState<_PhoneLayout>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      body: SafeArea(
-        bottom: false,
-        child: AnimatedOpacity(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: AppColors.surface,
+        body: AnimatedOpacity(
           duration: _fadeDuration,
           curve: Curves.easeOut,
           opacity: _opacity,
@@ -364,10 +377,10 @@ class _PhoneLayoutState extends ConsumerState<_PhoneLayout>
             _ => const _SettingsTab(),
           },
         ),
-      ),
-      bottomNavigationBar: _TeacherBottomNav(
-        activeTab: _currentTab,
-        onTabChanged: _switchTab,
+        bottomNavigationBar: _TeacherBottomNav(
+          activeTab: _currentTab,
+          onTabChanged: _switchTab,
+        ),
       ),
     );
   }
@@ -473,7 +486,9 @@ class _NavTab extends StatelessWidget {
 // ----------------------------------------------------------------- wide
 
 class _WideLayout extends ConsumerStatefulWidget {
-  const _WideLayout();
+  const _WideLayout({this.initialTab = 0});
+
+  final int initialTab;
 
   @override
   ConsumerState<_WideLayout> createState() => _WideLayoutState();
@@ -482,6 +497,12 @@ class _WideLayout extends ConsumerStatefulWidget {
 class _WideLayoutState extends ConsumerState<_WideLayout>
     with SingleTickerProviderStateMixin {
   int _currentTab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentTab = widget.initialTab;
+  }
 
   // Same tab-switch treatment as the Learner Hub's `HubShell`: fade the
   // outgoing tab out, swap content, fade the new one in.
@@ -1067,19 +1088,59 @@ class _RosterSection extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 4),
-        for (final s in preview)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _StudentCard(
-              student: s,
-              name: s['name'] as String,
-              completion: s['completion'] as double,
-              tracing: s['tracing'] as String,
-              activity: s['activity'] as String,
-              mastery: s['mastery'] as String,
+        if (preview.isEmpty)
+          const _NoStudentsCard()
+        else
+          for (final s in preview)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _StudentCard(
+                student: s,
+                name: s['name'] as String,
+                completion: s['completion'] as double,
+                tracing: s['tracing'] as String,
+                activity: s['activity'] as String,
+                mastery: s['mastery'] as String,
+              ),
             ),
-          ),
       ],
+    );
+  }
+}
+
+/// Shown in place of the roster preview when the active class has no
+/// enrolled students yet — without this, `_RosterSection` just rendered
+/// the "STUDENTS" header over blank space, giving no indication of
+/// whether the roster was empty or just still loading.
+class _NoStudentsCard extends StatelessWidget {
+  const _NoStudentsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return SoftCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.people_outline_rounded,
+            size: 28,
+            color: AppColors.textMuted,
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'No students in this class yet',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Share your class invitation code so parents can enroll their '
+            'child.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1430,6 +1491,134 @@ class _MasteryRingPainter extends CustomPainter {
       oldDelegate.progress != progress;
 }
 
+/// Class Health Index (FR-6.2) — one row per curriculum module showing
+/// group completion rate, average tracing accuracy, week-over-week trend,
+/// and average sequencing errors, rolled into a single health-tier pill.
+/// Reuses [masteryBg]/[masteryFg]'s existing High/Medium/Needs-help
+/// thresholds rather than inventing new colors.
+class ClassHealthSection extends ConsumerWidget {
+  const ClassHealthSection({super.key, required this.classId});
+
+  final String classId;
+
+  static String _tierFor(int healthIndex) {
+    if (healthIndex >= 80) return 'High';
+    if (healthIndex >= 50) return 'Medium';
+    return 'Needs help';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final modules = ref.watch(classHealthIndexProvider(classId));
+
+    return SoftCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'CLASS HEALTH INDEX',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: AppColors.textMuted,
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final module in modules)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _ModuleHealthRow(
+                module: module,
+                tier: _tierFor(module.healthIndex),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModuleHealthRow extends StatelessWidget {
+  const _ModuleHealthRow({required this.module, required this.tier});
+
+  final ModuleHealth module;
+  final String tier;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!module.hasActivity) {
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              module.moduleName,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            ),
+          ),
+          const Text(
+            'No activity yet',
+            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+          ),
+        ],
+      );
+    }
+
+    final trend = module.trend;
+    Widget trendIcon = const SizedBox(width: 16);
+    if (trend != null && trend > 0) {
+      trendIcon = const Icon(
+        Icons.arrow_upward_rounded,
+        size: 16,
+        color: AppColors.teal,
+      );
+    } else if (trend != null && trend < 0) {
+      trendIcon = const Icon(
+        Icons.arrow_downward_rounded,
+        size: 16,
+        color: AppColors.coral,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                module.moduleName,
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              ),
+            ),
+            trendIcon,
+            const SizedBox(width: 6),
+            MasteryPill(mastery: tier, dotted: true),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            value: module.completionRate,
+            minHeight: 6,
+            backgroundColor: AppColors.creamDark,
+            color: masteryBarColor(tier),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${(module.completionRate * 100).round()}% complete · '
+          '${module.avgAccuracy.round()}% avg accuracy · '
+          '${module.avgErrors.toStringAsFixed(1)} errors/session',
+          style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+        ),
+      ],
+    );
+  }
+}
+
 /// Home tab's students preview (wide layout) — only the 3 most
 /// recent, with a "See all" link to the active class's full roster.
 class _StudentTable extends ConsumerWidget {
@@ -1464,47 +1653,53 @@ class _StudentTable extends ConsumerWidget {
               ],
             ),
           ),
-          DataTable(
-            columnSpacing: 14,
-            horizontalMargin: 16,
-            showCheckboxColumn: false,
-            columns: const [
-              DataColumn(label: Text('Name')),
-              DataColumn(label: Text('Completion')),
-              DataColumn(label: Text('Tracing')),
-              DataColumn(label: Text('Mastery')),
-            ],
-            rows: [
-              for (final s in preview)
-                DataRow(
-                  onSelectChanged: (_) => showStudentDetails(context, ref, s),
-                  cells: [
-                    DataCell(
-                      Text(
-                        s['name'] as String,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+          if (preview.isEmpty)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 4, 16, 20),
+              child: _NoStudentsCard(),
+            )
+          else
+            DataTable(
+              columnSpacing: 14,
+              horizontalMargin: 16,
+              showCheckboxColumn: false,
+              columns: const [
+                DataColumn(label: Text('Name')),
+                DataColumn(label: Text('Completion')),
+                DataColumn(label: Text('Tracing')),
+                DataColumn(label: Text('Mastery')),
+              ],
+              rows: [
+                for (final s in preview)
+                  DataRow(
+                    onSelectChanged: (_) => showStudentDetails(context, ref, s),
+                    cells: [
+                      DataCell(
+                        Text(
+                          s['name'] as String,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
                       ),
-                    ),
-                    DataCell(
-                      SizedBox(
-                        width: 70,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: s['completion'] as double,
-                            minHeight: 5,
-                            backgroundColor: AppColors.creamDark,
-                            color: masteryBarColor(s['mastery'] as String),
+                      DataCell(
+                        SizedBox(
+                          width: 70,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: s['completion'] as double,
+                              minHeight: 5,
+                              backgroundColor: AppColors.creamDark,
+                              color: masteryBarColor(s['mastery'] as String),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    DataCell(Text(s['tracing'] as String)),
-                    DataCell(MasteryPill(mastery: s['mastery'] as String)),
-                  ],
-                ),
-            ],
-          ),
+                      DataCell(Text(s['tracing'] as String)),
+                      DataCell(MasteryPill(mastery: s['mastery'] as String)),
+                    ],
+                  ),
+              ],
+            ),
         ],
       ),
     );
@@ -1727,6 +1922,13 @@ class _ActionColumn extends ConsumerWidget {
             color: AppColors.mintGreen,
             bg: AppColors.mint,
             onTap: () => _openOverride(context, ref),
+          ),
+          (
+            icon: Icons.view_module_rounded,
+            label: 'Module library',
+            color: AppColors.coral,
+            bg: AppColors.coralTint,
+            onTap: () => context.push('/teacher/module-library'),
           ),
         ];
 
@@ -2363,13 +2565,32 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.fromLTRB(18, 10, 18, 16),
+                padding: const EdgeInsets.fromLTRB(12, 10, 18, 16),
                 decoration: const BoxDecoration(
                   border: Border(top: BorderSide(color: AppColors.creamBorder)),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    TextButton.icon(
+                      onPressed: () => _confirmRemoveFromClass(
+                        context,
+                        currentStudent['learnerId'] as String,
+                        name,
+                      ),
+                      icon: const Icon(
+                        Icons.person_remove_rounded,
+                        color: AppColors.coral,
+                        size: 16,
+                      ),
+                      label: const Text(
+                        'Remove',
+                        style: TextStyle(
+                          color: AppColors.coral,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(),
                       child: const Text('Cancel'),
@@ -2403,6 +2624,63 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmRemoveFromClass(
+    BuildContext context,
+    String studentId,
+    String studentName,
+  ) async {
+    final classId = ref.read(teacherClassControllerProvider)?.id;
+    if (classId == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(
+          Icons.warning_amber_rounded,
+          color: AppColors.coral,
+          size: 40,
+        ),
+        title: const Text('Remove Student?'),
+        content: Text(
+          'Are you sure you want to remove "$studentName" from this class?\n\n'
+          'Their homework assignments for this class will also be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.coral,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Remove Student'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      // Pop the details dialog first
+      Navigator.of(context).pop();
+
+      await ClassRepository().unenroll(classId: classId, learnerId: studentId);
+
+      // Invalidate providers so the roster updates instantly
+      ref.invalidate(teacherRosterProvider);
+      ref.invalidate(classRosterProvider(classId));
+      ref.read(rosterRefreshProvider.notifier).bump();
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Removed $studentName from class')),
+        );
+      }
+    }
   }
 }
 
@@ -2858,23 +3136,72 @@ class _CreateClassCard extends ConsumerStatefulWidget {
   ConsumerState<_CreateClassCard> createState() => _CreateClassCardState();
 }
 
+const _weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
 class _CreateClassCardState extends ConsumerState<_CreateClassCard> {
   final _gradeLevelC = TextEditingController();
   final _sectionC = TextEditingController();
-  final _scheduleC = TextEditingController();
+
+  /// Index into [_weekdayLabels] — a `Set` so days can be toggled in any
+  /// order but still render Mon→Sun when composed into the stored
+  /// [ClassSection.schedule] string.
+  final Set<int> _selectedWeekdays = {};
+  TimeOfDay? _startTime;
+  TimeOfDay? _endTime;
 
   @override
   void dispose() {
     _gradeLevelC.dispose();
     _sectionC.dispose();
-    _scheduleC.dispose();
     super.dispose();
+  }
+
+  String _formatTime(TimeOfDay t) {
+    final hour = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
+    final minute = t.minute.toString().padLeft(2, '0');
+    final period = t.period == DayPeriod.am ? 'AM' : 'PM';
+    return '$hour:$minute $period';
+  }
+
+  Future<void> _pickTime({required bool isStart}) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: (isStart ? _startTime : _endTime) ?? TimeOfDay.now(),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isStart) {
+        _startTime = picked;
+      } else {
+        _endTime = picked;
+      }
+    });
+  }
+
+  /// Composes the weekday chips + time range into the same plain-string
+  /// shape the schedule field always stored (e.g. "Mon/Wed/Fri, 9:00
+  /// AM–10:00 AM") — `ClassSection.schedule` stays a free-text `String?`,
+  /// no model change needed for this UI-only swap from typing to picking.
+  String? _composeSchedule() {
+    final days = _selectedWeekdays.toList()..sort();
+    final dayPart = days.map((i) => _weekdayLabels[i]).join('/');
+    final String timePart;
+    if (_startTime != null && _endTime != null) {
+      timePart = '${_formatTime(_startTime!)}–${_formatTime(_endTime!)}';
+    } else if (_startTime != null) {
+      timePart = _formatTime(_startTime!);
+    } else {
+      timePart = '';
+    }
+    if (dayPart.isEmpty && timePart.isEmpty) return null;
+    if (dayPart.isEmpty) return timePart;
+    if (timePart.isEmpty) return dayPart;
+    return '$dayPart, $timePart';
   }
 
   Future<void> _createClass() async {
     final gradeLevel = _gradeLevelC.text.trim();
     final section = _sectionC.text.trim();
-    final schedule = _scheduleC.text.trim();
     if (gradeLevel.isEmpty || section.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter grade level and section')),
@@ -2887,11 +3214,15 @@ class _CreateClassCardState extends ConsumerState<_CreateClassCard> {
         .createClass(
           gradeLevel: gradeLevel,
           section: section,
-          schedule: schedule.isEmpty ? null : schedule,
+          schedule: _composeSchedule(),
         );
     _gradeLevelC.clear();
     _sectionC.clear();
-    _scheduleC.clear();
+    setState(() {
+      _selectedWeekdays.clear();
+      _startTime = null;
+      _endTime = null;
+    });
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2938,16 +3269,84 @@ class _CreateClassCardState extends ConsumerState<_CreateClassCard> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _scheduleC,
-            decoration: const InputDecoration(
-              hintText: 'e.g. Mon/Wed/Fri, 9:00–10:00 AM',
-              labelText: 'Schedule (optional)',
-              border: OutlineInputBorder(),
-              isDense: true,
-              prefixIcon: Icon(Icons.schedule_outlined, size: 18),
+          const SizedBox(height: 14),
+          const Text(
+            'Schedule (optional)',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMuted,
             ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (var i = 0; i < _weekdayLabels.length; i++)
+                ChoiceChip(
+                  label: Text(_weekdayLabels[i]),
+                  selected: _selectedWeekdays.contains(i),
+                  onSelected: (selected) => setState(() {
+                    if (selected) {
+                      _selectedWeekdays.add(i);
+                    } else {
+                      _selectedWeekdays.remove(i);
+                    }
+                  }),
+                  labelStyle: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _selectedWeekdays.contains(i)
+                        ? Colors.white
+                        : AppColors.textMuted,
+                  ),
+                  selectedColor: AppColors.teal,
+                  backgroundColor: Colors.white,
+                  side: BorderSide(
+                    color: _selectedWeekdays.contains(i)
+                        ? AppColors.teal
+                        : AppColors.creamBorder,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _pickTime(isStart: true),
+                  icon: const Icon(Icons.schedule_outlined, size: 16),
+                  label: Text(
+                    _startTime == null ? 'Start time' : _formatTime(_startTime!),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.ink,
+                    side: const BorderSide(color: AppColors.creamBorder),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _pickTime(isStart: false),
+                  icon: const Icon(Icons.schedule_outlined, size: 16),
+                  label: Text(
+                    _endTime == null ? 'End time' : _formatTime(_endTime!),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.ink,
+                    side: const BorderSide(color: AppColors.creamBorder),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 14),
           SizedBox(
@@ -3878,6 +4277,11 @@ class _SettingsTab extends ConsumerWidget {
                 ),
                 const SizedBox(height: 14),
                 const _StaggerFadeIn(
+                  delay: Duration(milliseconds: 145),
+                  child: _TeacherLinkFirebaseCard(),
+                ),
+                const SizedBox(height: 14),
+                const _StaggerFadeIn(
                   delay: Duration(milliseconds: 180),
                   child: _EraseCard(),
                 ),
@@ -4240,6 +4644,135 @@ class _SyncCardState extends ConsumerState<_SyncCard> {
                       if (mounted) setState(() => _syncing = false);
                     }
                   },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Teacher-side counterpart to `parent_dashboard_screen.dart`'s
+/// `_LinkFirebaseCard` — same reason for existing (an account registered
+/// offline, or whose signup call failed at the time, has no `firebaseUid`
+/// yet, so `firestore.rules`' `ownsTeacherDoc` check fails and *nothing*
+/// this teacher owns — not just their own doc, but every class they
+/// create too — can ever reach Firestore via "Sync now" until this runs).
+/// The Teacher Dashboard never had this card until now, unlike the Parent
+/// Dashboard; that gap was the actual reason a newly created class could
+/// tap "Sync" successfully (per-collection account skips swallow an
+/// unlinked *teacher* doc push) while silently never showing up in the
+/// admin website (nothing skips the *class* push the same way — see
+/// `ClassRepository.pushAll`'s doc).
+class _TeacherLinkFirebaseCard extends ConsumerStatefulWidget {
+  const _TeacherLinkFirebaseCard();
+
+  @override
+  ConsumerState<_TeacherLinkFirebaseCard> createState() =>
+      _TeacherLinkFirebaseCardState();
+}
+
+class _TeacherLinkFirebaseCardState
+    extends ConsumerState<_TeacherLinkFirebaseCard> {
+  final _passwordC = TextEditingController();
+  bool _linking = false;
+  bool _linked = false;
+  bool _hasEmail = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final notifier = ref.read(sessionProvider.notifier);
+    _linked = notifier.activeAccountLinkedToFirebase;
+    _hasEmail = notifier.activeAccountHasEmail;
+  }
+
+  @override
+  void dispose() {
+    _passwordC.dispose();
+    super.dispose();
+  }
+
+  Future<void> _link() async {
+    final password = _passwordC.text;
+    if (password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter your account password')),
+      );
+      return;
+    }
+    setState(() => _linking = true);
+    try {
+      await ref
+          .read(sessionProvider.notifier)
+          .linkActiveAccountToFirebase(password);
+      if (mounted) {
+        setState(() {
+          _linked = true;
+          _linking = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Linked to cloud — sync now works for this account.'),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _linking = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Link failed: $error')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // No email/password on this account (a bare PIN-only bootstrap — same
+    // "nothing to link" case `parent_dashboard_screen.dart`'s card guards
+    // against) means there's nothing to retry; such an account is
+    // local-device-only by design until it's replaced with a real
+    // admin-provisioned sign-in.
+    if (_linked || !_hasEmail) return const SizedBox.shrink();
+    return SoftCard(
+      color: AppColors.goldTint,
+      borderColor: AppColors.goldSoft,
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Link to Cloud', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 6),
+          const Text(
+            'This account isn\'t linked to the cloud yet, so your classes '
+            'won\'t show up in the admin website until you link it. '
+            'Re-enter your password to link it.',
+            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _passwordC,
+            obscureText: true,
+            decoration: const InputDecoration(
+              hintText: 'Account password',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _linking ? null : _link,
+              icon: _linking
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.link, size: 16),
+              label: Text(_linking ? 'Linking...' : 'Link to Cloud'),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.teal),
+            ),
           ),
         ],
       ),
