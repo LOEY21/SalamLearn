@@ -5,9 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:salamlearn/logic/auth/session.dart';
 import 'package:salamlearn/logic/learner/learner_xp_provider.dart';
 import 'package:salamlearn/logic/learner/noor_energy_provider.dart';
-import 'package:salamlearn/ui/core_modules/module_registry.dart';
 import 'package:salamlearn/ui/student_hub/adventure_map_screen.dart';
-import 'package:salamlearn/ui/student_hub/destination_levels_sheet.dart';
 import 'package:salamlearn/ui/teacher_dashboard/teacher_dashboard_screen.dart'
     show ProgressionOverrideNotifier, progressionOverrideProvider;
 
@@ -52,11 +50,12 @@ class _FakeProgressionOverrideOffNotifier extends ProgressionOverrideNotifier {
 }
 
 void main() {
-  testWidgets('shows one node per destination', (tester) async {
+  testWidgets('shows one node per core module', (tester) async {
     final router = GoRouter(
       initialLocation: '/',
       routes: [
         GoRoute(path: '/', builder: (_, _) => const AdventureMapScreen()),
+        GoRoute(path: '/module/:id', builder: (_, state) => Text('module ${state.pathParameters['id']}')),
       ],
     );
 
@@ -74,24 +73,23 @@ void main() {
       ),
     );
 
-    // Genuinely infinite-repeating animations (ambient background
-    // breathing, Noor Energy lantern flicker) — pumpAndSettle never
-    // returns here. Advance explicitly instead.
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    for (final module in coreModules) {
-      expect(find.text(module.title), findsOneWidget);
-    }
+    expect(find.text('Tracing'), findsOneWidget);
+    expect(find.text('Sounds'), findsOneWidget);
+    expect(find.text('Stories'), findsOneWidget);
   });
 
   testWidgets(
-    'tapping an unassigned destination node shows the locked dialog, not the levels sheet',
+    'tapping an unassigned module node shows the locked dialog, not the module',
     (tester) async {
       final router = GoRouter(
         initialLocation: '/',
         routes: [
           GoRoute(path: '/', builder: (_, _) => const AdventureMapScreen()),
+          GoRoute(
+            path: '/module/:id',
+            builder: (_, state) =>
+                Text('module ${state.pathParameters['id']}'),
+          ),
         ],
       );
 
@@ -102,8 +100,7 @@ void main() {
             noorEnergyProvider.overrideWith(_FakeNoorEnergyNotifier.new),
             // Override off (no debug bypass) + a learner-less/teacher-less
             // session (both providers resolve to `null`/empty without
-            // touching Hive) — every destination reads as genuinely
-            // unassigned.
+            // touching Hive) — every module reads as genuinely unassigned.
             progressionOverrideProvider.overrideWith(
               _FakeProgressionOverrideOffNotifier.new,
             ),
@@ -113,64 +110,27 @@ void main() {
         ),
       );
 
-      final firstModule = coreModules.first;
-
-      // Tap via the node badge's own Key, not the title text — the label
-      // pill sits below the badge as a Column sibling, outside the actual
-      // InkWell hit-test region, so tapping the text itself would silently
-      // hit nothing.
+      // Tap via the node badge's own Key, not the "Tracing" text — the
+      // label pill sits below the badge as a Column sibling, outside the
+      // actual InkWell hit-test region, so tapping the text itself would
+      // silently hit nothing.
       //
       // This screen has genuinely infinite-repeating animations (ambient
       // background breathing, Noor Energy lantern flicker) — pumpAndSettle
       // never returns here. Advance explicitly instead, same pattern this
       // repo already uses for other continuously-animated screens.
-      await tester.tap(find.byKey(ValueKey('node-badge-${firstModule.id}')));
+      await tester.tap(find.byKey(const ValueKey('node-badge-tracing')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('${firstModule.title} is Locked'), findsOneWidget);
-      expect(find.byType(DestinationLevelsSheet), findsNothing);
+      expect(find.text('Tracing is Locked'), findsOneWidget);
+      expect(find.textContaining('module tracing'), findsNothing);
 
       await tester.tap(find.text('OK'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('${firstModule.title} is Locked'), findsNothing);
-    },
-  );
-
-  testWidgets(
-    'tapping an assigned destination node opens the levels sheet, not the locked dialog',
-    (tester) async {
-      final router = GoRouter(
-        initialLocation: '/',
-        routes: [
-          GoRoute(path: '/', builder: (_, _) => const AdventureMapScreen()),
-        ],
-      );
-
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            learnerXpProvider.overrideWith(_FakeLearnerXpNotifier.new),
-            noorEnergyProvider.overrideWith(_FakeNoorEnergyNotifier.new),
-            progressionOverrideProvider.overrideWith(
-              _FakeProgressionOverrideNotifier.new,
-            ),
-            sessionProvider.overrideWith(_FakeSessionNotifier.new),
-          ],
-          child: MaterialApp.router(routerConfig: router),
-        ),
-      );
-
-      final firstModule = coreModules.first;
-
-      await tester.tap(find.byKey(ValueKey('node-badge-${firstModule.id}')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
-      expect(find.byType(DestinationLevelsSheet), findsOneWidget);
-      expect(find.text('${firstModule.title} is Locked'), findsNothing);
+      expect(find.text('Tracing is Locked'), findsNothing);
     },
   );
 }

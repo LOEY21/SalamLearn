@@ -11,6 +11,7 @@ import '../../ui/auth/pin_verify_screen.dart';
 import '../../ui/auth/role_flow_shell.dart';
 import '../../ui/auth/role_picker_screen.dart';
 import '../../ui/core_modules/custom_lesson_detail_screen.dart';
+import '../../ui/core_modules/module_placeholder_screen.dart';
 import '../../ui/debug/database_inspector_screen.dart';
 import '../../ui/onboarding/get_started_screen.dart';
 import '../../ui/onboarding/onboarding_screen.dart';
@@ -174,6 +175,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/module/:id',
+        builder: (_, state) =>
+            ModulePlaceholderScreen(moduleId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/custom-lesson/:id',
