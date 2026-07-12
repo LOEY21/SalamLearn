@@ -1,7 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive/hive.dart';
 import 'package:salamlearn/data/curriculum_data.dart';
+import 'package:salamlearn/data/local/hive_boxes.dart';
+import 'package:salamlearn/data/models/progress_record.dart';
 import 'package:salamlearn/data/repositories/class_repository.dart';
 import 'package:salamlearn/data/repositories/learner_repository.dart';
 import 'package:salamlearn/data/repositories/progress_repository.dart';
@@ -104,5 +107,94 @@ void main() {
     // completionRate=1.0, avgAccuracy=100, avgErrors=0
     // 0.4*100 + 0.4*100 + 0.2*100 = 100
     expect(moduleHealth.healthIndex, 100);
+  });
+
+  test('enrolled roster with zero records for a module reports hasActivity false', () async {
+    final classes = ClassRepository();
+    final learners = LearnerRepository();
+    final progress = ProgressRepository();
+    final moduleId = curriculum.first.id.toString();
+    final otherModuleId = curriculum[1].id.toString();
+
+    final section = await classes.create(
+      teacherId: 't1',
+      gradeLevel: 'Grade 1',
+      section: 'A',
+    );
+    final a = await learners.register(
+      parentId: 'p1',
+      name: 'Learner A',
+      age: 6,
+      username: 'learner_a',
+    );
+    await classes.enroll(classId: section.id, learnerId: a.id!);
+    // Learner has activity, but only in a different module.
+    await progress.writeProgress(
+      learnerId: a.id!,
+      moduleId: otherModuleId,
+      strokeAccuracyPct: 80,
+      sequencingErrors: 0,
+      timeOnTaskSeconds: 60,
+    );
+
+    final result = computeClassHealthIndex(section.id);
+    final moduleHealth = result.firstWhere((m) => m.moduleId == moduleId);
+
+    expect(moduleHealth.hasActivity, isFalse);
+    expect(moduleHealth.healthIndex, 0);
+  });
+
+  test('trend compares this-week vs prior-week average accuracy', () async {
+    final classes = ClassRepository();
+    final learners = LearnerRepository();
+    final moduleId = curriculum.first.id.toString();
+    final progressBox = Hive.box<ProgressRecord>(HiveBoxes.progress);
+
+    final section = await classes.create(
+      teacherId: 't1',
+      gradeLevel: 'Grade 1',
+      section: 'A',
+    );
+    final a = await learners.register(
+      parentId: 'p1',
+      name: 'Learner A',
+      age: 6,
+      username: 'learner_a',
+    );
+    await classes.enroll(classId: section.id, learnerId: a.id!);
+
+    final now = DateTime.now();
+    final thisWeekRecord = ProgressRecord(
+      id: 'this-week',
+      learnerId: a.id!,
+      moduleId: moduleId,
+      strokeAccuracyPct: 90,
+      sequencingErrors: 0,
+      timeOnTaskSeconds: 60,
+      completedAt: now.subtract(const Duration(days: 3)),
+    );
+    final priorWeekRecord = ProgressRecord(
+      id: 'prior-week',
+      learnerId: a.id!,
+      moduleId: moduleId,
+      strokeAccuracyPct: 70,
+      sequencingErrors: 0,
+      timeOnTaskSeconds: 60,
+      completedAt: now.subtract(const Duration(days: 10)),
+    );
+    await progressBox.put(thisWeekRecord.id, thisWeekRecord);
+    await progressBox.put(priorWeekRecord.id, priorWeekRecord);
+
+    final result = computeClassHealthIndex(section.id);
+    final moduleHealth = result.firstWhere((m) => m.moduleId == moduleId);
+
+    expect(moduleHealth.trend, 20); // 90 - 70
+
+    // Only this-week data present -> trend is null (no prior-week baseline).
+    await progressBox.delete(priorWeekRecord.id);
+    final resultOnlyThisWeek = computeClassHealthIndex(section.id);
+    final moduleHealthOnlyThisWeek =
+        resultOnlyThisWeek.firstWhere((m) => m.moduleId == moduleId);
+    expect(moduleHealthOnlyThisWeek.trend, isNull);
   });
 }

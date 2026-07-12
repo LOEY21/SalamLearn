@@ -6,6 +6,7 @@ import '../../data/local/hive_boxes.dart';
 import '../../data/models/class_section.dart';
 import '../../data/models/custom_lesson.dart';
 import '../../data/models/lesson_folder.dart';
+import '../../data/models/progress_record.dart';
 import '../../data/repositories/class_repository.dart';
 import '../../data/repositories/custom_lesson_repository.dart';
 import '../../data/repositories/learner_repository.dart';
@@ -299,32 +300,44 @@ List<ModuleHealth> computeClassHealthIndex(String classId) {
   final weekAgo = now.subtract(const Duration(days: 7));
   final twoWeeksAgo = now.subtract(const Duration(days: 14));
 
+  if (rosterSize == 0) {
+    return curriculum
+        .map(
+          (destination) => ModuleHealth(
+            moduleId: destination.id.toString(),
+            moduleName: destination.name,
+            completionRate: 0,
+            avgAccuracy: 0,
+            avgErrors: 0,
+            trend: null,
+            healthIndex: 0,
+            hasActivity: false,
+          ),
+        )
+        .toList();
+  }
+
+  // One Hive scan per enrolled learner (not per learner × module) — bucket
+  // each learner's records by moduleId up front so the per-module loop
+  // below is a plain map lookup instead of re-querying byLearnerId.
+  final recordsByModule = <String, List<ProgressRecord>>{};
+  final learnersWithActivityByModule = <String, int>{};
+  for (final enrollment in enrollments) {
+    final byModule = <String, List<ProgressRecord>>{};
+    for (final record in progress.byLearnerId(enrollment.learnerId)) {
+      byModule.putIfAbsent(record.moduleId, () => []).add(record);
+    }
+    byModule.forEach((moduleId, records) {
+      recordsByModule.putIfAbsent(moduleId, () => []).addAll(records);
+      learnersWithActivityByModule[moduleId] =
+          (learnersWithActivityByModule[moduleId] ?? 0) + 1;
+    });
+  }
+
   return curriculum.map((destination) {
     final moduleId = destination.id.toString();
-
-    if (rosterSize == 0) {
-      return ModuleHealth(
-        moduleId: moduleId,
-        moduleName: destination.name,
-        completionRate: 0,
-        avgAccuracy: 0,
-        avgErrors: 0,
-        trend: null,
-        healthIndex: 0,
-        hasActivity: false,
-      );
-    }
-
-    final allRecords = <dynamic>[];
-    var learnersWithActivity = 0;
-    for (final enrollment in enrollments) {
-      final learnerRecords = progress
-          .byLearnerId(enrollment.learnerId)
-          .where((r) => r.moduleId == moduleId)
-          .toList();
-      if (learnerRecords.isNotEmpty) learnersWithActivity += 1;
-      allRecords.addAll(learnerRecords);
-    }
+    final allRecords = recordsByModule[moduleId] ?? const <ProgressRecord>[];
+    final learnersWithActivity = learnersWithActivityByModule[moduleId] ?? 0;
 
     if (allRecords.isEmpty) {
       return ModuleHealth(
@@ -341,25 +354,24 @@ List<ModuleHealth> computeClassHealthIndex(String classId) {
 
     final completionRate = learnersWithActivity / rosterSize;
     final avgAccuracy =
-        allRecords.map((r) => r.strokeAccuracyPct as double).reduce((a, b) => a + b) /
+        allRecords.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) /
             allRecords.length;
     final avgErrors =
-        allRecords.map((r) => r.sequencingErrors as int).reduce((a, b) => a + b) /
+        allRecords.map((r) => r.sequencingErrors).reduce((a, b) => a + b) /
             allRecords.length;
 
-    final thisWeek = allRecords.where((r) => (r.completedAt as DateTime).isAfter(weekAgo));
+    final thisWeek = allRecords.where((r) => r.completedAt.isAfter(weekAgo));
     final priorWeek = allRecords.where(
       (r) =>
-          (r.completedAt as DateTime).isAfter(twoWeeksAgo) &&
-          (r.completedAt as DateTime).isBefore(weekAgo),
+          r.completedAt.isAfter(twoWeeksAgo) && r.completedAt.isBefore(weekAgo),
     );
     double? trend;
     if (thisWeek.isNotEmpty && priorWeek.isNotEmpty) {
       final thisWeekAvg =
-          thisWeek.map((r) => r.strokeAccuracyPct as double).reduce((a, b) => a + b) /
+          thisWeek.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) /
               thisWeek.length;
       final priorWeekAvg =
-          priorWeek.map((r) => r.strokeAccuracyPct as double).reduce((a, b) => a + b) /
+          priorWeek.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) /
               priorWeek.length;
       trend = thisWeekAvg - priorWeekAvg;
     }
