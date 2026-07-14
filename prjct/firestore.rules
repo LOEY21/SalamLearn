@@ -117,7 +117,7 @@ service cloud.firestore {
         isValidEmail(data.email) &&
         (!('mobileNumber' in data) || data.mobileNumber == null || (data.mobileNumber is string && data.mobileNumber.size() < 30)) &&
         isValidDateString(data.createdAt) &&
-        data.firebaseUid is string && data.firebaseUid != request.auth.uid;
+        (data.firebaseUid == null || (data.firebaseUid is string && data.firebaseUid != request.auth.uid));
     }
 
     function isValidNewTeacher(data) {
@@ -128,7 +128,7 @@ service cloud.firestore {
         isValidEmail(data.email) &&
         (!('mobileNumber' in data) || data.mobileNumber == null || (data.mobileNumber is string && data.mobileNumber.size() < 30)) &&
         isValidDateString(data.createdAt) &&
-        data.firebaseUid is string && data.firebaseUid != request.auth.uid;
+        (data.firebaseUid == null || (data.firebaseUid is string && data.firebaseUid != request.auth.uid));
     }
 
     // Admin-created learner doc — no `firebaseUid`/credential fields exist
@@ -137,15 +137,35 @@ service cloud.firestore {
     // orphaned from creation.
     function isValidNewLearner(data) {
       return data.keys().hasOnly(['parentId', 'name', 'age', 'avatar', 'gradeLevel', 'username', 'createdAt']) &&
-        data.keys().hasAll(['parentId', 'name', 'age', 'avatar', 'gradeLevel', 'createdAt']) &&
+        data.keys().hasAll(['parentId', 'name', 'age', 'avatar', 'gradeLevel']) &&
         data.parentId is string &&
         exists(/databases/$(database)/documents/parents/$(data.parentId)) &&
         data.name is string && data.name.size() > 0 && data.name.size() < 60 &&
         data.age is int && data.age >= 3 && data.age <= 18 &&
-        data.avatar is string && data.avatar.size() < 10 &&
+        data.avatar is string && data.avatar.size() < 30 &&
         data.gradeLevel is string && data.gradeLevel.size() < 30 &&
         (!('username' in data) || data.username == null || (data.username is string && data.username.size() < 40)) &&
+        (!('createdAt' in data) || data.createdAt == null || isValidDateString(data.createdAt));
+    }
+
+    // Admin-created principal doc — mirrors isValidNewTeacher/isValidNewParent's
+    // shape, minus school/mobile (see isValidNewPrincipal doc at the /principals
+    // match block for why the doc id itself matters here, unlike those two).
+    function isValidNewPrincipal(data) {
+      return data.keys().hasOnly(['fullName', 'email', 'firebaseUid', 'createdAt']) &&
+        data.keys().hasAll(['fullName', 'email', 'firebaseUid', 'createdAt']) &&
+        data.fullName is string && data.fullName.size() > 0 && data.fullName.size() < 100 &&
+        isValidEmail(data.email) &&
+        data.firebaseUid is string && data.firebaseUid != request.auth.uid &&
         isValidDateString(data.createdAt);
+    }
+
+    // A principal is read-only across teachers/classes/enrollments/
+    // assignments/custom-lessons (see PRINCIPAL MONITORING note below) —
+    // never parents, learners, or progress; those stay out of scope.
+    function isPrincipal() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/principals/$(request.auth.uid));
     }
 
     // Default deny for every collection not given an explicit `allow read`
@@ -167,20 +187,25 @@ service cloud.firestore {
       // handed back after verifying the password) so the query filter
       // itself matches this rule's condition — see the architecture note's
       // "IMPORTANT" paragraph for why querying by email instead doesn't work.
-      allow read: if isAdmin() || (isSignedIn() && resource.data.firebaseUid == request.auth.uid);
+      //
+      // `resource == null` handles the case where an admin deletes the doc
+      // while the parent's app is listening via `onSnapshot` — without this
+      // the listener gets a permission error instead of `exists: false`,
+      // breaking the real-time account-deletion warning.
+      allow read: if isAdmin() || (isSignedIn() && (resource == null || resource.data.firebaseUid == request.auth.uid));
       allow create: if (isSignedIn() && request.resource.data.firebaseUid == request.auth.uid) ||
         (isAdmin() && isValidNewParent(request.resource.data));
       allow update: if resource.data.firebaseUid == request.auth.uid;
-      allow delete: if isAdmin() || resource.data.firebaseUid == request.auth.uid;
+      allow delete: if isAdmin() || (resource != null && resource.data.firebaseUid == request.auth.uid);
     }
 
     match /teachers/{teacherId} {
       // See `/parents/{parentId}` doc above — same reasoning.
-      allow read: if isAdmin() || (isSignedIn() && resource.data.firebaseUid == request.auth.uid);
+      allow read: if isAdmin() || isPrincipal() || (isSignedIn() && (resource == null || resource.data.firebaseUid == request.auth.uid));
       allow create: if (isSignedIn() && request.resource.data.firebaseUid == request.auth.uid) ||
         (isAdmin() && isValidNewTeacher(request.resource.data));
       allow update: if resource.data.firebaseUid == request.auth.uid;
-      allow delete: if isAdmin() || resource.data.firebaseUid == request.auth.uid;
+      allow delete: if isAdmin() || (resource != null && resource.data.firebaseUid == request.auth.uid);
     }
 
     match /learners/{learnerId} {
@@ -190,11 +215,37 @@ service cloud.firestore {
       // collection by `parentId`, which is exactly the field `ownsParentDoc`
       // checks, so Firestore can prove the query is safe the same way the
       // `/parents` lookup above works.
-      allow read: if isAdmin() || ownsParentDoc(resource.data.parentId);
+      //
+      // Also opened to any signed-in account (not just the owning parent)
+      // for the teacher's "Enroll Existing Learner" name search
+      // (`FirestoreMirror.findLearnersByName`) and the live enrollment-sync
+      // pull (`teacherEnrollmentSyncProvider`) — a teacher has no ownership
+      // relationship to the class's learners to prove, only the class
+      // itself, so this can't be scoped any tighter without denormalizing a
+      // classId onto the learner doc. Same accepted-risk shape as the
+      // "KNOWN SIMPLIFICATION" progress/assigned_modules/consents rules
+      // below: no credential fields live here (see `pushLearner`), so the
+      // exposure is name/age/grade, not anything sensitive.
+      allow read: if isAdmin() || isSignedIn();
       allow create: if ownsParentDoc(request.resource.data.parentId) ||
         (isAdmin() && isValidNewLearner(request.resource.data));
       allow update: if ownsParentDoc(request.resource.data.parentId);
       allow delete: if isAdmin() || ownsParentDoc(resource.data.parentId);
+    }
+
+    // PRINCIPAL MONITORING: a principal observes teacher usage/engagement
+    // (admin-web's "Add principal" form) but never creates/edits/deletes
+    // anything itself. Unlike /parents and /teachers, the doc id here is
+    // set equal to the account's own Firebase Auth uid at creation time
+    // (principals are always admin-created, so the uid is already known),
+    // which lets `isPrincipal()` do a direct, provably-safe `get()` by
+    // path instead of a query Firestore can't statically verify.
+    match /principals/{principalId} {
+      allow read: if isAdmin() || (isSignedIn() && principalId == request.auth.uid);
+      allow create: if isAdmin() && principalId == request.resource.data.firebaseUid &&
+        isValidNewPrincipal(request.resource.data);
+      allow update: if false;
+      allow delete: if isAdmin();
     }
 
     // Read is open to any signed-in account (not owner-scoped) — FR-6.1's
@@ -205,15 +256,24 @@ service cloud.firestore {
     // doc explains; this is a deliberate widening, not an oversight.
     match /classes/{classId} {
       allow read: if isSignedIn();
-      allow create, update: if ownsTeacherDoc(request.resource.data.teacherId);
+      allow create, update: if isAdmin() || ownsTeacherDoc(request.resource.data.teacherId);
       allow delete: if isAdmin() || ownsTeacherDoc(resource.data.teacherId);
     }
 
     // Enrollment linking a class to a learner is writable by either side
     // of the relationship — the class's teacher or the learner's parent.
+    // Admin bypass is needed for trashbin restore (the admin restores the
+    // parent, then the learner, then the enrollment in sequential batches).
     match /enrollments/{enrollmentId} {
-      allow read: if isAdmin();
-      allow create, update: if
+      // Read-side needs the same two-sided ownership check as create/delete
+      // below — without it, neither `teacherEnrollmentSyncProvider`'s live
+      // roster listener nor the parent dashboard's equivalent can actually
+      // read the enrollments they just got permission to write, so
+      // admin-web enroll/unenroll never reaches either device.
+      allow read: if isAdmin() || isPrincipal() ||
+        ownsTeacherDoc(get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId) ||
+        ownsParentDoc(get(/databases/$(database)/documents/learners/$(resource.data.learnerId)).data.parentId);
+      allow create, update: if isAdmin() ||
         ownsTeacherDoc(get(/databases/$(database)/documents/classes/$(request.resource.data.classId)).data.teacherId) ||
         ownsParentDoc(get(/databases/$(database)/documents/learners/$(request.resource.data.learnerId)).data.parentId);
       allow delete: if isAdmin() ||
@@ -230,7 +290,7 @@ service cloud.firestore {
     }
 
     match /assigned_modules/{assignmentId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || isPrincipal();
       allow delete: if isAdmin();
       allow create, update: if isSignedIn();
     }
@@ -239,7 +299,7 @@ service cloud.firestore {
     // simplification as progress/assigned_modules above — no reverse index
     // from classId to teacherId to check true ownership against yet.
     match /custom_lessons/{lessonId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || isPrincipal();
       allow delete: if isAdmin();
       allow create, update: if isSignedIn();
     }
@@ -250,6 +310,14 @@ service cloud.firestore {
     match /consents/{consentId} {
       allow read: if isAdmin();
       allow write: if isSignedIn();
+    }
+
+    match /trashbin/{trashId} {
+      // `batch.set` in the admin website is a `create` the first time and
+      // an `update` on re-delete (when a previously-deleted-and-re-synced
+      // account is deleted again with stale trash entries still present).
+      allow create, update: if isSignedIn();
+      allow read, delete: if isAdmin();
     }
   }
 }
