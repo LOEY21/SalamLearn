@@ -152,6 +152,7 @@ body {
 ════════════════════════════════════════════════════════ */
 .dashboard-view {
   display: flex;
+  flex-direction: column;
   min-height: 100vh;
 }
 
@@ -995,4 +996,88 @@ table tbody tr:hover { background: var(--mint); }
   .sidebar { display: none; }
   .page-header { padding: 12px 16px; }
   .content { padding: 16px; }
+}
+
+/* ════════════════════════════════════════════════════════
+   PRINCIPAL-WEB — brand row + topbar (this markup has no
+   sidebar, so it needs its own brand/topbar rules rather than
+   admin-web's .login-brand/.sidebar-* equivalents)
+════════════════════════════════════════════════════════ */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.login-view .brand {
+  margin-bottom: 28px;
+}
+
+.brand-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--teal), var(--teal-dark));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(15,110,86,.25);
+  color: var(--cream);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.brand h1 {
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+
+.brand-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.brand-compact {
+  gap: 10px;
+}
+
+.brand-compact .brand-badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+}
+
+.brand-compact span {
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--cream-border);
+  flex-shrink: 0;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.whoami {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
 }
