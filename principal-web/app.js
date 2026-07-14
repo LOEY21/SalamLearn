@@ -45,15 +45,17 @@ async function fetchAll(name) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-function renderTable(tableEl, columns, rows, onRowClick) {
+function renderTable(tableEl, columns, rows, onRowClick, actions) {
+  const actionsList = Array.isArray(actions) ? actions : (actions ? [actions] : []);
+  const allColumns = actionsList.length > 0 ? [...columns, { label: "" }] : columns;
   if (rows.length === 0) {
     tableEl.innerHTML = `
-      <thead><tr>${columns.map((c) => `<th>${c.label}</th>`).join("")}</tr></thead>
-      <tbody><tr class="empty-row"><td colspan="${columns.length}">No records yet.</td></tr></tbody>
+      <thead><tr>${allColumns.map((c) => `<th>${c.label}</th>`).join("")}</tr></thead>
+      <tbody><tr class="empty-row"><td colspan="${allColumns.length}">No records yet.</td></tr></tbody>
     `;
     return;
   }
-  tableEl.innerHTML = `<thead><tr>${columns.map((c) => `<th>${c.label}</th>`).join("")}</tr></thead><tbody></tbody>`;
+  tableEl.innerHTML = `<thead><tr>${allColumns.map((c) => `<th>${c.label}</th>`).join("")}</tr></thead><tbody></tbody>`;
   const tbody = tableEl.querySelector("tbody");
   rows.forEach((row) => {
     const tr = document.createElement("tr");
@@ -66,6 +68,21 @@ function renderTable(tableEl, columns, rows, onRowClick) {
       td.textContent = c.value(row) ?? "—";
       tr.appendChild(td);
     });
+    if (actionsList.length > 0) {
+      const td = document.createElement("td");
+      actionsList.forEach((act) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn-ghost btn-small";
+        btn.textContent = act.label;
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          act.onClick(row);
+        });
+        td.appendChild(btn);
+      });
+      tr.appendChild(td);
+    }
     tbody.appendChild(tr);
   });
 }
@@ -94,10 +111,10 @@ function describeAuthError(err) {
   }
 }
 
-// Populated by loadTeacherRoster, read by showTeacherDetail — learner docs
+// Populated by loadTeacherRoster, read by showStudentList — learner docs
 // aren't scoped per teacher, so this is a single flat lookup shared across
 // every teacher's drill-in rather than refetched per click.
-let learnerNameById = new Map();
+let learnerById = new Map();
 
 async function loadTeacherRoster() {
   const [teachers, classes, enrollments, assignedModules, customLessons, learners] = await Promise.all([
@@ -109,7 +126,7 @@ async function loadTeacherRoster() {
     fetchAll("learners"),
   ]);
 
-  learnerNameById = new Map(learners.map((l) => [l.id, l.name]));
+  learnerById = new Map(learners.map((l) => [l.id, l]));
 
   const classesByTeacherId = new Map();
   classes.forEach((c) => {
@@ -162,17 +179,14 @@ function showTeacherDetail(teacherRow) {
     const activity =
       teacherRow._assignedModules.filter((a) => a.classId === cls.id).length +
       teacherRow._customLessons.filter((l) => l.classId === cls.id).length;
-    const studentNames = roster
-      .map((e) => learnerNameById.get(e.learnerId) ?? e.learnerId)
-      .join(", ");
     return {
       name: cls.name,
       gradeLevel: cls.gradeLevel,
       section: cls.section,
       studentCount: roster.length,
-      studentNames: studentNames || null,
       activityCount: activity,
       invitationCode: cls.invitationCode,
+      _learnerIds: roster.map((e) => e.learnerId),
     };
   });
 
@@ -183,13 +197,44 @@ function showTeacherDetail(teacherRow) {
       { label: "Grade", value: (r) => r.gradeLevel },
       { label: "Section", value: (r) => r.section },
       { label: "Students", value: (r) => r.studentCount },
-      { label: "Student Names", value: (r) => r.studentNames },
       { label: "Assignments + Lessons", value: (r) => r.activityCount },
       { label: "Invitation Code", value: (r) => r.invitationCode },
     ],
-    classRows
+    classRows,
+    null,
+    [{ label: "View Students", onClick: (row) => showStudentList(row) }]
   );
 }
+
+function showStudentList(classRow) {
+  document.getElementById("teacher-detail-view").hidden = true;
+  document.getElementById("student-list-view").hidden = false;
+  document.getElementById("student-list-class-name").textContent = `${classRow.name} — Students`;
+
+  const studentRows = classRow._learnerIds.map((learnerId) => {
+    const learner = learnerById.get(learnerId);
+    return {
+      name: learner?.name ?? learnerId,
+      age: learner?.age,
+      gradeLevel: learner?.gradeLevel,
+    };
+  });
+
+  renderTable(
+    document.getElementById("table-class-students"),
+    [
+      { label: "Name", value: (r) => r.name },
+      { label: "Age", value: (r) => r.age },
+      { label: "Grade Level", value: (r) => r.gradeLevel },
+    ],
+    studentRows
+  );
+}
+
+document.getElementById("back-to-classes-btn").addEventListener("click", () => {
+  document.getElementById("student-list-view").hidden = true;
+  document.getElementById("teacher-detail-view").hidden = false;
+});
 
 document.getElementById("back-to-roster-btn").addEventListener("click", () => {
   document.getElementById("teacher-detail-view").hidden = true;
