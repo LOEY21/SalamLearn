@@ -94,14 +94,22 @@ function describeAuthError(err) {
   }
 }
 
+// Populated by loadTeacherRoster, read by showTeacherDetail — learner docs
+// aren't scoped per teacher, so this is a single flat lookup shared across
+// every teacher's drill-in rather than refetched per click.
+let learnerNameById = new Map();
+
 async function loadTeacherRoster() {
-  const [teachers, classes, enrollments, assignedModules, customLessons] = await Promise.all([
+  const [teachers, classes, enrollments, assignedModules, customLessons, learners] = await Promise.all([
     fetchAll("teachers"),
     fetchAll("classes"),
     fetchAll("enrollments"),
     fetchAll("assigned_modules"),
     fetchAll("custom_lessons"),
+    fetchAll("learners"),
   ]);
+
+  learnerNameById = new Map(learners.map((l) => [l.id, l.name]));
 
   const classesByTeacherId = new Map();
   classes.forEach((c) => {
@@ -154,11 +162,15 @@ function showTeacherDetail(teacherRow) {
     const activity =
       teacherRow._assignedModules.filter((a) => a.classId === cls.id).length +
       teacherRow._customLessons.filter((l) => l.classId === cls.id).length;
+    const studentNames = roster
+      .map((e) => learnerNameById.get(e.learnerId) ?? e.learnerId)
+      .join(", ");
     return {
       name: cls.name,
       gradeLevel: cls.gradeLevel,
       section: cls.section,
       studentCount: roster.length,
+      studentNames: studentNames || null,
       activityCount: activity,
       invitationCode: cls.invitationCode,
     };
@@ -171,6 +183,7 @@ function showTeacherDetail(teacherRow) {
       { label: "Grade", value: (r) => r.gradeLevel },
       { label: "Section", value: (r) => r.section },
       { label: "Students", value: (r) => r.studentCount },
+      { label: "Student Names", value: (r) => r.studentNames },
       { label: "Assignments + Lessons", value: (r) => r.activityCount },
       { label: "Invitation Code", value: (r) => r.invitationCode },
     ],
