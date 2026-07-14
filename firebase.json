@@ -1,0 +1,27 @@
+{
+  "firestore": {
+    "rules": "prjct/firestore.rules"
+  },
+  "hosting": [
+    {
+      "target": "admin-web",
+      "public": "admin-web",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**",
+        "(t.innerHTML",
+        "batch.delete(d.ref))"
+      ]
+    },
+    {
+      "target": "principal-web",
+      "public": "principal-web",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ]
+    }
+  ]
+}

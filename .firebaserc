@@ -1,0 +1,18 @@
+{
+  "projects": {
+    "default": "salamlearn-55712"
+  },
+  "targets": {
+    "salamlearn-55712": {
+      "hosting": {
+        "admin-web": [
+          "salamlearn-55712"
+        ],
+        "principal-web": [
+          "salamlearn-principal"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
