@@ -45,6 +45,31 @@ async function fetchAll(name) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
+function formatDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+// Text-filters whichever table a .table-search box is scoped to via its
+// data-table attribute — same mechanism as admin-web's own search boxes.
+document.addEventListener("input", (e) => {
+  const input = e.target.closest(".table-search");
+  if (!input) return;
+  const table = document.getElementById(input.dataset.table);
+  if (!table) return;
+  const term = input.value.toLowerCase().trim();
+  table.querySelectorAll("tbody tr").forEach((row) => {
+    const text = row.textContent.toLowerCase();
+    row.classList.toggle("table-row-hidden", term && !text.includes(term));
+  });
+});
+
 function renderTable(tableEl, columns, rows, onRowClick, actions) {
   const actionsList = Array.isArray(actions) ? actions : (actions ? [actions] : []);
   const allColumns = actionsList.length > 0 ? [...columns, { label: "" }] : columns;
@@ -135,23 +160,52 @@ async function loadTeacherRoster() {
     classesByTeacherId.set(c.teacherId, list);
   });
 
+  // Firestore has no login-timestamp field for teachers (that's Firebase
+  // Auth data, which needs a Cloud Function this project's Spark plan can't
+  // run — see docs/superpowers/plans/2026-07-14-principal-role.md's Task 4
+  // note). This is a genuine proxy instead: the most recent moment any of a
+  // teacher's classes/assignments/lessons was created, derived entirely
+  // from data already mirrored to Firestore.
+  function latestOf(...isoStrings) {
+    const valid = isoStrings.filter(Boolean);
+    if (valid.length === 0) return null;
+    return valid.reduce((latest, s) => (s > latest ? s : latest));
+  }
+
   const rows = teachers.map((teacher) => {
     const ownClasses = classesByTeacherId.get(teacher.id) ?? [];
     const ownClassIds = new Set(ownClasses.map((c) => c.id));
     const studentCount = enrollments.filter((e) => ownClassIds.has(e.classId)).length;
-    const activityCount =
-      assignedModules.filter((a) => ownClassIds.has(a.classId)).length +
-      customLessons.filter((l) => ownClassIds.has(l.classId)).length;
+    const ownAssignments = assignedModules.filter((a) => ownClassIds.has(a.classId));
+    const ownLessons = customLessons.filter((l) => ownClassIds.has(l.classId));
+    const activityCount = ownAssignments.length + ownLessons.length;
+    const lastActivity = latestOf(
+      ...ownClasses.map((c) => c.createdAt),
+      ...ownAssignments.map((a) => a.assignedAt),
+      ...ownLessons.map((l) => l.createdAt)
+    );
     return {
       ...teacher,
       classCount: ownClasses.length,
       studentCount,
       activityCount,
+      lastActivity,
+      isIdle: activityCount === 0,
       _ownClasses: ownClasses,
       _enrollments: enrollments,
       _assignedModules: assignedModules,
       _customLessons: customLessons,
     };
+  });
+
+  // Most recently active teachers first — idle ones (no lastActivity at
+  // all) sink to the bottom, surfacing exactly who a principal needs to
+  // check in on without them having to sort manually.
+  rows.sort((a, b) => {
+    if (!a.lastActivity && !b.lastActivity) return 0;
+    if (!a.lastActivity) return 1;
+    if (!b.lastActivity) return -1;
+    return b.lastActivity.localeCompare(a.lastActivity);
   });
 
   renderTable(
@@ -162,6 +216,8 @@ async function loadTeacherRoster() {
       { label: "Classes", value: (r) => r.classCount },
       { label: "Students", value: (r) => r.studentCount },
       { label: "Assignments + Lessons", value: (r) => r.activityCount },
+      { label: "Last Activity", value: (r) => formatDate(r.lastActivity) },
+      { label: "Status", value: (r) => (r.isIdle ? "No activity yet" : "Active") },
     ],
     rows,
     (row) => showTeacherDetail(row)
@@ -176,17 +232,18 @@ function showTeacherDetail(teacherRow) {
 
   const classRows = teacherRow._ownClasses.map((cls) => {
     const roster = teacherRow._enrollments.filter((e) => e.classId === cls.id);
-    const activity =
-      teacherRow._assignedModules.filter((a) => a.classId === cls.id).length +
-      teacherRow._customLessons.filter((l) => l.classId === cls.id).length;
+    const assignments = teacherRow._assignedModules.filter((a) => a.classId === cls.id);
+    const lessons = teacherRow._customLessons.filter((l) => l.classId === cls.id);
     return {
       name: cls.name,
       gradeLevel: cls.gradeLevel,
       section: cls.section,
       studentCount: roster.length,
-      activityCount: activity,
+      activityCount: assignments.length + lessons.length,
       invitationCode: cls.invitationCode,
       _learnerIds: roster.map((e) => e.learnerId),
+      _assignments: assignments,
+      _lessons: lessons,
     };
   });
 
@@ -202,9 +259,46 @@ function showTeacherDetail(teacherRow) {
     ],
     classRows,
     null,
-    [{ label: "View Students", onClick: (row) => showStudentList(row) }]
+    [
+      { label: "View Students", onClick: (row) => showStudentList(row) },
+      { label: "View Timeline", onClick: (row) => showClassTimeline(row) },
+    ]
   );
 }
+
+function showClassTimeline(classRow) {
+  document.getElementById("teacher-detail-view").hidden = true;
+  document.getElementById("class-timeline-view").hidden = false;
+  document.getElementById("class-timeline-name").textContent = `${classRow.name} — Timeline`;
+
+  const entries = [
+    ...classRow._assignments.map((a) => ({
+      type: "Assignment",
+      title: a.moduleId,
+      date: a.assignedAt,
+    })),
+    ...classRow._lessons.map((l) => ({
+      type: "Custom Lesson",
+      title: l.title,
+      date: l.createdAt,
+    })),
+  ].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+
+  renderTable(
+    document.getElementById("table-class-timeline"),
+    [
+      { label: "Type", value: (r) => r.type },
+      { label: "Title", value: (r) => r.title },
+      { label: "Date", value: (r) => formatDate(r.date) },
+    ],
+    entries
+  );
+}
+
+document.getElementById("back-to-classes-from-timeline-btn").addEventListener("click", () => {
+  document.getElementById("class-timeline-view").hidden = true;
+  document.getElementById("teacher-detail-view").hidden = false;
+});
 
 function showStudentList(classRow) {
   document.getElementById("teacher-detail-view").hidden = true;

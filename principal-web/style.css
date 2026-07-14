@@ -759,6 +759,8 @@ body {
 
 .table-search::-webkit-search-cancel-button { cursor: pointer; }
 .table-row-hidden { display: none !important; }
+.clickable-row { cursor: pointer; }
+.clickable-row:hover { background: var(--cream-dark); }
 
 /* ════════════════════════════════════════════════════════
    TABLES
