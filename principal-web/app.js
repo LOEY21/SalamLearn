@@ -143,6 +143,46 @@ async function loadTeacherRoster() {
   );
 }
 
+function showTeacherDetail(teacherRow) {
+  document.getElementById("teacher-roster-view").hidden = true;
+  const detailView = document.getElementById("teacher-detail-view");
+  detailView.hidden = false;
+  document.getElementById("teacher-detail-name").textContent = teacherRow.fullName;
+
+  const classRows = teacherRow._ownClasses.map((cls) => {
+    const roster = teacherRow._enrollments.filter((e) => e.classId === cls.id);
+    const activity =
+      teacherRow._assignedModules.filter((a) => a.classId === cls.id).length +
+      teacherRow._customLessons.filter((l) => l.classId === cls.id).length;
+    return {
+      name: cls.name,
+      gradeLevel: cls.gradeLevel,
+      section: cls.section,
+      studentCount: roster.length,
+      activityCount: activity,
+      invitationCode: cls.invitationCode,
+    };
+  });
+
+  renderTable(
+    document.getElementById("table-teacher-classes"),
+    [
+      { label: "Class", value: (r) => r.name },
+      { label: "Grade", value: (r) => r.gradeLevel },
+      { label: "Section", value: (r) => r.section },
+      { label: "Students", value: (r) => r.studentCount },
+      { label: "Assignments + Lessons", value: (r) => r.activityCount },
+      { label: "Invitation Code", value: (r) => r.invitationCode },
+    ],
+    classRows
+  );
+}
+
+document.getElementById("back-to-roster-btn").addEventListener("click", () => {
+  document.getElementById("teacher-detail-view").hidden = true;
+  document.getElementById("teacher-roster-view").hidden = false;
+});
+
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   loginError.hidden = true;
