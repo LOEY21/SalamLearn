@@ -1,10 +1,23 @@
 // Ports the type definitions from Wireframe 0.3's `src/data/curriculum.ts`
 // (lines 1-40) — see that file for the source of truth on shape/naming.
-
-enum ActivityType { flashcard, quiz, story, match, sort }
+//
+// `flashcard`/`match`/`sort` (Wireframe 0.3 port) retired in favor of the
+// capstone spec's real 5 core modules (FR-4.1–4.5): `trace` (FR-4.1),
+// `pronounce` (FR-4.2), `quranSync` (FR-4.3), `story` (FR-4.4, unchanged —
+// already matched), `fiqhDrag` (FR-4.5). `quiz` isn't one of the 5 FR
+// modules but is kept as an optional 6th assessment layer per the project
+// owner's call.
+enum ActivityType { trace, pronounce, quranSync, story, fiqhDrag, quiz, harakatPop }
 
 enum DestinationState { completed, current, locked }
 
+/// FR-4.1/FR-4.2's shared content shape — a single Arabic word/letter with
+/// its translit + translation. `trace` activities look up the letter's own
+/// guide path from `TraceActivity`'s per-letter table (extracted from the
+/// Cairo font's glyph outlines, not stored per-word here); `pronounce`
+/// activities render it as a tap-to-play card. Same class, two different
+/// activities, since both are "show one Arabic word and let the learner
+/// interact with it" at heart.
 class FlashCard {
   const FlashCard({
     required this.id,
@@ -13,6 +26,7 @@ class FlashCard {
     required this.translit,
     required this.english,
     required this.color,
+    this.audioAsset,
   });
 
   final String id;
@@ -21,6 +35,12 @@ class FlashCard {
   final String translit;
   final String english;
   final String color;
+
+  /// FR-4.2's "native media playback" asset — nullable because this app is
+  /// in its placeholder phase with no recorded audio yet (per project
+  /// owner's call); `PronounceActivity` shows its tap/waveform feedback
+  /// either way and simply skips playback when this is null.
+  final String? audioAsset;
 }
 
 class QuizQ {
@@ -85,36 +105,70 @@ class StoryPanel {
   final String? captionAr;
 }
 
-class MatchPair {
-  const MatchPair({
+/// FR-4.3's "highlights text strings ... synchronously with audio
+/// timestamps" — one Arabic line (ayah/hadith excerpt), word-by-word, each
+/// word paired with the millisecond offset (from the start of the clip)
+/// at which it should highlight. `audioAsset` is nullable for the same
+/// placeholder-phase reason as `FlashCard.audioAsset`; without it,
+/// `QuranSyncActivity` drives the highlight off a plain timer instead of
+/// real playback position, so the sync behavior is still exercisable.
+class QuranSyncLine {
+  const QuranSyncLine({
     required this.id,
-    required this.left,
-    this.leftEmoji,
-    required this.right,
-    this.rightEmoji,
+    required this.arabicWords,
+    required this.translitWords,
+    required this.wordTimestampsMs,
+    required this.totalDurationMs,
+    this.audioAsset,
+    this.reference,
   });
 
   final String id;
-  final String left;
-  final String? leftEmoji;
-  final String right;
-  final String? rightEmoji;
+  final List<String> arabicWords;
+  final List<String> translitWords;
+
+  /// One timestamp per word, same length/order as [arabicWords].
+  final List<int> wordTimestampsMs;
+  final int totalDurationMs;
+  final String? audioAsset;
+
+  /// e.g. "Surah Al-Fatiha, 1:1" or "Hadith — Sahih al-Bukhari" — shown as
+  /// a small caption above the line.
+  final String? reference;
 }
 
-class SortItem {
-  const SortItem({
+/// FR-4.5's "validates if a dragged item ID matches a target drop-zone ID"
+/// — one draggable chip. [correctZoneId] must equal a [FiqhDropZone.id] in
+/// the same activity's `fiqhZones` list. Covers both of the FR's own
+/// example shapes with one model: an *ordered array* (zones are numbered
+/// slots, e.g. Wudu steps 1→4) and a *binary sort* (zones are two named
+/// buckets, e.g. Halal/Haram) — the distinction lives entirely in how
+/// `fiqhZones` is authored, not in a separate class.
+class FiqhDragItem {
+  const FiqhDragItem({
     required this.id,
     required this.emoji,
     required this.label,
     this.labelAr,
-    required this.bucket,
+    required this.correctZoneId,
   });
 
   final String id;
   final String emoji;
   final String label;
   final String? labelAr;
-  final int bucket;
+  final String correctZoneId;
+}
+
+class FiqhDropZone {
+  const FiqhDropZone({required this.id, required this.label, this.icon});
+
+  final String id;
+  final String label;
+
+  /// Optional leading glyph for the zone chip itself (e.g. an order number
+  /// "1", or a small icon like "✅"/"❌" for binary zones).
+  final String? icon;
 }
 
 class Activity {
@@ -127,10 +181,9 @@ class Activity {
     this.cards,
     this.questions,
     this.panels,
-    this.pairs,
-    this.items,
-    this.bucketA,
-    this.bucketB,
+    this.quranLine,
+    this.fiqhItems,
+    this.fiqhZones,
   });
 
   final String id;
@@ -138,13 +191,14 @@ class Activity {
   final String title;
   final String icon;
   final int xp;
+
+  /// Used by both `trace` and `pronounce` (see [FlashCard] doc).
   final List<FlashCard>? cards;
   final List<QuizQ>? questions;
   final List<StoryPanel>? panels;
-  final List<MatchPair>? pairs;
-  final List<SortItem>? items;
-  final String? bucketA;
-  final String? bucketB;
+  final QuranSyncLine? quranLine;
+  final List<FiqhDragItem>? fiqhItems;
+  final List<FiqhDropZone>? fiqhZones;
 }
 
 class Lesson {

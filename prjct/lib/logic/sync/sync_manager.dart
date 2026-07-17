@@ -1,8 +1,13 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
+
+import '../auth/session.dart';
+import '../parent/analytics_providers.dart';
+import '../teacher/teacher_providers.dart';
 
 import '../../data/local/hive_boxes.dart';
 import '../../data/models/assigned_module.dart';
@@ -29,12 +34,14 @@ import '../../data/repositories/teacher_repository.dart';
 /// cloud"). Hive stays the only thing the UI reads; this only ever writes
 /// outward.
 class SyncManager {
-  SyncManager({Connectivity? connectivity, FirestoreMirror? mirror})
+  SyncManager({Connectivity? connectivity, FirestoreMirror? mirror, dynamic ref})
     : _connectivity = connectivity ?? Connectivity(),
-      _mirror = mirror ?? FirestoreMirror();
+      _mirror = mirror ?? FirestoreMirror(),
+      _ref = ref;
 
   final Connectivity _connectivity;
   final FirestoreMirror _mirror;
+  final dynamic _ref;
   final _parents = ParentRepository();
   final _teachers = TeacherRepository();
   final _learners = LearnerRepository();
@@ -67,12 +74,16 @@ class SyncManager {
   /// reflects a real problem instead of silently swallowing it.
   Future<void> syncNow() async {
     if (_syncing) return;
+    final connectivity = await _connectivity.checkConnectivity();
+    if (connectivity.isEmpty || connectivity.contains(ConnectivityResult.none)) {
+      throw Exception('No internet access, can\'t sync.');
+    }
     _syncing = true;
     try {
       Object? firstError;
-      Future<void> attempt(Future<void> Function() push) async {
+      Future<void> attempt(Future<void> Function() action) async {
         try {
-          await push();
+          await action();
         } catch (e) {
           firstError ??= e;
         }
@@ -86,13 +97,134 @@ class SyncManager {
       await attempt(() => _consents.pushAll(_mirror));
       await attempt(() => _customLessons.pushAll(_mirror));
 
+      // Pull teacher-specific data (enrollments/learners) from Firestore if signed in as Asatidz
+      final session = _ref?.read(sessionProvider);
+      if (session != null && session.activeRole == UserRole.asatidz && session.activeTeacherId != null) {
+        await attempt(() => _pullTeacherData(session.activeTeacherId!));
+      }
+
+      // Pull learner-specific assignments and progress if signed in as
+      // Parent/Learner — progress covers the case where the learner played
+      // on a different device than the one viewing the parent dashboard.
+      if (session != null && session.learner != null) {
+        await attempt(() => _pullLearnerAssignments(session.learner!.id));
+        await attempt(() => _pullProgressForLearner(session.learner!.id));
+        _ref?.read(parentProgressRefreshProvider.notifier).bump();
+      }
+
       if (firstError != null) throw firstError!;
 
       await Hive.box<dynamic>(
         HiveBoxes.settings,
       ).put('lastSyncedAt', DateTime.now().toIso8601String());
+
+      // Refresh the teacher roster UI
+      _ref?.read(rosterRefreshProvider.notifier).bump();
     } finally {
       _syncing = false;
+    }
+  }
+
+  Future<void> _pullTeacherData(String teacherId) async {
+    try {
+      final remoteClasses = await _mirror.fetchClassesForTeacher(teacherId);
+      for (final remote in remoteClasses) {
+        final local = _classes.findById(remote.id);
+        if (local == null) {
+          await _classes.saveFromRemote(remote);
+        }
+      }
+    } catch (e) {
+      debugPrint('SyncManager: pulling remote classes failed: $e');
+    }
+
+    final classes = _classes.byTeacherId(teacherId);
+    for (final section in classes) {
+      try {
+        final remoteEnrollments = await _mirror.fetchEnrollmentsForClass(section.id);
+        for (final remoteEnrollment in remoteEnrollments) {
+          // Save enrollment locally
+          await _classes.enroll(
+            classId: remoteEnrollment.classId,
+            learnerId: remoteEnrollment.learnerId,
+          );
+          // Pull learner profile if missing locally
+          final localLearner = _learners.findById(remoteEnrollment.learnerId);
+          if (localLearner == null) {
+            final remoteLearner = await _mirror.fetchLearner(remoteEnrollment.learnerId);
+            if (remoteLearner != null) {
+              await _learners.saveFromRemote(
+                id: remoteLearner.id,
+                parentId: remoteLearner.parentId ?? '',
+                name: remoteLearner.name,
+                age: remoteLearner.age,
+                avatar: remoteLearner.avatar,
+                gradeLevel: remoteLearner.gradeLevel,
+                username: remoteLearner.username,
+                createdAt: remoteLearner.createdAt,
+              );
+            }
+          }
+          await _pullProgressForLearner(remoteEnrollment.learnerId);
+        }
+      } catch (e) {
+        debugPrint('SyncManager: pulling teacher class ${section.id} data failed: $e');
+      }
+    }
+  }
+
+  /// Pulls [learnerId]'s progress records down from Firestore into the
+  /// local Hive box — the read side of `_progress.pushAll` above. Existing
+  /// local records win on id conflicts (a record already here was either
+  /// written on this device or already pulled), so this only ever adds
+  /// what's missing.
+  Future<void> _pullProgressForLearner(String learnerId) async {
+    try {
+      final remoteRecords = await _mirror.fetchProgressForLearner(learnerId);
+      final box = Hive.box<ProgressRecord>(HiveBoxes.progress);
+      for (final record in remoteRecords) {
+        if (!box.containsKey(record.id)) {
+          await box.put(record.id, record);
+        }
+      }
+    } catch (e) {
+      debugPrint('SyncManager: pulling progress for $learnerId failed: $e');
+    }
+  }
+
+  Future<void> _pullLearnerAssignments(String learnerId) async {
+    try {
+      final enrollments = _classes.byLearnerId(learnerId);
+      final enrolledClassIds = enrollments.map((e) => e.classId).toSet();
+      
+      final assignmentsBox = Hive.box<AssignedModule>(HiveBoxes.assignedModules);
+
+      for (final classId in enrolledClassIds) {
+        // Fetch class-wide assignments from Firestore
+        final remoteClassAssignments = await _mirror.fetchAssignmentsForClass(classId);
+        // Fetch personal assignments from Firestore
+        final remotePersonalAssignments = await _mirror.fetchAssignmentsForLearner(learnerId);
+
+        // Delete local assignments for this class/learner that are not in remote to keep them in sync
+        final localAssignments = assignmentsBox.values
+            .where((a) => a.classId == classId && (a.learnerId == null || a.learnerId == learnerId))
+            .toList();
+
+        final remoteIds = [...remoteClassAssignments, ...remotePersonalAssignments].map((a) => a.id).toSet();
+
+        for (final local in localAssignments) {
+          if (!remoteIds.contains(local.id)) {
+            await assignmentsBox.delete(local.id);
+          }
+        }
+
+        // Save remote assignments locally
+        for (final remote in [...remoteClassAssignments, ...remotePersonalAssignments]) {
+          await assignmentsBox.put(remote.id, remote);
+        }
+      }
+    } catch (e) {
+      debugPrint('SyncManager: pulling learner assignments failed: $e');
     }
   }
 
@@ -153,7 +285,7 @@ class SyncManager {
 }
 
 final syncManagerProvider = Provider<SyncManager>((ref) {
-  final manager = SyncManager();
+  final manager = SyncManager(ref: ref);
   manager.startWatching();
   ref.onDispose(manager.dispose);
   return manager;

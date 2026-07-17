@@ -23,9 +23,9 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
     duration: const Duration(milliseconds: 700),
   )..forward();
 
-  late final AnimationController _glow = AnimationController(
+  late final AnimationController _spin = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 2600),
+    duration: const Duration(seconds: 6),
   );
 
   Animation<double> _in(double start, double end) {
@@ -58,14 +58,14 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
   void initState() {
     super.initState();
     _c.addStatusListener((status) {
-      if (status == AnimationStatus.completed) _glow.repeat(reverse: true);
+      if (status == AnimationStatus.completed) _spin.repeat();
     });
   }
 
   @override
   void dispose() {
     _c.dispose();
-    _glow.dispose();
+    _spin.dispose();
     super.dispose();
   }
 
@@ -102,6 +102,11 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
 
     final isTeacher = role == UserRole.asatidz;
     final isParent = role == UserRole.parent;
+    final isLearner = role == UserRole.learner;
+    final accentColor = (isTeacher || isLearner) ? AppColors.gold : AppColors.teal;
+    final roleLabel = isTeacher
+        ? 'TEACHER GATE'
+        : (isParent ? 'PARENT GATE' : 'LEARNER GATE');
 
     String headingText;
     String subtitleText;
@@ -145,10 +150,23 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+                padding: const EdgeInsets.fromLTRB(12, 14, 18, 0),
                 child: Row(
                   children: [
                     _BackButton(onTap: () => _handleBack(redirect, role)),
+                    Expanded(
+                      child: Text(
+                        roleLabel,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.6,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 34),
                   ],
                 ),
               ),
@@ -165,7 +183,7 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
                             opacity: lock,
                             child: ScaleTransition(
                               scale: lock.drive(Tween(begin: 0.9, end: 1.0)),
-                              child: _RoleLockHero(role: role, anim: _glow),
+                              child: _RoleRingHero(role: role, spin: _spin),
                             ),
                           ),
                           const SizedBox(height: 24),
@@ -198,6 +216,7 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
                             opacity: pad,
                             child: PinPad(
                               key: ValueKey(confirming),
+                              accentColor: accentColor,
                               onSubmit: (pin) {
                                 if (!remoteLinked && !confirming) {
                                   setState(() => _firstEntry = pin);
@@ -284,11 +303,14 @@ class _BackButton extends StatelessWidget {
   }
 }
 
-class _RoleLockHero extends StatelessWidget {
-  const _RoleLockHero({required this.role, required this.anim});
+/// Rotating conic-gradient ring around a white icon disc — the ring's
+/// motion is the "locked" affordance, replacing the old static glow +
+/// coral lock badge.
+class _RoleRingHero extends StatelessWidget {
+  const _RoleRingHero({required this.role, required this.spin});
 
   final UserRole role;
-  final Animation<double> anim;
+  final Animation<double> spin;
 
   @override
   Widget build(BuildContext context) {
@@ -297,6 +319,9 @@ class _RoleLockHero extends StatelessWidget {
     final primaryColor = isTeacher
         ? AppColors.gold
         : (isLearner ? AppColors.gold : AppColors.teal);
+    final primaryColor2 = isTeacher || isLearner
+        ? const Color(0xFFF7C25A)
+        : const Color(0xFF14A17F);
 
     Widget getIcon(Color color, double size) {
       if (isTeacher) return graduationCapIcon(color, size: size);
@@ -305,84 +330,37 @@ class _RoleLockHero extends StatelessWidget {
     }
 
     return SizedBox(
-      width: 90,
-      height: 90,
+      width: 108,
+      height: 108,
       child: Stack(
         alignment: Alignment.center,
         children: [
           AnimatedBuilder(
-            animation: anim,
-            builder: (context, child) {
-              final t = Curves.easeInOut.transform(anim.value);
-              final scale = 0.92 + (0.12 * t);
-              final opacity = 0.6 + (0.4 * t);
-              return Opacity(
-                opacity: opacity,
-                child: Transform.scale(scale: scale, child: child),
-              );
-            },
+            animation: spin,
+            builder: (context, child) => Transform.rotate(
+              angle: spin.value * 6.28319,
+              child: child,
+            ),
             child: Container(
-              width: 90,
-              height: 90,
+              width: 108,
+              height: 108,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    primaryColor.withValues(alpha: 0.22),
-                    primaryColor.withValues(alpha: 0.0),
-                  ],
+                gradient: SweepGradient(
+                  colors: [primaryColor, primaryColor2, primaryColor],
                 ),
               ),
             ),
           ),
           Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
+            width: 92,
+            height: 92,
+            decoration: const BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.white,
-              border: Border.all(
-                color: primaryColor.withValues(alpha: 0.18),
-                width: 2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: primaryColor.withValues(alpha: 0.14),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
-                ),
-              ],
             ),
             alignment: Alignment.center,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                getIcon(primaryColor, 32),
-                Positioned(
-                  right: -6,
-                  bottom: -6,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: AppColors.coral,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Color(0x26000000),
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.lock_rounded,
-                      color: Colors.white,
-                      size: 11,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            child: getIcon(primaryColor, 36),
           ),
         ],
       ),

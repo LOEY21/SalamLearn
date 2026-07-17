@@ -4,11 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/class_section.dart';
-import '../../data/models/custom_lesson.dart';
+import '../../data/remote/firestore_mirror.dart';
 import '../../data/repositories/class_repository.dart';
-import '../../data/repositories/custom_lesson_repository.dart';
 import '../../data/repositories/learner_repository.dart';
-import '../../logic/auth/session.dart';
 import '../../logic/teacher/teacher_providers.dart';
 import '../theme/app_colors.dart';
 import '../widgets/auth_loading_overlay.dart';
@@ -25,9 +23,9 @@ import 'teacher_dashboard_screen.dart'
 /// returns to wherever the teacher actually came from instead of always
 /// landing on the classroom picker.
 ///
-/// Redesigned to match the Classroom tab's own visual language: full-bleed
-/// hero, ambient breathing blobs, staggered card entrance, and the same
-/// stamped "Class Pass" ticket for the invitation code.
+/// Flat appbar + chip row + card list, matching the approved top-tab
+/// dashboard mock (dumps/classes_redesign_mock.html) rather than the old
+/// teal-gradient hero and "Class Pass" ticket.
 class ClassDetailScreen extends ConsumerStatefulWidget {
   const ClassDetailScreen({super.key, required this.classId});
 
@@ -59,55 +57,19 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
   void _refresh() {
     ref.invalidate(classRosterProvider(widget.classId));
     ref.invalidate(teacherClassesProvider);
+    ref.invalidate(archivedTeacherClassesProvider);
     ref.invalidate(teacherRosterProvider);
   }
 
-  Future<void> _openCreateLessonDialog(String teacherId) async {
-    final titleC = TextEditingController();
-    final instructionsC = TextEditingController();
-    final bodyC = TextEditingController();
-    final created = await showDialog<bool>(
+  Future<void> _archive(ClassSection section) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('New Custom Lesson'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: titleC,
-                decoration: const InputDecoration(
-                  labelText: 'Title',
-                  hintText: 'e.g. Practicing Wudu at home',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: instructionsC,
-                decoration: const InputDecoration(
-                  labelText: 'Instructions',
-                  hintText: 'What should the learner do?',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: bodyC,
-                decoration: const InputDecoration(
-                  labelText: 'Lesson content',
-                  hintText: 'Write the lesson text here...',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
-                maxLines: 6,
-              ),
-            ],
-          ),
+        title: const Text('Archive this class?'),
+        content: Text(
+          '"${section.name}" will move to Archived Classes. Its roster, '
+          'progress, and lesson folders stay intact and read-only — no new '
+          'enrollments, casting, or homework until you unarchive it.',
         ),
         actions: [
           TextButton(
@@ -115,57 +77,71 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
-              if (titleC.text.trim().isEmpty || bodyC.text.trim().isEmpty) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please enter a title and lesson content'),
-                  ),
-                );
-                return;
-              }
-              Navigator.of(dialogContext).pop(true);
-            },
             style: FilledButton.styleFrom(backgroundColor: AppColors.teal),
-            child: const Text('Create'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Archive'),
           ),
         ],
       ),
     );
-
-    if (created == true) {
-      await CustomLessonRepository().create(
-        classId: widget.classId,
-        teacherId: teacherId,
-        title: titleC.text.trim(),
-        instructions: instructionsC.text.trim(),
-        body: bodyC.text.trim(),
-      );
-      ref.invalidate(classCustomLessonsProvider(widget.classId));
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Lesson created!')));
-      }
-    }
-  }
-
-  Future<void> _deleteLesson(CustomLesson lesson) async {
-    await CustomLessonRepository().delete(lesson.id);
-    ref.invalidate(classCustomLessonsProvider(widget.classId));
-  }
-
-  Future<void> _regenerateCode(ClassSection section) async {
-    await ClassRepository().regenerateInvitationCode(section);
+    if (confirmed != true) return;
+    await ref.read(teacherClassControllerProvider.notifier).archiveClass(section.id);
     _refresh();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('New invitation code generated!')),
+        SnackBar(content: Text('"${section.name}" archived')),
       );
     }
   }
 
-  void _enrollStudent() {
+  Future<void> _unarchive(ClassSection section) async {
+    await ref
+        .read(teacherClassControllerProvider.notifier)
+        .unarchiveClass(section.id);
+    _refresh();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('"${section.name}" unarchived')),
+      );
+    }
+  }
+
+  Future<void> _deleteClass(ClassSection section) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete this class?'),
+        content: Text(
+          '"${section.name}" and its entire roster, progress history, '
+          'assignments, and lesson folders will be permanently deleted. '
+          'This can\'t be undone — archive it instead if you want to keep '
+          'the record.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(teacherClassControllerProvider.notifier).deleteClass(section.id);
+    _refresh();
+    if (mounted) {
+      _goBack();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('"${section.name}" deleted')),
+      );
+    }
+  }
+
+  Future<void> _enrollStudent() async {
     final first = _firstNameC.text.trim();
     final middle = _middleNameC.text.trim();
     final last = _lastNameC.text.trim();
@@ -183,21 +159,49 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
     // back into the same "First Middle Last" shape and matches that,
     // exactly as if the teacher had typed one combined name field.
     final name = [first, middle, last].where((s) => s.isNotEmpty).join(' ');
-    final matches = LearnerRepository().findAllByName(name);
+    var matches = LearnerRepository().findAllByName(name);
     if (matches.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('No learner found named "$name"')));
+      // Not on this device yet — the learner may have been created
+      // straight in Firestore (e.g. by the admin website) and never
+      // synced down here. Fall back to a remote lookup and cache any hit
+      // locally so future enrolls for the same learner stay on-device.
+      try {
+        final remoteMatches = await FirestoreMirror().findLearnersByName(name);
+        for (final remote in remoteMatches) {
+          await LearnerRepository().saveFromRemote(
+            id: remote.id,
+            parentId: remote.parentId ?? '',
+            name: remote.name,
+            age: remote.age,
+            avatar: remote.avatar,
+            gradeLevel: remote.gradeLevel,
+            username: remote.username,
+            createdAt: remote.createdAt,
+          );
+        }
+      } catch (_) {
+        // Best-effort — offline devices just keep the "no learner found" path.
+      }
+      matches = LearnerRepository().findAllByName(name);
+    }
+    if (matches.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('No learner found named "$name"')));
+      }
       return;
     }
     if (matches.length > 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Multiple learners named "$name" found — ask the parent to confirm.',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Multiple learners named "$name" found — ask the parent to confirm.',
+            ),
           ),
-        ),
-      );
+        );
+      }
       return;
     }
     final learner = matches.first;
@@ -239,13 +243,17 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final classes = ref.watch(teacherClassesProvider);
+    // Watches both lists (not just [teacherClassesProvider], which excludes
+    // archived classes) so this screen keeps working after the class it's
+    // showing gets archived instead of reporting "no longer exists".
+    final classes = [
+      ...ref.watch(teacherClassesProvider),
+      ...ref.watch(archivedTeacherClassesProvider),
+    ];
     final section = classes.where((c) => c.id == widget.classId).firstOrNull;
     final activeId = ref.watch(teacherClassControllerProvider)?.id;
     final active = widget.classId == activeId;
     final roster = ref.watch(classRosterProvider(widget.classId));
-    final lessons = ref.watch(classCustomLessonsProvider(widget.classId));
-    final teacherId = ref.watch(sessionProvider).activeTeacherId;
 
     return PopScope(
       canPop: false,
@@ -254,9 +262,9 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
       },
       child: Scaffold(
         backgroundColor: AppColors.surface,
-        body: section == null
-            ? SafeArea(
-                child: Column(
+        body: SafeArea(
+          child: section == null
+              ? Column(
                   children: [
                     Align(
                       alignment: Alignment.centerLeft,
@@ -274,43 +282,29 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
                       ),
                     ),
                   ],
-                ),
-              )
-            : SafeArea(
-                bottom: false,
-                child: ListView(
-                  padding: EdgeInsets.zero,
+                )
+              : Column(
                   children: [
-                    _DetailHero(
+                    _DetailAppBar(section: section, onBack: _goBack),
+                    _DetailChips(
                       section: section,
                       active: active,
                       studentCount: roster.length,
-                      onBack: _goBack,
                       onMakeActive: _makeActive,
                     ),
-                    Transform.translate(
-                      offset: const Offset(0, -22),
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(20),
+                    const Divider(height: 1, color: AppColors.creamBorder),
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+                        children: [
+                          _StaggerFadeIn(
+                            delay: const Duration(milliseconds: 40),
+                            child: _InviteCodeCard(section: section),
                           ),
-                        ),
-                        padding: const EdgeInsets.fromLTRB(16, 22, 16, 28),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _StampIn(
-                              delay: const Duration(milliseconds: 60),
-                              child: _ClassPassTicket(
-                                section: section,
-                                onRegenerate: () => _regenerateCode(section),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
+                          const SizedBox(height: 14),
+                          if (!section.isArchived) ...[
                             _StaggerFadeIn(
-                              delay: const Duration(milliseconds: 160),
+                              delay: const Duration(milliseconds: 100),
                               child: _EnrollCard(
                                 firstNameController: _firstNameC,
                                 middleNameController: _middleNameC,
@@ -318,32 +312,37 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
                                 onEnroll: _enrollStudent,
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            _StaggerFadeIn(
-                              delay: const Duration(milliseconds: 200),
-                              child: _CustomLessonsCard(
-                                lessons: lessons,
-                                onCreate: teacherId == null
-                                    ? null
-                                    : () => _openCreateLessonDialog(teacherId),
-                                onDelete: _deleteLesson,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            _StaggerFadeIn(
-                              delay: const Duration(milliseconds: 240),
-                              child: _RosterCard(
-                                roster: roster,
-                                onStudentTap: (s) => _onStudentTap(active, s),
-                              ),
-                            ),
+                            const SizedBox(height: 14),
                           ],
-                        ),
+                          _StaggerFadeIn(
+                            delay: const Duration(milliseconds: 160),
+                            child: _RosterCard(
+                              roster: roster,
+                              onStudentTap: (s) => _onStudentTap(active, s),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          _StaggerFadeIn(
+                            delay: const Duration(milliseconds: 220),
+                            child: _ArchiveCard(
+                              section: section,
+                              onArchive: () => _archive(section),
+                              onUnarchive: () => _unarchive(section),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          _StaggerFadeIn(
+                            delay: const Duration(milliseconds: 280),
+                            child: _DeleteClassCard(
+                              onDelete: () => _deleteClass(section),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-              ),
+        ),
       ),
     );
   }
@@ -353,249 +352,62 @@ extension _FirstOrNull<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
 }
 
-/// Full-bleed masthead — same recipe as the Classroom tab's own hero
-/// (ambient breathing blobs + fade/slide-down entrance), plus a back
-/// button and an active/make-active chip since this is a pushed route.
-class _DetailHero extends StatefulWidget {
-  const _DetailHero({
-    required this.section,
-    required this.active,
-    required this.studentCount,
-    required this.onBack,
-    required this.onMakeActive,
-  });
+class _DetailAppBar extends StatelessWidget {
+  const _DetailAppBar({required this.section, required this.onBack});
 
   final ClassSection section;
-  final bool active;
-  final int studentCount;
   final VoidCallback onBack;
-  final VoidCallback onMakeActive;
-
-  @override
-  State<_DetailHero> createState() => _DetailHeroState();
-}
-
-class _DetailHeroState extends State<_DetailHero>
-    with TickerProviderStateMixin {
-  late final _entrance = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 500),
-  )..forward();
-
-  late final _breathe = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2600),
-  )..repeat(reverse: true);
-
-  late final _fade = CurvedAnimation(parent: _entrance, curve: Curves.easeOut);
-  late final _slide = Tween<Offset>(
-    begin: const Offset(0, -0.12),
-    end: Offset.zero,
-  ).animate(_fade);
-
-  @override
-  void dispose() {
-    _entrance.dispose();
-    _breathe.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(12, 8, 20, 46),
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.teal, AppColors.tealDark],
-          ),
-        ),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            AnimatedBuilder(
-              animation: _breathe,
-              builder: (context, child) {
-                final t = Curves.easeInOut.transform(_breathe.value);
-                return Positioned(
-                  top: -95 + (6 * t),
-                  right: -50,
-                  child: Opacity(
-                    opacity: 0.05 + (0.03 * t),
-                    child: Container(
-                      width: 190,
-                      height: 190,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-            AnimatedBuilder(
-              animation: _breathe,
-              builder: (context, child) {
-                final t = Curves.easeInOut.transform(_breathe.value);
-                return Positioned(
-                  bottom: -70 - (5 * t),
-                  left: -36,
-                  child: Opacity(
-                    opacity: 0.08 + (0.04 * t),
-                    child: Container(
-                      width: 130,
-                      height: 130,
-                      decoration: const BoxDecoration(
-                        color: AppColors.gold,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    IconButton(
-                      onPressed: widget.onBack,
-                      icon: const Icon(
-                        Icons.arrow_back_rounded,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (widget.active)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.check_circle_rounded,
-                              size: 14,
-                              color: Colors.white,
-                            ),
-                            SizedBox(width: 5),
-                            Text(
-                              'Active class',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      OutlinedButton(
-                        onPressed: widget.onMakeActive,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          backgroundColor: Colors.white.withValues(alpha: 0.1),
-                          side: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.3),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
-                          ),
-                        ),
-                        child: const Text('Make Active'),
-                      ),
-                    const SizedBox(width: 4),
-                  ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 18, 4),
+      child: Row(
+        children: [
+          Material(
+            color: AppColors.neutralTint,
+            borderRadius: BorderRadius.circular(11),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(11),
+              onTap: onBack,
+              child: const SizedBox(
+                width: 34,
+                height: 34,
+                child: Icon(
+                  Icons.arrow_back_rounded,
+                  size: 18,
+                  color: AppColors.ink,
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(left: 8, right: 8),
-                  child: FadeTransition(
-                    opacity: _fade,
-                    child: SlideTransition(
-                      position: _slide,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.section.name,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              _HeroChip(
-                                icon: Icons.groups_outlined,
-                                value:
-                                    '${widget.studentCount} student${widget.studentCount == 1 ? '' : 's'}',
-                              ),
-                              if (widget.section.schedule != null &&
-                                  widget.section.schedule!.isNotEmpty)
-                                _HeroChip(
-                                  icon: Icons.schedule_outlined,
-                                  value: widget.section.schedule!,
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'CLASS DETAIL',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                Text(
+                  section.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.2,
+                    color: AppColors.ink,
                   ),
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HeroChip extends StatelessWidget {
-  const _HeroChip({required this.icon, required this.value});
-
-  final IconData icon;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: AppColors.goldSoft),
-          const SizedBox(width: 6),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
             ),
           ),
         ],
@@ -604,21 +416,161 @@ class _HeroChip extends StatelessWidget {
   }
 }
 
-/// The signature "Class Pass" ticket — same treatment as the Classroom
-/// tab's own invitation-code card (dashed perforation, punched notches,
-/// monospace code) but scoped to whichever specific class this screen is
-/// showing rather than always the "active" one.
-class _ClassPassTicket extends StatefulWidget {
-  const _ClassPassTicket({required this.section, required this.onRegenerate});
+class _DetailChips extends StatelessWidget {
+  const _DetailChips({
+    required this.section,
+    required this.active,
+    required this.studentCount,
+    required this.onMakeActive,
+  });
 
   final ClassSection section;
-  final VoidCallback onRegenerate;
+  final bool active;
+  final int studentCount;
+  final VoidCallback onMakeActive;
 
   @override
-  State<_ClassPassTicket> createState() => _ClassPassTicketState();
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          if (section.isArchived)
+            const _HeroChip(
+              icon: Icons.archive_outlined,
+              value: 'Archived',
+              tint: AppColors.neutralTint,
+              fg: AppColors.textMuted,
+              border: AppColors.creamBorder,
+            )
+          else if (active)
+            const _HeroChip(
+              icon: Icons.check_circle_rounded,
+              value: 'Active class',
+              tint: AppColors.goldTint,
+              fg: Color(0xFF8A5A12),
+              border: AppColors.gold,
+            )
+          else
+            _MakeActiveChip(onTap: onMakeActive),
+          _HeroChip(
+            icon: Icons.groups_outlined,
+            value:
+                '$studentCount student${studentCount == 1 ? '' : 's'}',
+          ),
+          if (section.schedule != null && section.schedule!.isNotEmpty)
+            _HeroChip(
+              icon: Icons.schedule_outlined,
+              value: section.schedule!,
+            ),
+        ],
+      ),
+    );
+  }
 }
 
-class _ClassPassTicketState extends State<_ClassPassTicket> {
+class _MakeActiveChip extends StatelessWidget {
+  const _MakeActiveChip({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.neutralTint,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: AppColors.creamBorder),
+          ),
+          child: const Text(
+            'Make Active',
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.ink,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Flat tinted pill matching the approved mock's `.hero-chip` — shared
+/// shape with [ClassroomManagementScreen]'s own copy, each file keeping
+/// its own small widget per this codebase's existing convention.
+class _HeroChip extends StatelessWidget {
+  const _HeroChip({
+    required this.icon,
+    required this.value,
+    this.tint = AppColors.mint,
+    this.fg = AppColors.tealDark,
+    this.border = AppColors.mintBorder,
+  });
+
+  final IconData icon;
+  final String value;
+  final Color tint;
+  final Color fg;
+  final Color border;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: tint,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: fg),
+          const SizedBox(width: 5),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              color: fg,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Invitation code "Class Pass" ticket — same teal-gradient card with
+/// punched notches and a dashed perforation as the Classroom tab's own
+/// invitation-code card (`_ClassPassCard` in `teacher_dashboard_screen.dart`),
+/// so the two screens show one consistent design for the same concept.
+class _InviteCodeCard extends StatefulWidget {
+  const _InviteCodeCard({
+    required this.section,
+    this.notchColor = AppColors.surface,
+  });
+
+  final ClassSection section;
+
+  /// Color of the two punched notches — must match whatever surface sits
+  /// behind this card or the "cut" illusion breaks.
+  final Color notchColor;
+
+  @override
+  State<_InviteCodeCard> createState() => _InviteCodeCardState();
+}
+
+class _InviteCodeCardState extends State<_InviteCodeCard> {
   bool _copied = false;
 
   Future<void> _copyCode() async {
@@ -678,29 +630,21 @@ class _ClassPassTicketState extends State<_ClassPassTicket> {
                       ),
                     ],
                   ),
-                  TextButton.icon(
-                    onPressed: widget.onRegenerate,
-                    icon: const Icon(
-                      Icons.refresh_rounded,
-                      size: 14,
-                      color: Colors.white,
-                    ),
-                    label: const Text(
-                      'New',
-                      style: TextStyle(color: Colors.white, fontSize: 11.5),
-                    ),
-                    style: TextButton.styleFrom(
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 4,
+                  Flexible(
+                    child: Text(
+                      widget.section.name,
+                      textAlign: TextAlign.right,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white.withValues(alpha: 0.85),
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               _DashedDivider(color: Colors.white.withValues(alpha: 0.25)),
               const SizedBox(height: 16),
               Center(
@@ -716,77 +660,91 @@ class _ClassPassTicketState extends State<_ClassPassTicket> {
                 ),
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Share with parents to enroll',
+              if (widget.section.isArchived)
+                Row(
+                  children: [
+                    Icon(
+                      Icons.archive_outlined,
+                      size: 14,
+                      color: Colors.white.withValues(alpha: 0.65),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Archived — this code no longer works',
                       style: TextStyle(
                         fontSize: 11,
                         color: Colors.white.withValues(alpha: 0.65),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  AnimatedScale(
-                    scale: _copied ? 1.06 : 1.0,
-                    duration: const Duration(milliseconds: 160),
-                    curve: Curves.easeOut,
-                    child: OutlinedButton.icon(
-                      onPressed: _copied ? null : _copyCode,
-                      icon: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 180),
-                        child: Icon(
-                          _copied ? Icons.check_rounded : Icons.copy_rounded,
-                          key: ValueKey(_copied),
-                          size: 14,
-                        ),
-                      ),
-                      label: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 180),
-                        child: Text(
-                          _copied ? 'Copied' : 'Copy',
-                          key: ValueKey(_copied),
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor:
-                            (_copied ? AppColors.gold : Colors.white)
-                                .withValues(alpha: _copied ? 0.9 : 0.1),
-                        side: BorderSide(
-                          color: Colors.white.withValues(
-                            alpha: _copied ? 0.6 : 0.3,
-                          ),
-                        ),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        textStyle: const TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
+                  ],
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Share with parents to enroll',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.white.withValues(alpha: 0.65),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                    const SizedBox(width: 8),
+                    AnimatedScale(
+                      scale: _copied ? 1.06 : 1.0,
+                      duration: const Duration(milliseconds: 160),
+                      curve: Curves.easeOut,
+                      child: OutlinedButton.icon(
+                        onPressed: _copied ? null : _copyCode,
+                        icon: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 180),
+                          child: Icon(
+                            _copied ? Icons.check_rounded : Icons.copy_rounded,
+                            key: ValueKey(_copied),
+                            size: 14,
+                          ),
+                        ),
+                        label: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 180),
+                          child: Text(
+                            _copied ? 'Copied' : 'Copy',
+                            key: ValueKey(_copied),
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          backgroundColor:
+                              (_copied ? AppColors.gold : Colors.white)
+                                  .withValues(alpha: _copied ? 0.9 : 0.1),
+                          side: BorderSide(
+                            color: Colors.white.withValues(
+                              alpha: _copied ? 0.6 : 0.3,
+                            ),
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),
-        Positioned(
-          left: -11,
-          top: 39,
-          child: _PassNotch(color: AppColors.surface),
-        ),
-        Positioned(
-          right: -11,
-          top: 39,
-          child: _PassNotch(color: AppColors.surface),
-        ),
+        // The two punched notches, positioned at the perforation line —
+        // small circles matching the surrounding background color so they
+        // read as cut-outs rather than decoration sitting on top.
+        Positioned(left: -11, top: 39, child: _PassNotch(color: widget.notchColor)),
+        Positioned(right: -11, top: 39, child: _PassNotch(color: widget.notchColor)),
       ],
     );
   }
@@ -807,6 +765,9 @@ class _PassNotch extends StatelessWidget {
   }
 }
 
+/// Fake dashed rule (Flutter has no built-in dashed border) — a row of
+/// short filled segments sized to fill whatever width it's given. Matches
+/// the Classroom tab's own `_DashedDivider`.
 class _DashedDivider extends StatelessWidget {
   const _DashedDivider({required this.color});
 
@@ -934,115 +895,6 @@ class _EnrollCard extends StatelessWidget {
   }
 }
 
-class _CustomLessonsCard extends StatelessWidget {
-  const _CustomLessonsCard({
-    required this.lessons,
-    required this.onCreate,
-    required this.onDelete,
-  });
-
-  final List<CustomLesson> lessons;
-  final VoidCallback? onCreate;
-  final ValueChanged<CustomLesson> onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    return SoftCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'CUSTOM LESSONS',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.6,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-              ),
-              TextButton.icon(
-                onPressed: onCreate,
-                icon: const Icon(Icons.add_rounded, size: 16),
-                label: const Text('New Lesson'),
-                style: TextButton.styleFrom(foregroundColor: AppColors.teal),
-              ),
-            ],
-          ),
-          if (lessons.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                'No custom lessons yet — write one for this class to appear in every enrolled learner\'s Student Hub.',
-                style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-              ),
-            )
-          else
-            for (final lesson in lessons)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.creamBorder),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.menu_book_outlined,
-                        size: 18,
-                        color: AppColors.gold,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              lesson.title,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                            if (lesson.instructions.isNotEmpty)
-                              Text(
-                                lesson.instructions,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textMuted,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          size: 18,
-                          color: AppColors.danger,
-                        ),
-                        onPressed: () => onDelete(lesson),
-                        tooltip: 'Delete lesson',
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-        ],
-      ),
-    );
-  }
-}
-
 class _RosterCard extends StatelessWidget {
   const _RosterCard({required this.roster, required this.onStudentTap});
 
@@ -1144,6 +996,146 @@ class _StudentRow extends StatelessWidget {
   }
 }
 
+/// End-of-school-year retirement action (FR-6.1) — archives an owned class
+/// (read-only, roster/progress/lesson-folders preserved, see
+/// [ClassSection.isArchived]) or reverses it.
+class _ArchiveCard extends StatelessWidget {
+  const _ArchiveCard({
+    required this.section,
+    required this.onArchive,
+    required this.onUnarchive,
+  });
+
+  final ClassSection section;
+  final VoidCallback onArchive;
+  final VoidCallback onUnarchive;
+
+  @override
+  Widget build(BuildContext context) {
+    if (section.isArchived) {
+      return SoftCard(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This class is archived',
+              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Roster and progress stay saved. Unarchive to reopen '
+              'enrollment, casting, and homework for this class.',
+              style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onUnarchive,
+                icon: const Icon(Icons.unarchive_outlined, size: 16),
+                label: const Text('Unarchive Class'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.teal,
+                  side: const BorderSide(color: AppColors.teal),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return SoftCard(
+      color: AppColors.coralTint,
+      borderColor: const Color(0xFFF0C4B0),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Archive this class',
+            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Save this class for the record when the school year ends. '
+            'Its roster and progress stay intact and read-only until you '
+            'unarchive it.',
+            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onArchive,
+              icon: const Icon(Icons.archive_outlined, size: 16),
+              label: const Text('Archive Class'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.coral,
+                side: const BorderSide(color: AppColors.coral),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Permanent, irreversible retirement — unlike [_ArchiveCard], deletes the
+/// class's roster, progress, assignments, and lesson folders outright
+/// (`ClassRepository.deleteClass`). Kept as its own card below Archive so
+/// the two "I'm done with this class" options read as distinct severities
+/// rather than one action with a checkbox.
+class _DeleteClassCard extends StatelessWidget {
+  const _DeleteClassCard({required this.onDelete});
+
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return SoftCard(
+      color: AppColors.coralTint,
+      borderColor: AppColors.danger,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Delete this class',
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w800,
+              color: AppColors.danger,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Permanently removes the class along with its roster, progress '
+            'history, assignments, and lesson folders. This can\'t be '
+            'undone — archive instead if you just want to close it out.',
+            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline, size: 16),
+              label: const Text('Delete Class'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.danger,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Self-contained staggered entrance (fade + slide-up) — matches the
 /// Classroom tab's own `_StaggerFadeIn`.
 class _StaggerFadeIn extends StatefulWidget {
@@ -1160,11 +1152,14 @@ class _StaggerFadeInState extends State<_StaggerFadeIn>
     with SingleTickerProviderStateMixin {
   late final _c = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 380),
+    duration: const Duration(milliseconds: 280),
   );
-  late final _fade = CurvedAnimation(parent: _c, curve: Curves.easeOut);
+  late final _fade = CurvedAnimation(
+    parent: _c,
+    curve: const Cubic(0.2, 0.7, 0.3, 1.0),
+  );
   late final _slide = Tween<Offset>(
-    begin: const Offset(0, 0.12),
+    begin: const Offset(0, 0.04),
     end: Offset.zero,
   ).animate(_fade);
 
@@ -1187,59 +1182,6 @@ class _StaggerFadeInState extends State<_StaggerFadeIn>
     return FadeTransition(
       opacity: _fade,
       child: SlideTransition(position: _slide, child: widget.child),
-    );
-  }
-}
-
-/// The Class Pass's entrance — a "stamp" settle (scale + slight rotation
-/// easing to rest) matching the Classroom tab's own signature moment.
-class _StampIn extends StatefulWidget {
-  const _StampIn({required this.delay, required this.child});
-
-  final Duration delay;
-  final Widget child;
-
-  @override
-  State<_StampIn> createState() => _StampInState();
-}
-
-class _StampInState extends State<_StampIn>
-    with SingleTickerProviderStateMixin {
-  late final _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 480),
-  );
-  late final _curve = CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
-
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(widget.delay, () {
-      if (mounted) _c.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _curve,
-      builder: (context, child) {
-        final t = _curve.value;
-        return Opacity(
-          opacity: t,
-          child: Transform.rotate(
-            angle: (1 - t) * -0.05,
-            child: Transform.scale(scale: 0.9 + (0.1 * t), child: child),
-          ),
-        );
-      },
-      child: widget.child,
     );
   }
 }

@@ -23,12 +23,18 @@ import '../../ui/student_hub/adventure_map_screen.dart';
 import '../../ui/student_hub/backpack_screen.dart';
 import '../../ui/student_hub/hub_shell.dart';
 import '../../ui/student_hub/profile_screen.dart';
+import '../../ui/teacher_dashboard/archived_classes_screen.dart';
 import '../../ui/teacher_dashboard/cast_screen.dart';
 import '../../ui/teacher_dashboard/class_detail_screen.dart';
+import '../../ui/teacher_dashboard/class_health_detail_screen.dart';
 import '../../ui/teacher_dashboard/classroom_management_screen.dart';
+import '../../ui/teacher_dashboard/home_mode_dashboard_screen.dart';
+import '../../ui/teacher_dashboard/lesson_folder_builder_screen.dart';
+import '../../ui/teacher_dashboard/module_library_screen.dart';
 import '../../ui/teacher_dashboard/teacher_dashboard_screen.dart';
 import '../../ui/widgets/auth_loading_overlay.dart' show rootNavigatorKey;
 import '../auth/session.dart';
+import '../sync/sync_manager.dart';
 
 /// Role-gated router.
 ///
@@ -40,7 +46,18 @@ import '../auth/session.dart';
 ///   (FR-2.1).
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = ValueNotifier(0);
-  ref.listen(sessionProvider, (_, _) => refresh.value++);
+  ref.listen(sessionProvider, (previous, next) {
+    refresh.value++;
+    // First sync on a fresh install/new device has nothing else to trigger
+    // it — the connectivity-change listener only fires on a transition
+    // (useless if the phone is already online at launch) and the manual
+    // "Sync" buttons need the user to find them first. PIN verification is
+    // the actual moment a parent/teacher session becomes usable, so pull
+    // remote data (including a learner's progress) right then.
+    if (!(previous?.pinVerified ?? false) && next.pinVerified) {
+      ref.read(syncManagerProvider).syncNow();
+    }
+  });
   ref.onDispose(refresh.dispose);
 
   const adminPaths = [
@@ -197,9 +214,33 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, _) => const ClassroomManagementScreen(),
       ),
       GoRoute(
+        path: '/teacher/classes/archived',
+        builder: (_, _) => const ArchivedClassesScreen(),
+      ),
+      GoRoute(
         path: '/teacher/classes/:classId',
         builder: (_, state) =>
             ClassDetailScreen(classId: state.pathParameters['classId']!),
+      ),
+      GoRoute(
+        path: '/teacher/classes/:classId/health',
+        builder: (_, state) => ClassHealthDetailScreen(
+          classId: state.pathParameters['classId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/teacher/home-progress',
+        builder: (_, _) => const HomeModeDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/teacher/module-library',
+        builder: (_, _) => const ModuleLibraryScreen(),
+      ),
+      GoRoute(
+        path: '/teacher/module-library/builder',
+        builder: (_, state) => LessonFolderBuilderScreen(
+          folderId: state.uri.queryParameters['folderId'],
+        ),
       ),
       GoRoute(path: '/cast', builder: (_, _) => const CastScreen()),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),

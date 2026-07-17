@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/curriculum/curriculum_models.dart';
+import '../../data/repositories/progress_repository.dart';
+import '../../logic/auth/session.dart';
 import '../../logic/learner/learner_xp_provider.dart';
 import '../../logic/recent_module_provider.dart';
 import '../theme/app_colors.dart';
-import 'activities/flashcard_activity.dart';
-import 'activities/match_activity.dart';
+import 'activities/fiqh_drag_activity.dart';
+import 'activities/pronounce_activity.dart';
 import 'activities/quiz_activity.dart';
-import 'activities/sort_activity.dart';
+import 'activities/quran_sync_activity.dart';
 import 'activities/story_activity.dart';
+import 'activities/trace_activity.dart';
+import 'activities/harakat_pop_activity.dart';
 import 'lesson_complete_screen.dart';
 
 /// Parses the model's `#RRGGBB` hex strings into a [Color] — same
@@ -35,31 +39,91 @@ class LessonPlayerScreen extends ConsumerStatefulWidget {
   const LessonPlayerScreen({
     super.key,
     required this.lesson,
+    required this.destinationId,
     required this.onClose,
   });
 
   final Lesson lesson;
+
+  /// The adventure/destination this lesson belongs to (FR-5.1's per-module
+  /// telemetry grouping) — stored as [ProgressRecord.moduleId] so the
+  /// Parent Dashboard can break progress down per adventure.
+  final int destinationId;
   final VoidCallback onClose;
 
   @override
   ConsumerState<LessonPlayerScreen> createState() => _LessonPlayerScreenState();
 }
 
-class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
+class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
+    with WidgetsBindingObserver {
   int _activityIndex = 0;
   int _xpEarned = 0;
   bool _finished = false;
 
+  final Stopwatch _stopwatch = Stopwatch()..start();
+  double _accuracySum = 0.0;
+  int _accuracyCount = 0;
+  int _errorsTotal = 0;
+
   Activity get _activity => widget.lesson.activities[_activityIndex];
 
-  void _handleActivityComplete(int xp) {
+  // Whether this lesson already has a ProgressRecord from a prior playthrough
+  // — replays still play normally but don't re-award XP/streak/badge or
+  // write another record, so parent/teacher analytics only reflect the
+  // learner's first attempt at each lesson.
+  late final bool _alreadyCompleted;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final learnerId = ref.read(sessionProvider).learner?.id;
+    _alreadyCompleted = learnerId != null &&
+        ProgressRepository().completedLessonIds(learnerId).contains(widget.lesson.id);
+  }
+
+  // Pause the stopwatch while backgrounded so time-on-task reflects actual
+  // engagement, not idle time with the app off-screen.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (!_stopwatch.isRunning) _stopwatch.start();
+    } else {
+      if (_stopwatch.isRunning) _stopwatch.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopwatch.stop();
+    super.dispose();
+  }
+
+  void _handleActivityComplete(int xp, double accuracyPct, int errors) {
     final next = _xpEarned + xp;
+    _accuracySum += accuracyPct;
+    _accuracyCount += 1;
+    _errorsTotal += errors;
+
     if (_activityIndex + 1 >= widget.lesson.activities.length) {
+      if (_alreadyCompleted) {
+        // Replay of an already-finished lesson — let the learner play
+        // through, but don't re-award XP/streak/badge or write another
+        // ProgressRecord (only the first try counts toward analytics).
+        setState(() {
+          _xpEarned = 0;
+          _finished = true;
+        });
+        return;
+      }
       ref.read(learnerXpProvider.notifier).addXp(next);
       ref.read(learnerStreakProvider.notifier).increment();
       ref
           .read(unlockedBadgesProvider.notifier)
           .unlockBadge('${widget.lesson.title} Master');
+      _writeProgressRecord();
       setState(() {
         _xpEarned = next;
         _finished = true;
@@ -70,6 +134,56 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
         _activityIndex += 1;
       });
     }
+  }
+
+  /// Mid-lesson quit — nothing is saved until the last activity completes
+  /// (see [_writeProgressRecord]), so warn the learner before closing:
+  /// confirming discards all progress in this attempt and the lesson
+  /// restarts from the first activity next time it's opened.
+  Future<void> _confirmExit() async {
+    if (_finished) {
+      widget.onClose();
+      return;
+    }
+    final quit = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Quit lesson?'),
+        content: const Text(
+          'Your progress will not be saved. You\'ll restart this lesson '
+          'from the beginning next time.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep playing'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Quit'),
+          ),
+        ],
+      ),
+    );
+    if (quit == true) widget.onClose();
+  }
+
+  /// FR-5.1's `ProgressBox` write — the real telemetry the Parent Dashboard's
+  /// per-adventure breakdown and mediation prompts read back. `moduleId` is
+  /// the destination id so records group by adventure, matching how
+  /// `adventure_map_screen.dart` opens this screen.
+  void _writeProgressRecord() {
+    final learnerId = ref.read(sessionProvider).learner?.id;
+    if (learnerId == null) return;
+    final avgAccuracy = _accuracyCount == 0 ? 0.0 : _accuracySum / _accuracyCount;
+    ProgressRepository().writeProgress(
+      learnerId: learnerId,
+      moduleId: '${widget.destinationId}',
+      strokeAccuracyPct: avgAccuracy,
+      sequencingErrors: _errorsTotal,
+      timeOnTaskSeconds: _stopwatch.elapsed.inSeconds,
+      lessonId: widget.lesson.id,
+    );
   }
 
   @override
@@ -91,14 +205,28 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
         ? 0.0
         : _activityIndex / widget.lesson.activities.length;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF7E9),
-      body: SafeArea(
-        child: Column(
+    return PopScope(
+      // Prevent the default back-navigation — we handle it ourselves
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmExit();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFF7E9),
+        body: Column(
           children: [
             _buildTopBar(lessonColor, progress, totalXp),
-            _buildActivityTitleRow(),
-            Expanded(child: _buildActivityContent(lessonColor)),
+            Expanded(
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  children: [
+                    _buildActivityTitleRow(),
+                    Expanded(child: _buildActivityContent(lessonColor)),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -106,8 +234,13 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
   }
 
   Widget _buildTopBar(Color lessonColor, double progress, int totalXp) {
+    final topPadding = MediaQuery.of(context).padding.top;
+    final total = widget.lesson.activities.length;
+    final finished = _activityIndex; // number of activities finished
+    final percentage = total == 0 ? 0 : ((finished / total) * 100).round();
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+      padding: EdgeInsets.fromLTRB(16, 14 + topPadding, 16, 10),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Color(0xFFF0EDE8), width: 2)),
@@ -115,7 +248,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
       child: Row(
         children: [
           GestureDetector(
-            onTap: widget.onClose,
+            onTap: _confirmExit,
             child: Container(
               width: 36,
               height: 36,
@@ -130,31 +263,64 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(5),
-              child: SizedBox(
-                height: 10,
-                child: Stack(
-                  children: [
-                    Container(color: const Color(0xFFF0EDE8)),
-                    FractionallySizedBox(
-                      widthFactor: progress.clamp(0.0, 1.0),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [lessonColor, AppColors.gold],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(5),
+                  child: SizedBox(
+                    height: 10,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: Container(color: const Color(0xFFF0EDE8)),
+                        ),
+                        Positioned.fill(
+                          child: FractionallySizedBox(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: progress.clamp(0.0, 1.0),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [lessonColor, AppColors.gold],
+                                ),
+                              ),
+                            ),
                           ),
                         ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Game ${_activityIndex + 1} of $total',
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    Text(
+                      '$percentage% finished',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: lessonColor,
                       ),
                     ),
                   ],
                 ),
-              ),
+              ],
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
@@ -215,15 +381,45 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
   Widget _buildActivityContent(Color lessonColor) {
     final activity = _activity;
     // `key: ValueKey(activity.id)` matters here, not just style: two
-    // consecutive activities of the same type (e.g. two flashcard
-    // activities back to back) are the same widget type at the same tree
-    // position, so without a distinct key Flutter reuses the previous
-    // activity's State — its flip/card-index/done-set — instead of
-    // starting the new activity fresh.
+    // consecutive activities of the same type (e.g. two trace activities
+    // back to back) are the same widget type at the same tree position, so
+    // without a distinct key Flutter reuses the previous activity's State
+    // — its card-index/done-set/etc — instead of starting the new activity
+    // fresh.
     return switch (activity.type) {
-      ActivityType.flashcard => FlashcardActivity(
+      ActivityType.trace => TraceActivity(
         key: ValueKey(activity.id),
         cards: activity.cards!,
+        xp: activity.xp,
+        color: lessonColor,
+        onComplete: _handleActivityComplete,
+      ),
+      ActivityType.pronounce => PronounceActivity(
+        key: ValueKey(activity.id),
+        cards: activity.cards!,
+        xp: activity.xp,
+        color: lessonColor,
+        onComplete: _handleActivityComplete,
+      ),
+      ActivityType.quranSync => QuranSyncActivity(
+        key: ValueKey(activity.id),
+        line: activity.quranLine!,
+        xp: activity.xp,
+        color: lessonColor,
+        onComplete: _handleActivityComplete,
+      ),
+      ActivityType.story => StoryActivity(
+        key: ValueKey(activity.id),
+        activityId: activity.id,
+        panels: activity.panels!,
+        xp: activity.xp,
+        onComplete: _handleActivityComplete,
+      ),
+      ActivityType.fiqhDrag => FiqhDragActivity(
+        key: ValueKey(activity.id),
+        activityId: activity.id,
+        items: activity.fiqhItems!,
+        zones: activity.fiqhZones!,
         xp: activity.xp,
         color: lessonColor,
         onComplete: _handleActivityComplete,
@@ -235,24 +431,9 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
         color: lessonColor,
         onComplete: _handleActivityComplete,
       ),
-      ActivityType.story => StoryActivity(
+      ActivityType.harakatPop => HarakatPopActivity(
         key: ValueKey(activity.id),
-        panels: activity.panels!,
-        xp: activity.xp,
-        onComplete: _handleActivityComplete,
-      ),
-      ActivityType.match => MatchActivity(
-        key: ValueKey(activity.id),
-        pairs: activity.pairs!,
-        xp: activity.xp,
-        color: lessonColor,
-        onComplete: _handleActivityComplete,
-      ),
-      ActivityType.sort => SortActivity(
-        key: ValueKey(activity.id),
-        items: activity.items!,
-        bucketA: activity.bucketA!,
-        bucketB: activity.bucketB!,
+        cards: activity.cards!,
         xp: activity.xp,
         color: lessonColor,
         onComplete: _handleActivityComplete,

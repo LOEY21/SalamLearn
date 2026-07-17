@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../local/hive_boxes.dart';
@@ -60,6 +62,7 @@ class RemoteLearnerRef {
     required this.gradeLevel,
     this.username,
     this.createdAt,
+    this.parentId,
   });
 
   final String id;
@@ -69,6 +72,7 @@ class RemoteLearnerRef {
   final String gradeLevel;
   final String? username;
   final DateTime? createdAt;
+  final String? parentId;
 }
 
 /// Fields needed to recreate a [ClassSection] locally after a cross-device
@@ -83,6 +87,7 @@ class RemoteClassRef {
     this.section,
     this.schedule,
     this.createdAt,
+    this.archivedAt,
   });
 
   final String id;
@@ -93,6 +98,7 @@ class RemoteClassRef {
   final String? section;
   final String? schedule;
   final DateTime? createdAt;
+  final DateTime? archivedAt;
 }
 
 /// Pushes Hive records to Firestore, one collection per box (same names as
@@ -160,6 +166,7 @@ class FirestoreMirror {
       'schedule': section.schedule,
       'gradeLevel': section.gradeLevel,
       'section': section.section,
+      'archivedAt': section.archivedAt?.toIso8601String(),
     });
   }
 
@@ -181,6 +188,10 @@ class FirestoreMirror {
     if (snapshot.docs.isEmpty) return null;
     final doc = snapshot.docs.first;
     final data = doc.data();
+    // An archived class's old code stops resolving cross-device too — same
+    // "not found" contract `ClassRepository.findByInvitationCode` already
+    // gives a local-only lookup, see [ClassSection.isArchived].
+    if (data['archivedAt'] != null) return null;
     final createdAtRaw = data['createdAt'] as String?;
     return RemoteClassRef(
       id: doc.id,
@@ -212,7 +223,37 @@ class FirestoreMirror {
       'timeOnTaskSeconds': record.timeOnTaskSeconds,
       'completedAt': record.completedAt.toIso8601String(),
       'assignedByTeacher': record.assignedByTeacher,
+      'lessonId': record.lessonId,
+      'isClassroomMode': record.isClassroomMode,
     });
+  }
+
+  /// Pulls a learner's progress records down from Firestore — the missing
+  /// counterpart to [pushProgress]. Without this, a parent/teacher signed
+  /// in on a device other than the one the learner played on never sees
+  /// any telemetry, since [ProgressRepository] only ever reads the local
+  /// Hive box.
+  Future<List<ProgressRecord>> fetchProgressForLearner(String learnerId) async {
+    final snapshot = await _db
+        .collection(HiveBoxes.progress)
+        .where('learnerId', isEqualTo: learnerId)
+        .get();
+    return snapshot.docs.map((doc) {
+      final data = doc.data();
+      return ProgressRecord(
+        id: doc.id,
+        learnerId: data['learnerId'] as String? ?? learnerId,
+        moduleId: data['moduleId'] as String? ?? '',
+        strokeAccuracyPct: (data['strokeAccuracyPct'] as num?)?.toDouble() ?? 0,
+        sequencingErrors: data['sequencingErrors'] as int? ?? 0,
+        timeOnTaskSeconds: data['timeOnTaskSeconds'] as int? ?? 0,
+        completedAt:
+            DateTime.tryParse(data['completedAt'] as String? ?? '') ?? DateTime.now(),
+        assignedByTeacher: data['assignedByTeacher'] as bool? ?? false,
+        lessonId: data['lessonId'] as String?,
+        isClassroomMode: data['isClassroomMode'] as bool? ?? false,
+      );
+    }).toList();
   }
 
   Future<void> pushAssignedModule(AssignedModule assignment) {
@@ -222,6 +263,8 @@ class FirestoreMirror {
       'moduleId': assignment.moduleId,
       'dueDate': assignment.dueDate.toIso8601String(),
       'assignedAt': assignment.assignedAt.toIso8601String(),
+      'maxLevel': assignment.maxLevel,
+      'maxLessons': assignment.maxLessons,
     });
   }
 
@@ -262,7 +305,7 @@ class FirestoreMirror {
         .collection(HiveBoxes.parents)
         .where('firebaseUid', isEqualTo: firebaseUid)
         .limit(1)
-        .get();
+        .get(const GetOptions(source: Source.server));
     if (snapshot.docs.isEmpty) return null;
     final doc = snapshot.docs.first;
     final data = doc.data();
@@ -282,7 +325,7 @@ class FirestoreMirror {
         .collection(HiveBoxes.teachers)
         .where('firebaseUid', isEqualTo: firebaseUid)
         .limit(1)
-        .get();
+        .get(const GetOptions(source: Source.server));
     if (snapshot.docs.isEmpty) return null;
     final doc = snapshot.docs.first;
     final data = doc.data();
@@ -316,6 +359,7 @@ class FirestoreMirror {
         avatar: data['avatar'] as String? ?? '🧒',
         gradeLevel: data['gradeLevel'] as String? ?? 'Grade 1',
         username: data['username'] as String?,
+        parentId: data['parentId'] as String?,
         createdAt: createdAtRaw == null
             ? null
             : DateTime.tryParse(createdAtRaw),
@@ -323,12 +367,245 @@ class FirestoreMirror {
     }).toList();
   }
 
+  Future<List<RemoteClassRef>> fetchClassesForTeacher(String teacherId) async {
+    final snapshot = await _db
+        .collection(HiveBoxes.classes)
+        .where('teacherId', isEqualTo: teacherId)
+        .get();
+    return snapshot.docs.map((doc) {
+      final data = doc.data();
+      final createdAtRaw = data['createdAt'] as String?;
+      final archivedAtRaw = data['archivedAt'] as String?;
+      return RemoteClassRef(
+        id: doc.id,
+        teacherId: data['teacherId'] as String? ?? teacherId,
+        name: data['name'] as String? ?? 'Class',
+        invitationCode: data['invitationCode'] as String? ?? '',
+        gradeLevel: data['gradeLevel'] as String?,
+        section: data['section'] as String?,
+        schedule: data['schedule'] as String?,
+        createdAt: createdAtRaw == null ? null : DateTime.tryParse(createdAtRaw),
+        archivedAt: archivedAtRaw == null ? null : DateTime.tryParse(archivedAtRaw),
+      );
+    }).toList();
+  }
+
+  Future<List<Enrollment>> fetchEnrollmentsForClass(String classId) async {
+    final snapshot = await _db
+        .collection(HiveBoxes.enrollments)
+        .where('classId', isEqualTo: classId)
+        .get();
+    return snapshot.docs.map((doc) {
+      final data = doc.data();
+      return Enrollment(
+        classId: data['classId'] as String? ?? '',
+        learnerId: data['learnerId'] as String? ?? '',
+        enrolledAt: DateTime.tryParse(data['enrolledAt'] as String? ?? '') ?? DateTime.now(),
+      );
+    }).toList();
+  }
+
+  Future<List<AssignedModule>> fetchAssignmentsForClass(String classId) async {
+    final snapshot = await _db
+        .collection(HiveBoxes.assignedModules)
+        .where('classId', isEqualTo: classId)
+        .get();
+    return snapshot.docs
+        .map((doc) {
+          final data = doc.data();
+          return AssignedModule(
+            id: doc.id,
+            classId: data['classId'] as String? ?? '',
+            learnerId: data['learnerId'] as String?,
+            moduleId: data['moduleId'] as String? ?? '',
+            dueDate: DateTime.tryParse(data['dueDate'] as String? ?? '') ?? DateTime.now(),
+            assignedAt: DateTime.tryParse(data['assignedAt'] as String? ?? '') ?? DateTime.now(),
+            maxLevel: data['maxLevel'] as int? ?? 3,
+            maxLessons: data['maxLessons'] as int?,
+          );
+        })
+        .where((a) => a.learnerId == null)
+        .toList();
+  }
+
+  Future<List<AssignedModule>> fetchAssignmentsForLearner(String learnerId) async {
+    final snapshot = await _db
+        .collection(HiveBoxes.assignedModules)
+        .where('learnerId', isEqualTo: learnerId)
+        .get();
+    return snapshot.docs.map((doc) {
+      final data = doc.data();
+      return AssignedModule(
+        id: doc.id,
+        classId: data['classId'] as String? ?? '',
+        learnerId: data['learnerId'] as String?,
+        moduleId: data['moduleId'] as String? ?? '',
+        dueDate: DateTime.tryParse(data['dueDate'] as String? ?? '') ?? DateTime.now(),
+        assignedAt: DateTime.tryParse(data['assignedAt'] as String? ?? '') ?? DateTime.now(),
+        maxLevel: data['maxLevel'] as int? ?? 3,
+        maxLessons: data['maxLessons'] as int?,
+      );
+    }).toList();
+  }
+
+  /// Teacher's "Enroll Existing Learner" form only has [LearnerRepository]'s
+  /// local Hive box to search — which is empty for a learner the admin
+  /// website created directly in Firestore and that never touched this
+  /// device. Firestore has no case-insensitive query and there's no
+  /// normalized-name field to match on, so (same as the admin dashboard's
+  /// own learner list) this pulls the whole collection and filters
+  /// client-side; the caller is expected to cache any match locally via
+  /// `LearnerRepository.saveFromRemote` so repeat lookups stay local.
+  Future<List<RemoteLearnerRef>> findLearnersByName(String name) async {
+    final normalized = name.trim().toLowerCase();
+    final snapshot = await _db.collection(HiveBoxes.learners).get();
+    return snapshot.docs
+        .map((doc) {
+          final data = doc.data();
+          final createdAtRaw = data['createdAt'] as String?;
+          return RemoteLearnerRef(
+            id: doc.id,
+            name: data['name'] as String? ?? 'Learner',
+            age: data['age'] as int? ?? 5,
+            avatar: data['avatar'] as String? ?? '🧒',
+            gradeLevel: data['gradeLevel'] as String? ?? 'Grade 1',
+            username: data['username'] as String?,
+            parentId: data['parentId'] as String?,
+            createdAt: createdAtRaw == null
+                ? null
+                : DateTime.tryParse(createdAtRaw),
+          );
+        })
+        .where((l) => l.name.trim().toLowerCase() == normalized)
+        .toList();
+  }
+
+  Future<RemoteLearnerRef?> fetchLearner(String learnerId) async {
+    final doc = await _db.collection(HiveBoxes.learners).doc(learnerId).get();
+    if (!doc.exists) return null;
+    final data = doc.data();
+    if (data == null) return null;
+    final createdAtRaw = data['createdAt'] as String?;
+    return RemoteLearnerRef(
+      id: doc.id,
+      name: data['name'] as String? ?? 'Learner',
+      age: data['age'] as int? ?? 5,
+      avatar: data['avatar'] as String? ?? '🧒',
+      gradeLevel: data['gradeLevel'] as String? ?? 'Grade 1',
+      username: data['username'] as String?,
+      parentId: data['parentId'] as String?,
+      createdAt: createdAtRaw == null
+          ? null
+          : DateTime.tryParse(createdAtRaw),
+    );
+  }
+
   /// FR-7.3 "Right to be Forgotten" — deletes a single mirrored document.
   /// [collection] is one of the `HiveBoxes` constants; [docId] must match
   /// whatever id that collection's `push*` method used (the model's own
   /// `.id` for most, but `'${classId}_${learnerId}'` for enrollments and
   /// the raw consent key for consents — see each `push*` method above).
-  Future<void> deleteDoc(String collection, String docId) {
+  Future<void> deleteDoc(String collection, String docId) async {
+    try {
+      final docRef = _db.collection(collection).doc(docId);
+      final snapshot = await docRef.get();
+      if (snapshot.exists && snapshot.data() != null) {
+        final data = snapshot.data()!;
+        final trashId = '${collection}_$docId';
+        await _db.collection('trashbin').doc(trashId).set({
+          'collection': collection,
+          'originalId': docId,
+          'data': data,
+          'deletedAt': DateTime.now().toIso8601String(),
+          'deletedBy': 'user',
+        });
+      }
+    } catch (_) {
+      // Best-effort move to trashbin
+    }
     return _db.collection(collection).doc(docId).delete();
+  }
+
+  /// Real-time listener for account existence. Emits `true` as long as the
+  /// document exists in Firestore; emits `false` when the document is
+  /// deleted — used by [accountStreamProvider] so a dashboard user learns
+  /// immediately if an admin removes their account.
+  Stream<bool> watchDocExistence(String collection, String docId) {
+    return _db.collection(collection).doc(docId).snapshots().map(
+      (snap) => snap.exists,
+    );
+  }
+
+  /// One-shot check — returns `true` iff a document at [collection]/[docId]
+  /// exists right now. Used by `signIn` to reject accounts an admin
+  /// deleted from the web panel, preventing local-Hive-only re-login that
+  /// would re-create the doc via sync.
+  Future<bool> docExists(String collection, String docId) async {
+    try {
+      final doc = await _db
+          .collection(collection)
+          .doc(docId)
+          .get(const GetOptions(source: Source.server));
+      return doc.exists;
+    } catch (_) {
+      return true; // fail-open — network error shouldn't lock the user out
+    }
+  }
+
+  /// Real-time stream of learner IDs that exist in Firestore for a given
+  /// [parentId]. Emits the full set of IDs on every change (create or
+  /// delete), so the caller can diff against the local Hive set to detect
+  /// remote deletions and keep the parent dashboard in sync with admin-web
+  /// deletes.
+  Stream<Set<String>> watchLearnersForParent(String parentId) {
+    return _db
+        .collection(HiveBoxes.learners)
+        .where('parentId', isEqualTo: parentId)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => d.id).toSet());
+  }
+
+  /// Real-time stream of enrollment learnerIds for a given [classId].
+  /// Emits the full set of learnerIds on every change (create or delete),
+  /// so the caller can diff against local Hive to keep the teacher roster
+  /// in sync with admin-web enroll/unenroll.
+  Stream<Set<String>> watchEnrollmentsForClass(String classId) {
+    return _db
+        .collection(HiveBoxes.enrollments)
+        .where('classId', isEqualTo: classId)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => d.data()['learnerId'] as String).toSet());
+  }
+
+  /// Real-time stream of enrollment IDs (each as `"$classId:$learnerId"`)
+  /// for a parent's [learnerIds]. Used by the parent dashboard to detect
+  /// admin-web enroll/unenroll immediately.
+  Stream<Set<String>> watchEnrollmentsForLearners(List<String> learnerIds) {
+    if (learnerIds.isEmpty) return const Stream.empty();
+    final controller = StreamController<Set<String>>.broadcast();
+    List<StreamSubscription> subs = [];
+    void onListen() async {
+      // Firestore `in` limit is 10; chunk for safety
+      for (var i = 0; i < learnerIds.length; i += 10) {
+        final chunk = learnerIds.sublist(i, (i + 10).clamp(0, learnerIds.length));
+        final sub = _db
+            .collection(HiveBoxes.enrollments)
+            .where('learnerId', whereIn: chunk)
+            .snapshots()
+            .listen((snap) {
+              final ids = snap.docs.map((d) => '${d.data()['classId']}_${d.data()['learnerId']}').toSet();
+              controller.add(ids);
+            });
+        subs.add(sub);
+      }
+    }
+    controller.onListen = onListen;
+    controller.onCancel = () {
+      for (final sub in subs) {
+        sub.cancel();
+      }
+      subs = [];
+    };
+    return controller.stream;
   }
 }

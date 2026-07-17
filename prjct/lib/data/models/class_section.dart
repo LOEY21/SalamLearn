@@ -16,6 +16,7 @@ class ClassSection extends HiveObject {
     this.gradeLevel,
     this.section,
     this.schedule,
+    this.archivedAt,
   });
 
   final String id;
@@ -30,6 +31,15 @@ class ClassSection extends HiveObject {
   /// "Mon/Wed/Fri, 9:00–10:00 AM") — nullable since classes created before
   /// this field existed have none on file.
   final String? schedule;
+
+  /// Set when a teacher archives the class at the end of a school year
+  /// (`ClassRepository.archiveClass`) — null for an active class. Archived
+  /// classes drop out of active pickers (casting, homework, new
+  /// enrollments) but keep their roster/progress/lesson-folder data intact
+  /// and browsable read-only from the Archived Classes screen.
+  final DateTime? archivedAt;
+
+  bool get isArchived => archivedAt != null;
 }
 
 class ClassSectionAdapter extends TypeAdapter<ClassSection> {
@@ -51,13 +61,14 @@ class ClassSectionAdapter extends TypeAdapter<ClassSection> {
       gradeLevel: fields[5] as String?,
       section: fields[6] as String?,
       schedule: fields[7] as String?,
+      archivedAt: fields[8] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, ClassSection obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -73,6 +84,8 @@ class ClassSectionAdapter extends TypeAdapter<ClassSection> {
       ..writeByte(6)
       ..write(obj.section)
       ..writeByte(7)
-      ..write(obj.schedule);
+      ..write(obj.schedule)
+      ..writeByte(8)
+      ..write(obj.archivedAt);
   }
 }

@@ -22,4 +22,39 @@ void main() {
     await tester.tap(find.text('Backpack'));
     expect(tapped, true);
   });
+
+  testWidgets('shows the unread dot on Backpack only when showBackpackBadge is true', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: AdventureMapBottomNav(
+            active: HubTab.home,
+            onHomeTap: _noop,
+            onBackpackTap: _noop,
+            onProfileTap: _noop,
+            showBackpackBadge: true,
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('backpack-nav-badge-dot')), findsOneWidget);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: AdventureMapBottomNav(
+            active: HubTab.home,
+            onHomeTap: _noop,
+            onBackpackTap: _noop,
+            onProfileTap: _noop,
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('backpack-nav-badge-dot')), findsNothing);
+  });
 }
+
+void _noop() {}

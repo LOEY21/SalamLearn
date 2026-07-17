@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuthException;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -159,23 +160,25 @@ class _AuthChoiceScreenState extends ConsumerState<AuthChoiceScreen>
                 ),
               },
             ),
-            // Back button overlay — only shown once off the hub,
-            // exactly like the preview's `#backBtn` which starts
-            // `display:none`.
-            if (_step != _Step.hub)
-              Positioned(
-                top: 8,
-                left: 12,
-                child: IconButton(
-                  onPressed: () => _goStep(_Step.hub),
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: AppColors.ink,
-                    side: const BorderSide(color: AppColors.creamBorder),
-                  ),
+            // Back button overlay — off the hub it steps back to the hub;
+            // on the hub itself it goes back to role selection (previously
+            // only reachable via hardware back or the small footnote link
+            // at the bottom of the hub).
+            Positioned(
+              top: 8,
+              left: 12,
+              child: IconButton(
+                onPressed: _step == _Step.hub
+                    ? () => context.go('/roles')
+                    : () => _goStep(_Step.hub),
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppColors.ink,
+                  side: const BorderSide(color: AppColors.creamBorder),
                 ),
               ),
+            ),
           ],
         ),
       ),
@@ -392,6 +395,22 @@ class _HubView extends StatelessWidget {
 }
 
 /// ============ Screen 2: sign up ============
+/// Capitalizes just the first character typed into a name field, leaving
+/// the rest alone (these are single-word first/middle/last-name boxes).
+class _CapitalizeFirstLetterFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text;
+    if (text.isEmpty) return newValue;
+    final capitalized = text[0].toUpperCase() + text.substring(1);
+    if (capitalized == text) return newValue;
+    return newValue.copyWith(text: capitalized);
+  }
+}
+
 enum _PasswordStrength { none, weak, medium, strong }
 
 /// Simple heuristic: length is weighted most heavily (a long passphrase
@@ -589,17 +608,28 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _FieldLabel('First name'),
-        _TextField(controller: _firstNameC, hint: 'e.g. Amir'),
+        _TextField(
+          controller: _firstNameC,
+          label: 'First name',
+          inputFormatters: [_CapitalizeFirstLetterFormatter()],
+        ),
         const SizedBox(height: 14),
-        _FieldLabel('Middle name (optional)'),
-        _TextField(controller: _middleNameC, hint: 'e.g. Ahmad'),
+        _TextField(
+          controller: _middleNameC,
+          label: 'Middle name (optional)',
+          inputFormatters: [_CapitalizeFirstLetterFormatter()],
+        ),
         const SizedBox(height: 14),
-        _FieldLabel('Last name'),
-        _TextField(controller: _lastNameC, hint: 'e.g. Ali'),
+        _TextField(
+          controller: _lastNameC,
+          label: 'Last name',
+          inputFormatters: [_CapitalizeFirstLetterFormatter()],
+        ),
         const SizedBox(height: 14),
-        _FieldLabel('Grade Level'),
-        _TextField(controller: _gradeC, hint: 'e.g. Grade 1'),
+        _TextField(
+          controller: _gradeC,
+          label: 'Grade Level',
+        ),
         const SizedBox(height: 16),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -630,20 +660,20 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
           onChanged: (v) => setState(() => _age = v.round()),
         ),
         const SizedBox(height: 14),
-        _FieldLabel('Username'),
-        _TextField(controller: _usernameC, hint: 'e.g. amir_ali'),
+        _TextField(
+          controller: _usernameC,
+          label: 'Username',
+        ),
         const SizedBox(height: 14),
-        _FieldLabel('Password'),
         _TextField(
           controller: _learnerPasswordC,
-          hint: '••••••••',
+          label: 'Password',
           obscureText: true,
         ),
         const SizedBox(height: 14),
-        _FieldLabel('Confirm Password'),
         _TextField(
           controller: _learnerConfirmPasswordC,
-          hint: '••••••••',
+          label: 'Confirm Password',
           obscureText: true,
         ),
         const SizedBox(height: 16),
@@ -776,27 +806,34 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _FieldLabel('First name'),
         _TextField(
           controller: _parentFirstNameC,
-          hint: isTeacher ? 'e.g. Zayd' : 'e.g. Nurhana',
+          label: 'First name',
+          inputFormatters: [_CapitalizeFirstLetterFormatter()],
         ),
         const SizedBox(height: 14),
-        _FieldLabel('Middle name (optional)'),
-        _TextField(controller: _parentMiddleNameC, hint: 'e.g. Santos'),
+        _TextField(
+          controller: _parentMiddleNameC,
+          label: 'Middle name (optional)',
+          inputFormatters: [_CapitalizeFirstLetterFormatter()],
+        ),
         const SizedBox(height: 14),
-        _FieldLabel('Last name'),
-        _TextField(controller: _parentLastNameC, hint: 'e.g. Ali'),
+        _TextField(
+          controller: _parentLastNameC,
+          label: 'Last name',
+          inputFormatters: [_CapitalizeFirstLetterFormatter()],
+        ),
         const SizedBox(height: 14),
         if (isTeacher) ...[
-          _FieldLabel('School'),
-          _TextField(controller: _schoolC, hint: 'e.g. Madrasah Al-Ikhlas'),
+          _TextField(
+            controller: _schoolC,
+            label: 'School',
+          ),
           const SizedBox(height: 14),
         ],
-        _FieldLabel('Email address'),
         _TextField(
           controller: _emailC,
-          hint: 'you@email.com',
+          label: 'Email address',
           keyboardType: TextInputType.emailAddress,
           errorText: _emailError,
           onChanged: (_) {
@@ -804,18 +841,16 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
           },
         ),
         const SizedBox(height: 14),
-        _FieldLabel('Mobile number (optional)'),
         _TextField(
           controller: _mobileC,
-          hint: '912 345 6789',
+          label: 'Mobile number (optional)',
           keyboardType: TextInputType.phone,
           prefixText: '+63 ',
         ),
         const SizedBox(height: 14),
-        _FieldLabel('Password'),
         _TextField(
           controller: _passwordC,
-          hint: '••••••••',
+          label: 'Password',
           obscureText: true,
           onChanged: (value) =>
               setState(() => _passwordStrength = _scorePassword(value)),
@@ -825,10 +860,9 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
           _PasswordStrengthMeter(strength: _passwordStrength),
         ],
         const SizedBox(height: 14),
-        _FieldLabel('Confirm Password'),
         _TextField(
           controller: _confirmPasswordC,
-          hint: '••••••••',
+          label: 'Confirm Password',
           obscureText: true,
         ),
         const SizedBox(height: 24),
@@ -878,6 +912,18 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
               if (password.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Please enter a password')),
+                );
+                return;
+              }
+              if (password.length < 8 ||
+                  !RegExp(r'[a-zA-Z]').hasMatch(password) ||
+                  !RegExp(r'[0-9]').hasMatch(password)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Password must be at least 8 characters and include both letters and numbers',
+                    ),
+                  ),
                 );
                 return;
               }
@@ -1375,6 +1421,14 @@ class _GrownupSignInFormState extends ConsumerState<_GrownupSignInForm> {
           _error = null;
         });
         context.go('/pin/setup?redirect=${Uri.encodeComponent(target)}');
+      case SignInResult.accountDeleted:
+        setState(() {
+          _submitting = false;
+          _error =
+              'This account has been removed by an administrator and '
+              'can no longer be used. Please contact your school '
+              'administrator if you believe this was a mistake.';
+        });
       case SignInResult.invalidCredentials:
         setState(() {
           _submitting = false;
@@ -1410,15 +1464,17 @@ class _GrownupSignInFormState extends ConsumerState<_GrownupSignInForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _FieldLabel('Email'),
         _TextField(
           controller: _emailC,
-          hint: 'you@email.com',
+          label: 'Email',
           keyboardType: TextInputType.emailAddress,
         ),
         const SizedBox(height: 14),
-        const _FieldLabel('Password'),
-        _TextField(controller: _passwordC, hint: '••••••••', obscureText: true),
+        _TextField(
+          controller: _passwordC,
+          label: 'Password',
+          obscureText: true,
+        ),
         if (_error != null) ...[
           const SizedBox(height: 12),
           Text(
@@ -1457,14 +1513,143 @@ class _GrownupSignInFormState extends ConsumerState<_GrownupSignInForm> {
         const SizedBox(height: 12),
         Center(
           child: TextButton(
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Demo only — no backend yet')),
-            ),
+            onPressed: _submitting ? null : () => _showForgotPasswordDialog(),
             child: const Text(
               'Forgot password?',
               style: TextStyle(fontSize: 12.5, color: AppColors.teal),
             ),
           ),
+        ),
+      ],
+    );
+  }
+
+  /// Same reset mechanism as `_ActivateView`'s teacher activation (Firebase's
+  /// own hosted password-reset email — no custom Cloud Function/mail
+  /// provider needed). Prefills whatever the user already typed into the
+  /// email field above so they don't have to type it twice.
+  Future<void> _showForgotPasswordDialog() async {
+    final sentEmail = await showDialog<String>(
+      context: context,
+      builder: (_) => _ForgotPasswordDialog(initialEmail: _emailC.text.trim()),
+    );
+    if (sentEmail == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Password reset email sent to $sentEmail.'),
+        backgroundColor: AppColors.teal,
+      ),
+    );
+  }
+}
+
+/// Content of the "Forgot password?" dialog, as its own [StatefulWidget] —
+/// not a `StatefulBuilder` closure — so its [TextEditingController] is
+/// disposed by the normal `State.dispose()` lifecycle (i.e. once Flutter
+/// actually unmounts the dialog after its exit animation finishes) rather
+/// than manually right after `showDialog` returns. `showDialog`'s Future
+/// completes the instant `Navigator.pop()` is called — *before* the closing
+/// fade-out transition finishes — so a manual dispose there was racing that
+/// animation and killing the controller while it was still in use (surfaced
+/// as "A TextEditingController was used after being disposed").
+///
+/// Pops with the sent-to email address on success so the caller can show its
+/// own confirmation snackbar (`Navigator` can't show a `ScaffoldMessenger`
+/// snackbar reliably from inside a dialog route), or with nothing on cancel.
+class _ForgotPasswordDialog extends StatefulWidget {
+  const _ForgotPasswordDialog({required this.initialEmail});
+
+  final String initialEmail;
+
+  @override
+  State<_ForgotPasswordDialog> createState() => _ForgotPasswordDialogState();
+}
+
+class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
+  late final _emailC = TextEditingController(text: widget.initialEmail);
+  bool _sending = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _emailC.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final email = _emailC.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() => _error = 'Enter a valid email address.');
+      return;
+    }
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
+    try {
+      await FirebaseAuthGateway().sendPasswordResetEmail(email);
+      if (mounted) Navigator.of(context).pop(email);
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _sending = false;
+        _error = e.code == 'user-not-found'
+            ? "We don't have an account for that email."
+            : 'Could not send the reset email. Please try again.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _sending = false;
+        _error = 'Could not send the reset email — check your connection.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Reset your password'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            "Enter your account email and we'll send you a link to reset your password.",
+            style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _emailC,
+            keyboardType: TextInputType.emailAddress,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'Email',
+              border: const OutlineInputBorder(),
+              errorText: _error,
+            ),
+            onSubmitted: (_) => _sending ? null : _send(),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _sending ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _sending ? null : _send,
+          style: FilledButton.styleFrom(backgroundColor: AppColors.teal),
+          child: _sending
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : const Text('Send reset link'),
         ),
       ],
     );
@@ -1508,43 +1693,29 @@ class _RoleBadge extends StatelessWidget {
   }
 }
 
-class _FieldLabel extends StatelessWidget {
-  const _FieldLabel(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: AppColors.ink,
-        ),
-      ),
-    );
-  }
-}
-
 class _TextField extends StatefulWidget {
   const _TextField({
     this.controller,
-    required this.hint,
+    required this.label,
     this.obscureText = false,
     this.keyboardType = TextInputType.text,
     this.errorText,
     this.onChanged,
     this.prefixText,
+    this.inputFormatters,
   });
 
   final TextEditingController? controller;
-  final String hint;
+
+  /// Floats up into the border on focus (Material's built-in animation) —
+  /// replaces the old static caption above the field, per the approved
+  /// mp4 reference of the floating-label motion.
+  final String label;
   final bool obscureText;
   final TextInputType keyboardType;
   final String? errorText;
   final ValueChanged<String>? onChanged;
+  final List<TextInputFormatter>? inputFormatters;
 
   /// Fixed, non-editable prefix shown inside the field (e.g. `+63 ` for
   /// the Philippines-only mobile number field) — not part of the typed
@@ -1557,72 +1728,109 @@ class _TextField extends StatefulWidget {
 
 class _TextFieldState extends State<_TextField> {
   late bool _obscured;
+  final _focusNode = FocusNode();
+  bool _focused = false;
 
   @override
   void initState() {
     super.initState();
     _obscured = widget.obscureText;
+    _focusNode.addListener(() {
+      setState(() => _focused = _focusNode.hasFocus);
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: widget.controller,
-      obscureText: _obscured,
-      keyboardType: widget.keyboardType,
-      onChanged: widget.onChanged,
-      decoration: InputDecoration(
-        hintText: widget.hint,
-        errorText: widget.errorText,
-        errorMaxLines: 2,
-        prefixText: widget.prefixText,
-        prefixStyle: const TextStyle(
-          color: AppColors.ink,
-          fontWeight: FontWeight.w600,
-        ),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 14,
-        ),
-        suffixIcon: widget.obscureText
-            ? IconButton(
-                icon: Icon(
-                  _obscured
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                  color: AppColors.textMuted,
-                  size: 20,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: _focused
+            ? [
+                BoxShadow(
+                  color: AppColors.teal.withValues(alpha: 0.18),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
                 ),
-                onPressed: () => setState(() => _obscured = !_obscured),
-              )
+              ]
             : null,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(
-            color: AppColors.creamBorder,
-            width: 1.4,
+      ),
+      child: TextField(
+        controller: widget.controller,
+        focusNode: _focusNode,
+        obscureText: _obscured,
+        keyboardType: widget.keyboardType,
+        onChanged: widget.onChanged,
+        inputFormatters: widget.inputFormatters,
+        decoration: InputDecoration(
+          label: Text(widget.label),
+          errorText: widget.errorText,
+          errorMaxLines: 2,
+          prefixText: widget.prefixText,
+          prefixStyle: const TextStyle(
+            color: AppColors.ink,
+            fontWeight: FontWeight.w600,
           ),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(
-            color: AppColors.creamBorder,
-            width: 1.4,
+          labelStyle: const TextStyle(
+            color: AppColors.textMuted,
+            fontWeight: FontWeight.w700,
           ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.teal, width: 1.6),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.coral, width: 1.6),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.coral, width: 1.6),
+          floatingLabelStyle: const TextStyle(
+            color: AppColors.teal,
+            fontWeight: FontWeight.w700,
+          ),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 14,
+          ),
+          suffixIcon: widget.obscureText
+              ? IconButton(
+                  icon: Icon(
+                    _obscured
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    color: AppColors.textMuted,
+                    size: 20,
+                  ),
+                  onPressed: () => setState(() => _obscured = !_obscured),
+                )
+              : null,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(
+              color: AppColors.creamBorder,
+              width: 1.4,
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(
+              color: AppColors.creamBorder,
+              width: 1.4,
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.teal, width: 1.8),
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.coral, width: 1.6),
+          ),
+          focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.coral, width: 1.6),
+          ),
         ),
       ),
     );

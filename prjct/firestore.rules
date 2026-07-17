@@ -282,15 +282,24 @@ service cloud.firestore {
     }
 
     // See "KNOWN SIMPLIFICATION" above — any signed-in SalamLearn account
-    // can write, not just a verified owner of this specific learner/class.
+    // can read/write, not just a verified owner of this specific
+    // learner/class. Read must stay open (not admin-only) so
+    // FirestoreMirror.fetchProgressForLearner's cross-device pull can
+    // actually succeed — otherwise a learner's progress never follows them
+    // to a new device even though pushes still silently succeed.
     match /progress/{progressId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || isSignedIn();
       allow delete: if isAdmin();
       allow create, update: if isSignedIn();
     }
 
+    // Read must stay open to any signed-in account (not just admin/
+    // principal) — SyncManager's fetchAssignmentsForClass/
+    // fetchAssignmentsForLearner pulls this on a new device the same way
+    // progress does; admin-only read caused the same silent
+    // permission-denied cross-device gap fixed above for /progress.
     match /assigned_modules/{assignmentId} {
-      allow read: if isAdmin() || isPrincipal();
+      allow read: if isAdmin() || isPrincipal() || isSignedIn();
       allow delete: if isAdmin();
       allow create, update: if isSignedIn();
     }

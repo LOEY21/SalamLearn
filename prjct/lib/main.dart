@@ -23,6 +23,12 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
+  // Parent/Teacher (and every other admin/onboarding screen) keep the
+  // normal system status + navigation bars. Only the Learner Hub goes
+  // fullscreen immersive — see `HubShell`'s own SystemChrome calls, which
+  // switch into immersiveSticky on entry and restore this default on exit.
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+
   runApp(const ProviderScope(child: SalamLearnApp()));
 }
 

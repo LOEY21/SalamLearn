@@ -33,7 +33,7 @@ void main() {
     );
 
     expect(find.text('Alif to Yaa'), findsOneWidget);
-    expect(find.text('No activity yet'), findsOneWidget);
+    expect(find.text('Not cast yet this week'), findsOneWidget);
   });
 
   testWidgets('shows a High health pill and an upward trend for a healthy module', (

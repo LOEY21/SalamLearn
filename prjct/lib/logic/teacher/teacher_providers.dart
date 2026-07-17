@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
 
-import '../../data/curriculum_data.dart';
 import '../../data/local/hive_boxes.dart';
 import '../../data/models/class_section.dart';
 import '../../data/models/custom_lesson.dart';
@@ -12,7 +11,17 @@ import '../../data/repositories/custom_lesson_repository.dart';
 import '../../data/repositories/learner_repository.dart';
 import '../../data/repositories/lesson_folder_repository.dart';
 import '../../data/repositories/progress_repository.dart';
+import '../../data/models/enrollment.dart';
+import '../../data/remote/firestore_mirror.dart';
+import '../../ui/core_modules/module_registry.dart';
 import '../auth/session.dart';
+
+String _moduleTitle(String moduleId) => coreModules
+    .firstWhere(
+      (m) => m.id == moduleId,
+      orElse: () => coreModules.first,
+    )
+    .title;
 
 /// Real, Hive-backed replacement for the hardcoded Ali/Yusra/Hamza roster
 /// and single-class state that used to live directly in
@@ -34,7 +43,7 @@ class TeacherClassController extends Notifier<ClassSection?> {
       sessionProvider.select((s) => s.activeTeacherId),
     );
     if (teacherId == null) return null;
-    final owned = _classes.byTeacherId(teacherId);
+    final owned = _classes.activeByTeacherId(teacherId);
     if (owned.isEmpty) return null;
     final activeId = _settings.get('activeClassId') as String?;
     final match = owned.where((c) => c.id == activeId);
@@ -63,7 +72,12 @@ class TeacherClassController extends Notifier<ClassSection?> {
   Future<void> switchClass(String classId) async {
     final teacherId = ref.read(sessionProvider).activeTeacherId;
     if (teacherId == null) return;
-    final match = _classes.byTeacherId(teacherId).where((c) => c.id == classId);
+    // Archived classes are read-only and can never become "the active
+    // class" — an archived roster shouldn't be castable or receive new
+    // homework. See [ClassSection.isArchived].
+    final match = _classes
+        .activeByTeacherId(teacherId)
+        .where((c) => c.id == classId);
     if (match.isEmpty) return;
     await _settings.put('activeClassId', classId);
     state = match.first;
@@ -76,7 +90,7 @@ class TeacherClassController extends Notifier<ClassSection?> {
     final teacherId = ref.read(sessionProvider).activeTeacherId;
     if (teacherId == null) return;
     await _classes.deleteClass(classId);
-    final remaining = _classes.byTeacherId(teacherId);
+    final remaining = _classes.activeByTeacherId(teacherId);
     if (remaining.isEmpty) {
       await _settings.delete('activeClassId');
       state = null;
@@ -86,10 +100,31 @@ class TeacherClassController extends Notifier<ClassSection?> {
     }
   }
 
-  Future<void> regenerateInvitationCode() async {
-    final current = state;
-    if (current == null) return;
-    state = await _classes.regenerateInvitationCode(current);
+  /// Archives an owned class (FR-6.1's "school year ended" retirement, see
+  /// [ClassRepository.archiveClass]) — reachable from the Class Detail
+  /// screen for whichever class it's showing, not just the active one. If
+  /// the archived class was active, falls back to another active class, or
+  /// null if none remain — same fallback contract as [deleteClass].
+  Future<void> archiveClass(String classId) async {
+    await _classes.archiveClass(classId);
+    if (state?.id != classId) return;
+    final teacherId = ref.read(sessionProvider).activeTeacherId;
+    if (teacherId == null) return;
+    final remaining = _classes.activeByTeacherId(teacherId);
+    if (remaining.isEmpty) {
+      await _settings.delete('activeClassId');
+      state = null;
+    } else {
+      await _settings.put('activeClassId', remaining.first.id);
+      state = remaining.first;
+    }
+  }
+
+  /// Reverses [archiveClass] — doesn't touch which class is "active" since
+  /// an unarchived class doesn't automatically become current, matching
+  /// how a newly-created class isn't forced active either.
+  Future<void> unarchiveClass(String classId) async {
+    await _classes.unarchiveClass(classId);
   }
 }
 
@@ -107,7 +142,16 @@ final teacherClassesProvider = Provider<List<ClassSection>>((ref) {
   final teacherId = ref.watch(sessionProvider.select((s) => s.activeTeacherId));
   ref.watch(teacherClassControllerProvider);
   if (teacherId == null) return const [];
-  return ClassRepository().byTeacherId(teacherId);
+  return ClassRepository().activeByTeacherId(teacherId);
+});
+
+/// Backs the Archived Classes screen — every class the teacher has
+/// archived (FR-6.1's "school year ended" retirement), read-only.
+final archivedTeacherClassesProvider = Provider<List<ClassSection>>((ref) {
+  final teacherId = ref.watch(sessionProvider.select((s) => s.activeTeacherId));
+  ref.watch(teacherClassControllerProvider);
+  if (teacherId == null) return const [];
+  return ClassRepository().archivedByTeacherId(teacherId);
 });
 
 final activeClassNameProvider = Provider<String>((ref) {
@@ -158,6 +202,82 @@ String _masteryFor(double accuracyPct) {
   return 'Needs help';
 }
 
+class RosterRefreshNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void bump() => state++;
+}
+
+final rosterRefreshProvider = NotifierProvider<RosterRefreshNotifier, int>(RosterRefreshNotifier.new);
+
+/// Listens to Firestore enrollment changes for the active class and syncs
+/// to Hive in real time. Bumps [rosterRefreshProvider] on every change so
+/// the roster UI reflects admin-web enroll/unenroll immediately.
+final teacherEnrollmentSyncProvider = StreamProvider.autoDispose<void>((ref) async* {
+  final section = ref.watch(teacherClassControllerProvider);
+  if (section == null) { yield null; return; }
+  final classId = section.id;
+  final enrollmentsBox = Hive.box<Enrollment>(HiveBoxes.enrollments);
+  final mirror = FirestoreMirror();
+
+  final learners = LearnerRepository();
+
+  await for (final remoteLearnerIds in mirror.watchEnrollmentsForClass(classId)) {
+    final local = enrollmentsBox.values
+        .where((e) => e.classId == classId)
+        .map((e) => e.learnerId)
+        .toSet();
+
+    // Add new enrollments
+    for (final learnerId in remoteLearnerIds.difference(local)) {
+      final key = '$classId:$learnerId';
+      await enrollmentsBox.put(
+        key,
+        Enrollment(classId: classId, learnerId: learnerId, enrolledAt: DateTime.now()),
+      );
+      // An enrollment created directly in Firestore (e.g. the admin
+      // website's own "Enroll" button) can reference a learner this
+      // device has never seen — without this, classRosterProvider's
+      // `learners.findById` comes back null and silently drops the
+      // student from the roster despite the enrollment existing.
+      if (learners.findById(learnerId) == null) {
+        try {
+          final remoteLearner = await mirror.fetchLearner(learnerId);
+          if (remoteLearner != null) {
+            await learners.saveFromRemote(
+              id: remoteLearner.id,
+              parentId: remoteLearner.parentId ?? '',
+              name: remoteLearner.name,
+              age: remoteLearner.age,
+              avatar: remoteLearner.avatar,
+              gradeLevel: remoteLearner.gradeLevel,
+              username: remoteLearner.username,
+              createdAt: remoteLearner.createdAt,
+            );
+          }
+        } catch (_) {
+          // Best-effort — offline devices just show an empty roster slot
+          // until the next successful sync.
+        }
+      }
+    }
+
+    // Remove deleted enrollments
+    for (final learnerId in local.difference(remoteLearnerIds)) {
+      final key = '$classId:$learnerId';
+      await enrollmentsBox.delete(key);
+    }
+
+    if (remoteLearnerIds.difference(local).isNotEmpty ||
+        local.difference(remoteLearnerIds).isNotEmpty) {
+      ref.read(rosterRefreshProvider.notifier).bump();
+    }
+
+    yield null;
+  }
+});
+
 /// The real roster for one specific class — one entry per learner
 /// enrolled in it, with real [ProgressRepository] telemetry. Until Module
 /// 4's core learning engines exist and write [ProgressRecord]s,
@@ -172,6 +292,7 @@ final classRosterProvider = Provider.family<List<Map<String, dynamic>>, String>(
   ref,
   classId,
 ) {
+  ref.watch(rosterRefreshProvider);
   final classes = ClassRepository();
   final learners = LearnerRepository();
   final progress = ProgressRepository();
@@ -183,11 +304,14 @@ final classRosterProvider = Provider.family<List<Map<String, dynamic>>, String>(
     final learner = learners.findById(enrollment.learnerId);
     if (learner == null) continue;
     final summary = progress.summary(enrollment.learnerId);
-    final assignments = classes
-        .assignmentsFor(classId: classId, learnerId: enrollment.learnerId)
+    final rawAssignments = classes.assignmentsFor(
+      classId: classId,
+      learnerId: enrollment.learnerId,
+    );
+    final assignments = rawAssignments
         .map(
           (a) =>
-              '${a.moduleId} (Due: ${a.dueDate.day}/${a.dueDate.month}/${a.dueDate.year})',
+              '${_moduleTitle(a.moduleId)} (Due: ${a.dueDate.day}/${a.dueDate.month}/${a.dueDate.year})',
         )
         .toList();
     roster.add({
@@ -198,9 +322,18 @@ final classRosterProvider = Provider.family<List<Map<String, dynamic>>, String>(
       'activity': summary.timeOnTaskMinutes == 0
           ? 'No activity yet'
           : '${summary.timeOnTaskMinutes}m logged',
+      'errorCount': summary.errorCount,
       'mastery': _masteryFor(summary.accuracyPct),
       'feedback': feedback[enrollment.learnerId] ?? '',
       'assignedModules': assignments,
+      // Raw (moduleId, dueDate, maxLevel, maxLessons) tuples — used by the
+      // learner Adventure Map to flag overdue nodes and gate level/lesson
+      // access; the formatted `assignedModules` strings above are
+      // display-only and stay untouched for the teacher dashboard.
+      'assignedModuleDues': [
+        for (final a in rawAssignments)
+          (a.moduleId, a.dueDate, a.maxLevel, a.maxLessons),
+      ],
     });
   }
   return roster;
@@ -226,6 +359,9 @@ final classHomeworkProvider = Provider<List<Map<String, dynamic>>>((ref) {
         (a) => {
           'module': a.moduleId,
           'dueDate': '${a.dueDate.day}/${a.dueDate.month}/${a.dueDate.year}',
+          'dueDateRaw': a.dueDate,
+          'maxLevel': a.maxLevel,
+          'maxLessons': a.maxLessons,
         },
       )
       .toList();
@@ -257,15 +393,23 @@ final classLessonFoldersProvider = Provider.family<List<LessonFolder>, String>(
   (ref, classId) => LessonFolderRepository().byClassId(classId),
 );
 
-/// One module's aggregated classroom telemetry (FR-6.2). Built from every
-/// enrolled learner's [ProgressRecord]s for that module — there is no
-/// field on [ProgressRecord] distinguishing Classroom Mode (cast/hot-seat)
-/// telemetry from solo Student Hub play, and core modules are still
-/// placeholders per the project's "no real telemetry yet" scope note, so
-/// this indexes all recorded activity rather than a Classroom-Mode-only
-/// subset. Closing that gap for real would mean adding an
-/// `isClassroomMode` field to [ProgressRecord] (Hive model + adapter bump)
-/// and wiring it from the casting/hot-seat flow.
+/// The four letters `HotSeatDrawingCanvas` (`hot_seat_choral.dart`) offers
+/// in its tracing picker — the only source of `isClassroomMode: true`
+/// records today, so these are the only rows the Class Health Index can
+/// ever have real data for. Keep in sync with that widget's
+/// `_letterGlyphs`/`_paths` maps if new letters are added there.
+const _hotSeatLetters = ['ا', 'ب', 'ت', 'ج'];
+const _hotSeatLetterNames = {'ا': 'Alif', 'ب': 'Ba', 'ت': 'Ta', 'ج': 'Jeem'};
+
+String _hotSeatModuleId(String letter) => 'hot_seat_$letter';
+String _hotSeatModuleName(String letter) =>
+    '${_hotSeatLetterNames[letter]} — Hot Seat';
+
+/// One Hot Seat letter's aggregated classroom telemetry (FR-6.2). Built
+/// exclusively from [ProgressRecord.isClassroomMode] records — Student Hub/
+/// Adventure Map solo play (`isClassroomMode: false`) never counts here,
+/// since the Class Health Index exists to show a teacher what happened
+/// live in class, not at home.
 class ModuleHealth {
   const ModuleHealth({
     required this.moduleId,
@@ -276,6 +420,8 @@ class ModuleHealth {
     required this.trend,
     required this.healthIndex,
     required this.hasActivity,
+    this.attemptCount = 0,
+    this.studentsUp = 0,
   });
 
   final String moduleId;
@@ -286,6 +432,16 @@ class ModuleHealth {
   final double? trend;
   final int healthIndex;
   final bool hasActivity;
+
+  /// Total Hot Seat attempts recorded for this letter across the whole
+  /// roster — a student called up more than once counts once per attempt.
+  final int attemptCount;
+
+  /// Distinct students who've been called up to the Hot Seat for this
+  /// letter at least once (the numerator behind [completionRate]) — shown
+  /// as "N students up", matching the Hot Seat's own "calling a student
+  /// up" language rather than a generic "completion" label.
+  final int studentsUp;
 }
 
 /// Pure aggregation, no Riverpod dependency — kept as a standalone function
@@ -300,33 +456,42 @@ List<ModuleHealth> computeClassHealthIndex(String classId) {
   final weekAgo = now.subtract(const Duration(days: 7));
   final twoWeeksAgo = now.subtract(const Duration(days: 14));
 
+  ModuleHealth emptyRow(String letter) => ModuleHealth(
+    moduleId: _hotSeatModuleId(letter),
+    moduleName: _hotSeatModuleName(letter),
+    completionRate: 0,
+    avgAccuracy: 0,
+    avgErrors: 0,
+    trend: null,
+    healthIndex: 0,
+    hasActivity: false,
+  );
+
   if (rosterSize == 0) {
-    return curriculum
-        .map(
-          (destination) => ModuleHealth(
-            moduleId: destination.id.toString(),
-            moduleName: destination.name,
-            completionRate: 0,
-            avgAccuracy: 0,
-            avgErrors: 0,
-            trend: null,
-            healthIndex: 0,
-            hasActivity: false,
-          ),
-        )
-        .toList();
+    return _hotSeatLetters.map(emptyRow).toList();
   }
 
-  // One Hive scan per enrolled learner (not per learner × module) — bucket
-  // each learner's records by moduleId up front so the per-module loop
-  // below is a plain map lookup instead of re-querying byLearnerId.
+  // Perform a single pass over the progress records instead of querying and sorting
+  // byLearnerId repeatedly for each learner (which causes heavy database scans and lag).
   final recordsByModule = <String, List<ProgressRecord>>{};
   final learnersWithActivityByModule = <String, int>{};
-  for (final enrollment in enrollments) {
-    final byModule = <String, List<ProgressRecord>>{};
-    for (final record in progress.byLearnerId(enrollment.learnerId)) {
-      byModule.putIfAbsent(record.moduleId, () => []).add(record);
+  
+  final learnerIds = enrollments.map((e) => e.learnerId).toSet();
+  final studentModuleRecords = <String, Map<String, List<ProgressRecord>>>{};
+
+  final progressBox = Hive.box<ProgressRecord>(HiveBoxes.progress);
+  for (final record in progressBox.values) {
+    if (learnerIds.contains(record.learnerId) && record.isClassroomMode) {
+      studentModuleRecords
+          .putIfAbsent(record.learnerId, () => {})
+          .putIfAbsent(record.moduleId, () => [])
+          .add(record);
     }
+  }
+
+  for (final learnerId in learnerIds) {
+    final byModule = studentModuleRecords[learnerId];
+    if (byModule == null) continue;
     byModule.forEach((moduleId, records) {
       recordsByModule.putIfAbsent(moduleId, () => []).addAll(records);
       learnersWithActivityByModule[moduleId] =
@@ -334,23 +499,12 @@ List<ModuleHealth> computeClassHealthIndex(String classId) {
     });
   }
 
-  return curriculum.map((destination) {
-    final moduleId = destination.id.toString();
+  return _hotSeatLetters.map((letter) {
+    final moduleId = _hotSeatModuleId(letter);
     final allRecords = recordsByModule[moduleId] ?? const <ProgressRecord>[];
     final learnersWithActivity = learnersWithActivityByModule[moduleId] ?? 0;
 
-    if (allRecords.isEmpty) {
-      return ModuleHealth(
-        moduleId: moduleId,
-        moduleName: destination.name,
-        completionRate: 0,
-        avgAccuracy: 0,
-        avgErrors: 0,
-        trend: null,
-        healthIndex: 0,
-        hasActivity: false,
-      );
-    }
+    if (allRecords.isEmpty) return emptyRow(letter);
 
     final completionRate = learnersWithActivity / rosterSize;
     final avgAccuracy =
@@ -384,19 +538,22 @@ List<ModuleHealth> computeClassHealthIndex(String classId) {
 
     return ModuleHealth(
       moduleId: moduleId,
-      moduleName: destination.name,
+      moduleName: _hotSeatModuleName(letter),
       completionRate: completionRate,
       avgAccuracy: avgAccuracy,
       avgErrors: avgErrors,
       trend: trend,
       healthIndex: healthIndex,
       hasActivity: true,
+      attemptCount: allRecords.length,
+      studentsUp: learnersWithActivity,
     );
   }).toList();
 }
 
 /// Class Health Index (FR-6.2) for the given classId — backs
 /// `_ClassHealthSection` on the Teacher Dashboard's Classroom tab.
-final classHealthIndexProvider = Provider.family<List<ModuleHealth>, String>(
-  (ref, classId) => computeClassHealthIndex(classId),
-);
+final classHealthIndexProvider = Provider.family<List<ModuleHealth>, String>((ref, classId) {
+  ref.watch(rosterRefreshProvider);
+  return computeClassHealthIndex(classId);
+});

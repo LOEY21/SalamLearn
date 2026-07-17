@@ -1,11 +1,16 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hive/hive.dart';
 import 'package:lottie/lottie.dart';
 
+import '../../data/local/hive_boxes.dart';
+import '../../data/models/curriculum/curriculum_models.dart';
 import '../../data/models/enrollment.dart';
+import '../../data/models/assigned_module.dart';
 import '../../data/remote/firestore_mirror.dart';
 import '../../data/repositories/class_repository.dart';
 import '../../logic/auth/session.dart';
@@ -13,11 +18,24 @@ import '../../logic/parent/analytics_providers.dart';
 import '../../logic/parent/children_providers.dart';
 import '../../logic/settings/settings_providers.dart';
 import '../../logic/sync/sync_manager.dart';
+import '../../logic/teacher/teacher_providers.dart';
 import '../theme/app_colors.dart';
 import '../widgets/auth_loading_overlay.dart';
 import '../widgets/email_verification_card.dart';
+import '../widgets/flat_dashboard_header.dart';
 import '../widgets/learner_avatar.dart';
+import '../widgets/mock_icons.dart';
 import '../widgets/soft_card.dart';
+import '../widgets/top_tab_bar.dart';
+import '../../data/repositories/progress_repository.dart';
+import '../core_modules/module_registry.dart';
+
+/// Progress-tab heading — a brand-new account has no enrolled child yet
+/// (the caller falls back to the literal name 'your child' in that case),
+/// so "your child's progress" reads oddly next to an empty dashboard.
+/// Nudge them toward the actual next step instead.
+String _progressHeading(String name) =>
+    name == 'your child' ? 'Enroll your child' : "$name's progress";
 
 /// Greeting line for the Progress screen — addresses the parent by their
 /// own name (distinct from the "[Child]'s progress" heading next to it,
@@ -36,6 +54,18 @@ String _parentGreeting(WidgetRef ref, {bool caps = false}) {
       : "Assalamu'alaikum, $parentName — here's this week's summary";
 }
 
+/// Live "synced" status line shown under the header title — same wording
+/// this used to render inside the (now removed) gradient hero.
+String _syncStatusLabel(WidgetRef ref) {
+  final lastSynced = ref.read(syncManagerProvider).lastSyncedAt;
+  if (lastSynced == null) return 'Not synced yet';
+  final elapsed = DateTime.now().difference(lastSynced);
+  if (elapsed.inMinutes < 1) return 'Synced just now';
+  if (elapsed.inMinutes < 60) return 'Synced ${elapsed.inMinutes} min ago';
+  if (elapsed.inHours < 24) return 'Synced ${elapsed.inHours}h ago';
+  return 'Synced ${elapsed.inDays}d ago';
+}
+
 /// Parent analytics dashboard (mockup Figure 4.4, FR-5.1/5.2/7.2).
 /// Phone: gradient hero header + stacked cards + bottom nav. Wide/monitor:
 /// labeled teal side rail, 4-up metric row, chart and suggestions side by
@@ -52,16 +82,16 @@ class ParentDashboardScreen extends ConsumerWidget {
     final learner = ref.watch(sessionProvider).learner;
     final name = learner?.name ?? 'your child';
 
-    // Catches the "removed via the admin web panel" case (see
-    // `verifyActiveAccountStillExists`'s doc) — a confirmed remote miss
-    // already logged this device out by the time this fires, so all that's
-    // left is telling the parent why and sending them to the role picker
-    // instead of leaving them looking at a dashboard for an account that
-    // no longer exists.
-    ref.listen(accountStillExistsProvider, (_, next) {
-      next.whenData((stillExists) {
-        if (stillExists) return;
-        showDialog<void>(
+    // Watches the parent's Firestore document in real time. If the admin
+    // web panel deletes it, the stream emits false immediately and this
+    // listener fires — showing the warning dialog without needing a page
+    // reload or app restart. Uses `prev` vs `next` to fire only once:
+    // after the dialog shows and navigates away, the stream auto-disposes.
+    ref.listen(accountStreamProvider, (prev, next) {
+      next.whenData((stillExists) async {
+        if (stillExists || prev?.asData?.value == false) return;
+        if (!context.mounted) return;
+        await showDialog<void>(
           context: context,
           barrierDismissible: false,
           builder: (dialogContext) => AlertDialog(
@@ -72,22 +102,32 @@ class ParentDashboardScreen extends ConsumerWidget {
             ),
             title: const Text('Account no longer available'),
             content: const Text(
-              'This account was removed by an administrator. Please sign in again or create a new account.',
+              'This account was removed by an administrator. '
+              'Your data will no longer sync. Please contact your school '
+              'administrator if you believe this was a mistake.',
             ),
             actions: [
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: AppColors.teal),
-                onPressed: () {
-                  Navigator.of(dialogContext).pop();
-                  context.go('/roles');
-                },
+                onPressed: () => Navigator.of(dialogContext).pop(),
                 child: const Text('OK'),
               ),
             ],
           ),
         );
+        if (!context.mounted) return;
+        // Navigate to a gate path first so the router redirect (triggered by
+        // the logout below) doesn't land on /pin/setup — gate paths skip the
+        // PIN check, so the user lands on the role picker instead.
+        context.go('/roles');
+        await ref.read(sessionProvider.notifier).logout();
       });
     });
+    // Watches the Firestore learners collection for remote deletions (admin
+    // web panel removing a child). When detected, removes from local Hive
+    // and re-picks the active learner — see the provider's doc for details.
+    ref.listen(learnerSyncProvider, (_, _) {});
+    ref.listen(parentEnrollmentSyncProvider, (_, _) {});
 
     // Without this, hardware/system back had no explicit handling here,
     // so it fell through to go_router's default history-pop — silently
@@ -95,18 +135,18 @@ class ParentDashboardScreen extends ConsumerWidget {
     // leaving `pinVerified` still true, so re-picking Parent skipped the
     // PIN gate entirely. Reusing the existing "Switch User?" confirmation
     // makes back press exactly as intentional as tapping that menu item.
+    String? tabParam;
+    try {
+      tabParam = GoRouterState.of(context).uri.queryParameters['tab'];
+    } catch (_) {}
+    final initialTab = int.tryParse(tabParam ?? '') ?? 0;
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) _switchUser(context, ref);
       },
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide =
-              constraints.maxWidth >= 800 && constraints.maxHeight >= 550;
-          return wide ? _WideLayout(name: name) : _PhoneLayout(name: name);
-        },
-      ),
+      child: _PhoneLayout(name: name, initialTab: initialTab),
     );
   }
 }
@@ -141,9 +181,10 @@ void _switchUser(BuildContext context, WidgetRef ref) {
 // ---------------------------------------------------------------- phone
 
 class _PhoneLayout extends ConsumerStatefulWidget {
-  const _PhoneLayout({required this.name});
+  const _PhoneLayout({required this.name, this.initialTab = 0});
 
   final String name;
+  final int initialTab;
 
   @override
   ConsumerState<_PhoneLayout> createState() => _PhoneLayoutState();
@@ -153,23 +194,15 @@ class _PhoneLayoutState extends ConsumerState<_PhoneLayout>
     with SingleTickerProviderStateMixin {
   int _currentTab = 0;
 
-  // Same tab-switch treatment as the Learner Hub's `HubShell`: fade the
-  // outgoing tab out, swap content, fade the new one in — a soft crossfade
-  // instead of an instant cut.
-  static const _fadeDuration = Duration(milliseconds: 140);
-  double _opacity = 1;
+  @override
+  void initState() {
+    super.initState();
+    _currentTab = widget.initialTab;
+  }
 
   void _switchTab(int index) {
     if (index == _currentTab) return;
-    setState(() => _opacity = 0);
-    Future.delayed(_fadeDuration, () {
-      if (mounted) {
-        setState(() {
-          _currentTab = index;
-          _opacity = 1;
-        });
-      }
-    });
+    setState(() => _currentTab = index);
   }
 
   late final AnimationController _c = AnimationController(
@@ -185,9 +218,6 @@ class _PhoneLayoutState extends ConsumerState<_PhoneLayout>
   }
 
   late final greet = _in(0.05, 0.45);
-  late final kpi = _in(0.28, 0.62);
-  late final chart = _in(0.42, 0.78);
-  late final suggest = _in(0.55, 0.9);
 
   @override
   void dispose() {
@@ -195,650 +225,129 @@ class _PhoneLayoutState extends ConsumerState<_PhoneLayout>
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      body: SafeArea(
-        bottom: false,
-        child: AnimatedOpacity(
-          duration: _fadeDuration,
-          curve: Curves.easeOut,
-          opacity: _opacity,
-          child: switch (_currentTab) {
-            0 => ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                _DashboardHero(
-                  name: widget.name,
-                  animation: greet,
-                  onSwitchUser: () => _switchUser(context, ref),
-                ),
-                Transform.translate(
-                  offset: const Offset(0, -26),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _FadeUp(animation: kpi, child: const _KpiFocusRow()),
-                        const SizedBox(height: 14),
-                        _FadeUp(
-                          animation: chart,
-                          child: const _TrendChartCard(),
-                        ),
-                        const SizedBox(height: 14),
-                        _FadeUp(
-                          animation: suggest,
-                          child: const _SuggestionCarousel(),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            1 => ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                const _ProfileHero(),
-                Transform.translate(
-                  offset: const Offset(0, -22),
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(20),
-                      ),
-                    ),
-                    padding: const EdgeInsets.fromLTRB(18, 22, 18, 28),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _StaggerFadeIn(
-                          delay: const Duration(milliseconds: 40),
-                          child: _ChildSwitcher(
-                            onSwitched: () => _switchTab(0),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        const _StaggerFadeIn(
-                          delay: Duration(milliseconds: 70),
-                          child: _NoProfileEmptyState(),
-                        ),
-                        const SizedBox(height: 14),
-                        const _StaggerFadeIn(
-                          delay: Duration(milliseconds: 100),
-                          child: _ManageProfileCard(),
-                        ),
-                        const SizedBox(height: 14),
-                        const _StaggerFadeIn(
-                          delay: Duration(milliseconds: 160),
-                          child: _ClassSection(),
-                        ),
-                        const SizedBox(height: 14),
-                        const _StaggerFadeIn(
-                          delay: Duration(milliseconds: 220),
-                          child: _CreateNewProfileCard(),
-                        ),
-                        const SizedBox(height: 14),
-                        const _StaggerFadeIn(
-                          delay: Duration(milliseconds: 280),
-                          child: _SyncProfileCard(),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            _ => const _SettingsTab(),
-          },
-        ),
-      ),
-      bottomNavigationBar: _ParentBottomNav(
-        activeTab: _currentTab,
-        onTabChanged: _switchTab,
-      ),
-    );
-  }
-}
-
-class _ParentBottomNav extends StatelessWidget {
-  const _ParentBottomNav({required this.activeTab, required this.onTabChanged});
-
-  final int activeTab;
-  final ValueChanged<int> onTabChanged;
+  static const _tabs = [
+    TopTabItem(iconPath: MockIcons.progress, label: 'Progress'),
+    TopTabItem(iconPath: MockIcons.profile, label: 'Profile'),
+    TopTabItem(iconPath: MockIcons.settings, label: 'Settings'),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.creamBorder)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _NavTab(
-                icon: Icons.bar_chart_rounded,
-                label: 'Progress',
-                active: activeTab == 0,
-                onTap: () => onTabChanged(0),
-              ),
-              _NavTab(
-                icon: Icons.assignment_ind_outlined,
-                label: 'Manage Profile',
-                active: activeTab == 1,
-                onTap: () => onTabChanged(1),
-              ),
-              _NavTab(
-                icon: Icons.settings_outlined,
-                label: 'Settings',
-                active: activeTab == 2,
-                onTap: () => onTabChanged(2),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+    final learner = ref.watch(sessionProvider.select((s) => s.learner));
 
-class _NavTab extends StatelessWidget {
-  const _NavTab({
-    required this.icon,
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = active ? AppColors.teal : AppColors.textMuted;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: active ? AppColors.mint : Colors.transparent,
-            borderRadius: BorderRadius.circular(14),
-          ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark,
+      child: Scaffold(
+        backgroundColor: AppColors.surface,
+        body: SafeArea(
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 20, color: color),
-              const SizedBox(height: 3),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _WideLayout extends ConsumerStatefulWidget {
-  const _WideLayout({required this.name});
-
-  final String name;
-
-  @override
-  ConsumerState<_WideLayout> createState() => _WideLayoutState();
-}
-
-class _WideLayoutState extends ConsumerState<_WideLayout>
-    with SingleTickerProviderStateMixin {
-  int _currentTab = 0;
-
-  // Same tab-switch treatment as the Learner Hub's `HubShell`: fade the
-  // outgoing tab out, swap content, fade the new one in.
-  static const _fadeDuration = Duration(milliseconds: 140);
-  double _opacity = 1;
-
-  void _switchTab(int index) {
-    if (index == _currentTab) return;
-    setState(() => _opacity = 0);
-    Future.delayed(_fadeDuration, () {
-      if (mounted) {
-        setState(() {
-          _currentTab = index;
-          _opacity = 1;
-        });
-      }
-    });
-  }
-
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 650),
-  )..forward();
-
-  Animation<double> _in(double start, double end) {
-    return CurvedAnimation(
-      parent: _c,
-      curve: Interval(start, end, curve: Curves.easeOut),
-    );
-  }
-
-  late final kpi = _in(0.05, 0.45);
-  late final row = _in(0.3, 0.72);
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.neutralTint,
-      body: Row(
-        children: [
-          _SideRail(activeTab: _currentTab, onTabChanged: _switchTab),
-          Expanded(
-            child: SafeArea(
-              child: AnimatedOpacity(
-                duration: _fadeDuration,
-                curve: Curves.easeOut,
-                opacity: _opacity,
-                child: switch (_currentTab) {
-                  0 => Padding(
-                    padding: const EdgeInsets.all(26),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "${widget.name}'s progress",
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.headlineMedium,
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  _parentGreeting(ref),
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: AppColors.textMuted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const Spacer(),
-                            OutlinedButton.icon(
-                              onPressed: () => _switchUser(context, ref),
-                              icon: const Icon(
-                                Icons.people_outline_rounded,
-                                size: 18,
-                              ),
-                              label: const Text('Switch user'),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(
-                                  color: AppColors.creamBorder,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 22),
-                        _FadeUp(
-                          animation: kpi,
-                          child: const _KpiFocusRow(wide: true),
-                        ),
-                        const SizedBox(height: 20),
-                        Expanded(
-                          child: _FadeUp(
-                            animation: row,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: const [
-                                Expanded(flex: 3, child: _TrendChartCard()),
-                                SizedBox(width: 20),
-                                Expanded(
-                                  flex: 2,
-                                  child: _SuggestionCarousel(wide: true),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  1 => SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const _ProfileHero(wide: true),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(30, 24, 30, 30),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _ChildSwitcher(onSwitched: () => _switchTab(0)),
-                              const SizedBox(height: 20),
-                              const _NoProfileEmptyState(),
-                              const SizedBox(height: 20),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Expanded(child: _ManageProfileCard()),
-                                  const SizedBox(width: 20),
-                                  Expanded(
-                                    child: Column(
-                                      children: const [
-                                        _ClassSection(),
-                                        SizedBox(height: 14),
-                                        _CreateNewProfileCard(),
-                                        SizedBox(height: 14),
-                                        _SyncProfileCard(),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  _ => const _SettingsTab(),
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SideRail extends StatelessWidget {
-  const _SideRail({required this.activeTab, required this.onTabChanged});
-
-  final int activeTab;
-  final ValueChanged<int> onTabChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 84,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [AppColors.teal, AppColors.tealDark],
-        ),
-      ),
-      child: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 10),
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              alignment: Alignment.center,
-              child: const Icon(Icons.favorite, color: Colors.white, size: 20),
-            ),
-            const SizedBox(height: 22),
-            _RailItem(
-              icon: Icons.bar_chart_rounded,
-              label: 'Progress',
-              active: activeTab == 0,
-              onTap: () => onTabChanged(0),
-            ),
-            const SizedBox(height: 6),
-            _RailItem(
-              icon: Icons.assignment_ind_outlined,
-              label: 'Profile',
-              active: activeTab == 1,
-              onTap: () => onTabChanged(1),
-            ),
-            const Spacer(),
-            _RailItem(
-              icon: Icons.settings_outlined,
-              label: 'Settings',
-              active: activeTab == 2,
-              onTap: () => onTabChanged(2),
-            ),
-            const SizedBox(height: 14),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RailItem extends StatelessWidget {
-  const _RailItem({
-    required this.icon,
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          width: 64,
-          padding: const EdgeInsets.symmetric(vertical: 9),
-          decoration: BoxDecoration(
-            color: active ? Colors.white.withValues(alpha: 0.16) : null,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 19,
-                color: active ? Colors.white : Colors.white70,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  color: active ? Colors.white : Colors.white70,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Full-bleed masthead for the Manage Profile tab — same recipe as the
-/// Teacher Dashboard's `_ClassroomHero`/`_SettingsHero` (ambient breathing
-/// blobs + fade/slide-down entrance) so this tab isn't a lone boxed card
-/// sitting in padding while Progress/Settings get the full-bleed treatment.
-class _ProfileHero extends ConsumerStatefulWidget {
-  const _ProfileHero({this.wide = false});
-
-  final bool wide;
-
-  @override
-  ConsumerState<_ProfileHero> createState() => _ProfileHeroState();
-}
-
-class _ProfileHeroState extends ConsumerState<_ProfileHero>
-    with TickerProviderStateMixin {
-  late final _entrance = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 500),
-  )..forward();
-
-  late final _breathe = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2600),
-  )..repeat(reverse: true);
-
-  late final _fade = CurvedAnimation(parent: _entrance, curve: Curves.easeOut);
-  late final _slide = Tween<Offset>(
-    begin: const Offset(0, -0.12),
-    end: Offset.zero,
-  ).animate(_fade);
-
-  @override
-  void dispose() {
-    _entrance.dispose();
-    _breathe.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final learner = ref.watch(sessionProvider).learner;
-    final wide = widget.wide;
-
-    return ClipRect(
-      child: Container(
-        width: double.infinity,
-        padding: EdgeInsets.fromLTRB(wide ? 30 : 20, 20, wide ? 30 : 20, 46),
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.teal, AppColors.tealDark],
-          ),
-        ),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            AnimatedBuilder(
-              animation: _breathe,
-              builder: (context, child) {
-                final t = Curves.easeInOut.transform(_breathe.value);
-                return Positioned(
-                  top: -95 + (6 * t),
-                  right: -50,
-                  child: Opacity(
-                    opacity: 0.05 + (0.03 * t),
+              FadeTransition(
+                opacity: greet,
+                child: FlatDashboardHeader(
+                  avatar: GestureDetector(
+                    onTap: () => _switchTab(0),
                     child: Container(
-                      width: 190,
-                      height: 190,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
+                      decoration: BoxDecoration(
                         shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.teal, width: 1.5),
                       ),
+                      child: LearnerAvatar(avatar: learner?.avatar ?? '🧒', size: 34),
                     ),
                   ),
-                );
-              },
-            ),
-            AnimatedBuilder(
-              animation: _breathe,
-              builder: (context, child) {
-                final t = Curves.easeInOut.transform(_breathe.value);
-                return Positioned(
-                  bottom: -70 - (5 * t),
-                  left: -36,
-                  child: Opacity(
-                    opacity: 0.08 + (0.04 * t),
-                    child: Container(
-                      width: 130,
-                      height: 130,
-                      decoration: const BoxDecoration(
-                        color: AppColors.gold,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-            FadeTransition(
-              opacity: _fade,
-              child: SlideTransition(
-                position: _slide,
-                child: Row(
-                  children: [
-                    LearnerAvatar(avatar: learner?.avatar ?? '➕', size: 54),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            learner?.name ?? 'No learner yet',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            learner == null
-                                ? 'Add a child profile to get started'
-                                : 'Age ${learner.age} • ${learner.gradeLevel}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.white70,
-                            ),
-                          ),
-                        ],
-                      ),
+                  eyebrow: _parentGreeting(ref, caps: true),
+                  title: _progressHeading(widget.name),
+                  statusLabel: _syncStatusLabel(ref),
+                  actions: [
+                    HeaderIconButton(
+                      iconPath: MockIcons.swap,
+                      tooltip: 'Switch user',
+                      onTap: () => _switchUser(context, ref),
                     ),
                   ],
                 ),
               ),
-            ),
-          ],
+              TopTabBar(
+                items: _tabs,
+                activeIndex: _currentTab,
+                onChanged: _switchTab,
+              ),
+              Expanded(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: _PanelRise(
+                      key: ValueKey(_currentTab),
+                      child: switch (_currentTab) {
+                        0 => ListView(
+                          padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
+                          children: [
+                            const _StaggerFadeIn(
+                              delay: Duration.zero,
+                              child: _KpiFocusRow(),
+                            ),
+                            const SizedBox(height: 14),
+                            const _StaggerFadeIn(
+                              delay: Duration(milliseconds: 35),
+                              child: _TrendChartCard(),
+                            ),
+                            const SizedBox(height: 14),
+                            const _StaggerFadeIn(
+                              delay: Duration(milliseconds: 70),
+                              child: _AdventureBreakdownCard(),
+                            ),
+                          ],
+                        ),
+                        1 => ListView(
+                          padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
+                          children: [
+                            _StaggerFadeIn(
+                              delay: const Duration(milliseconds: 25),
+                              child: _ChildSwitcher(
+                                onSwitched: () => _switchTab(0),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            const _StaggerFadeIn(
+                              delay: Duration(milliseconds: 40),
+                              child: _NoProfileEmptyState(),
+                            ),
+                            const SizedBox(height: 14),
+                            const _StaggerFadeIn(
+                              delay: Duration(milliseconds: 60),
+                              child: _ManageProfileCard(),
+                            ),
+                            const SizedBox(height: 14),
+                            const _StaggerFadeIn(
+                              delay: Duration(milliseconds: 95),
+                              child: _ClassSection(),
+                            ),
+                            const SizedBox(height: 14),
+                            const _StaggerFadeIn(
+                              delay: Duration(milliseconds: 130),
+                              child: _CreateNewProfileCard(),
+                            ),
+                            const SizedBox(height: 14),
+                            const _StaggerFadeIn(
+                              delay: Duration(milliseconds: 165),
+                              child: _SyncProfileCard(),
+                            ),
+                          ],
+                        ),
+                        _ => const _SettingsTab(),
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
+
 
 /// Lets a parent with more than one child switch which one's dashboard
 /// (KPIs, streak, suggestions below, plus the "Edit Child Profile" form)
@@ -1096,7 +605,20 @@ class _ClassSectionState extends ConsumerState<_ClassSection> {
     } catch (e) {
       debugPrint('_ClassSection._join: enrollment push failed: $e');
     }
+
+    // Pull assignments for the joined class section from Firestore immediately
+    try {
+      final remoteClassAssignments = await FirestoreMirror().fetchAssignmentsForClass(section.id);
+      final remotePersonalAssignments = await FirestoreMirror().fetchAssignmentsForLearner(learnerId);
+      final assignmentsBox = Hive.box<AssignedModule>(HiveBoxes.assignedModules);
+      for (final remote in [...remoteClassAssignments, ...remotePersonalAssignments]) {
+        await assignmentsBox.put(remote.id, remote);
+      }
+    } catch (e) {
+      debugPrint('_ClassSection._join: pulling assignments failed: $e');
+    }
     refreshLearnerClass(ref);
+    ref.read(rosterRefreshProvider.notifier).bump();
     _codeC.clear();
     if (mounted) {
       setState(() => _joining = false);
@@ -1127,25 +649,41 @@ class _ClassSectionState extends ConsumerState<_ClassSection> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.mint,
+                color: section.isArchived
+                    ? AppColors.neutralTint
+                    : AppColors.mint,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.mintBorder),
+                border: Border.all(
+                  color: section.isArchived
+                      ? AppColors.creamBorder
+                      : AppColors.mintBorder,
+                ),
               ),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.school_outlined,
-                    color: AppColors.teal,
-                    size: 20,
-                  ),
+                  section.isArchived
+                      ? const Icon(
+                          Icons.archive_outlined,
+                          color: AppColors.textMuted,
+                          size: 18,
+                        )
+                      : const MockIcon(
+                          MockIcons.classBadge,
+                          color: AppColors.teal,
+                          size: 18,
+                        ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      '${learner.name} is enrolled in ${section.name}',
-                      style: const TextStyle(
+                      section.isArchived
+                          ? "${section.name} has been archived by the teacher"
+                          : '${learner.name} is enrolled in ${section.name}',
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
+                        color: section.isArchived
+                            ? AppColors.textMuted
+                            : AppColors.ink,
                       ),
                     ),
                   ),
@@ -1153,9 +691,12 @@ class _ClassSectionState extends ConsumerState<_ClassSection> {
               ),
             ),
             const SizedBox(height: 10),
-            const Text(
-              'Enter a new invitation code below to join a different class.',
-              style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+            Text(
+              section.isArchived
+                  ? 'This class is no longer active. Enter a new invitation '
+                        'code below to join a different class.'
+                  : 'Enter a new invitation code below to join a different class.',
+              style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
             ),
           ] else ...[
             const Text(
@@ -1169,7 +710,10 @@ class _ClassSectionState extends ConsumerState<_ClassSection> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: _Input(controller: _codeC, hint: 'e.g. 7K3PQR'),
+                child: _Input(
+                  controller: _codeC,
+                  label: 'Invitation code',
+                ),
               ),
               const SizedBox(width: 10),
               SizedBox(
@@ -1319,290 +863,87 @@ class _SyncProfileCardState extends ConsumerState<_SyncProfileCard> {
   }
 }
 
-class _Input extends StatelessWidget {
-  const _Input({required this.controller, required this.hint});
+class _Input extends StatefulWidget {
+  const _Input({required this.controller, required this.label});
   final TextEditingController controller;
-  final String hint;
+  final String label;
 
   @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      decoration: InputDecoration(
-        hintText: hint,
-        filled: true,
-        fillColor: AppColors.neutralTint,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.creamBorder),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.creamBorder),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.teal, width: 1.4),
-        ),
-      ),
-    );
+  State<_Input> createState() => _InputState();
+}
+
+class _InputState extends State<_Input> {
+  final _focusNode = FocusNode();
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(() {
+      setState(() => _focused = _focusNode.hasFocus);
+    });
   }
-}
-
-// ------------------------------------------------------------- hero
-
-/// Gradient hero header: greeting, avatar initial, sync icon and a live
-/// "synced" status pill. Replaces the old flat AppBar on the phone layout.
-class _DashboardHero extends ConsumerStatefulWidget {
-  const _DashboardHero({
-    required this.name,
-    required this.animation,
-    required this.onSwitchUser,
-  });
-
-  final String name;
-  final Animation<double> animation;
-  final VoidCallback onSwitchUser;
-
-  @override
-  ConsumerState<_DashboardHero> createState() => _DashboardHeroState();
-}
-
-class _DashboardHeroState extends ConsumerState<_DashboardHero>
-    with SingleTickerProviderStateMixin {
-  // Ambient layer: slow breathing pulse on the hero's background blobs —
-  // matches the Classroom tab/Settings/Classroom-Management heroes' own
-  // breathing treatment (2600ms, same duration as the splash screen's
-  // halo) so every full-bleed hero in the app shares one motion language
-  // instead of this tab's blobs being the one static exception.
-  late final _breathe = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2600),
-  )..repeat(reverse: true);
 
   @override
   void dispose() {
-    _breathe.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
-  String _syncStatusLabel(WidgetRef ref) {
-    final lastSynced = ref.read(syncManagerProvider).lastSyncedAt;
-    if (lastSynced == null) return 'Not synced yet';
-    final elapsed = DateTime.now().difference(lastSynced);
-    if (elapsed.inMinutes < 1) return 'Synced just now';
-    if (elapsed.inMinutes < 60) return 'Synced ${elapsed.inMinutes} min ago';
-    if (elapsed.inHours < 24) return 'Synced ${elapsed.inHours}h ago';
-    return 'Synced ${elapsed.inDays}d ago';
-  }
-
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: widget.animation,
-      child: ClipRect(
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 56),
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.teal, AppColors.tealDark],
-            ),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: _focused
+            ? [
+                BoxShadow(
+                  color: AppColors.teal.withValues(alpha: 0.18),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ]
+            : null,
+      ),
+      child: TextField(
+        controller: widget.controller,
+        focusNode: _focusNode,
+        decoration: InputDecoration(
+          label: Text(widget.label),
+          labelStyle: const TextStyle(
+            color: AppColors.textMuted,
+            fontWeight: FontWeight.w700,
           ),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // Ambient blobs — now breathing (opacity + gentle drift)
-              // instead of static, matching the HTML preview's
-              // `.hero::before`/`::after` intent more fully.
-              AnimatedBuilder(
-                animation: _breathe,
-                builder: (context, child) {
-                  final t = Curves.easeInOut.transform(_breathe.value);
-                  return Positioned(
-                    top: -90 + (6 * t),
-                    right: -50,
-                    child: Opacity(
-                      opacity: 0.04 + (0.03 * t),
-                      child: const _Blob(size: 180, color: Colors.white),
-                    ),
-                  );
-                },
-              ),
-              AnimatedBuilder(
-                animation: _breathe,
-                builder: (context, child) {
-                  final t = Curves.easeInOut.transform(_breathe.value);
-                  return Positioned(
-                    bottom: -60 - (5 * t),
-                    left: -30,
-                    child: Opacity(
-                      opacity: 0.07 + (0.05 * t),
-                      child: const _Blob(size: 120, color: AppColors.gold),
-                    ),
-                  );
-                },
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: AppColors.goldTint,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.35),
-                            width: 2,
-                          ),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          widget.name.isNotEmpty
-                              ? widget.name[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.tealDark,
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: widget.onSwitchUser,
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          alignment: Alignment.center,
-                          child: const Icon(
-                            Icons.people_outline_rounded,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    _parentGreeting(ref, caps: true),
-                    style: const TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.4,
-                      color: Colors.white70,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    "${widget.name}'s progress",
-                    style: const TextStyle(
-                      fontSize: 21,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.3,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.13),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.12),
-                      ),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            color: AppColors.goldSoft,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          _syncStatusLabel(ref),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
+          floatingLabelStyle: const TextStyle(
+            color: AppColors.teal,
+            fontWeight: FontWeight.w700,
+          ),
+          filled: true,
+          fillColor: AppColors.neutralTint,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: AppColors.creamBorder),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: AppColors.creamBorder),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: AppColors.teal, width: 1.6),
           ),
         ),
       ),
     );
   }
 }
-
-/// Soft translucent circle used for ambient depth behind hero content.
-class _Blob extends StatelessWidget {
-  const _Blob({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    );
-  }
-}
-
 // ------------------------------------------------------------- shared
-
-/// Fades and slides its child upward as [animation] runs 0→1.
-class _FadeUp extends StatelessWidget {
-  const _FadeUp({required this.animation, required this.child});
-
-  final Animation<double> animation;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: animation,
-      child: AnimatedBuilder(
-        animation: animation,
-        builder: (context, c) => Transform.translate(
-          offset: Offset(0, (1 - animation.value) * 16),
-          child: c,
-        ),
-        child: child,
-      ),
-    );
-  }
-}
 
 /// Radial accuracy dial + stacked time/error stat pills — replaces the flat
 /// 2x2 KPI grid with one focal metric (streak surfaces as a tappable badge
@@ -1690,31 +1031,60 @@ class _KpiFocusRowState extends ConsumerState<_KpiFocusRow>
               ),
               SizedBox(width: widget.wide ? 26 : 16),
               Expanded(
-                child: Column(
-                  children: [
-                    _StatPill(
-                      icon: Icons.schedule_rounded,
-                      iconBg: AppColors.goldTint,
-                      iconColor: AppColors.gold,
-                      value: '${kpis.timeOnTaskMinutes}m',
-                      label: 'Time on task',
-                      trend: kpis.timeOnTaskTrend.text,
-                      trendUp: kpis.timeOnTaskTrend.up,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _showProgressDetailsDialog(context, ref),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Column(
+                      children: [
+                        _StatPill(
+                          iconPath: MockIcons.clock,
+                          iconBg: AppColors.goldTint,
+                          iconColor: AppColors.gold,
+                          value: '${kpis.timeOnTaskMinutes}m',
+                          label: 'Time on task',
+                          trend: kpis.timeOnTaskTrend.text,
+                          trendUp: kpis.timeOnTaskTrend.up,
+                        ),
+                        const SizedBox(height: 10),
+                        _StatPill(
+                          iconPath: MockIcons.warningTriangle,
+                          iconBg: AppColors.coralTint,
+                          iconColor: AppColors.coral,
+                          value: '${kpis.errorCount}',
+                          label: 'Errors',
+                          trend: kpis.errorTrend.text,
+                          trendUp: kpis.errorTrend.up,
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 10),
-                    _StatPill(
-                      icon: Icons.error_outline_rounded,
-                      iconBg: AppColors.coralTint,
-                      iconColor: AppColors.coral,
-                      value: '${kpis.errorCount}',
-                      label: 'Errors',
-                      trend: kpis.errorTrend.text,
-                      trendUp: kpis.errorTrend.up,
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: TextButton.icon(
+              onPressed: () => _showProgressDetailsDialog(context, ref),
+              icon: const Icon(Icons.analytics_outlined, size: 16, color: AppColors.teal),
+              label: const Text(
+                'View Detailed Progress Report',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.teal,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
           ),
           AnimatedSize(
             duration: const Duration(milliseconds: 220),
@@ -1755,7 +1125,7 @@ class _KpiFocusRowState extends ConsumerState<_KpiFocusRow>
 
 class _StatPill extends StatelessWidget {
   const _StatPill({
-    required this.icon,
+    required this.iconPath,
     required this.iconBg,
     required this.iconColor,
     required this.value,
@@ -1764,7 +1134,7 @@ class _StatPill extends StatelessWidget {
     required this.trendUp,
   });
 
-  final IconData icon;
+  final String iconPath;
   final Color iconBg;
   final Color iconColor;
   final String value;
@@ -1790,7 +1160,7 @@ class _StatPill extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
-            child: Icon(icon, size: 17, color: iconColor),
+            child: MockIcon(iconPath, size: 15, color: iconColor),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1810,14 +1180,759 @@ class _StatPill extends StatelessWidget {
             ),
           ),
           if (trend.isNotEmpty)
-            Text(
-              trend,
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-                color: trendUp ? AppColors.teal : AppColors.coral,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                MockIcon(
+                  trendUp ? MockIcons.trendUp : MockIcons.trendDown,
+                  size: 10,
+                  color: trendUp ? AppColors.teal : AppColors.coral,
+                ),
+                const SizedBox(width: 2),
+                Text(
+                  trend,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: trendUp ? AppColors.teal : AppColors.coral,
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Telemetry Visualization component's per-adventure breakdown (FR-5.1) —
+/// a ring-per-adventure grid (weakest accuracy first) plus, when the
+/// Mediation Prompts Engine (FR-5.2) has flagged a real weak point, a
+/// single "practice this at home" prescription for that adventure below.
+class _AdventureBreakdownCard extends ConsumerWidget {
+  const _AdventureBreakdownCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final adventures = ref.watch(parentAdventureBreakdownProvider);
+    final mediation = ref.watch(parentMediationPromptProvider);
+
+    return SoftCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Adventures this week', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 2),
+          const Text(
+            'Progress by adventure, weakest first.',
+            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 14),
+          if (adventures.isEmpty)
+            const Text(
+              'Complete a lesson in the Learner Hub to see per-adventure progress here.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
+            )
+          else
+            Column(
+              children: [
+                for (final progress in adventures) ...[
+                  _AdventureRingCard(progress: progress),
+                  if (progress != adventures.last) const SizedBox(height: 8),
+                ],
+              ],
+            ),
+          if (mediation != null) ...[
+            const SizedBox(height: 14),
+            _MediationCard(prompt: mediation),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AdventureRingCard extends StatelessWidget {
+  const _AdventureRingCard({required this.progress});
+
+  final AdventureProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final weak = progress.accuracyPct < 60;
+    final ringColor = weak ? AppColors.coral : AppColors.teal;
+    final pct = (progress.accuracyPct / 100).clamp(0.0, 1.0);
+    return Container(
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.creamBorder),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 40,
+            height: 40,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: pct),
+                  duration: const Duration(milliseconds: 700),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, t, _) => CircularProgressIndicator(
+                    value: t,
+                    strokeWidth: 5,
+                    backgroundColor: AppColors.mint,
+                    valueColor: AlwaysStoppedAnimation(ringColor),
+                  ),
+                ),
+                Text(
+                  '${progress.accuracyPct.round()}%',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    color: ringColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  progress.destination.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  '${progress.errorCount} error${progress.errorCount == 1 ? '' : 's'}',
+                  style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                ),
+                const SizedBox(height: 5),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: pct),
+                    duration: const Duration(milliseconds: 700),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, t, _) => LinearProgressIndicator(
+                      value: t,
+                      minHeight: 4,
+                      backgroundColor: AppColors.mint,
+                      valueColor: AlwaysStoppedAnimation(ringColor),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (weak) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppColors.coralTint,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                'NEEDS REVIEW',
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.coral,
+                ),
               ),
             ),
+          ],
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => _AdventureDetailScreen(progress: progress),
+              ),
+            ),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'See detail',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    color: ringColor,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Icon(Icons.chevron_right, size: 14, color: ringColor),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One tier of a destination's lessons — mirrors the 3-way split
+/// `DestinationLevelsSheet._levels` uses in the Learner Hub (perLevel =
+/// ceil(lessons.length / 3)), so the parent-facing level names/grouping
+/// match what the child actually sees when playing.
+class _AdventureLevelMeta {
+  const _AdventureLevelMeta(this.stars, this.label, this.color, this.tint);
+  final String stars;
+  final String label;
+  final Color color;
+  final Color tint;
+}
+
+const _adventureLevelMeta = [
+  _AdventureLevelMeta('⭐', 'Beginner', AppColors.teal, AppColors.mint),
+  _AdventureLevelMeta('⭐⭐', 'Practice', AppColors.gold, AppColors.goldTint),
+  _AdventureLevelMeta('⭐⭐⭐', 'Mastery', AppColors.coral, AppColors.coralTint),
+];
+
+List<List<Lesson>> _splitIntoLevels(List<Lesson> lessons) {
+  final perLevel = (lessons.length / 3).ceil();
+  return [
+    lessons.take(perLevel).toList(),
+    lessons.skip(perLevel).take(perLevel).toList(),
+    lessons.skip(perLevel * 2).toList(),
+  ].where((group) => group.isNotEmpty).toList();
+}
+
+/// Sequential level unlock, same rule `DestinationLevelsSheet` uses in the
+/// Learner Hub: the whole destination must not be locked, level 0 is always
+/// open, and every level after that opens once the previous one's lessons
+/// are all completed. Doesn't account for a teacher's per-lesson
+/// `maxLevel`/`maxLessons` assignment cap (that lives in a different data
+/// source not wired into the parent dashboard) — this is the learner's own
+/// unlock progress, which is what a parent is checking here.
+bool _isLevelUnlocked(
+  Destination destination,
+  List<List<Lesson>> levels,
+  int levelIndex,
+  Set<String> completedLessons,
+) {
+  if (destination.state == DestinationState.locked) return false;
+  if (levelIndex == 0) return true;
+  final previous = levels[levelIndex - 1];
+  return previous.every((l) => completedLessons.contains(l.id));
+}
+
+/// Comprehensive drill-down for one adventure — every level, and every game
+/// inside every level, real curriculum data (`AdventureProgress.destination
+/// .lessons[].activities[]`) with a real Done/Not-yet chip sourced from
+/// [parentCompletedLessonsProvider]. Its own screen (pushed from "Adventures
+/// this week") rather than a dialog — there's enough content (a header, a
+/// hero stat block, and a scrolling list of levels/games) that it reads
+/// better with full-screen room than squeezed into a `Dialog`.
+class _AdventureDetailScreen extends ConsumerWidget {
+  const _AdventureDetailScreen({required this.progress});
+
+  final AdventureProgress progress;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final completedLessons = ref.watch(parentCompletedLessonsProvider);
+    final destination = progress.destination;
+    final levels = _splitIntoLevels(destination.lessons);
+    final totalLessons = destination.lessons.length;
+    final doneLessons = destination.lessons.where((l) => completedLessons.contains(l.id)).length;
+    final completionPct = totalLessons == 0 ? 0 : (doneLessons / totalLessons * 100).round();
+
+    return Scaffold(
+      backgroundColor: AppColors.cream,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.fromLTRB(4, 10, 18, 4),
+              color: Colors.white,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back, size: 20),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.coralTint,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Text(destination.icon, style: const TextStyle(fontSize: 22)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'ADVENTURE DETAIL',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                          Text(
+                            destination.name,
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Redesigned Floating Stats Hero Card
+            Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.creamBorder),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0C20241F),
+                    blurRadius: 30,
+                    offset: Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 76,
+                    height: 76,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0, end: totalLessons == 0 ? 0 : doneLessons / totalLessons),
+                          duration: const Duration(milliseconds: 700),
+                          curve: Curves.easeOutCubic,
+                          builder: (context, t, _) => SizedBox(
+                            width: 76,
+                            height: 76,
+                            child: CircularProgressIndicator(
+                              value: t,
+                              strokeWidth: 6,
+                              backgroundColor: AppColors.mint,
+                              valueColor: const AlwaysStoppedAnimation(AppColors.teal),
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '$completionPct%',
+                          style: const TextStyle(
+                            fontFamily: 'Outfit',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                            color: AppColors.teal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _DetailStatRow(value: '$doneLessons/$totalLessons', label: 'lessons done'),
+                        const SizedBox(height: 8),
+                        _DetailStatRow(value: '${progress.accuracyPct.round()}%', label: 'accuracy'),
+                        const SizedBox(height: 8),
+                        _DetailStatRow(value: '${progress.errorCount}', label: 'errors logged'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Caveat footnote banner
+            Container(
+              margin: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+              decoration: BoxDecoration(
+                color: AppColors.goldTint,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.goldSoft.withValues(alpha: 0.25)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('ℹ️', style: TextStyle(fontSize: 12)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Tracked per lesson, not per game — every game a lesson "
+                      "contains is listed for reference.",
+                      style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Levels
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                child: Column(
+                  children: [
+                    for (var li = 0; li < levels.length; li++) ...[
+                      if (li > 0) const SizedBox(height: 16),
+                      _AdventureLevelSection(
+                        meta: _adventureLevelMeta[li < 2 ? li : 2],
+                        lessons: levels[li],
+                        completedLessons: completedLessons,
+                        unlocked: _isLevelUnlocked(destination, levels, li, completedLessons),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailStatRow extends StatelessWidget {
+  const _DetailStatRow({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontFamily: 'Outfit',
+            fontWeight: FontWeight.w800,
+            fontSize: 17,
+            color: AppColors.ink,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textMuted,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AdventureLevelSection extends StatefulWidget {
+  const _AdventureLevelSection({
+    required this.meta,
+    required this.lessons,
+    required this.completedLessons,
+    required this.unlocked,
+  });
+
+  final _AdventureLevelMeta meta;
+  final List<Lesson> lessons;
+  final Set<String> completedLessons;
+  final bool unlocked;
+
+  @override
+  State<_AdventureLevelSection> createState() => _AdventureLevelSectionState();
+}
+
+class _AdventureLevelSectionState extends State<_AdventureLevelSection> {
+  bool _isCollapsed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final done = widget.lessons.where((l) => widget.completedLessons.contains(l.id)).length;
+    return Opacity(
+      opacity: widget.unlocked ? 1 : 0.55,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.creamBorder),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              onTap: widget.unlocked
+                  ? () => setState(() => _isCollapsed = !_isCollapsed)
+                  : null,
+              child: Container(
+                color: widget.meta.tint,
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 11),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(widget.meta.stars, style: const TextStyle(fontSize: 12)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            widget.meta.label,
+                            style: TextStyle(
+                              fontFamily: 'Fredoka',
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13.5,
+                              color: widget.meta.color,
+                            ),
+                          ),
+                        ),
+                        if (!widget.unlocked)
+                          const Icon(Icons.lock, size: 13, color: AppColors.textMuted)
+                        else ...[
+                          Text(
+                            '$done/${widget.lessons.length}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          AnimatedRotation(
+                            turns: _isCollapsed ? -0.25 : 0,
+                            duration: const Duration(milliseconds: 200),
+                            child: Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 16,
+                              color: widget.meta.color,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(
+                          begin: 0,
+                          end: !widget.unlocked || widget.lessons.isEmpty ? 0 : done / widget.lessons.length,
+                        ),
+                        duration: const Duration(milliseconds: 600),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, t, _) => LinearProgressIndicator(
+                          value: t,
+                          minHeight: 5,
+                          backgroundColor: Colors.black.withValues(alpha: 0.08),
+                          valueColor: AlwaysStoppedAnimation(widget.meta.color),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (!widget.unlocked)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.lock, size: 14, color: AppColors.textMuted),
+                    SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        'Locked — finish the level above to unlock this one.',
+                        style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (!_isCollapsed)
+              for (final lesson in widget.lessons)
+                for (final activity in lesson.activities)
+                  _AdventureGameRow(
+                    lesson: lesson,
+                    activity: activity,
+                    done: widget.completedLessons.contains(lesson.id),
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Parent-friendly label for an [ActivityType] — the raw enum name
+/// (`quranSync`, `fiqhDrag`) is camelCase code, not something to show a
+/// parent.
+String _activityTypeLabel(ActivityType type) => switch (type) {
+      ActivityType.trace => 'Letter Tracing',
+      ActivityType.pronounce => 'Pronunciation',
+      ActivityType.quranSync => "Qur'an Sync",
+      ActivityType.story => 'Story',
+      ActivityType.fiqhDrag => 'Fiqh Match',
+      ActivityType.quiz => 'Quiz',
+      ActivityType.harakatPop => 'Harakat Pop',
+    };
+
+class _AdventureGameRow extends StatelessWidget {
+  const _AdventureGameRow({
+    required this.lesson,
+    required this.activity,
+    required this.done,
+  });
+
+  final Lesson lesson;
+  final Activity activity;
+  final bool done;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+      decoration: BoxDecoration(
+        color: done ? AppColors.mint.withValues(alpha: 0.5) : null,
+        border: const Border(top: BorderSide(color: AppColors.creamBorder)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.cream,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(activity.icon, style: const TextStyle(fontSize: 15)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  activity.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  '${_activityTypeLabel(activity.type)} · +${activity.xp}xp',
+                  style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                ),
+              ],
+            ),
+          ),
+          if (done)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppColors.teal,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check, size: 10, color: Colors.white),
+                  SizedBox(width: 3),
+                  Text(
+                    'Done',
+                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.white),
+                  ),
+                ],
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppColors.creamBorder),
+              ),
+              child: const Text(
+                'Not started',
+                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MediationCard extends StatelessWidget {
+  const _MediationCard({required this.prompt});
+
+  final MediationPrompt prompt;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.mint,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.mintBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('🖊️', style: TextStyle(fontSize: 14)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  "This week's practice routine — ${prompt.destination.name}",
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.tealDark,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            prompt.routine,
+            style: const TextStyle(fontSize: 12, color: AppColors.tealDark, height: 1.35),
+          ),
         ],
       ),
     );
@@ -1956,9 +2071,10 @@ class _DialPainter extends CustomPainter {
       oldDelegate.progress != progress;
 }
 
-/// Smooth draw-in line chart replacing the bar chart — tap or drag to scrub
-/// between days; the floating bubble reads real per-day activity level from
-/// [parentWeeklyChartProvider] (no invented numbers).
+/// Draw-in line chart matching the approved top-tab mock exactly: grid +
+/// gradient area fill + a teal line that draws itself in on every reveal
+/// (fresh [_draw] controller each time this tab remounts), reading real
+/// per-day activity from [parentWeeklyChartProvider] (no invented numbers).
 class _TrendChartCard extends ConsumerStatefulWidget {
   const _TrendChartCard();
 
@@ -1970,9 +2086,15 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
     with SingleTickerProviderStateMixin {
   late final AnimationController _draw = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 800),
+    duration: const Duration(milliseconds: 1000),
   )..forward();
-  int? _selected;
+  int _range = 0;
+
+  static const _ranges = ['7 days', '30 days', 'Term'];
+  // ponytail: "Term" has no curriculum-defined length yet, so it's
+  // approximated as a 90-day window. Swap in the real academic-term length
+  // once that's modeled.
+  static const _rangeWindowDays = [7, 30, 90];
 
   @override
   void dispose() {
@@ -1980,17 +2102,18 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
     super.dispose();
   }
 
-  void _selectNearest(double dx, double step, int n) {
-    if (n == 0) return;
-    final i = step == 0 ? 0 : (dx / step).round().clamp(0, n - 1);
-    if (i != _selected) setState(() => _selected = i);
+  void _selectRange(int i) {
+    if (i == _range) return;
+    setState(() => _range = i);
+    _draw
+      ..reset()
+      ..forward();
   }
 
   @override
   Widget build(BuildContext context) {
-    final chartData = ref.watch(parentWeeklyChartProvider);
-    final entries = chartData.entries.toList();
-    final selected = _selected ?? (entries.isEmpty ? null : entries.length - 1);
+    final chartData = ref.watch(parentWeeklyChartProvider(_rangeWindowDays[_range]));
+    final entries = chartData;
 
     return SoftCard(
       padding: const EdgeInsets.all(18),
@@ -1999,36 +2122,36 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
         children: [
           Row(
             children: [
+              const MockIcon(MockIcons.trend, size: 16, color: AppColors.teal),
+              const SizedBox(width: 7),
               Flexible(
                 child: Text(
-                  'Weekly activity',
+                  'Weekly trend',
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
-              const SizedBox(width: 8),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.mint,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: const Text(
-                  'This week',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.tealDark,
-                  ),
-                ),
-              ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 2),
+          const Text(
+            'Time spent playing, day by day',
+            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              for (final (i, label) in _ranges.indexed) ...[
+                if (i > 0) const SizedBox(width: 6),
+                _RangePill(
+                  label: label,
+                  active: i == _range,
+                  onTap: () => _selectRange(i),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 16),
           if (entries.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
@@ -2058,9 +2181,9 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
           else
             LayoutBuilder(
               builder: (context, constraints) {
-                const height = 140.0;
-                const topPad = 30.0;
-                const bottomPad = 20.0;
+                const height = 116.0;
+                const topPad = 20.0;
+                const bottomPad = 8.0;
                 final width = constraints.maxWidth;
                 final values = entries.map((e) => e.value).toList();
                 final n = values.length;
@@ -2073,64 +2196,54 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
                     ),
                 ];
 
-                return GestureDetector(
-                  onTapDown: (d) => _selectNearest(d.localPosition.dx, dx, n),
-                  onPanUpdate: (d) => _selectNearest(d.localPosition.dx, dx, n),
-                  child: AnimatedBuilder(
-                    animation: _draw,
-                    builder: (context, _) {
-                      return SizedBox(
-                        width: width,
-                        height: height,
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            CustomPaint(
-                              size: Size(width, height),
-                              painter: _TrendPainter(
-                                points: points,
-                                progress: _draw.value,
-                                selectedIndex: selected,
-                                bottom: height - bottomPad,
+                // Thin to at most 7 labels so a 30-day/Term window doesn't
+                // crowd the axis — always keep the first and last day.
+                const maxLabels = 7;
+                final step = n > maxLabels ? (n / maxLabels).ceil() : 1;
+                final labelIndices = <int>{
+                  for (var i = 0; i < n; i += step) i,
+                  if (n > 0) n - 1,
+                }.toList()..sort();
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AnimatedBuilder(
+                      animation: _draw,
+                      builder: (context, _) {
+                        return CustomPaint(
+                          size: Size(width, height),
+                          painter: _TrendPainter(
+                            points: points,
+                            progress: _draw.value,
+                            bottom: height - bottomPad,
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 14,
+                      width: width,
+                      child: Stack(
+                        children: [
+                          for (final i in labelIndices)
+                            Positioned(
+                              left: (points[i].dx - 14).clamp(0.0, width - 28),
+                              width: 28,
+                              child: Text(
+                                entries[i].label,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  color: AppColors.textMuted,
+                                ),
                               ),
                             ),
-                            for (final (i, e) in entries.indexed)
-                              Positioned(
-                                left: points[i].dx - 12,
-                                top: height - bottomPad + 4,
-                                width: 24,
-                                child: Text(
-                                  e.key,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: selected == i
-                                        ? AppColors.teal
-                                        : AppColors.textMuted,
-                                  ),
-                                ),
-                              ),
-                            if (selected != null && _draw.isCompleted)
-                              Positioned(
-                                left: (points[selected].dx - 30).clamp(
-                                  0,
-                                  width - 60,
-                                ),
-                                top: (points[selected].dy - 38).clamp(
-                                  -8,
-                                  height,
-                                ),
-                                child: _ChartTooltip(
-                                  label: entries[selected].key,
-                                  pct: (values[selected] * 100).round(),
-                                ),
-                              ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                        ],
+                      ),
+                    ),
+                  ],
                 );
               },
             ),
@@ -2140,67 +2253,77 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
   }
 }
 
-class _ChartTooltip extends StatelessWidget {
-  const _ChartTooltip({required this.label, required this.pct});
+class _RangePill extends StatelessWidget {
+  const _RangePill({required this.label, required this.active, required this.onTap});
 
   final String label;
-  final int pct;
+  final bool active;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.tealDark,
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+    return Material(
+      color: active ? AppColors.teal : AppColors.neutralTint,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              color: active ? Colors.white : AppColors.textMuted,
+            ),
           ),
-        ],
-      ),
-      child: Text(
-        '$label · $pct% activity',
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
         ),
       ),
     );
   }
 }
 
+
+/// Grid + gradient area fill + drawn line — matches the approved top-tab
+/// mock's chart exactly (`.chart-grid` / `.chart-area` / `.chart-line`).
 class _TrendPainter extends CustomPainter {
   _TrendPainter({
     required this.points,
     required this.progress,
-    required this.selectedIndex,
     required this.bottom,
   });
 
   final List<Offset> points;
   final double progress;
-  final int? selectedIndex;
   final double bottom;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (points.isEmpty) return;
+
+    // 1. Solid horizontal gridlines behind the curve.
+    final gridPaint = Paint()
+      ..color = AppColors.creamBorder
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    for (var i = 1; i <= 3; i++) {
+      final y = bottom * i / 4;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    // 2. Straight-segment line (mock uses a plain polyline, not a spline).
     final path = Path()..moveTo(points.first.dx, points.first.dy);
     for (var i = 1; i < points.length; i++) {
-      final prev = points[i - 1];
-      final curr = points[i];
-      final midX = (prev.dx + curr.dx) / 2;
-      path.cubicTo(midX, prev.dy, midX, curr.dy, curr.dx, curr.dy);
+      path.lineTo(points[i].dx, points[i].dy);
     }
 
     final reveal = progress.clamp(0.0, 1.0);
     canvas.save();
     canvas.clipRect(Rect.fromLTWH(0, 0, size.width * reveal, size.height + 40));
 
+    // 3. Gradient area fill, fading from the line down to the baseline.
     final fillPath = Path.from(path)
       ..lineTo(points.last.dx, bottom)
       ..lineTo(points.first.dx, bottom)
@@ -2210,578 +2333,28 @@ class _TrendPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          AppColors.gold.withValues(alpha: 0.28),
-          AppColors.gold.withValues(alpha: 0.0),
+          AppColors.teal.withValues(alpha: 0.16),
+          AppColors.teal.withValues(alpha: 0.0),
         ],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
     canvas.drawPath(fillPath, fillPaint);
 
+    // 4. The line itself.
     final linePaint = Paint()
-      ..color = AppColors.gold
+      ..color = AppColors.teal
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
+      ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
     canvas.drawPath(path, linePaint);
     canvas.restore();
-
-    for (var i = 0; i < points.length; i++) {
-      if (points[i].dx > size.width * reveal + 0.5) continue;
-      final isSelected = i == selectedIndex;
-      canvas.drawCircle(
-        points[i],
-        isSelected ? 6 : 3.5,
-        Paint()..color = isSelected ? AppColors.tealDark : Colors.white,
-      );
-      canvas.drawCircle(
-        points[i],
-        isSelected ? 6 : 3.5,
-        Paint()
-          ..color = AppColors.gold
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = isSelected ? 2.5 : 2,
-      );
-    }
-
-    if (selectedIndex != null && selectedIndex! < points.length) {
-      final p = points[selectedIndex!];
-      final dash = Paint()
-        ..color = AppColors.creamBorder
-        ..strokeWidth = 1.5;
-      var y = p.dy + 8;
-      while (y < bottom) {
-        canvas.drawLine(Offset(p.dx, y), Offset(p.dx, y + 4), dash);
-        y += 8;
-      }
-    }
   }
 
   @override
   bool shouldRepaint(covariant _TrendPainter oldDelegate) =>
-      oldDelegate.progress != progress ||
-      oldDelegate.selectedIndex != selectedIndex ||
-      oldDelegate.points != points;
+      oldDelegate.progress != progress || oldDelegate.points != points;
 }
 
-/// Swipeable suggestion cards (replacing the flat checklist) — tapping a
-/// card marks it reviewed in-memory, mirroring the ephemeral, no-persistence
-/// state pattern used elsewhere in this session (FR-5.2 data is still real).
-class _SuggestionCarousel extends ConsumerStatefulWidget {
-  const _SuggestionCarousel({this.wide = false});
-
-  final bool wide;
-
-  @override
-  ConsumerState<_SuggestionCarousel> createState() =>
-      _SuggestionCarouselState();
-}
-
-class _SuggestionCarouselState extends ConsumerState<_SuggestionCarousel>
-    with SingleTickerProviderStateMixin {
-  final Set<int> _reviewed = {};
-  late final PageController _controller = PageController(
-    viewportFraction: widget.wide ? 0.62 : 0.86,
-  );
-  late final _glow = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2600),
-  )..repeat(reverse: true);
-  int _page = 0;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _glow.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final items = ref.watch(parentSuggestionsProvider);
-    final allReviewed = items.isNotEmpty && _reviewed.length == items.length;
-    final progress = items.isEmpty ? 0.0 : _reviewed.length / items.length;
-
-    return SoftCard(
-      color: AppColors.neutralTint,
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              SizedBox(
-                width: 30,
-                height: 30,
-                child: Stack(
-                  alignment: Alignment.center,
-                  clipBehavior: Clip.none,
-                  children: [
-                    // Ambient layer: a slow breathing glow behind the badge,
-                    // same 2600ms rhythm as the hero's blobs elsewhere on
-                    // this dashboard — reads as "this card is alive/waiting"
-                    // rather than a static icon.
-                    AnimatedBuilder(
-                      animation: _glow,
-                      builder: (context, child) {
-                        final t = Curves.easeInOut.transform(_glow.value);
-                        return Opacity(
-                          opacity: 0.18 + t * 0.22,
-                          child: Transform.scale(
-                            scale: 1 + t * 0.3,
-                            child: Container(
-                              width: 30,
-                              height: 30,
-                              decoration: BoxDecoration(
-                                color: AppColors.gold,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        color: AppColors.goldTint,
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Icon(
-                        Icons.lightbulb_outline_rounded,
-                        size: 16,
-                        color: AppColors.gold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Flexible(
-                child: Text(
-                  'Practice recommended',
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Spacer(),
-              if (items.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: allReviewed ? AppColors.mint : Colors.white,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: allReviewed
-                          ? AppColors.mintBorder
-                          : AppColors.creamBorder,
-                    ),
-                  ),
-                  child: Text(
-                    '${_reviewed.length}/${items.length}',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      color: allReviewed
-                          ? AppColors.tealDark
-                          : AppColors.textMuted,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          if (items.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: progress),
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOut,
-                builder: (context, t, _) => LinearProgressIndicator(
-                  value: t,
-                  minHeight: 5,
-                  backgroundColor: AppColors.creamBorder,
-                  valueColor: AlwaysStoppedAnimation(
-                    allReviewed ? AppColors.teal : AppColors.gold,
-                  ),
-                ),
-              ),
-            ),
-          ],
-          const SizedBox(height: 14),
-          if (items.isEmpty)
-            const Text(
-              'Complete a few lessons to unlock personalized practice suggestions.',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
-            )
-          else
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 320),
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: ScaleTransition(scale: animation, child: child),
-              ),
-              child: allReviewed
-                  ? _AllCaughtUpPanel(
-                      key: const ValueKey('celebrate'),
-                      wide: widget.wide,
-                    )
-                  : Column(
-                      key: const ValueKey('carousel'),
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          height: widget.wide ? 132 : 118,
-                          child: PageView.builder(
-                            controller: _controller,
-                            itemCount: items.length,
-                            onPageChanged: (i) => setState(() => _page = i),
-                            itemBuilder: (context, i) => AnimatedBuilder(
-                              animation: _controller,
-                              builder: (context, child) {
-                                // Depth parallax: the centered card sits at
-                                // full scale, neighbors shrink slightly as
-                                // they scroll off — reads as a physical
-                                // stack of cards rather than a flat swap.
-                                var page = i.toDouble();
-                                if (_controller.hasClients &&
-                                    _controller.position.haveDimensions) {
-                                  page = _controller.page ?? i.toDouble();
-                                }
-                                final delta = (page - i).abs().clamp(0.0, 1.0);
-                                final scale = 1 - (delta * 0.1);
-                                return Transform.scale(
-                                  scale: scale,
-                                  child: Opacity(
-                                    opacity: 1 - (delta * 0.35),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                ),
-                                child: _SuggestionCard(
-                                  text: items[i],
-                                  reviewed: _reviewed.contains(i),
-                                  onTap: () => setState(() {
-                                    if (!_reviewed.remove(i)) {
-                                      _reviewed.add(i);
-                                    }
-                                  }),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (items.length > 1) ...[
-                          const SizedBox(height: 10),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              for (var i = 0; i < items.length; i++)
-                                AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  margin: const EdgeInsets.symmetric(
-                                    horizontal: 3,
-                                  ),
-                                  width: _page == i ? 16 : 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    // Encodes review state, not just position —
-                                    // a reviewed card stays teal even after
-                                    // scrolling past it.
-                                    color: _reviewed.contains(i)
-                                        ? AppColors.teal
-                                        : (_page == i
-                                              ? AppColors.gold
-                                              : AppColors.creamBorder),
-                                    borderRadius: BorderRadius.circular(3),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Shown once every suggestion in this batch has been tapped reviewed —
-/// swaps in for the carousel via the parent's `AnimatedSwitcher` and plays
-/// a one-shot confetti/checkmark Lottie (fresh widget instance each time
-/// this state is entered, so `repeat: false` never needs a manual replay
-/// trigger — matches the one-shot ethos of `_KpiFocusRow`'s milestone burst).
-class _AllCaughtUpPanel extends StatelessWidget {
-  const _AllCaughtUpPanel({super.key, required this.wide});
-
-  final bool wide;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        children: [
-          SizedBox(
-            width: wide ? 108 : 88,
-            height: wide ? 108 : 88,
-            child: Lottie.asset(
-              'assets/lottie/practice_complete.json',
-              repeat: false,
-            ),
-          ),
-          const SizedBox(height: 2),
-          const Text(
-            "All caught up — masha'Allah!",
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-              color: AppColors.ink,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            "You've reviewed every suggestion in this batch.",
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textMuted, fontSize: 11.5),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Which core module a suggestion string belongs to, inferred from its own
-/// wording — grounds the card's icon/accent in the app's real curriculum
-/// taxonomy (tracing / pronunciation / Qur'an & Hadith / Sirah / Fiqh)
-/// instead of every suggestion looking visually identical.
-class _SuggestionMeta {
-  const _SuggestionMeta(this.label, this.icon, this.color, this.tint);
-
-  final String label;
-  final IconData icon;
-  final Color color;
-  final Color tint;
-}
-
-_SuggestionMeta _suggestionMeta(String text) {
-  final t = text.toLowerCase();
-  if (t.contains('trac') || t.contains('alif') || t.contains('letter')) {
-    return const _SuggestionMeta(
-      'Tracing',
-      Icons.draw_outlined,
-      AppColors.teal,
-      AppColors.mint,
-    );
-  }
-  if (t.contains('sound') || t.contains('pronunc') || t.contains('flashcard')) {
-    return const _SuggestionMeta(
-      'Pronunciation',
-      Icons.volume_up_outlined,
-      AppColors.gold,
-      AppColors.goldTint,
-    );
-  }
-  if (t.contains('qur') || t.contains('hadith') || t.contains('recit')) {
-    return const _SuggestionMeta(
-      "Qur'an & Hadith",
-      Icons.menu_book_outlined,
-      AppColors.coral,
-      AppColors.coralTint,
-    );
-  }
-  if (t.contains('sirah') || t.contains('story') || t.contains('prophet')) {
-    return const _SuggestionMeta(
-      'Sirah',
-      Icons.auto_stories_rounded,
-      AppColors.tealDark,
-      AppColors.mint,
-    );
-  }
-  if (t.contains('fiqh') ||
-      t.contains('wudu') ||
-      t.contains('salah') ||
-      t.contains('prayer')) {
-    return const _SuggestionMeta(
-      'Fiqh',
-      Icons.extension_outlined,
-      AppColors.mintGreen,
-      AppColors.mint,
-    );
-  }
-  return const _SuggestionMeta(
-    'Practice',
-    Icons.lightbulb_outline_rounded,
-    AppColors.gold,
-    AppColors.goldTint,
-  );
-}
-
-class _SuggestionCard extends StatefulWidget {
-  const _SuggestionCard({
-    required this.text,
-    required this.reviewed,
-    required this.onTap,
-  });
-
-  final String text;
-  final bool reviewed;
-  final VoidCallback onTap;
-
-  @override
-  State<_SuggestionCard> createState() => _SuggestionCardState();
-}
-
-class _SuggestionCardState extends State<_SuggestionCard>
-    with SingleTickerProviderStateMixin {
-  late final _pop = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 260),
-  );
-
-  @override
-  void didUpdateWidget(covariant _SuggestionCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!oldWidget.reviewed && widget.reviewed) {
-      _pop.forward(from: 0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _pop.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final meta = _suggestionMeta(widget.text);
-    final reviewed = widget.reviewed;
-    return GestureDetector(
-      onTap: widget.onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: reviewed ? AppColors.mintBorder : AppColors.creamBorder,
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x0A000000),
-              blurRadius: 6,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: meta.tint,
-                    borderRadius: BorderRadius.circular(7),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(meta.icon, size: 13, color: meta.color),
-                ),
-                const SizedBox(width: 7),
-                Flexible(
-                  child: Text(
-                    meta.label,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.2,
-                      color: meta.color,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: Text(
-                widget.text,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  height: 1.4,
-                  color: reviewed ? AppColors.textMuted : AppColors.ink,
-                  decoration: reviewed ? TextDecoration.lineThrough : null,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 7),
-              decoration: BoxDecoration(
-                color: reviewed ? AppColors.teal : Colors.transparent,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: reviewed ? AppColors.teal : AppColors.creamBorder,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ScaleTransition(
-                    scale: reviewed
-                        ? CurvedAnimation(
-                            parent: _pop,
-                            curve: Curves.easeOutBack,
-                          )
-                        : const AlwaysStoppedAnimation(1.0),
-                    child: Icon(
-                      reviewed
-                          ? Icons.check_circle_rounded
-                          : Icons.radio_button_unchecked,
-                      size: 15,
-                      color: reviewed ? Colors.white : AppColors.textMuted,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    reviewed ? 'Practiced' : 'Mark practiced',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: reviewed ? Colors.white : AppColors.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class _SettingsTab extends ConsumerWidget {
   const _SettingsTab();
@@ -2792,25 +2365,13 @@ class _SettingsTab extends ConsumerWidget {
     final volumeNotifier = ref.read(volumeProvider.notifier);
 
     return ListView(
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
       children: [
-        const _SettingsHero(
-          title: 'Dashboard Settings',
-          subtitle: 'Configure sound volumes and local data',
-        ),
-        Transform.translate(
-          offset: const Offset(0, -22),
-          child: Container(
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            padding: const EdgeInsets.fromLTRB(18, 22, 18, 28),
-            child: Column(
+        Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _StaggerFadeIn(
-                  delay: const Duration(milliseconds: 40),
+                  delay: const Duration(milliseconds: 25),
                   child: SoftCard(
                     padding: const EdgeInsets.all(18),
                     child: Column(
@@ -2864,190 +2425,84 @@ class _SettingsTab extends ConsumerWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
                 const _StaggerFadeIn(
-                  delay: Duration(milliseconds: 110),
+                  delay: Duration(milliseconds: 65),
                   child: _SyncCard(),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
                 const _StaggerFadeIn(
-                  delay: Duration(milliseconds: 135),
+                  delay: Duration(milliseconds: 80),
                   child: EmailVerificationCard(),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
                 const _StaggerFadeIn(
-                  delay: Duration(milliseconds: 160),
+                  delay: Duration(milliseconds: 95),
                   child: _LinkFirebaseCard(),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
                 const _StaggerFadeIn(
-                  delay: Duration(milliseconds: 210),
+                  delay: Duration(milliseconds: 125),
                   child: _EraseCard(),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
                 const _StaggerFadeIn(
-                  delay: Duration(milliseconds: 260),
+                  delay: Duration(milliseconds: 155),
                   child: _ExitSettingsCard(),
                 ),
               ],
             ),
-          ),
-        ),
       ],
     );
   }
 }
 
-/// Full-bleed settings masthead — same recipe as the Progress tab's own
-/// hero (ambient breathing blobs + fade/slide-down entrance) so Settings
-/// isn't a lone boxed card floating on a plain background.
-class _SettingsHero extends StatefulWidget {
-  const _SettingsHero({required this.title, required this.subtitle});
+/// Tab-panel entrance used by the top-tab shell — matches the mock's
+/// per-panel "rise" (fade + slide-up, 320ms, cubic-bezier(.2,.7,.3,1)).
+/// Deliberately does NOT crossfade with the outgoing panel the way
+/// `AnimatedSwitcher` does: when [Widget.key] changes (new tab selected),
+/// the old panel's Element is disposed and removed from the tree
+/// immediately — normal Flutter rebuild semantics, no exit transition —
+/// and only the new panel plays this one-shot entrance. That's what the
+/// mock does too (`panel.hidden = true` on the old one, then the new one
+/// gets its `rise` animation) — an `AnimatedSwitcher` here would keep both
+/// panels visible and overlapping for the transition's duration instead.
+class _PanelRise extends StatefulWidget {
+  const _PanelRise({super.key, required this.child});
 
-  final String title;
-  final String subtitle;
+  final Widget child;
 
   @override
-  State<_SettingsHero> createState() => _SettingsHeroState();
+  State<_PanelRise> createState() => _PanelRiseState();
 }
 
-class _SettingsHeroState extends State<_SettingsHero>
-    with TickerProviderStateMixin {
-  late final _entrance = AnimationController(
+class _PanelRiseState extends State<_PanelRise>
+    with SingleTickerProviderStateMixin {
+  late final _c = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 500),
+    duration: const Duration(milliseconds: 200),
   )..forward();
-
-  late final _breathe = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2600),
-  )..repeat(reverse: true);
-
-  late final _fade = CurvedAnimation(parent: _entrance, curve: Curves.easeOut);
-  late final _slide = Tween<Offset>(
-    begin: const Offset(0, -0.12),
-    end: Offset.zero,
-  ).animate(_fade);
+  late final _curved = CurvedAnimation(
+    parent: _c,
+    curve: const Cubic(0.2, 0.7, 0.3, 1.0),
+  );
 
   @override
   void dispose() {
-    _entrance.dispose();
-    _breathe.dispose();
+    _c.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 46),
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.teal, AppColors.tealDark],
-          ),
-        ),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            AnimatedBuilder(
-              animation: _breathe,
-              builder: (context, child) {
-                final t = Curves.easeInOut.transform(_breathe.value);
-                return Positioned(
-                  top: -95 + (6 * t),
-                  right: -50,
-                  child: Opacity(
-                    opacity: 0.05 + (0.03 * t),
-                    child: Container(
-                      width: 190,
-                      height: 190,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-            AnimatedBuilder(
-              animation: _breathe,
-              builder: (context, child) {
-                final t = Curves.easeInOut.transform(_breathe.value);
-                return Positioned(
-                  bottom: -70 - (5 * t),
-                  left: -36,
-                  child: Opacity(
-                    opacity: 0.08 + (0.04 * t),
-                    child: Container(
-                      width: 130,
-                      height: 130,
-                      decoration: const BoxDecoration(
-                        color: AppColors.gold,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-            FadeTransition(
-              opacity: _fade,
-              child: SlideTransition(
-                position: _slide,
-                child: Row(
-                  children: [
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.18),
-                        ),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Icon(
-                        Icons.tune_rounded,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.title,
-                            style: const TextStyle(
-                              fontSize: 19,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            widget.subtitle,
-                            style: const TextStyle(
-                              fontSize: 11.5,
-                              color: Colors.white70,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+    return FadeTransition(
+      opacity: _curved,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.03),
+          end: Offset.zero,
+        ).animate(_curved),
+        child: widget.child,
       ),
     );
   }
@@ -3070,11 +2525,14 @@ class _StaggerFadeInState extends State<_StaggerFadeIn>
     with SingleTickerProviderStateMixin {
   late final _c = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 380),
+    duration: const Duration(milliseconds: 280),
   );
-  late final _fade = CurvedAnimation(parent: _c, curve: Curves.easeOut);
+  late final _fade = CurvedAnimation(
+    parent: _c,
+    curve: const Cubic(0.2, 0.7, 0.3, 1.0),
+  );
   late final _slide = Tween<Offset>(
-    begin: const Offset(0, 0.12),
+    begin: const Offset(0, 0.04),
     end: Offset.zero,
   ).animate(_fade);
 
@@ -3304,20 +2762,29 @@ class _SyncCardState extends ConsumerState<_SyncCard> {
   @override
   Widget build(BuildContext context) {
     return SoftCard(
-      color: AppColors.mint,
-      borderColor: AppColors.mintBorder,
       padding: const EdgeInsets.all(18),
       child: Row(
         children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: AppColors.mint,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            alignment: Alignment.center,
+            child: const Icon(Icons.sync_rounded, size: 18, color: AppColors.teal),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Sync Now', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 const Text(
                   'Sync local device progress with cloud servers.',
-                  style: TextStyle(fontSize: 12, color: AppColors.tealDark),
+                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -3417,11 +2884,24 @@ class _EraseCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return SoftCard(
-      color: AppColors.coralTint,
-      borderColor: AppColors.coral,
       padding: const EdgeInsets.all(18),
       child: Row(
         children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: AppColors.coralTint,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            alignment: Alignment.center,
+            child: const Icon(
+              Icons.delete_outline_rounded,
+              size: 18,
+              color: AppColors.coral,
+            ),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -3430,10 +2910,10 @@ class _EraseCard extends ConsumerWidget {
                   'Erase Local Data',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 const Text(
                   'Permanently delete all stored profiles and progress data.',
-                  style: TextStyle(fontSize: 12, color: AppColors.ink),
+                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -3540,6 +3020,533 @@ class _ExitSettingsCard extends ConsumerWidget {
             ),
             onPressed: () => _confirmLogout(context, ref),
             child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------- progress details dialog
+
+void _showProgressDetailsDialog(BuildContext context, WidgetRef ref) {
+  showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: 'Learning Progress Details',
+    barrierColor: Colors.black54,
+    transitionDuration: const Duration(milliseconds: 260),
+    pageBuilder: (dialogContext, animation, secondaryAnimation) =>
+        const _ParentStudentProgressDetailsDialog(),
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      );
+      return FadeTransition(
+        opacity: curved,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.92, end: 1).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
+class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
+  const _ParentStudentProgressDetailsDialog({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final learner = ref.watch(sessionProvider.select((s) => s.learner));
+    final learnerId = learner?.id;
+    final learnerName = learner?.name ?? 'your child';
+    final learnerAvatar = learner?.avatar ?? '👦';
+    final kpis = ref.watch(parentKpiProvider);
+
+    if (learnerId == null) {
+      return Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        child: const Padding(
+          padding: EdgeInsets.all(20),
+          child: Text('No active profile found. Please select a child profile.'),
+        ),
+      );
+    }
+
+    final repo = ProgressRepository();
+    final records = repo.byLearnerId(learnerId);
+    final moduleSummaries = repo.summaryByModule(learnerId);
+
+    String formatDate(DateTime dt) {
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+      final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+      final minute = dt.minute.toString().padLeft(2, '0');
+      return '${months[dt.month - 1]} ${dt.day}, ${dt.year} $hour:$minute $ampm';
+    }
+
+    String getModuleTitle(String moduleId) {
+      try {
+        return coreModules.firstWhere((m) => m.id == moduleId).title;
+      } catch (_) {
+        return moduleId;
+      }
+    }
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 680),
+        child: Material(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(22),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 18, 12, 18),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppColors.teal, AppColors.tealDark],
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    LearnerAvatar(
+                      avatar: learnerAvatar,
+                      size: 40,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            learnerName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16.5,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Learning Progress Report',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Body
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Overview Stats Row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildOverviewTile(
+                              icon: Icons.check_circle_outline_rounded,
+                              value: '${kpis.accuracyPct.round()}%',
+                              label: 'Avg. Accuracy',
+                              color: AppColors.teal,
+                              bg: AppColors.mint,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildOverviewTile(
+                              icon: Icons.error_outline_rounded,
+                              value: '${kpis.errorCount}',
+                              label: 'Total Errors',
+                              color: AppColors.coral,
+                              bg: AppColors.coralTint,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildOverviewTile(
+                              icon: Icons.schedule_rounded,
+                              value: '${kpis.timeOnTaskMinutes}m',
+                              label: 'Time on Task',
+                              color: AppColors.gold,
+                              bg: AppColors.goldTint,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildOverviewTile(
+                              icon: Icons.local_fire_department_rounded,
+                              value: '${kpis.streak}d',
+                              label: 'Active Streak',
+                              color: Colors.orange,
+                              bg: Colors.orange.withOpacity(0.1),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 22),
+
+                      // Section: Adventure Mastery
+                      const Text(
+                        'ADVENTURE MASTERY',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textMuted,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (moduleSummaries.isEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.neutralTint,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text(
+                            'No adventure history yet.',
+                            style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+                          ),
+                        )
+                      else
+                        ...moduleSummaries.map((mod) {
+                          final title = getModuleTitle(mod.moduleId);
+                          return Card(
+                            elevation: 0,
+                            margin: const EdgeInsets.only(bottom: 8),
+                            color: AppColors.neutralTint,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          title,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.ink,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        '${mod.sessionCount} session${mod.sessionCount == 1 ? '' : 's'}',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.textMuted,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(99),
+                                          child: TweenAnimationBuilder<double>(
+                                            tween: Tween<double>(
+                                              begin: 0.0,
+                                              end: mod.accuracyPct / 100.0,
+                                            ),
+                                            duration: const Duration(milliseconds: 900),
+                                            curve: Curves.easeOutCubic,
+                                            builder: (context, val, child) {
+                                              return LinearProgressIndicator(
+                                                value: val,
+                                                backgroundColor: Colors.grey.shade200,
+                                                valueColor: AlwaysStoppedAnimation<Color>(
+                                                  mod.accuracyPct >= 80
+                                                      ? AppColors.teal
+                                                      : (mod.accuracyPct >= 60
+                                                          ? AppColors.gold
+                                                          : AppColors.coral),
+                                                ),
+                                                minHeight: 6,
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        '${mod.accuracyPct.round()}% accuracy',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: mod.accuracyPct >= 80
+                                              ? AppColors.tealDark
+                                              : (mod.accuracyPct >= 60
+                                                  ? AppColors.gold
+                                                  : AppColors.coral),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (mod.errorCount > 0) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${mod.errorCount} sequencing error${mod.errorCount == 1 ? '' : 's'} logged',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.coral,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                      const SizedBox(height: 22),
+
+                      // Section: Recent Activity
+                      const Text(
+                        'RECENT LESSONS',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textMuted,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (records.isEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.neutralTint,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text(
+                            'No activities logged yet.',
+                            style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+                          ),
+                        )
+                      else
+                        ...records.take(15).map((rec) {
+                          final title = getModuleTitle(rec.moduleId);
+                          final timeStr = formatDate(rec.completedAt);
+                          final durationMin = (rec.timeOnTaskSeconds / 60.0).toStringAsFixed(1);
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: AppColors.neutralTint,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: AppColors.creamBorder.withOpacity(0.5),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        title,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.ink,
+                                        ),
+                                      ),
+                                    ),
+                                    if (rec.assignedByTeacher)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.teal.withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Text(
+                                          'HOMEWORK',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.tealDark,
+                                            letterSpacing: 0.3,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      timeStr,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textMuted,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${durationMin}m on task',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const Divider(height: 12, thickness: 0.5),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.check_circle_outline_rounded,
+                                          size: 13,
+                                          color: rec.strokeAccuracyPct >= 80
+                                              ? AppColors.teal
+                                              : (rec.strokeAccuracyPct >= 60
+                                                  ? AppColors.gold
+                                                  : AppColors.coral),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Accuracy: ${rec.strokeAccuracyPct.round()}%',
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: rec.strokeAccuracyPct >= 80
+                                                ? AppColors.tealDark
+                                                : (rec.strokeAccuracyPct >= 60
+                                                    ? AppColors.gold
+                                                    : AppColors.coral),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.error_outline_rounded,
+                                          size: 13,
+                                          color: rec.sequencingErrors > 0
+                                              ? AppColors.coral
+                                              : AppColors.teal,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Errors: ${rec.sequencingErrors}',
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: rec.sequencingErrors > 0
+                                                ? AppColors.coral
+                                                : AppColors.tealDark,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverviewTile({
+    required IconData icon,
+    required String value,
+    required String label,
+    required Color color,
+    required Color bg,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 18, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                    color: AppColors.ink,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    color: AppColors.textMuted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

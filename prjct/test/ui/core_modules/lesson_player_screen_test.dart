@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salamlearn/data/models/curriculum/curriculum_models.dart';
+import 'package:salamlearn/logic/auth/session.dart';
 import 'package:salamlearn/logic/learner/learner_xp_provider.dart';
 import 'package:salamlearn/ui/core_modules/lesson_complete_screen.dart';
 import 'package:salamlearn/ui/core_modules/lesson_player_screen.dart';
@@ -21,7 +22,18 @@ class _FakeLearnerXpNotifier extends LearnerXpNotifier {
   void addXp(int amount) => state = state + amount;
 }
 
-Lesson _twoFlashcardActivityLesson() {
+/// `LessonPlayerScreen` also reads `sessionProvider` on lesson completion to
+/// write a `ProgressRecord` (FR-5.1) — `SessionNotifier.build()` normally
+/// reads the real Hive `settings` box, so it needs the same override
+/// treatment as `learnerXpProvider` above. Returning a learner-less state
+/// keeps the write a no-op without needing a real Hive box for progress
+/// either.
+class _FakeSessionNotifier extends SessionNotifier {
+  @override
+  SessionState build() => const SessionState();
+}
+
+Lesson _twoPronounceActivityLesson() {
   const card = FlashCard(
     id: 'c1',
     emoji: '🌟',
@@ -40,17 +52,17 @@ Lesson _twoFlashcardActivityLesson() {
     activities: [
       Activity(
         id: 'a1',
-        type: ActivityType.flashcard,
-        title: 'Flashcards One',
-        icon: '🃏',
+        type: ActivityType.pronounce,
+        title: 'Listen One',
+        icon: '🔊',
         xp: 10,
         cards: [card],
       ),
       Activity(
         id: 'a2',
-        type: ActivityType.flashcard,
-        title: 'Flashcards Two',
-        icon: '🃏',
+        type: ActivityType.pronounce,
+        title: 'Listen Two',
+        icon: '🔊',
         xp: 10,
         cards: [card],
       ),
@@ -63,43 +75,48 @@ void main() {
     'activities auto-advance with no manual "start next activity" step, '
     'and finishing the lesson awards XP/streak/badge then shows completion',
     (tester) async {
-      final lesson = _twoFlashcardActivityLesson();
+      final lesson = _twoPronounceActivityLesson();
 
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             learnerXpProvider.overrideWith(_FakeLearnerXpNotifier.new),
+            sessionProvider.overrideWith(_FakeSessionNotifier.new),
           ],
           child: MaterialApp(
-            home: LessonPlayerScreen(lesson: lesson, onClose: () {}),
+            home: LessonPlayerScreen(
+              lesson: lesson,
+              destinationId: 1,
+              onClose: () {},
+            ),
           ),
         ),
       );
       await tester.pump();
 
       // First activity showing, no completion screen yet.
-      expect(find.text('Flashcards One'), findsOneWidget);
+      expect(find.text('Listen One'), findsOneWidget);
       expect(find.text('1/2'), findsOneWidget);
       expect(find.byType(LessonCompleteScreen), findsNothing);
 
-      // Each activity here has exactly 1 card, so its own Next button
-      // already reads "✓ Done!" (the flashcard widget's "is this the last
-      // card in THIS activity's deck" state) even on the very first
-      // activity — that's the only button in the whole flow between one
-      // activity and the next; there is no separate "start" step anywhere.
-      await tester.tap(find.text('Tap to flip →'));
-      await tester.pump();
+      // Tap the speaker to "play" the clip (900ms mock playback, see
+      // `PronounceActivity`'s AUDIO PLUG POINT), which reveals the
+      // translation and enables the Next/Done button — the only button in
+      // the whole flow between one activity and the next; there is no
+      // separate "start" step anywhere.
+      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+      await tester.pump(const Duration(milliseconds: 950));
       await tester.tap(find.text('✓ Done!'));
       await tester.pump();
 
       // Auto-advanced straight into the second activity.
-      expect(find.text('Flashcards Two'), findsOneWidget);
+      expect(find.text('Listen Two'), findsOneWidget);
       expect(find.text('2/2'), findsOneWidget);
       expect(find.byType(LessonCompleteScreen), findsNothing);
 
       // Finish the last activity.
-      await tester.tap(find.text('Tap to flip →'));
-      await tester.pump();
+      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+      await tester.pump(const Duration(milliseconds: 950));
       await tester.tap(find.text('✓ Done!'));
       await tester.pump();
 

@@ -1,3 +1,5 @@
+import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../logic/teacher/teacher_providers.dart';
 import '../theme/app_colors.dart';
+import 'hot_seat_choral.dart';
 
 /// Classroom cast screen (mockup Figure 4.6, FR-6.4): forced 16:9
 /// landscape presentation view shown on the projector/TV under the
@@ -16,16 +19,24 @@ class CastScreen extends ConsumerStatefulWidget {
   ConsumerState<CastScreen> createState() => _CastScreenState();
 }
 
-class _CastScreenState extends ConsumerState<CastScreen>
-    with SingleTickerProviderStateMixin {
+class _CastScreenState extends ConsumerState<CastScreen> {
   int _currentLetterIdx = 0;
-  bool _choralPlaying = false;
-  bool _voicePlaying = false;
 
-  late final AnimationController _waveController = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 1),
-  );
+  // Real Hot Seat state (FR-6.6), mirrored here from HotSeatSheet's
+  // callbacks — Hot Seat only exists inside an active cast now, so this
+  // screen is the single source of truth for who's up and their last
+  // recorded tracing accuracy. The left column is permanently the Hot Seat
+  // panel (not in the SRS spec for anything else — the big letter/Play
+  // Audio display that used to live there is gone), and the right column's
+  // second card is permanently the Choral Controller, so neither needs an
+  // on/off toggle anymore.
+  String? _hotSeatStudent;
+  double? _hotSeatAccuracy;
+
+  // Which letter Hot Seat is actively tracing — once set, the vocab card
+  // follows this instead of the stepper's _currentLetterIdx, so the class
+  // sees the word for whatever the volunteer is actually drawing.
+  String? _hotSeatLetterChar;
 
   final List<Map<String, dynamic>> _castLetters = [
     {
@@ -74,7 +85,6 @@ class _CastScreenState extends ConsumerState<CastScreen>
 
   @override
   void dispose() {
-    _waveController.dispose();
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -82,22 +92,23 @@ class _CastScreenState extends ConsumerState<CastScreen>
     super.dispose();
   }
 
-  void _toggleChoral() {
-    setState(() {
-      _choralPlaying = !_choralPlaying;
-      if (_choralPlaying) {
-        _waveController.repeat(reverse: true);
-      } else {
-        _waveController.stop();
-      }
-    });
-  }
-
-  void _triggerVoice() async {
-    if (_voicePlaying) return;
-    setState(() => _voicePlaying = true);
-    await Future<void>.delayed(const Duration(milliseconds: 900));
-    if (mounted) setState(() => _voicePlaying = false);
+  // Opens Android's built-in Cast (Smart View) picker so the teacher can
+  // select the classroom Chromecast/Android TV; the OS then mirrors the
+  // device screen (this locked-landscape presentation view) to it.
+  Future<void> _openCastPicker() async {
+    try {
+      await const AndroidIntent(
+        action: 'android.settings.CAST_SETTINGS',
+        flags: [Flag.FLAG_ACTIVITY_NEW_TASK],
+      ).launch();
+    } on PlatformException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cast isn\'t available on this device.'),
+        ),
+      );
+    }
   }
 
   void _confirmEndCast() {
@@ -133,7 +144,10 @@ class _CastScreenState extends ConsumerState<CastScreen>
   @override
   Widget build(BuildContext context) {
     final activeClass = ref.watch(activeClassNameProvider);
-    final letter = _castLetters[_currentLetterIdx];
+    final letter = _castLetters.firstWhere(
+      (l) => l['char'] == _hotSeatLetterChar,
+      orElse: () => _castLetters[_currentLetterIdx],
+    );
 
     return PopScope(
       canPop: false,
@@ -154,23 +168,50 @@ class _CastScreenState extends ConsumerState<CastScreen>
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: Column(
+          child: Center(
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: SizedBox(
+                  width: 960,
+                  height: 540,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    child: Column(
               children: [
                 // Header Row
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.cast_connected,
-                        color: AppColors.mintGreen,
-                        size: 18,
+                    Tooltip(
+                      message: 'Cast to TV',
+                      child: InkWell(
+                        onTap: _openCastPicker,
+                        customBorder: const CircleBorder(),
+                        child: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [AppColors.mintGreen, AppColors.teal],
+                            ),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.mintGreen.withValues(alpha: 0.35),
+                                blurRadius: 14,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.cast_connected,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -197,15 +238,19 @@ class _CastScreenState extends ConsumerState<CastScreen>
                       ],
                     ),
                     const Spacer(),
-                    // Hot seat chip
+                    // Hot Seat indicator — the panel itself is permanently
+                    // the left column below, so this chip is just a status
+                    // label (who's up / their last accuracy), not a toggle.
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.gold,
-                        borderRadius: BorderRadius.circular(12),
+                        gradient: const LinearGradient(
+                          colors: [AppColors.goldSoft, AppColors.gold],
+                        ),
+                        borderRadius: BorderRadius.circular(999),
                         boxShadow: [
                           BoxShadow(
                             color: AppColors.gold.withValues(alpha: 0.24),
@@ -215,12 +260,37 @@ class _CastScreenState extends ConsumerState<CastScreen>
                         ],
                       ),
                       child: Row(
-                        children: const [
-                          Icon(Icons.airline_seat_recline_normal_rounded, size: 14, color: AppColors.ink),
-                          SizedBox(width: 6),
+                        children: [
+                          if (_hotSeatStudent != null) ...[
+                            Container(
+                              width: 18,
+                              height: 18,
+                              alignment: Alignment.center,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF3D2705),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                _hotSeatStudent![0].toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFFFFE8BF),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ] else ...[
+                            const Icon(Icons.airline_seat_recline_normal_rounded, size: 14, color: AppColors.ink),
+                            const SizedBox(width: 6),
+                          ],
                           Text(
-                            'Hot Seat: Ali',
-                            style: TextStyle(
+                            _hotSeatStudent == null
+                                ? 'Hot Seat'
+                                : _hotSeatAccuracy == null
+                                ? 'Hot Seat — $_hotSeatStudent'
+                                : 'Hot Seat — $_hotSeatStudent · ${_hotSeatAccuracy!.round()}%',
+                            style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w800,
                               color: AppColors.ink,
@@ -230,40 +300,33 @@ class _CastScreenState extends ConsumerState<CastScreen>
                       ),
                     ),
                     const SizedBox(width: 10),
-                    // Choral Controller chip
-                    GestureDetector(
-                      onTap: _toggleChoral,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _choralPlaying ? AppColors.teal : Colors.white.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: _choralPlaying ? Colors.transparent : Colors.white24,
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              _choralPlaying ? Icons.volume_up : Icons.volume_mute,
-                              size: 14,
+                    // Choral Controller indicator — the player itself is
+                    // permanently the right-hand card's content below (each
+                    // track has its own play/pause), so this chip is just a
+                    // label, not a toggle.
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        border: Border.all(color: Colors.white24),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.volume_up, size: 14, color: Colors.white),
+                          SizedBox(width: 6),
+                          Text(
+                            'Choral controller',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
                               color: Colors.white,
                             ),
-                            const SizedBox(width: 6),
-                            Text(
-                              _choralPlaying ? 'Talqeen Loop: ON' : 'Choral repeat',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -273,7 +336,10 @@ class _CastScreenState extends ConsumerState<CastScreen>
                 Expanded(
                   child: Row(
                     children: [
-                      // Left Column: Big Glowing Arabic Letter Display
+                      // Left Column: the Hot Seat panel (FR-6.6), permanently
+                      // — the big letter/Play Audio display that used to live
+                      // here isn't in the SRS spec, this card is designated
+                      // for Hot Seat tracing only.
                       Expanded(
                         flex: 4,
                         child: Container(
@@ -282,73 +348,18 @@ class _CastScreenState extends ConsumerState<CastScreen>
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(color: Colors.white12, width: 1.4),
                           ),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Positioned(
-                                top: 10,
-                                left: 14,
-                                child: Text(
-                                  'Letter ${letter['name']}',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white38,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                              // Calligraphy Glow
-                              Center(
-                                child: Container(
-                                  width: 140,
-                                  height: 140,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.02),
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: AppColors.teal.withValues(alpha: 0.15),
-                                        blurRadius: 50,
-                                        spreadRadius: 15,
-                                      )
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              Center(
-                                child: Text(
-                                  letter['char'] as String,
-                                  style: const TextStyle(
-                                    fontSize: 120,
-                                    fontWeight: FontWeight.w100,
-                                    color: Colors.white,
-                                    fontFamily: 'Roboto',
-                                  ),
-                                ),
-                              ),
-                              // Play Voice button overlay
-                              Positioned(
-                                bottom: 12,
-                                child: FloatingActionButton.extended(
-                                  onPressed: _triggerVoice,
-                                  backgroundColor: _voicePlaying ? AppColors.gold : AppColors.teal,
-                                  icon: Icon(
-                                    _voicePlaying ? Icons.record_voice_over : Icons.play_arrow_rounded,
-                                    color: Colors.white,
-                                    size: 18,
-                                  ),
-                                  label: Text(
-                                    _voicePlaying ? 'Pronouncing...' : 'Play Audio',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w800,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
+                          padding: const EdgeInsets.all(10),
+                          child: SingleChildScrollView(
+                            child: HotSeatSheet(
+                              onStudentPicked: (name) =>
+                                  setState(() => _hotSeatStudent = name),
+                              onAttemptSaved: (name, accuracyPct) => setState(() {
+                                _hotSeatStudent = name;
+                                _hotSeatAccuracy = accuracyPct;
+                              }),
+                              onLetterChanged: (char) =>
+                                  setState(() => _hotSeatLetterChar = char),
+                            ),
                           ),
                         ),
                       ),
@@ -432,7 +443,12 @@ class _CastScreenState extends ConsumerState<CastScreen>
                               ),
                             ),
                             const SizedBox(height: 10),
-                            // Card 2: Student Tracing Simulation & Choral Waveform
+                            // Card 2: Choral Controller (FR-6.6) — permanently
+                            // here, embedded directly (never a separate
+                            // sheet/screen). Hot Seat's tracing accuracy lives
+                            // in the left panel next to the canvas instead of
+                            // sharing this card, so the two never compete for
+                            // the same slot.
                             Expanded(
                               flex: 9,
                               child: Container(
@@ -442,84 +458,22 @@ class _CastScreenState extends ConsumerState<CastScreen>
                                   borderRadius: BorderRadius.circular(20),
                                   border: Border.all(color: Colors.white12, width: 1.4),
                                 ),
-                                child: Center(
-                                  child: SingleChildScrollView(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        if (_choralPlaying) ...[
-                                          const Text(
-                                            'CHORAL REPEAT ACTIVE (TALQEEN)',
-                                            style: TextStyle(
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.w800,
-                                              color: AppColors.mintGreen,
-                                              letterSpacing: 1.0,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          AnimatedBuilder(
-                                            animation: _waveController,
-                                            builder: (context, child) {
-                                              return Row(
-                                                mainAxisAlignment: MainAxisAlignment.center,
-                                                children: [
-                                                  for (int i = 0; i < 15; i++)
-                                                    Container(
-                                                      width: 3.5,
-                                                      height: 6 + (28 * (0.2 + 0.8 * (i % 2 == 0 ? _waveController.value : (1.0 - _waveController.value)))),
-                                                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                                                      decoration: BoxDecoration(
-                                                        color: AppColors.teal,
-                                                        borderRadius: BorderRadius.circular(99),
-                                                      ),
-                                                    ),
-                                                ],
-                                              );
-                                            },
-                                          ),
-                                        ] else ...[
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: const [
-                                              Text(
-                                                'HOT SEAT ACCURACY MONITOR',
-                                                style: TextStyle(
-                                                  fontSize: 9,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: AppColors.goldSoft,
-                                                  letterSpacing: 1.0,
-                                                ),
-                                              ),
-                                              Text(
-                                                '94% MATCH',
-                                                style: TextStyle(
-                                                  fontSize: 9.5,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: AppColors.mintGreen,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 6),
-                                          const ClipRRect(
-                                            borderRadius: BorderRadius.all(Radius.circular(4)),
-                                            child: LinearProgressIndicator(
-                                              value: 0.94,
-                                              minHeight: 8,
-                                              backgroundColor: Colors.white10,
-                                              color: AppColors.mintGreen,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          const Text(
-                                            'Ali is currently tracing the letters on the hot seat device.',
-                                            style: TextStyle(fontSize: 10.5, color: Colors.white54),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
+                                child: SingleChildScrollView(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'CHORAL CONTROLLER (TALQEEN)',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                          color: AppColors.mintGreen,
+                                          letterSpacing: 1.0,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      const ChoralPlayer(),
+                                    ],
                                   ),
                                 ),
                               ),
@@ -538,17 +492,16 @@ class _CastScreenState extends ConsumerState<CastScreen>
                     for (int i = 0; i < _castLetters.length; i++)
                       GestureDetector(
                         onTap: () => setState(() => _currentLetterIdx = i),
-                        child: Container(
-                          width: 12,
-                          height: 12,
-                          margin: const EdgeInsets.symmetric(horizontal: 5),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: i == _currentLetterIdx ? 22 : 8,
+                          height: 8,
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
                           decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: i == _currentLetterIdx ? AppColors.teal : Colors.transparent,
-                            border: Border.all(
-                              color: i == _currentLetterIdx ? Colors.transparent : Colors.white30,
-                              width: 1.5,
-                            ),
+                            borderRadius: BorderRadius.circular(99),
+                            color: i == _currentLetterIdx
+                                ? AppColors.mintGreen
+                                : Colors.white.withValues(alpha: 0.18),
                           ),
                         ),
                       ),
@@ -598,18 +551,37 @@ class _CastScreenState extends ConsumerState<CastScreen>
                       label: const Text('Next', style: TextStyle(fontSize: 12)),
                     ),
                     const SizedBox(width: 12),
-                    FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.coral,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [AppColors.coral, Color(0xFFB8431F)],
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        borderRadius: BorderRadius.circular(11),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.coral.withValues(alpha: 0.35),
+                            blurRadius: 14,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
                       ),
-                      onPressed: _confirmEndCast,
-                      icon: const Icon(Icons.close, size: 16),
-                      label: const Text('End cast', style: TextStyle(fontSize: 12)),
+                      child: TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        ),
+                        onPressed: _confirmEndCast,
+                        icon: const Icon(Icons.close, size: 15),
+                        label: const Text(
+                          'End cast',
+                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -618,7 +590,11 @@ class _CastScreenState extends ConsumerState<CastScreen>
           ),
         ),
       ),
-      ),
-    );
+    ),
+  ),
+),
+),
+),
+);
   }
 }

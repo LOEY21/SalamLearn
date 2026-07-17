@@ -1,9 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive/hive.dart';
 
 import '../../data/models/class_section.dart';
+import '../../data/models/enrollment.dart';
 import '../../data/models/learner_profile.dart';
 import '../../data/repositories/class_repository.dart';
 import '../../data/repositories/learner_repository.dart';
+import '../../data/remote/firestore_mirror.dart';
+import '../../data/local/hive_boxes.dart';
 import '../auth/session.dart';
 
 /// Every learner the active parent has created (FR-2.3) — a parent isn't
@@ -20,8 +24,11 @@ final parentLearnersProvider = Provider<List<LearnerProfile>>((ref) {
   // changed activeParentId, so the newly-created sibling silently never
   // showed up anywhere reading this provider). Watching the active
   // learner's id forces a recompute on every create/switch/edit, which
-  // covers every path that currently mutates the roster.
+  // covers every path that currently mutates the roster. Also watches
+  // `learnerSyncProvider` so remote deletions (admin web panel) trigger a
+  // re-read from Hive regardless of which learner was removed.
   ref.watch(sessionProvider.select((s) => s.learner?.id));
+  ref.watch(learnerSyncProvider);
   if (parentId == null) return const [];
   return LearnerRepository().byParentId(parentId);
 });
@@ -55,3 +62,50 @@ final learnerClassProvider = Provider.family<ClassSection?, String>((ref, learne
 /// Call after successfully joining a class via invitation code, so every
 /// widget reading [learnerClassProvider] recomputes.
 void refreshLearnerClass(WidgetRef ref) => ref.read(_classRefreshProvider.notifier).bump();
+
+/// Listens to Firestore enrollment changes for the parent's learners and
+/// syncs to Hive in real time. Bumps [_classRefreshProvider] on every change
+/// so the parent dashboard reflects admin-web enroll/unenroll immediately.
+final parentEnrollmentSyncProvider = StreamProvider.autoDispose<void>((ref) async* {
+  final learners = ref.watch(parentLearnersProvider);
+  final learnerIds = learners.map((l) => l.id).whereType<String>().toList();
+  if (learnerIds.isEmpty) return;
+
+  final enrollmentsBox = Hive.box<Enrollment>(HiveBoxes.enrollments);
+  await for (final remoteIds in FirestoreMirror().watchEnrollmentsForLearners(learnerIds)) {
+    final local = enrollmentsBox.values
+        .where((e) => learnerIds.contains(e.learnerId))
+        .map((e) => '${e.classId}_${e.learnerId}')
+        .toSet();
+
+    final added = remoteIds.difference(local);
+    final removed = local.difference(remoteIds);
+
+    for (final docId in added) {
+      final parts = docId.split('_');
+      if (parts.length < 2) continue;
+      final classId = parts.sublist(0, parts.length - 1).join('_');
+      final learnerId = parts.last;
+      final key = '$classId:$learnerId';
+      if (enrollmentsBox.get(key) != null) continue;
+      await enrollmentsBox.put(
+        key,
+        Enrollment(classId: classId, learnerId: learnerId, enrolledAt: DateTime.now()),
+      );
+    }
+
+    for (final docId in removed) {
+      final parts = docId.split('_');
+      if (parts.length < 2) continue;
+      final classId = parts.sublist(0, parts.length - 1).join('_');
+      final learnerId = parts.last;
+      await enrollmentsBox.delete('$classId:$learnerId');
+    }
+
+    if (added.isNotEmpty || removed.isNotEmpty) {
+      ref.read(_classRefreshProvider.notifier).bump();
+    }
+
+    yield null;
+  }
+});

@@ -17,9 +17,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Noor Energy'), findsOneWidget);
-    expect(find.text('OK'), findsOneWidget);
+    expect(find.text('Okay, I\'ll wait'), findsOneWidget);
 
-    await tester.tap(find.text('OK'));
+    await tester.tap(find.text('Okay, I\'ll wait'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Noor Energy'), findsNothing);

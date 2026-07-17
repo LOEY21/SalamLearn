@@ -1,14 +1,18 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../data/curriculum_data.dart';
+import '../../data/models/curriculum/curriculum_models.dart';
+import '../../data/repositories/class_repository.dart';
+import '../../data/repositories/progress_repository.dart';
 import '../../logic/auth/session.dart';
+import '../../logic/learner/map_zoom_provider.dart';
 import '../../logic/learner/noor_energy_provider.dart';
 import '../../logic/recent_module_provider.dart';
-import '../../logic/teacher/teacher_providers.dart';
 import '../core_modules/lesson_player_screen.dart';
 import '../core_modules/module_registry.dart';
 import '../teacher_dashboard/teacher_dashboard_screen.dart'
@@ -19,76 +23,51 @@ import 'adventure_map_top_bar.dart';
 import 'destination_levels_sheet.dart';
 import 'noor_energy_resting_sheet.dart';
 
-/// Matches destination ids to the free-text module names teachers pick
-/// when assigning homework — same matching rules `StudentHubScreen` used
-/// before this screen replaced it (kept in sync here since assignment
-/// gating is still module-name-based on the teacher side). Re-keyed from
-/// the original 5 placeholder module ids to the 7 real destinations the
-/// Wireframe 0.3 curriculum port introduced.
-bool _doesModuleNameMatchId(String name, String id) {
-  final cleanName = name.toLowerCase();
-  return switch (id) {
-    'village-of-salaam' =>
-      cleanName.contains('greeting') ||
-          cleanName.contains('salaam') ||
-          cleanName.contains('expression') ||
-          cleanName.contains('dua'),
-    'desert-of-letters' =>
-      cleanName.contains('tracing') ||
-          cleanName.contains('alif') ||
-          cleanName.contains('alphabet') ||
-          cleanName.contains('letter') ||
-          cleanName.contains('harakat'),
-    'garden-of-words' =>
-      cleanName.contains('vocabulary') ||
-          cleanName.contains('vocab') ||
-          cleanName.contains('word') ||
-          cleanName.contains('sounds') ||
-          cleanName.contains('flashcards'),
-    'river-of-sirah' =>
-      cleanName.contains('sirah') ||
-          cleanName.contains('recitation') ||
-          cleanName.contains('pronunciation') ||
-          cleanName.contains('ج') ||
-          cleanName.contains('qur\'an') ||
-          cleanName.contains('hadith') ||
-          cleanName.contains('stories') ||
-          cleanName.contains('story') ||
-          cleanName.contains('prophet'),
-    'masjid-of-salah' =>
-      cleanName.contains('salah') ||
-          cleanName.contains('prayer') ||
-          cleanName.contains('wudu') ||
-          cleanName.contains('fiqh'),
-    'mountain-of-iman' =>
-      cleanName.contains('aqidah') ||
-          cleanName.contains('iman') ||
-          cleanName.contains('values') ||
-          cleanName.contains('sequence') ||
-          cleanName.contains('matcher') ||
-          cleanName.contains('sort') ||
-          cleanName.contains('match'),
-    'quran-corner' =>
-      cleanName.contains('quran review') ||
-          cleanName.contains('qur\'an review') ||
-          cleanName.contains('knowledge'),
-    _ => false,
-  };
-}
 
-// First-pass even interpolation across the map height for the 7 real
-// destinations (was 5 hand-tuned fractions recorded from the approved Task 7
-// HTML preview). These 7 have NOT been visually tuned against the actual
-// map background art yet — same tuning pass the original 5 got — treat as
-// a placeholder layout until checked against the real artwork.
+
+
+/// The Wireframe 0.3 curriculum entry each core module represents — looked
+/// up once via `ModuleInfo.destinationId`, since the map's real layout
+/// (`mapX`/`mapY`) and per-level color live on `Destination`, not on
+/// `ModuleInfo` itself.
+Destination _destinationFor(ModuleInfo module) =>
+    curriculum.firstWhere((d) => d.id == module.destinationId);
+
+/// `mapX`/`mapY` on each `Destination` are pixel coordinates from the
+/// approved Wireframe 0.3 preview's 390x1980 canvas (village at the
+/// bottom, Hall of Knowledge at the top) — these fractions place every
+/// node exactly where that preview does, instead of a straight-line
+/// placeholder spacing.
+const _wireframeCanvasWidth = 390.0;
+const _wireframeCanvasHeight = 1980.0;
+
 final _nodePositions = <String, double>{
-  for (final (i, module) in coreModules.indexed)
-    module.id: 0.824 - i * (0.824 - 0.077) / (coreModules.length - 1),
+  for (final module in coreModules)
+    module.id: _destinationFor(module).mapY / _wireframeCanvasHeight,
 };
+
+final _nodePositionsX = <String, double>{
+  for (final module in coreModules)
+    module.id: _destinationFor(module).mapX / _wireframeCanvasWidth,
+};
+
+/// Each destination's own accent color (from the wireframe's `color` field)
+/// — every level reads as visually distinct, not just by number.
+final _nodeColors = <String, Color>{
+  for (final module in coreModules)
+    module.id: _hexColor(_destinationFor(module).color),
+};
+
+Color _hexColor(String hex) {
+  final h = hex.replaceFirst('#', '');
+  return Color(int.parse('FF$h', radix: 16));
+}
 
 /// The exact overshoot easing the approved preview uses everywhere (nodes,
 /// pills, mascot, speech bubble): `cubic-bezier(0.34, 1.56, 0.64, 1)`.
 const _overshoot = Cubic(0.34, 1.56, 0.64, 1.0);
+
+const _debugUnlockAllModules = true;
 
 enum _NodeState { locked, available, current, completed }
 
@@ -99,9 +78,43 @@ class AdventureMapScreen extends ConsumerStatefulWidget {
   ConsumerState<AdventureMapScreen> createState() => _AdventureMapScreenState();
 }
 
-class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen> {
+class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
+    with TickerProviderStateMixin {
   final _scrollController = ScrollController();
-  static const _mapHeight = 1821.0;
+  // Resting balance point: zoomed in enough to read as a tall scrollable
+  // journey (not the whole 7-destination map flattened onto one screen),
+  // without over-cropping the background video.
+  static const _baseMapHeight = 1300.0;
+
+  // Pinch-zoom tracking. Uses raw `Listener` pointer events rather than a
+  // `GestureDetector`'s scale recognizer so a 2-finger pinch never steals
+  // the gesture arena from the map's own `SingleChildScrollView` —
+  // one-finger scrolling keeps working untouched underneath.
+  final Map<int, Offset> _activePointers = {};
+  double? _pinchStartDistance;
+  double _pinchStartZoom = 1.0;
+  double _pinchZoom = 1.0;
+  late final _release = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 350),
+  );
+  double _releaseFromZoom = 1.0;
+
+  double get _mapHeight => _baseMapHeight * _pinchZoom;
+
+  /// How much the pinch has moved away from resting (1.0) before the top
+  /// bar / bottom nav are fully faded out — same distance either direction,
+  /// so zooming in and zooming out both clear the chrome away.
+  static const _chromeFadeRange = 0.12;
+
+  void _setPinchZoom(double value) {
+    setState(() => _pinchZoom = value.clamp(0.6, 1.6));
+    final fade = (1.0 - (_pinchZoom - 1.0).abs() / _chromeFadeRange).clamp(
+      0.0,
+      1.0,
+    );
+    ref.read(mapZoomProvider.notifier).set(fade);
+  }
 
   @override
   void initState() {
@@ -113,11 +126,50 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen> {
       final target = (_mapHeight * fraction) - 300;
       _scrollController.jumpTo(target.clamp(0, _mapHeight));
     });
+    _release.addListener(() {
+      final t = Curves.easeOutCubic.transform(_release.value);
+      _setPinchZoom(_releaseFromZoom + (1.0 - _releaseFromZoom) * t);
+    });
+  }
+
+  void _onPointerDown(PointerDownEvent event) {
+    _activePointers[event.pointer] = event.position;
+    if (_activePointers.length == 2) {
+      _release.stop();
+      final pts = _activePointers.values.toList();
+      _pinchStartDistance = (pts[0] - pts[1]).distance;
+      _pinchStartZoom = _pinchZoom;
+    }
+  }
+
+  void _onPointerMove(PointerMoveEvent event) {
+    if (!_activePointers.containsKey(event.pointer)) return;
+    _activePointers[event.pointer] = event.position;
+    final startDistance = _pinchStartDistance;
+    if (_activePointers.length != 2 || startDistance == null) return;
+    final pts = _activePointers.values.toList();
+    final distance = (pts[0] - pts[1]).distance;
+    // Ratio < 1 (fingers moved closer together) zooms out; ratio > 1
+    // (spread apart) zooms in.
+    final ratio = distance / startDistance;
+    _setPinchZoom(_pinchStartZoom * ratio);
+  }
+
+  void _onPointerEnd(PointerEvent event) {
+    _activePointers.remove(event.pointer);
+    if (_activePointers.length < 2) {
+      _pinchStartDistance = null;
+      if (_pinchZoom != 1.0) {
+        _releaseFromZoom = _pinchZoom;
+        _release.forward(from: 0);
+      }
+    }
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
+    _release.dispose();
     super.dispose();
   }
 
@@ -126,32 +178,77 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen> {
   /// debug override is on, or a teacher has actually assigned it (per class
   /// homework or this student's own assignment list) — otherwise it's
   /// locked, matching the "Locked by ustadzah" messaging learners already
-  /// know from the old Home tab.
+  /// know from the old
   bool _isModuleAssigned(String moduleId) {
+    if (_debugUnlockAllModules) return true;
     final override = ref.watch(progressionOverrideProvider);
     if (override) return true;
 
-    final classHomeworks = ref.watch(classHomeworkProvider);
-    final isClassAssigned = classHomeworks.any((hw) {
-      final moduleName = hw['module'] as String? ?? '';
-      return _doesModuleNameMatchId(moduleName, moduleId);
-    });
-    if (isClassAssigned) return true;
+    // 1. Sequential unlocking:
+    final completed = _completedLessons;
+    final index = coreModules.indexWhere((m) => m.id == moduleId);
+    if (index <= 0) return true; // First module is always unlocked
+
+    // Check if previous module is completed
+    final prevModule = coreModules[index - 1];
+    final dest = curriculum.firstWhere((d) => d.id == prevModule.destinationId, orElse: () => curriculum.first);
+    final isPrevCompleted = dest.lessons.every((lesson) => completed.contains(lesson.id));
+    if (isPrevCompleted) return true;
+
+    // 2. Teacher assignment override (unlocks the module early):
+    final learner = ref.watch(sessionProvider).learner;
+    if (learner == null) return false;
+    final learnerId = learner.id;
+    if (learnerId == null) return false;
+
+    final enrollments = ClassRepository().byLearnerId(learnerId);
+    final enrolledClassIds = enrollments.map((e) => e.classId).toSet();
+
+    for (final classId in enrolledClassIds) {
+      final classAssignments = ClassRepository().assignmentsFor(classId: classId, learnerId: null);
+      if (classAssignments.any((a) => a.moduleId == moduleId)) return true;
+
+      final personalAssignments = ClassRepository().assignmentsFor(classId: classId, learnerId: learnerId);
+      if (personalAssignments.any((a) => a.moduleId == moduleId)) return true;
+    }
+
+    return false;
+  }
+
+  /// How far (1–3) a teacher has allowed [moduleId] to be played into.
+  /// On the main map, sequential levels are fully unlocked so students can play self-paced.
+  int _maxLevelFor(String moduleId) {
+    return 3;
+  }
+
+  /// How many lessons within the top level are unlocked — on the main map, this is uncapped.
+  int? _maxLessonsFor(String moduleId) {
+    return null;
+  }
+
+  /// True if [moduleId] is assigned (class-wide or per-student) with a due
+  /// date already in the past — drives the small overdue badge on the map node.
+  bool _isModuleOverdue(String moduleId) {
+    if (ref.watch(progressionOverrideProvider)) return false;
+    final now = DateTime.now();
 
     final learner = ref.watch(sessionProvider).learner;
-    if (learner != null) {
-      final students = ref.watch(teacherRosterProvider);
-      final currentStudent = students.firstWhere(
-        (s) => s['learnerId'] == learner.id,
-        orElse: () => <String, dynamic>{},
-      );
-      final studentAssigned =
-          currentStudent['assignedModules'] as List<dynamic>? ?? [];
-      final isStudentAssigned = studentAssigned.any((hw) {
-        final moduleText = hw as String? ?? '';
-        return _doesModuleNameMatchId(moduleText, moduleId);
-      });
-      if (isStudentAssigned) return true;
+    if (learner == null) return false;
+    final learnerId = learner.id;
+    if (learnerId == null) return false;
+
+    final enrollments = ClassRepository().byLearnerId(learnerId);
+    final enrolledClassIds = enrollments.map((e) => e.classId).toSet();
+
+    for (final classId in enrolledClassIds) {
+      final classAssignments = ClassRepository().assignmentsFor(classId: classId, learnerId: null);
+      for (final a in classAssignments) {
+        if (a.moduleId == moduleId && a.dueDate.isBefore(now)) return true;
+      }
+      final personalAssignments = ClassRepository().assignmentsFor(classId: classId, learnerId: learnerId);
+      for (final a in personalAssignments) {
+        if (a.moduleId == moduleId && a.dueDate.isBefore(now)) return true;
+      }
     }
     return false;
   }
@@ -181,7 +278,7 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen> {
         ),
         title: Text('$moduleTitle is Locked'),
         content: const Text(
-          'This module is not currently assigned by your teacher. Please ask your teacher or parent to assign it to you!',
+          'This module is not currently unlocked. Complete the previous module first, or complete your teacher-assigned homework to unlock new modules!',
         ),
         actions: [
           FilledButton(
@@ -194,39 +291,40 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen> {
     );
   }
 
-  // No real progress-tracking backend exists yet (placeholder phase, per
-  // this repo's standing constraint) — nothing is ever actually marked
-  // "completed" here, so every level in `DestinationLevelsSheet` reads as
-  // unlocked-from-scratch. Real completion tracking is a follow-up, not
-  // part of this port.
-  static const _completedLessons = <String>{};
+  /// Every lesson this learner has actually finished, read fresh from
+  /// [ProgressRepository] each time a level sheet opens — drives
+  /// `DestinationLevelsSheet`'s real per-lesson/per-level unlock gating.
+  Set<String> get _completedLessons {
+    final learnerId = ref.read(sessionProvider).learner?.id;
+    if (learnerId == null) return const {};
+    return ProgressRepository().completedLessonIds(learnerId);
+  }
 
-  void _onNodeTap(ModuleInfo module, bool isAssigned) {
-    if (!isAssigned) {
-      _showLockedDialog(module.title);
-      return;
-    }
-    final energy = ref.read(noorEnergyProvider);
-    if (!energy.hasEnergy) {
-      showNoorEnergyRestingSheet(context);
-      return;
-    }
-    final destination = curriculum.firstWhere(
-      (d) => d.id == module.destinationId,
-    );
+  /// Opens the level selection sheet for [destination] and [module].
+  /// When the player closes a lesson, this is called again so the user always
+  /// lands back on the level selection — never on the bare map.
+  void _openLevelSheet(ModuleInfo module, Destination destination) {
     DestinationLevelsSheet.show(
       context,
       destination: destination,
       completedLessons: _completedLessons,
-      noorEnergy: energy.current,
+      maxLevel: _maxLevelFor(module.id),
+      maxLessons: _maxLessonsFor(module.id),
+      noorEnergy: ref.read(noorEnergyProvider).current,
       onStartLesson: (lesson, isNewLevel) {
         ref.read(noorEnergyProvider.notifier).consume();
         ref.read(recentModuleProvider.notifier).interactWith(module.id);
-        Navigator.of(context).push(
+        Navigator.of(context, rootNavigator: true).push(
           MaterialPageRoute<void>(
             builder: (_) => LessonPlayerScreen(
               lesson: lesson,
-              onClose: () => Navigator.of(context).pop(),
+              destinationId: destination.id,
+              onClose: () {
+                // Close the lesson player
+                Navigator.of(context, rootNavigator: true).pop();
+                // Always go back to the level selection sheet
+                _openLevelSheet(module, destination);
+              },
             ),
           ),
         );
@@ -234,57 +332,119 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen> {
     );
   }
 
+  void _onNodeTap(ModuleInfo module, bool isAssigned) {
+    if (!isAssigned) {
+      _showLockedDialog(module.title);
+      return;
+    }
+    final energy = ref.read(noorEnergyProvider);
+    if (!_debugUnlockAllModules && !energy.hasEnergy) {
+      showNoorEnergyRestingSheet(context);
+      return;
+    }
+    final destination = curriculum.firstWhere(
+      (d) => d.id == module.destinationId,
+    );
+    _openLevelSheet(module, destination);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final currentId = ref.watch(recentModuleProvider) ?? 'tracing';
+    final currentId = ref.watch(recentModuleProvider) ?? coreModules.first.id;
     final learnerAvatar = ref.watch(sessionProvider).learner?.avatar;
+    final chromeFade = ref.watch(mapZoomProvider);
 
     return Scaffold(
       backgroundColor: AppColors.cream,
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            controller: _scrollController,
-            // `HubShell`'s outer Scaffold uses `extendBody: true` so the
-            // floating pill nav doesn't shorten this screen's visible
-            // height. No bottom padding here — matching the approved
-            // preview exactly, the nav simply floats *over* whatever's
-            // currently at the bottom of the scroll, the same way it does
-            // in dumps/adventure_map_preview/preview.html. Padding here
-            // would just add dead cream space past the image's real end.
-            child: SizedBox(
-              height: _mapHeight,
-              child: Stack(
-                children: [
-                  const Positioned.fill(child: _MapVideoBackground()),
-                  const Positioned.fill(child: _AmbientBreathing()),
-                  const _MapSparkles(),
-                  for (final (i, module) in coreModules.indexed)
-                    _MapNode(
-                      key: ValueKey(module.id),
-                      module: module,
-                      topFraction: _nodePositions[module.id] ?? 0.5,
-                      mapHeight: _mapHeight,
-                      state: _stateFor(
-                        module,
-                        currentId,
-                        _isModuleAssigned(module.id),
-                      ),
-                      entranceDelay: Duration(milliseconds: 40 + i * 50),
-                      onTap: () =>
-                          _onNodeTap(module, _isModuleAssigned(module.id)),
+      body: Listener(
+        onPointerDown: _onPointerDown,
+        onPointerMove: _onPointerMove,
+        onPointerUp: _onPointerEnd,
+        onPointerCancel: _onPointerEnd,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Never shorter than the viewport: at low pinch-zoom,
+            // `_mapHeight` alone can end up shorter than the screen,
+            // leaving bare cream space below the map once scrolled to the
+            // bottom. Flooring it at the viewport height instead makes
+            // `BoxFit.cover` crop a touch more off the video at that point
+            // — no visible seam, since it's already covering by design —
+            // and keeps the map filling the whole screen at every zoom
+            // level.
+            final effectiveMapHeight = math.max(
+              _mapHeight,
+              constraints.maxHeight,
+            );
+            return Stack(
+              children: [
+                SingleChildScrollView(
+                  controller: _scrollController,
+                  // `HubShell`'s outer Scaffold uses `extendBody: true` so
+                  // the floating pill nav doesn't shorten this screen's
+                  // visible height. No bottom padding here — matching the
+                  // approved preview exactly, the nav simply floats *over*
+                  // whatever's currently at the bottom of the scroll, the
+                  // same way it does in
+                  // dumps/adventure_map_preview/preview.html. Padding here
+                  // would just add dead cream space past the image's real
+                  // end.
+                  child: SizedBox(
+                    height: effectiveMapHeight,
+                    child: Stack(
+                      children: [
+                        const Positioned.fill(child: _MapVideoBackground()),
+                        const Positioned.fill(child: _AmbientBreathing()),
+                        const _MapSparkles(),
+                        for (final (i, module) in coreModules.indexed)
+                          _MapNode(
+                            key: ValueKey(module.id),
+                            module: module,
+                            topFraction: _nodePositions[module.id] ?? 0.5,
+                            left:
+                                constraints.maxWidth *
+                                (_nodePositionsX[module.id] ?? 0.33),
+                            mapHeight: effectiveMapHeight,
+                            color: _nodeColors[module.id] ?? AppColors.teal,
+                            state: _stateFor(
+                              module,
+                              currentId,
+                              _isModuleAssigned(module.id),
+                            ),
+                            overdue: _isModuleOverdue(module.id),
+                            entranceDelay: Duration(milliseconds: 40 + i * 50),
+                            onTap: () => _onNodeTap(
+                              module,
+                              _isModuleAssigned(module.id),
+                            ),
+                          ),
+                        _MascotAvatar(
+                          topFraction: _nodePositions[currentId] ?? 0.5,
+                          left:
+                              constraints.maxWidth *
+                              (_nodePositionsX[currentId] ?? 0.33),
+                          mapHeight: effectiveMapHeight,
+                          avatar: learnerAvatar,
+                        ),
+                      ],
                     ),
-                  _MascotAvatar(
-                    topFraction: _nodePositions[currentId] ?? 0.5,
-                    mapHeight: _mapHeight,
-                    avatar: learnerAvatar,
                   ),
-                ],
-              ),
-            ),
-          ),
-          const SafeArea(child: AdventureMapTopBar()),
-        ],
+                ),
+                IgnorePointer(
+                  ignoring: chromeFade < 0.5,
+                  child: Opacity(
+                    opacity: chromeFade,
+                    child: Transform.translate(
+                      offset: Offset(0, -16 * (1 - chromeFade)),
+                      child: const SafeArea(
+                        child: AdventureMapTopBar(),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -514,16 +674,22 @@ class _MapNode extends StatefulWidget {
     super.key,
     required this.module,
     required this.topFraction,
+    required this.left,
     required this.mapHeight,
+    required this.color,
     required this.state,
+    required this.overdue,
     required this.entranceDelay,
     required this.onTap,
   });
 
   final ModuleInfo module;
   final double topFraction;
+  final double left;
   final double mapHeight;
+  final Color color;
   final _NodeState state;
+  final bool overdue;
   final Duration entranceDelay;
   final VoidCallback onTap;
 
@@ -621,132 +787,236 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     widget.onTap();
   }
 
+  /// Each level keeps its own destination color (from the wireframe) as
+  /// its badge fill — only "locked" overrides to a neutral gray. The
+  /// number/icon stays white on top, same contrast pattern every state
+  /// already used, just recoloring the fill per destination instead of
+  /// per state.
   (Color, Color) _colorsFor(_NodeState state) {
-    return switch (state) {
-      _NodeState.completed => (AppColors.adventureGreen, Colors.white),
-      _NodeState.current => (AppColors.gold, Colors.white),
-      _NodeState.available => (AppColors.adventureBlue, Colors.white),
-      _NodeState.locked => (const Color(0xFFC9C2AE), const Color(0xFF7A8B85)),
-    };
+    if (state == _NodeState.locked) {
+      return (const Color(0xFFC9C2AE), const Color(0xFF7A8B85));
+    }
+    return (widget.color, Colors.white);
   }
 
   @override
   Widget build(BuildContext context) {
     final isCurrent = widget.state == _NodeState.current;
-    final size = isCurrent ? 78.0 : 64.0;
+    // Small enough to sit on the path without covering the artwork's own
+    // landmarks (buildings, trees) — was 64-78px, oversized against the
+    // background's actual scale.
+    final size = isCurrent ? 40.0 : 34.0;
     final (bg, fg) = _colorsFor(widget.state);
 
     Widget icon = switch (widget.state) {
       _NodeState.locked => const Icon(
         Icons.lock_rounded,
         color: Color(0xFF7A8B85),
+        size: 16,
       ),
-      _NodeState.completed => Icon(Icons.check_rounded, color: fg, size: 28),
-      _ => Icon(widget.module.icon, color: fg),
+      _NodeState.completed => Icon(Icons.check_rounded, color: fg, size: 18),
+      // Numbered badge (1-7, the destination's position on the journey)
+      // rather than the module's topic icon — makes the map read as a
+      // level sequence at a glance.
+      _ => Text(
+        '${widget.module.destinationId}',
+        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: fg),
+      ),
     };
 
     return Positioned(
       top: widget.mapHeight * widget.topFraction - size / 2,
-      left: 130, // matches the approved preview's .node { left: 130px }
-      child: Column(
-        children: [
-          AnimatedBuilder(
-            animation: _animations,
-            builder: (context, child) {
-              final entranceT = _overshoot.transform(_entrance.value);
-              final tiltT = Curves.easeInOut.transform(_idleTilt.value);
-              final pulseT = Curves.easeInOut.transform(_pulse.value);
-              final wobbleT = Curves.easeInOut.transform(_wobble.value);
+      left: widget.left - size / 2,
+      child: AnimatedBuilder(
+        animation: _animations,
+        builder: (context, child) {
+          final entranceT = _overshoot.transform(_entrance.value);
+          final tiltT = Curves.easeInOut.transform(_idleTilt.value);
+          final pulseT = Curves.easeInOut.transform(_pulse.value);
+          final wobbleT = Curves.easeInOut.transform(_wobble.value);
 
-              final scale = 0.5 + 0.5 * entranceT;
-              final opacity = entranceT.clamp(0.0, 1.0);
-              final tiltAngle =
-                  (widget.state == _NodeState.current ||
-                      widget.state == _NodeState.available)
-                  ? (tiltT * 2 - 1) *
-                        0.07 // ±4deg in radians
-                  : 0.0;
-              final wobbleDx = widget.state == _NodeState.locked
-                  ? (wobbleT < 0.5 ? -4.0 : 4.0) *
-                        (1 - (wobbleT - 0.5).abs() * 2)
-                  : 0.0;
-              final glowSpread = isCurrent ? 6 + 6 * pulseT : 0.0;
+          final scale = 0.5 + 0.5 * entranceT;
+          final opacity = entranceT.clamp(0.0, 1.0);
+          final tiltAngle =
+              (widget.state == _NodeState.current ||
+                  widget.state == _NodeState.available)
+              ? (tiltT * 2 - 1) *
+                    0.07 // ±4deg in radians
+              : 0.0;
+          final wobbleDx = widget.state == _NodeState.locked
+              ? (wobbleT < 0.5 ? -4.0 : 4.0) * (1 - (wobbleT - 0.5).abs() * 2)
+              : 0.0;
+          final glowSpread = isCurrent ? 6 + 6 * pulseT : 0.0;
 
-              return Opacity(
-                opacity: opacity,
-                child: Transform.translate(
-                  offset: Offset(wobbleDx, 0),
-                  child: Transform.scale(
-                    scale: scale,
-                    child: Transform.rotate(
-                      angle: tiltAngle,
-                      child: Semantics(
-                        button: true,
-                        label: widget.state == _NodeState.locked
-                            ? '${widget.module.title} module, locked by teacher'
-                            : '${widget.module.title} module',
-                        child: Material(
-                          color: Colors.transparent,
-                          shape: const CircleBorder(),
-                          child: InkWell(
-                            key: ValueKey('node-badge-${widget.module.id}'),
-                            customBorder: const CircleBorder(),
-                            onTap: _handleTap,
-                            child: Container(
-                              width: size,
-                              height: size,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: bg,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 4,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.25),
-                                    blurRadius: 14,
-                                    offset: const Offset(0, 6),
+          return Opacity(
+            opacity: opacity,
+            child: Transform.translate(
+              offset: Offset(wobbleDx, 0),
+              child: Transform.scale(
+                scale: scale,
+                child: Transform.rotate(
+                  angle: tiltAngle,
+                  child: Semantics(
+                    button: true,
+                    label: widget.state == _NodeState.locked
+                        ? '${widget.module.title} module, locked by teacher'
+                        : '${widget.module.title} module',
+                    child: Material(
+                      color: Colors.transparent,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        key: ValueKey('node-badge-${widget.module.id}'),
+                        customBorder: const CircleBorder(),
+                        onTap: _handleTap,
+                        child: SizedBox(
+                          width: size,
+                          height: size,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: bg,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2.5,
                                   ),
-                                  if (isCurrent)
+                                  boxShadow: [
                                     BoxShadow(
-                                      color: AppColors.gold.withValues(
-                                        alpha: 0.35,
+                                      color: Colors.black.withValues(
+                                        alpha: 0.25,
                                       ),
-                                      blurRadius: 0,
-                                      spreadRadius: glowSpread,
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 3),
                                     ),
-                                ],
+                                    if (isCurrent)
+                                      BoxShadow(
+                                        color: AppColors.gold.withValues(
+                                          alpha: 0.35,
+                                        ),
+                                        blurRadius: 0,
+                                        spreadRadius: glowSpread,
+                                      ),
+                                  ],
+                                ),
+                                alignment: Alignment.center,
+                                child: icon,
                               ),
-                              alignment: Alignment.center,
-                              child: icon,
-                            ),
+                              if (widget.overdue &&
+                                  widget.state != _NodeState.locked)
+                                const Positioned(
+                                  top: -2,
+                                  right: -2,
+                                  child: _OverdueBadge(),
+                                ),
+                              Positioned(
+                                top: size + 6,
+                                left: -46,
+                                right: -46,
+                                child: IgnorePointer(
+                                  child: Center(
+                                    child: _NodeLabel(
+                                      title: widget.module.title,
+                                      locked: widget.state == _NodeState.locked,
+                                      isCurrent: isCurrent,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              );
-            },
-          ),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.92),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              widget.module.title,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: AppColors.tealDark,
               ),
             ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Destination name pill under a map node's badge — small enough to stay
+/// out of the background art's way, legible over any landmark it sits on
+/// thanks to the opaque card + shadow (same treatment as the app's other
+/// small text-on-photo labels).
+class _NodeLabel extends StatelessWidget {
+  const _NodeLabel({
+    required this.title,
+    required this.locked,
+    required this.isCurrent,
+  });
+
+  final String title;
+  final bool locked;
+  final bool isCurrent;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 88),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: locked ? 0.75 : 0.95),
+          borderRadius: BorderRadius.circular(999),
+          border: isCurrent
+              ? Border.all(color: AppColors.gold, width: 1.5)
+              : null,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w800,
+            height: 1.1,
+            color: locked ? const Color(0xFF7A8B85) : const Color(0xFF2E2A24),
           ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Small coral "!" dot pinned to a node's top-right corner when its
+/// assignment's due date has passed — locked nodes never show it since
+/// there's nothing overdue to act on until the module unlocks.
+class _OverdueBadge extends StatelessWidget {
+  const _OverdueBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 14,
+      height: 14,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.coral,
+        border: Border.all(color: Colors.white, width: 1.5),
+      ),
+      alignment: Alignment.center,
+      child: const Text(
+        '!',
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+          color: Colors.white,
+          height: 1,
+        ),
       ),
     );
   }
@@ -755,11 +1025,13 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
 class _MascotAvatar extends StatefulWidget {
   const _MascotAvatar({
     required this.topFraction,
+    required this.left,
     required this.mapHeight,
     required this.avatar,
   });
 
   final double topFraction;
+  final double left;
   final double mapHeight;
   final String? avatar;
 
@@ -810,8 +1082,8 @@ class _MascotAvatarState extends State<_MascotAvatar>
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      top: widget.mapHeight * widget.topFraction - 100,
-      left: 18, // matches the approved preview's .mascot-wrap { left: 18px }
+      top: widget.mapHeight * widget.topFraction - 64,
+      left: widget.left + 22,
       child: SizedBox(
         width: 84,
         height: 100,
@@ -911,14 +1183,15 @@ class _MascotAvatarState extends State<_MascotAvatar>
               builder: (context, child) {
                 final t = _overshoot.transform(_bubble.value);
                 return Positioned(
-                  left: 78,
-                  top: -2,
+                  left: -30,
+                  right: -30,
+                  top: -20,
                   child: Opacity(
                     opacity: t.clamp(0.0, 1.0),
                     child: Transform.scale(
                       scale: 0.7 + 0.3 * t,
-                      alignment: Alignment.centerLeft,
-                      child: child,
+                      alignment: Alignment.bottomCenter,
+                      child: Center(child: child),
                     ),
                   ),
                 );
@@ -956,3 +1229,5 @@ class _MascotAvatarState extends State<_MascotAvatar>
     );
   }
 }
+
+

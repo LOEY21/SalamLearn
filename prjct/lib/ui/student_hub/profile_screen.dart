@@ -5,8 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
 
+import '../../data/curriculum_data.dart';
+import '../../data/repositories/class_repository.dart';
+import '../../data/models/curriculum/curriculum_models.dart';
+import '../../data/repositories/progress_repository.dart';
 import '../../logic/auth/session.dart';
 import '../../logic/recent_module_provider.dart';
+import '../core_modules/lesson_player_screen.dart';
 import '../core_modules/module_registry.dart';
 import '../theme/app_colors.dart';
 import 'notifications_sheet.dart';
@@ -90,6 +95,7 @@ class ProfileScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.neutralTint,
       body: SafeArea(
+        top: false,
         bottom: false,
         child: ListView(
           padding: EdgeInsets.zero,
@@ -138,9 +144,14 @@ class ProfileScreen extends ConsumerWidget {
 
             const SizedBox(height: 20),
 
+            _StaggerFadeIn(
+              delay: const Duration(milliseconds: 240),
+              child: const _AssignedHomeworkButton(),
+            ),
+
             // ── Action rows ──────────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(18, 0, 18, 32),
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 170),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -250,7 +261,7 @@ class _StaggerFadeInState extends State<_StaggerFadeIn>
 
 // ─── Profile hero ─────────────────────────────────────────────────────────────
 
-class _ProfileHero extends StatefulWidget {
+class _ProfileHero extends StatelessWidget {
   const _ProfileHero({
     required this.avatar,
     required this.name,
@@ -263,63 +274,15 @@ class _ProfileHero extends StatefulWidget {
   final int streakDays;
 
   @override
-  State<_ProfileHero> createState() => _ProfileHeroState();
-}
-
-class _ProfileHeroState extends State<_ProfileHero>
-    with TickerProviderStateMixin {
-  // Entrance: avatar pops in with playful overshoot.
-  late final _entrance = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 600),
-  )..forward();
-  late final _avatarScale = CurvedAnimation(
-    parent: _entrance,
-    curve: Curves.easeOutBack,
-  );
-  late final _avatarFade = CurvedAnimation(
-    parent: _entrance,
-    curve: const Interval(0, 0.45, curve: Curves.easeOut),
-  );
-  late final _nameFade = CurvedAnimation(
-    parent: _entrance,
-    curve: const Interval(0.4, 1, curve: Curves.easeOut),
-  );
-  late final _nameSlide = Tween<Offset>(
-    begin: const Offset(0, 0.25),
-    end: Offset.zero,
-  ).animate(_nameFade);
-
-  // Ambient: slow breathing glow behind the avatar.
-  late final _breathe = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2800),
-  )..repeat(reverse: true);
-
-  // XP ring continuous gentle spin.
-  late final _ringRotate = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 14),
-  )..repeat();
-
-  @override
-  void dispose() {
-    _entrance.dispose();
-    _breathe.dispose();
-    _ringRotate.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 22, 20, 62),
+      padding: const EdgeInsets.fromLTRB(20, 42, 20, 62),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF0D7A60), AppColors.tealDark],
+          colors: [AppColors.gold, AppColors.coral], // Orange/Gold gradient matching the tab active color
         ),
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(32),
@@ -330,47 +293,35 @@ class _ProfileHeroState extends State<_ProfileHero>
         clipBehavior: Clip.none,
         children: [
           // ── Ambient decorative blobs ───────────────────────────────────
-          AnimatedBuilder(
-            animation: _breathe,
-            builder: (_, __) {
-              final t = Curves.easeInOut.transform(_breathe.value);
-              return Positioned(
-                top: -20 + t * 14,
-                right: -28,
-                child: Opacity(
-                  opacity: 0.16 + t * 0.10,
-                  child: Container(
-                    width: 140,
-                    height: 140,
-                    decoration: const BoxDecoration(
-                      color: AppColors.gold,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
+          Positioned(
+            top: -10,
+            right: -20,
+            child: Opacity(
+              opacity: 0.18,
+              child: Container(
+                width: 140,
+                height: 140,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
                 ),
-              );
-            },
+              ),
+            ),
           ),
-          AnimatedBuilder(
-            animation: _breathe,
-            builder: (_, __) {
-              final t = Curves.easeInOut.transform(_breathe.value);
-              return Positioned(
-                bottom: -30 - t * 10,
-                left: -20,
-                child: Opacity(
-                  opacity: 0.10 + t * 0.08,
-                  child: Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
+          Positioned(
+            bottom: -20,
+            left: -15,
+            child: Opacity(
+              opacity: 0.12,
+              child: Container(
+                width: 100,
+                height: 100,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
                 ),
-              );
-            },
+              ),
+            ),
           ),
 
           // ── Arabic geometric corner ornament (top-left) ────────────────
@@ -390,35 +341,32 @@ class _ProfileHeroState extends State<_ProfileHero>
           Positioned(
             top: 0,
             right: 0,
-            child: FadeTransition(
-              opacity: _nameFade,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 6,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.32),
                 ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.28),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('🔥', style: TextStyle(fontSize: 14)),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${widget.streakDays} day streak',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🔥', style: TextStyle(fontSize: 14)),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$streakDays day streak',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -426,7 +374,7 @@ class _ProfileHeroState extends State<_ProfileHero>
           // ── Central content ────────────────────────────────────────────
           Column(
             children: [
-              // Avatar with spinning XP ring
+              // Avatar with XP ring
               SizedBox(
                 width: 130,
                 height: 130,
@@ -434,36 +382,14 @@ class _ProfileHeroState extends State<_ProfileHero>
                   alignment: Alignment.center,
                   clipBehavior: Clip.none,
                   children: [
-                    // Celebration burst (one-shot)
-                    IgnorePointer(
-                      child: Lottie.asset(
-                        'assets/lottie/milestone_burst.json',
-                        repeat: false,
-                        width: 130,
-                        height: 130,
-                      ),
-                    ),
-
-                    // Slowly-rotating XP arc ring
-                    AnimatedBuilder(
-                      animation: _ringRotate,
-                      builder: (_, __) => Transform.rotate(
-                        angle: _ringRotate.value * 2 * math.pi,
-                        child: CustomPaint(
-                          size: const Size(110, 110),
-                          painter: _XpRingPainter(progress: 0.72),
-                        ),
-                      ),
+                    // XP arc ring (White dash ring in orange hero, static)
+                    CustomPaint(
+                      size: const Size(110, 110),
+                      painter: _XpRingPainter(progress: 0.72),
                     ),
 
                     // Avatar circle
-                    ScaleTransition(
-                      scale: _avatarScale,
-                      child: FadeTransition(
-                        opacity: _avatarFade,
-                        child: LearnerAvatar(avatar: widget.avatar, size: 88),
-                      ),
-                    ),
+                    LearnerAvatar(avatar: avatar, size: 88),
                   ],
                 ),
               ),
@@ -471,41 +397,36 @@ class _ProfileHeroState extends State<_ProfileHero>
               const SizedBox(height: 14),
 
               // Name + level
-              FadeTransition(
-                opacity: _nameFade,
-                child: SlideTransition(
-                  position: _nameSlide,
-                  child: Column(
+              Column(
+                children: [
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        widget.name,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          letterSpacing: -0.3,
+                      if (age != null) ...[
+                        _HeroPill(
+                          label: 'Age $age',
+                          icon: Icons.cake_rounded,
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (widget.age != null) ...[
-                            _HeroPill(
-                              label: 'Age ${widget.age}',
-                              icon: Icons.cake_rounded,
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          const _HeroPill(
-                            label: 'Level 3',
-                            icon: Icons.workspace_premium_rounded,
-                          ),
-                        ],
+                        const SizedBox(width: 8),
+                      ],
+                      const _HeroPill(
+                        label: 'Level 3',
+                        icon: Icons.workspace_premium_rounded,
                       ),
                     ],
                   ),
-                ),
+                ],
               ),
             ],
           ),
@@ -612,9 +533,9 @@ class _XpRingPainter extends CustomPainter {
         ..strokeWidth = 3,
     );
 
-    // Progress arc — gold fill
+    // Progress arc — white fill
     final progressPaint = Paint()
-      ..color = AppColors.gold
+      ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3
       ..strokeCap = StrokeCap.round;
@@ -665,7 +586,7 @@ class _StatsBento extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(24),
@@ -674,7 +595,7 @@ class _StatsBento extends StatelessWidget {
           BoxShadow(
             color: Color(0x0A2C2C2A),
             offset: Offset(0, 6),
-            blurRadius: 16,
+            blurRadius: 20,
           ),
         ],
       ),
@@ -694,8 +615,8 @@ class _StatsBento extends StatelessWidget {
             child: _BentoStat(
               value: '$completedCount/$totalModules',
               label: 'Modules',
-              emoji: '✅',
-              color: const Color(0xFF5BC4A0),
+              emoji: '📚',
+              color: const Color(0xFF0F6E56),
               tint: const Color(0xFFE3F7EF),
             ),
           ),
@@ -752,6 +673,7 @@ class _BentoStat extends StatelessWidget {
           decoration: BoxDecoration(
             color: tint,
             borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.35), width: 1.5),
           ),
           alignment: Alignment.center,
           child: Text(emoji, style: const TextStyle(fontSize: 18)),
@@ -760,8 +682,9 @@ class _BentoStat extends StatelessWidget {
         Text(
           value,
           style: TextStyle(
+            fontFamily: 'Outfit',
             fontSize: 17,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w900,
             color: color,
           ),
         ),
@@ -771,7 +694,7 @@ class _BentoStat extends StatelessWidget {
           textAlign: TextAlign.center,
           style: const TextStyle(
             fontSize: 10,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             color: AppColors.textMuted,
           ),
         ),
@@ -840,8 +763,40 @@ class _BadgeChip extends StatefulWidget {
   State<_BadgeChip> createState() => _BadgeChipState();
 }
 
-class _BadgeChipState extends State<_BadgeChip> {
+class _BadgeChipState extends State<_BadgeChip> with SingleTickerProviderStateMixin {
   bool _pressed = false;
+  late final AnimationController _wobbleController;
+
+  @override
+  void initState() {
+    super.initState();
+    _wobbleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3000),
+    );
+    if (widget.isUnlocked) {
+      _wobbleController.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _BadgeChip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isUnlocked != widget.isUnlocked) {
+      if (widget.isUnlocked) {
+        _wobbleController.repeat(reverse: true);
+      } else {
+        _wobbleController.stop();
+        _wobbleController.value = 0;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _wobbleController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -855,44 +810,64 @@ class _BadgeChipState extends State<_BadgeChip> {
         duration: const Duration(milliseconds: 130),
         curve: Curves.easeOut,
         child: Container(
-          width: 76,
+          width: 80,
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
           decoration: BoxDecoration(
-            color: unlocked
-                ? widget.badge.color.withValues(alpha: 0.12)
-                : const Color(0xFFF0EDE8),
+            color: unlocked ? const Color(0xFFFFFDF9) : const Color(0xFFF0EDE8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: unlocked
-                  ? widget.badge.color.withValues(alpha: 0.35)
-                  : AppColors.creamBorder,
-              width: 1.5,
+              color: unlocked ? AppColors.gold : AppColors.creamBorder,
+              width: unlocked ? 2.0 : 1.5,
             ),
+            boxShadow: unlocked
+                ? [
+                    BoxShadow(
+                      color: AppColors.gold.withValues(alpha: 0.08),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: unlocked
-                          ? widget.badge.color.withValues(alpha: 0.18)
-                          : const Color(0xFFE8E4DC),
-                      shape: BoxShape.circle,
+              AnimatedBuilder(
+                animation: _wobbleController,
+                builder: (context, child) {
+                  final t = Curves.easeInOut.transform(_wobbleController.value);
+                  final angle = unlocked ? (0.07 * (t - 0.5) * 2) : 0.0;
+                  return Transform.rotate(
+                    angle: angle,
+                    child: child,
+                  );
+                },
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: unlocked
+                            ? widget.badge.color.withValues(alpha: 0.18)
+                            : const Color(0xFFE8E4DC),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: unlocked ? widget.badge.color.withValues(alpha: 0.35) : Colors.transparent,
+                          width: 1.5,
+                        ),
+                      ),
                     ),
-                  ),
-                  Text(
-                    unlocked ? widget.badge.icon : '🔒',
-                    style: TextStyle(
-                      fontSize: 20,
-                      color: unlocked ? null : const Color(0xFFBBB5A8),
+                    Text(
+                      unlocked ? widget.badge.icon : '🔒',
+                      style: TextStyle(
+                        fontSize: 22,
+                        color: unlocked ? null : const Color(0xFFBBB5A8),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(height: 6),
               Text(
@@ -901,11 +876,9 @@ class _BadgeChipState extends State<_BadgeChip> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  color: unlocked
-                      ? widget.badge.color
-                      : const Color(0xFFBBB5A8),
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w900,
+                  color: unlocked ? const Color(0xFF8A5A12) : const Color(0xFFBBB5A8),
                 ),
               ),
             ],
@@ -946,7 +919,8 @@ class _OwlBanner extends StatelessWidget {
                 Text(
                   'Salam, $name! 👋',
                   style: const TextStyle(
-                    fontWeight: FontWeight.w800,
+                    fontFamily: 'Outfit',
+                    fontWeight: FontWeight.w900,
                     fontSize: 14,
                     color: AppColors.tealDark,
                   ),
@@ -958,6 +932,7 @@ class _OwlBanner extends StatelessWidget {
                     fontSize: 12,
                     color: AppColors.teal,
                     height: 1.45,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
@@ -1047,6 +1022,7 @@ class _ActionRowState extends State<_ActionRow> {
                     decoration: BoxDecoration(
                       color: widget.iconBg.withValues(alpha: 0.16),
                       borderRadius: BorderRadius.circular(13),
+                      border: Border.all(color: widget.iconBg.withValues(alpha: 0.4), width: 1.5),
                     ),
                     alignment: Alignment.center,
                     child: Icon(widget.icon, size: 20, color: widget.iconBg),
@@ -1061,8 +1037,9 @@ class _ActionRowState extends State<_ActionRow> {
                         Text(
                           widget.label,
                           style: const TextStyle(
+                            fontFamily: 'Outfit',
                             fontSize: 14,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w900,
                             color: AppColors.ink,
                           ),
                         ),
@@ -1072,6 +1049,7 @@ class _ActionRowState extends State<_ActionRow> {
                           style: const TextStyle(
                             fontSize: 11.5,
                             color: AppColors.textMuted,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -1085,6 +1063,7 @@ class _ActionRowState extends State<_ActionRow> {
                     decoration: BoxDecoration(
                       color: AppColors.neutralTint,
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.creamBorder, width: 1.0),
                     ),
                     alignment: Alignment.center,
                     child: const Icon(
@@ -1102,3 +1081,487 @@ class _ActionRowState extends State<_ActionRow> {
     );
   }
 }
+
+class _AssignedHomeworkButton extends ConsumerWidget {
+  const _AssignedHomeworkButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final learner = ref.watch(sessionProvider).learner;
+    if (learner == null) return const SizedBox.shrink();
+    final learnerId = learner.id;
+    if (learnerId == null) return const SizedBox.shrink();
+
+    final enrollments = ClassRepository().byLearnerId(learnerId);
+    final enrolledClassIds = enrollments.map((e) => e.classId).toSet();
+
+    final List<Map<String, dynamic>> assignedList = [];
+
+    for (final classId in enrolledClassIds) {
+      final classAssignments = ClassRepository().assignmentsFor(classId: classId, learnerId: null);
+      for (final a in classAssignments) {
+        assignedList.add({
+          'moduleId': a.moduleId,
+          'maxLevel': a.maxLevel,
+          'maxLessons': a.maxLessons,
+        });
+      }
+      final personalAssignments = ClassRepository().assignmentsFor(classId: classId, learnerId: learnerId);
+      for (final a in personalAssignments) {
+        final existingIdx = assignedList.indexWhere((m) => m['moduleId'] == a.moduleId);
+        if (existingIdx != -1) {
+          assignedList[existingIdx] = {
+            'moduleId': a.moduleId,
+            'maxLevel': a.maxLevel,
+            'maxLessons': a.maxLessons,
+          };
+        } else {
+          assignedList.add({
+            'moduleId': a.moduleId,
+            'maxLevel': a.maxLevel,
+            'maxLessons': a.maxLessons,
+          });
+        }
+      }
+    }
+
+    // Count pending games/lessons
+    var pendingCount = 0;
+    final completed = ProgressRepository().completedLessonIds(learnerId);
+
+    for (final assignment in assignedList) {
+      final moduleId = assignment['moduleId'] as String;
+      final maxLevel = assignment['maxLevel'] as int;
+      final maxLessons = assignment['maxLessons'] as int?;
+
+      final module = coreModules.firstWhere(
+        (m) => m.id == moduleId || m.destinationId.toString() == moduleId,
+        orElse: () => coreModules.first,
+      );
+      final dest = curriculum.firstWhere((d) => d.id == module.destinationId, orElse: () => curriculum.first);
+
+      final lessons = dest.lessons;
+      final perLevel = (lessons.length / 3).ceil();
+      final levelsList = [
+        lessons.take(perLevel).toList(),
+        lessons.skip(perLevel).take(perLevel).toList(),
+        lessons.skip(perLevel * 2).toList(),
+      ].where((group) => group.isNotEmpty).toList();
+
+      final List<Lesson> assignedLessons = [];
+      for (var li = 0; li < maxLevel; li++) {
+        if (li >= levelsList.length) break;
+        final group = levelsList[li];
+        final cap = (li == maxLevel - 1) ? maxLessons : null;
+        final count = cap ?? group.length;
+        assignedLessons.addAll(group.take(count));
+      }
+
+      pendingCount += assignedLessons.where((l) => !completed.contains(l.id)).length;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+      child: Card(
+        color: Colors.white,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: AppColors.creamBorder, width: 2),
+        ),
+        child: InkWell(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AssignedHomeworkScreen(),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE8E4FF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.menu_book_rounded,
+                    color: AppColors.adventurePurple,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Assigned Homework',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        assignedList.isEmpty
+                            ? 'No homework yet'
+                            : pendingCount > 0
+                                ? '$pendingCount pending game${pendingCount == 1 ? '' : 's'} to play'
+                                : 'All homework completed! 🎉',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: pendingCount > 0 ? AppColors.coral : AppColors.teal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: const BoxDecoration(
+                    color: AppColors.neutralTint,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.textMuted,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class AssignedHomeworkScreen extends ConsumerWidget {
+  const AssignedHomeworkScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final learner = ref.watch(sessionProvider).learner;
+    if (learner == null) {
+      return const Scaffold(
+        body: Center(child: Text('No active profile')),
+      );
+    }
+    final learnerId = learner.id;
+    if (learnerId == null) {
+      return const Scaffold(
+        body: Center(child: Text('No active profile ID')),
+      );
+    }
+
+    final enrollments = ClassRepository().byLearnerId(learnerId);
+    final enrolledClassIds = enrollments.map((e) => e.classId).toSet();
+
+    final List<Map<String, dynamic>> assignedList = [];
+
+    for (final classId in enrolledClassIds) {
+      final classAssignments = ClassRepository().assignmentsFor(classId: classId, learnerId: null);
+      for (final a in classAssignments) {
+        assignedList.add({
+          'moduleId': a.moduleId,
+          'maxLevel': a.maxLevel,
+          'maxLessons': a.maxLessons,
+          'assignedBy': 'Class Homework',
+        });
+      }
+      final personalAssignments = ClassRepository().assignmentsFor(classId: classId, learnerId: learnerId);
+      for (final a in personalAssignments) {
+        final existingIdx = assignedList.indexWhere((m) => m['moduleId'] == a.moduleId);
+        if (existingIdx != -1) {
+          assignedList[existingIdx] = {
+            'moduleId': a.moduleId,
+            'maxLevel': a.maxLevel,
+            'maxLessons': a.maxLessons,
+            'assignedBy': 'Personal Assignment',
+          };
+        } else {
+          assignedList.add({
+            'moduleId': a.moduleId,
+            'maxLevel': a.maxLevel,
+            'maxLessons': a.maxLessons,
+            'assignedBy': 'Personal Assignment',
+          });
+        }
+      }
+    }
+
+    return Scaffold(
+      backgroundColor: AppColors.neutralTint,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.ink),
+        ),
+        title: const Text(
+          'Assigned Homework',
+          style: TextStyle(
+            color: AppColors.ink,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+          ),
+        ),
+        centerTitle: true,
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: AppColors.creamBorder),
+        ),
+      ),
+      body: SafeArea(
+        child: assignedList.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      '🎉',
+                      style: TextStyle(fontSize: 48),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'No homework assigned!',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Check back later for new tasks from your teacher.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.all(18),
+                itemCount: assignedList.length,
+                itemBuilder: (context, index) {
+                  final assignment = assignedList[index];
+                  final moduleId = assignment['moduleId'] as String;
+                  final maxLevel = assignment['maxLevel'] as int;
+                  final maxLessons = assignment['maxLessons'] as int?;
+
+                  // Look up module info
+                  final module = coreModules.firstWhere(
+                    (m) => m.id == moduleId || m.destinationId.toString() == moduleId,
+                    orElse: () => coreModules.first,
+                  );
+
+                  // Look up destination
+                  final dest = curriculum.firstWhere(
+                    (d) => d.id == module.destinationId,
+                    orElse: () => curriculum.first,
+                  );
+
+                  // Split lessons into levels
+                  final lessons = dest.lessons;
+                  final perLevel = (lessons.length / 3).ceil();
+                  final levelsList = [
+                    lessons.take(perLevel).toList(),
+                    lessons.skip(perLevel).take(perLevel).toList(),
+                    lessons.skip(perLevel * 2).toList(),
+                  ].where((group) => group.isNotEmpty).toList();
+
+                  // Gather all assigned lessons
+                  final List<Lesson> assignedLessons = [];
+                  for (var li = 0; li < maxLevel; li++) {
+                    if (li >= levelsList.length) break;
+                    final group = levelsList[li];
+                    final cap = (li == maxLevel - 1) ? maxLessons : null;
+                    final count = cap ?? group.length;
+                    assignedLessons.addAll(group.take(count));
+                  }
+
+                  final completedLessons = ProgressRepository().completedLessonIds(learnerId);
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    color: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      side: const BorderSide(color: AppColors.creamBorder, width: 2),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: module.color.withValues(alpha: 0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(module.icon, color: module.color, size: 22),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      module.title,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.ink,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      assignment['assignedBy'] as String,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.textMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          const Divider(height: 1, color: AppColors.creamBorder),
+                          const SizedBox(height: 14),
+                          if (assignedLessons.isEmpty)
+                            const Text(
+                              'No specific games assigned.',
+                              style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                            )
+                          else
+                            ...assignedLessons.map((lesson) {
+                              final done = completedLessons.contains(lesson.id);
+
+                              // Find which level this lesson belongs to
+                              var levelName = 'Beginner';
+                              for (var li = 0; li < levelsList.length; li++) {
+                                if (levelsList[li].any((l) => l.id == lesson.id)) {
+                                  levelName = switch (li) {
+                                    0 => 'Beginner',
+                                    1 => 'Practice',
+                                    _ => 'Mastery',
+                                  };
+                                  break;
+                                }
+                              }
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: InkWell(
+                                  onTap: () {
+                                    ref.read(recentModuleProvider.notifier).interactWith(module.id);
+                                    Navigator.of(context, rootNavigator: true).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => LessonPlayerScreen(
+                                          lesson: lesson,
+                                          destinationId: dest.id,
+                                          onClose: () {
+                                            Navigator.of(context, rootNavigator: true).pop();
+                                            // Re-trigger rebuild
+                                            ref.invalidate(sessionProvider);
+                                          },
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.neutralTint,
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 34,
+                                          height: 34,
+                                          alignment: Alignment.center,
+                                          decoration: BoxDecoration(
+                                            color: done ? AppColors.mint : Colors.white,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Text(
+                                            done ? '✓' : lesson.icon,
+                                            style: TextStyle(
+                                              fontSize: done ? 14 : 18,
+                                              fontWeight: done ? FontWeight.bold : null,
+                                              color: done ? AppColors.adventureGreen : null,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                lesson.title,
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: done ? AppColors.textMuted : AppColors.ink,
+                                                  decoration: done ? TextDecoration.lineThrough : null,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                levelName,
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppColors.textMuted,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Icon(
+                                          done ? Icons.check_circle_rounded : Icons.play_arrow_rounded,
+                                          color: done ? AppColors.adventureGreen : AppColors.adventureBlue,
+                                          size: 22,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ),
+    );
+  }
+}
+
+// Removed old _AssignedHomeworkSection class.

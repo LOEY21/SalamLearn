@@ -5,8 +5,10 @@ import 'package:salamlearn/data/models/assigned_module.dart';
 import 'package:salamlearn/data/models/badge_award.dart';
 import 'package:salamlearn/data/models/class_section.dart';
 import 'package:salamlearn/data/models/consent_record.dart';
+import 'package:salamlearn/data/models/custom_lesson.dart';
 import 'package:salamlearn/data/models/enrollment.dart';
 import 'package:salamlearn/data/models/learner_profile.dart';
+import 'package:salamlearn/data/models/lesson_folder.dart';
 import 'package:salamlearn/data/models/parent_account.dart';
 import 'package:salamlearn/data/models/progress_record.dart';
 import 'package:salamlearn/data/models/streak_state.dart';
@@ -36,6 +38,8 @@ Future<Directory> setUpTestHive() async {
   registerOnce(7, AssignedModuleAdapter());
   registerOnce(8, StreakStateAdapter());
   registerOnce(9, BadgeAwardAdapter());
+  registerOnce(10, CustomLessonAdapter());
+  registerOnce(11, LessonFolderAdapter());
 
   await Future.wait([
     Hive.openBox<ParentAccount>(HiveBoxes.parents),
@@ -48,6 +52,8 @@ Future<Directory> setUpTestHive() async {
     Hive.openBox<AssignedModule>(HiveBoxes.assignedModules),
     Hive.openBox<StreakState>(HiveBoxes.streaks),
     Hive.openBox<BadgeAward>(HiveBoxes.badges),
+    Hive.openBox<CustomLesson>(HiveBoxes.customLessons),
+    Hive.openBox<LessonFolder>(HiveBoxes.lessonFolders),
     Hive.openBox<dynamic>(HiveBoxes.settings),
   ]);
 

@@ -198,6 +198,30 @@ class TeacherRepository {
   List<String> debugAllEmails() =>
       _box.values.map((a) => a.email ?? '<none>').toList();
 
+  /// See `ParentRepository.updatePasswordLocally` doc — same "resync from a
+  /// remote password reset" contract for a teacher account.
+  Future<TeacherAccount> updatePasswordLocally({
+    required TeacherAccount account,
+    required String newPassword,
+  }) async {
+    final passwordSalt = CredentialHasher.generateSalt();
+    final updated = TeacherAccount(
+      id: account.id,
+      fullName: account.fullName,
+      school: account.school,
+      email: account.email,
+      mobileNumber: account.mobileNumber,
+      passwordHash: CredentialHasher.hash(newPassword, passwordSalt),
+      passwordSalt: passwordSalt,
+      pinHash: account.pinHash,
+      pinSalt: account.pinSalt,
+      createdAt: account.createdAt,
+      firebaseUid: account.firebaseUid,
+    );
+    await _box.put(account.id, updated);
+    return updated;
+  }
+
   bool verifyPassword(TeacherAccount account, String candidate) {
     if (account.passwordHash == null || account.passwordSalt == null) {
       return false;

@@ -13,6 +13,8 @@ class AssignedModule extends HiveObject {
     required this.dueDate,
     required this.assignedAt,
     this.learnerId,
+    this.maxLevel = 3,
+    this.maxLessons,
   });
 
   final String id;
@@ -21,6 +23,20 @@ class AssignedModule extends HiveObject {
   final String moduleId;
   final DateTime dueDate;
   final DateTime assignedAt;
+
+  /// How far into this destination's 3 levels (Beginner/Practice/Mastery)
+  /// the teacher has allowed this assignment to reach — the Adventure Map's
+  /// level gating never opens a level past this, regardless of lesson
+  /// completion. Defaults to 3 (no ceiling) so pre-existing assignments
+  /// written before this field existed keep behaving as "fully open".
+  final int maxLevel;
+
+  /// How many lessons ("games") within the highest level [maxLevel] allows
+  /// are unlocked — earlier levels stay fully open once [maxLevel] admits
+  /// them, but the top level itself only opens this many lessons in order,
+  /// regardless of completion. `null` means no cap (every lesson in that
+  /// level is open).
+  final int? maxLessons;
 }
 
 class AssignedModuleAdapter extends TypeAdapter<AssignedModule> {
@@ -40,13 +56,15 @@ class AssignedModuleAdapter extends TypeAdapter<AssignedModule> {
       moduleId: fields[3] as String,
       dueDate: fields[4] as DateTime,
       assignedAt: fields[5] as DateTime,
+      maxLevel: fields[6] as int? ?? 3,
+      maxLessons: fields[7] as int?,
     );
   }
 
   @override
   void write(BinaryWriter writer, AssignedModule obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -58,6 +76,10 @@ class AssignedModuleAdapter extends TypeAdapter<AssignedModule> {
       ..writeByte(4)
       ..write(obj.dueDate)
       ..writeByte(5)
-      ..write(obj.assignedAt);
+      ..write(obj.assignedAt)
+      ..writeByte(6)
+      ..write(obj.maxLevel)
+      ..writeByte(7)
+      ..write(obj.maxLessons);
   }
 }

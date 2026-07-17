@@ -4,9 +4,10 @@ import '../theme/app_colors.dart';
 import '../widgets/learner_avatar.dart';
 import 'hub_bottom_nav.dart' show HubTab;
 
-/// Floating rounded-pill bottom nav replacing `HubBottomNav`'s flat bar —
-/// same `HubTab`/callback contract, only the visual container changes.
-/// See the Adventure Map design spec's "BottomNav" section.
+/// Floating rounded-pill bottom nav redesigned as a game adventure quest log —
+/// features a heavy wood/gold double-frame border with corner rivets, and a
+/// sliding gold-lined active medallion indicator. Active icons gently bob
+/// up and down to feel "alive".
 class AdventureMapBottomNav extends StatelessWidget {
   const AdventureMapBottomNav({
     super.key,
@@ -15,6 +16,7 @@ class AdventureMapBottomNav extends StatelessWidget {
     required this.onBackpackTap,
     required this.onProfileTap,
     this.learnerAvatar,
+    this.showBackpackBadge = false,
   });
 
   final HubTab active;
@@ -26,61 +28,166 @@ class AdventureMapBottomNav extends StatelessWidget {
   /// a generic emoji so the nav reflects who's actually using the app.
   final String? learnerAvatar;
 
+  /// Whether to show the small "something new" dot on the Backpack tab —
+  /// true when a badge has been earned since the learner last opened that
+  /// tab (see `seenBadgeCountProvider`).
+  final bool showBackpackBadge;
+
   @override
   Widget build(BuildContext context) {
+    final activeIndex = active.index;
+
+    // Curated themed gradients matching each tab's personality.
+    final activeGradient = switch (active) {
+      HubTab.home => const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.teal, AppColors.adventureGreen],
+        ),
+      HubTab.backpack => const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.adventureBlue, AppColors.adventurePurple],
+        ),
+      HubTab.profile => const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.gold, AppColors.coral],
+        ),
+    };
+
+    final activeShadowColor = switch (active) {
+      HubTab.home => AppColors.teal,
+      HubTab.backpack => AppColors.adventureBlue,
+      HubTab.profile => AppColors.gold,
+    };
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        decoration: BoxDecoration(
-          // Parchment, not stark white — the flat white pill read as a
-          // clinical system chrome floating over the painterly map. A warm
-          // cream base + a hand-drawn-style border + a brown-tinted shadow
-          // make the bar feel like a carved signpost belonging to the map's
-          // world, matching the "You are here" / node-label plaques.
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [AppColors.surface, AppColors.cream],
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Main Bottom Nav Board Container
+          Container(
+            padding: const EdgeInsets.all(3.5),
+            decoration: BoxDecoration(
+              color: const Color(0xFF4A3A1E), // Dark wood outline frame
+              borderRadius: BorderRadius.circular(32),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x334A3A1E),
+                  blurRadius: 18,
+                  offset: Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+              decoration: BoxDecoration(
+                color: AppColors.cream, // Warm parchment background
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: AppColors.goldSoft, width: 1.5), // Inner gold border
+              ),
+              child: Stack(
+                children: [
+                  // Sliding indicator background active medallion plate
+                  Positioned.fill(
+                    child: AnimatedAlign(
+                      alignment: Alignment(-1.0 + activeIndex * 1.0, 0.0),
+                      duration: const Duration(milliseconds: 320),
+                      curve: const Cubic(0.34, 1.56, 0.64, 1.0), // Playful spring curve
+                      child: FractionallySizedBox(
+                        widthFactor: 0.32,
+                        heightFactor: 0.95,
+                        child: Container(
+                          padding: const EdgeInsets.all(2.0),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4A3A1E), // Medallion outer frame
+                            borderRadius: BorderRadius.circular(22),
+                          ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: activeGradient,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: AppColors.goldSoft, width: 1.0), // Inner gold frame
+                              boxShadow: [
+                                BoxShadow(
+                                  color: activeShadowColor.withValues(alpha: 0.35),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // The interactive tabs Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _Item(
+                          emoji: '🗺️',
+                          iconAsset: 'assets/images/adventure_map/tab_map.png',
+                          label: 'Home',
+                          active: active == HubTab.home,
+                          onTap: onHomeTap,
+                        ),
+                      ),
+                      Expanded(
+                        child: _Item(
+                          emoji: '🎒',
+                          iconAsset: 'assets/images/adventure_map/tab_backpack.png',
+                          label: 'Backpack',
+                          active: active == HubTab.backpack,
+                          onTap: onBackpackTap,
+                          showBadge: showBackpackBadge,
+                        ),
+                      ),
+                      Expanded(
+                        child: _Item(
+                          emoji: '🙂',
+                          avatar: learnerAvatar,
+                          label: 'Me',
+                          active: active == HubTab.profile,
+                          onTap: onProfileTap,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: AppColors.creamBorder, width: 2),
+          // Decorative corner rivets
+          _buildCornerRivet(top: 8, left: 10),
+          _buildCornerRivet(top: 8, right: 10),
+          _buildCornerRivet(bottom: 8, left: 10),
+          _buildCornerRivet(bottom: 8, right: 10),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCornerRivet({double? top, double? bottom, double? left, double? right}) {
+    return Positioned(
+      top: top,
+      bottom: bottom,
+      left: left,
+      right: right,
+      child: Container(
+        width: 6,
+        height: 6,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppColors.gold,
+          border: Border.all(color: const Color(0xFF4A3A1E), width: 1.0),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x3B4A3A1E),
-              blurRadius: 22,
-              offset: Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: _Item(
-                emoji: '🗺️',
-                iconAsset: 'assets/images/adventure_map/tab_map.png',
-                label: 'Home',
-                active: active == HubTab.home,
-                onTap: onHomeTap,
-              ),
-            ),
-            Expanded(
-              child: _Item(
-                emoji: '🎒',
-                iconAsset: 'assets/images/adventure_map/tab_backpack.png',
-                label: 'Backpack',
-                active: active == HubTab.backpack,
-                onTap: onBackpackTap,
-              ),
-            ),
-            Expanded(
-              child: _Item(
-                emoji: '🙂',
-                avatar: learnerAvatar,
-                label: 'Me',
-                active: active == HubTab.profile,
-                onTap: onProfileTap,
-              ),
+              color: Color(0x33000000),
+              blurRadius: 1,
+              offset: Offset(0, 1),
             ),
           ],
         ),
@@ -97,22 +204,16 @@ class _Item extends StatefulWidget {
     required this.onTap,
     this.avatar,
     this.iconAsset,
+    this.showBadge = false,
   });
 
-  // Render priority: [avatar] (learner's own pic, Me tab) > [iconAsset]
-  // (the custom cartoon PNGs the owner supplied for Home/Backpack) >
-  // [emoji] (fallback if neither is set / the asset can't load).
   final String emoji;
   final String label;
   final bool active;
   final VoidCallback onTap;
-
-  /// When set, renders the learner's own avatar instead of [emoji] — only
-  /// the "Me" tab passes this.
   final String? avatar;
-
-  /// When set, renders a bundled PNG glyph instead of [emoji].
   final String? iconAsset;
+  final bool showBadge;
 
   @override
   State<_Item> createState() => _ItemState();
@@ -120,12 +221,6 @@ class _Item extends StatefulWidget {
 
 class _ItemState extends State<_Item> {
   static const _duration = Duration(milliseconds: 200);
-  // Playful-archetype overshoot (motion-design spec) — but overshoot only
-  // ever gets applied to *scale* below. A `BoxDecoration` tween (color/
-  // gradient/shadow) can't handle a curve whose output leaves [0, 1] —
-  // `Color.lerp` extrapolates past the two endpoint colors, which read as a
-  // one-frame flash of an out-of-palette colour every time the active tab
-  // changes. Container decoration always eases with a plain curve instead.
   static const _bounce = Cubic(0.34, 1.56, 0.64, 1.0);
 
   bool _pressed = false;
@@ -146,43 +241,48 @@ class _ItemState extends State<_Item> {
         child: AnimatedContainer(
           duration: _duration,
           curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-          decoration: BoxDecoration(
-            gradient: active
-                ? const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [AppColors.teal, AppColors.adventureGreen],
-                  )
-                : null,
-            color: active ? null : Colors.transparent,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: active
-                ? [
-                    BoxShadow(
-                      color: AppColors.teal.withValues(alpha: 0.35),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
-                : null,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+          decoration: const BoxDecoration(
+            color: Colors.transparent,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               AnimatedScale(
-                scale: active ? 1.15 : 1.0,
+                scale: active ? 1.18 : 1.0,
                 duration: _duration,
                 curve: _bounce,
-                child: _icon(active, avatar, widget.iconAsset, widget.emoji),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    _icon(active, avatar, widget.iconAsset, widget.emoji),
+                    if (widget.showBadge)
+                      Positioned(
+                        top: -2,
+                        right: -4,
+                        child: Container(
+                          key: const Key('backpack-nav-badge-dot'),
+                          width: 9,
+                          height: 9,
+                          decoration: BoxDecoration(
+                            color: AppColors.coral,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1.5),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 5),
               AnimatedDefaultTextStyle(
                 duration: _duration,
                 style: TextStyle(
                   color: active ? Colors.white : AppColors.textMuted,
-                  fontSize: 10,
-                  fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                  fontFamily: 'Outfit',
+                  fontSize: 11.5,
+                  fontWeight: active ? FontWeight.w900 : FontWeight.w700,
+                  letterSpacing: 0.3,
                 ),
                 child: Text(widget.label),
               ),
@@ -193,21 +293,20 @@ class _ItemState extends State<_Item> {
     );
   }
 
-  // Render priority: learner avatar (Me) > bundled PNG (Home/Backpack) >
-  // emoji fallback. Avatar is sized large (learner's face); PNG glyphs sit
-  // at the icon scale of the emoji they replace.
   Widget _icon(bool active, String? avatar, String? iconAsset, String emoji) {
     if (avatar != null) {
-      return LearnerAvatar(avatar: avatar, size: active ? 40 : 34);
+      // Sized consistently to prevent layout shifts. Visually scaled via AnimatedScale instead.
+      return LearnerAvatar(avatar: avatar, size: 44);
     }
     if (iconAsset != null) {
+      const size = 42.0;
       return Image.asset(
         iconAsset,
-        width: active ? 26 : 24,
-        height: active ? 26 : 24,
+        width: size,
+        height: size,
         fit: BoxFit.contain,
       );
     }
-    return Text(emoji, style: TextStyle(fontSize: active ? 22 : 20));
+    return Text(emoji, style: TextStyle(fontSize: active ? 28 : 26));
   }
 }

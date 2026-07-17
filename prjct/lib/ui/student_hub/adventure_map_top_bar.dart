@@ -7,6 +7,7 @@ import '../../logic/learner/learner_xp_provider.dart';
 import '../../logic/learner/noor_energy_provider.dart';
 import '../../logic/recent_module_provider.dart';
 import '../theme/app_colors.dart';
+import 'noor_energy_info_sheet.dart';
 
 /// Pill-style stat row replacing the Learner Hub's previous plain header —
 /// see the Adventure Map design spec's "TopBar" section. Shown across the
@@ -67,6 +68,7 @@ class AdventureMapTopBar extends ConsumerWidget {
           ),
           _Pill(
             index: 2,
+            onTap: () => showNoorEnergyInfoSheet(context),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -84,10 +86,11 @@ class AdventureMapTopBar extends ConsumerWidget {
 }
 
 class _Pill extends StatefulWidget {
-  const _Pill({required this.index, required this.child});
+  const _Pill({required this.index, required this.child, this.onTap});
 
   final int index;
   final Widget child;
+  final VoidCallback? onTap;
 
   @override
   State<_Pill> createState() => _PillState();
@@ -126,23 +129,30 @@ class _PillState extends State<_Pill> with SingleTickerProviderStateMixin {
           child: Transform.scale(scale: 0.6 + 0.4 * t, child: child),
         );
       },
-      child: Container(
-        height: 34,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          onTap: widget.onTap,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.creamBorder, width: 1.5),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x1A000000),
-              blurRadius: 6,
-              offset: Offset(0, 2),
+          child: Container(
+            height: 34,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.creamBorder, width: 1.5),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x1A000000),
+                  blurRadius: 6,
+                  offset: Offset(0, 2),
+                ),
+              ],
             ),
-          ],
+            alignment: Alignment.center,
+            child: widget.child,
+          ),
         ),
-        alignment: Alignment.center,
-        child: widget.child,
       ),
     );
   }
@@ -197,15 +207,17 @@ class _LanternState extends State<_Lantern>
     super.dispose();
   }
 
+  static const _asset = 'assets/images/noor_energy_moon.png';
+
   @override
   Widget build(BuildContext context) {
     if (!widget.lit) {
       return const Opacity(
-        opacity: 0.25,
-        child: Icon(
-          Icons.nightlight_round,
-          size: 14,
-          color: AppColors.adventurePurple,
+        opacity: 0.28,
+        child: Image(
+          image: AssetImage(_asset),
+          width: 16,
+          height: 16,
         ),
       );
     }
@@ -213,19 +225,13 @@ class _LanternState extends State<_Lantern>
       animation: _flicker,
       builder: (context, child) {
         final t = Curves.easeInOut.transform(_flicker.value);
-        return Transform.scale(
-          scale: 1 + 0.12 * t,
-          child: Icon(
-            Icons.nightlight_round,
-            size: 14,
-            color: Color.lerp(
-              AppColors.adventurePurple,
-              Colors.white,
-              0.15 * t,
-            ),
-          ),
-        );
+        return Transform.scale(scale: 1 + 0.12 * t, child: child);
       },
+      child: const Image(
+        image: AssetImage(_asset),
+        width: 16,
+        height: 16,
+      ),
     );
   }
 }

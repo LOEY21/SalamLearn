@@ -8,6 +8,7 @@ import '../../data/models/consent_record.dart';
 import '../../data/models/learner_profile.dart';
 import '../../data/repositories/consent_repository.dart';
 import '../../data/repositories/learner_repository.dart';
+import '../../data/repositories/class_repository.dart';
 import '../../data/remote/firebase_auth_gateway.dart';
 import '../../data/remote/firestore_mirror.dart';
 import '../../data/repositories/parent_repository.dart';
@@ -30,6 +31,12 @@ enum SignInResult {
   /// Neither the local account nor (if tried) Firebase Auth accepted the
   /// credentials.
   invalidCredentials,
+
+  /// A local account matched, but its Firestore document no longer exists
+  /// — an admin deleted it from the web panel. The user cannot sign in
+  /// because the account was intentionally removed. The UI shows a
+  /// distinct message instead of "wrong password".
+  accountDeleted,
 
   /// No local account matched, and this device has no internet connection
   /// to try the remote fallback — genuinely different from wrong
@@ -82,13 +89,14 @@ class SessionState {
     ConsentRecord? consent,
     String? languageCode,
     bool clearRole = false,
+    bool clearLearner = false,
   }) {
     return SessionState(
       activeRole: clearRole ? null : activeRole ?? this.activeRole,
       pinVerified: pinVerified ?? this.pinVerified,
       activeParentId: activeParentId ?? this.activeParentId,
       activeTeacherId: activeTeacherId ?? this.activeTeacherId,
-      learner: learner ?? this.learner,
+      learner: clearLearner ? null : learner ?? this.learner,
       consent: consent ?? this.consent,
       languageCode: languageCode ?? this.languageCode,
     );
@@ -209,10 +217,35 @@ class SessionNotifier extends Notifier<SessionState> {
       activeTeacherId = null;
     }
     var activeLearnerId = _settings.get('activeLearnerId') as String?;
-    final learner = activeLearnerId == null
+    var learner = activeLearnerId == null
         ? null
         : _learners.findById(activeLearnerId);
-    if (activeLearnerId != null && learner == null) {
+    if (activeParentId != null && (activeLearnerId == null || learner == null || learner.parentId != activeParentId)) {
+      final lastSelectedId = _settings.get('lastSelectedLearner_$activeParentId') as String?;
+      if (lastSelectedId != null) {
+        final lastSelected = _learners.findById(lastSelectedId);
+        if (lastSelected != null && lastSelected.parentId == activeParentId) {
+          _settings.put('activeLearnerId', lastSelectedId);
+          learner = lastSelected;
+        }
+      }
+      if (learner == null) {
+        final parentLearners = _learners.byParentId(activeParentId);
+        if (parentLearners.isNotEmpty) {
+          final first = parentLearners.first;
+          if (first.id != null) {
+            _settings.put('activeLearnerId', first.id);
+            _settings.put('lastSelectedLearner_$activeParentId', first.id);
+          }
+          learner = first;
+        } else {
+          if (activeLearnerId != null) {
+            _settings.delete('activeLearnerId');
+          }
+          learner = null;
+        }
+      }
+    } else if (activeLearnerId != null && learner == null) {
       _settings.delete('activeLearnerId');
     }
 
@@ -259,6 +292,10 @@ class SessionNotifier extends Notifier<SessionState> {
   void selectRole(UserRole role) {
     state = state.copyWith(activeRole: role, pinVerified: false);
     if (role == UserRole.learner) {
+      _settings.put('activeRole', role.name);
+    } else if (role == UserRole.parent && state.activeParentId != null) {
+      _settings.put('activeRole', role.name);
+    } else if (role == UserRole.asatidz && state.activeTeacherId != null) {
       _settings.put('activeRole', role.name);
     }
   }
@@ -428,6 +465,7 @@ class SessionNotifier extends Notifier<SessionState> {
         }
         await _settings.put('activeTeacherId', account.id);
         state = state.copyWith(activeTeacherId: account.id, pinVerified: true);
+        if (pending.remoteId != null) await _pullClassesFromRemote(account.id);
         return;
       }
       final account = await _teachers.createPinOnly(pin);
@@ -468,7 +506,11 @@ class SessionNotifier extends Notifier<SessionState> {
           }
         }
         await _settings.put('activeParentId', account.id);
-        state = state.copyWith(activeParentId: account.id, pinVerified: true);
+        state = state.copyWith(
+          activeParentId: account.id,
+          pinVerified: true,
+          clearLearner: true,
+        );
         if (pending.remoteId != null) await _pullLearnersFromRemote(account.id);
         return;
       }
@@ -511,10 +553,48 @@ class SessionNotifier extends Notifier<SessionState> {
       }
       if (first != null) {
         await _settings.put('activeLearnerId', first.id);
+        await _settings.put('lastSelectedLearner_$parentId', first.id);
         state = state.copyWith(learner: first);
       }
     } catch (e) {
       debugPrint('SessionNotifier: pulling remote learners failed: $e');
+    }
+  }
+
+  Future<void> _pullClassesFromRemote(String teacherId) async {
+    try {
+      final remoteClasses = await FirestoreMirror().fetchClassesForTeacher(
+        teacherId,
+      );
+      final classes = ClassRepository();
+      for (final remote in remoteClasses) {
+        await classes.saveFromRemote(remote);
+        final remoteEnrollments = await FirestoreMirror().fetchEnrollmentsForClass(remote.id);
+        for (final remoteEnrollment in remoteEnrollments) {
+          await classes.enroll(
+            classId: remoteEnrollment.classId,
+            learnerId: remoteEnrollment.learnerId,
+          );
+          final localLearner = _learners.findById(remoteEnrollment.learnerId);
+          if (localLearner == null) {
+            final remoteLearner = await FirestoreMirror().fetchLearner(remoteEnrollment.learnerId);
+            if (remoteLearner != null) {
+              await _learners.saveFromRemote(
+                id: remoteLearner.id,
+                parentId: remoteLearner.parentId ?? '',
+                name: remoteLearner.name,
+                age: remoteLearner.age,
+                avatar: remoteLearner.avatar,
+                gradeLevel: remoteLearner.gradeLevel,
+                username: remoteLearner.username,
+                createdAt: remoteLearner.createdAt,
+              );
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('SessionNotifier: pulling remote classes failed: $e');
     }
   }
 
@@ -550,7 +630,34 @@ class SessionNotifier extends Notifier<SessionState> {
       );
       if (account != null) {
         if (!_teachers.verifyPassword(account, password)) {
-          return SignInResult.invalidCredentials;
+          // Local hash can go stale if the password was reset via
+          // Firebase's emailed link — that only updates the remote
+          // credential, since it happens outside the app entirely. Before
+          // giving up, check the typed password against Firebase Auth
+          // itself and, if it matches, resync the local hash so this
+          // device stops rejecting the new password.
+          final verifiedRemotely = account.firebaseUid != null &&
+              await _tryRemotePasswordVerify(
+                email: normalizedEmail,
+                password: password,
+              );
+          if (!verifiedRemotely) return SignInResult.invalidCredentials;
+          await _teachers.updatePasswordLocally(
+            account: account,
+            newPassword: password,
+          );
+        }
+        await _reestablishFirebaseSessionIfNeeded(
+          firebaseUid: account.firebaseUid,
+          email: normalizedEmail,
+          password: password,
+        );
+        if (account.firebaseUid != null) {
+          final remoteExists = await FirestoreMirror().docExists(
+            HiveBoxes.teachers,
+            account.id,
+          );
+          if (!remoteExists) return SignInResult.accountDeleted;
         }
         await _settings.put('activeRole', role.name);
         await _settings.put('activeTeacherId', account.id);
@@ -572,15 +679,40 @@ class SessionNotifier extends Notifier<SessionState> {
       );
       if (account != null) {
         if (!_parents.verifyPassword(account, password)) {
-          return SignInResult.invalidCredentials;
+          // See the matching comment in the teacher branch above — resync
+          // from a Firebase-side password reset before failing.
+          final verifiedRemotely = account.firebaseUid != null &&
+              await _tryRemotePasswordVerify(
+                email: normalizedEmail,
+                password: password,
+              );
+          if (!verifiedRemotely) return SignInResult.invalidCredentials;
+          await _parents.updatePasswordLocally(
+            account: account,
+            newPassword: password,
+          );
+        }
+        await _reestablishFirebaseSessionIfNeeded(
+          firebaseUid: account.firebaseUid,
+          email: normalizedEmail,
+          password: password,
+        );
+        if (account.firebaseUid != null) {
+          final remoteExists = await FirestoreMirror().docExists(
+            HiveBoxes.parents,
+            account.id,
+          );
+          if (!remoteExists) return SignInResult.accountDeleted;
         }
         await _settings.put('activeRole', role.name);
         await _settings.put('activeParentId', account.id);
+        final resolvedLearner = _resolveActiveLearnerFor(account.id);
         state = state.copyWith(
           activeRole: role,
           activeParentId: account.id,
           pinVerified: false,
-          learner: _resolveActiveLearnerFor(account.id),
+          learner: resolvedLearner,
+          clearLearner: resolvedLearner == null,
         );
         return SignInResult.success;
       }
@@ -589,15 +721,38 @@ class SessionNotifier extends Notifier<SessionState> {
   }
 
   /// Restores the previously-active child (if any) for a parent who just
-  /// signed back in — `activeLearnerId` survives [logout] specifically so
-  /// this can find it. Guards on `parentId` so a stale pointer never leaks
-  /// a different parent's child on a shared device.
+  /// signed back in within the same still-logged-in session (e.g.
+  /// re-verifying a PIN, or `linkActiveAccountToFirebase`) — [logout] now
+  /// clears `activeLearnerId`, so this only ever finds something across a
+  /// full sign-out-and-back-in if `signIn` itself repopulates it first.
+  /// Guards on `parentId` so a stale pointer never leaks a different
+  /// parent's child on a shared device.
   LearnerProfile? _resolveActiveLearnerFor(String parentId) {
     final learnerId = _settings.get('activeLearnerId') as String?;
-    if (learnerId == null) return null;
-    final learner = _learners.findById(learnerId);
-    if (learner == null || learner.parentId != parentId) return null;
-    return learner;
+    if (learnerId != null) {
+      final learner = _learners.findById(learnerId);
+      if (learner != null && learner.parentId == parentId) {
+        return learner;
+      }
+    }
+    final lastSelectedId = _settings.get('lastSelectedLearner_$parentId') as String?;
+    if (lastSelectedId != null) {
+      final learner = _learners.findById(lastSelectedId);
+      if (learner != null && learner.parentId == parentId) {
+        _settings.put('activeLearnerId', lastSelectedId);
+        return learner;
+      }
+    }
+    final parentLearners = _learners.byParentId(parentId);
+    if (parentLearners.isNotEmpty) {
+      final first = parentLearners.first;
+      if (first.id != null) {
+        _settings.put('activeLearnerId', first.id);
+        _settings.put('lastSelectedLearner_$parentId', first.id);
+      }
+      return first;
+    }
+    return null;
   }
 
   /// Checked before every remote sign-in attempt — Firebase Auth's own
@@ -608,6 +763,73 @@ class SessionNotifier extends Notifier<SessionState> {
   Future<bool> _hasInternet() async {
     final results = await Connectivity().checkConnectivity();
     return results.any((r) => r != ConnectivityResult.none);
+  }
+
+  /// Checks a password against Firebase Auth without disturbing any other
+  /// sign-in state — used purely to detect "this device's local hash is
+  /// stale because the password was reset outside the app" (see the
+  /// matching comments in [signIn]'s local-account branches). Swallows
+  /// every failure (wrong password, offline, unknown user) as `false`;
+  /// callers already have their own "local check failed" path to fall back
+  /// to, so there's nothing more specific to report here.
+  Future<bool> _tryRemotePasswordVerify({
+    required String email,
+    required String password,
+  }) async {
+    if (!await _hasInternet()) return false;
+    try {
+      await FirebaseAuthGateway().signIn(email: email, password: password);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Firebase Auth tracks exactly one signed-in user *per device*, not one
+  /// per local role — a Hive-verified local sign-in never used to touch
+  /// Firebase Auth at all (only [_tryRemoteParentSignIn]/
+  /// [_tryRemoteTeacherSignIn]'s no-local-match fallback did). On a device
+  /// that's ever signed into more than one role (Parent, then Teacher, or
+  /// vice versa — a common tester/QA setup, not just an edge case), that
+  /// left Firebase's device-wide "current user" permanently pointed at
+  /// whichever role authenticated with it *last*, so every subsequent
+  /// `SyncManager.syncNow()` for the *other*, locally-signed-in-only role
+  /// wrote as the wrong Firebase user — `firestore.rules`' owner checks
+  /// (`ownsParentDoc`/`ownsTeacherDoc`) then reject every write with a bare
+  /// `permission-denied`, indistinguishable from a real bug without
+  /// checking `FirebaseAuth.instance.currentUser` directly.
+  ///
+  /// Called on every successful local sign-in (not just the first): if
+  /// this account has a `firebaseUid` but isn't the one Firebase Auth
+  /// currently considers signed in, silently re-authenticates with it
+  /// using the password already typed into this exact sign-in form —
+  /// restoring the correct session for sync purposes without adding any
+  /// extra step to the fast local sign-in path. Best-effort: offline, a
+  /// stale/changed remote password, or any other failure here must not
+  /// block sign-in itself (sync will just keep failing until it's online
+  /// with the right password, same as before this existed).
+  Future<void> _reestablishFirebaseSessionIfNeeded({
+    required String? firebaseUid,
+    required String email,
+    required String password,
+  }) async {
+    if (firebaseUid == null) return;
+    // Wrapped as one block, not just around the `signIn` call — even
+    // touching `FirebaseAuth.instance` via `gateway.currentUser` throws in
+    // a widget-test environment with no Firebase app initialized (no
+    // Firebase test double exists in this repo's tests, same as every
+    // other `FirebaseAuthGateway` call site). This whole path is
+    // best-effort by design (see the doc above), so any failure here —
+    // Firebase not initialized, offline, a stale password — must fall
+    // through silently rather than surface at all.
+    try {
+      final gateway = FirebaseAuthGateway();
+      if (gateway.currentUser?.uid == firebaseUid) return;
+      if (!await _hasInternet()) return;
+      await gateway.signIn(email: email, password: password);
+    } catch (e) {
+      debugPrint('SessionNotifier: Firebase session re-auth failed: $e');
+    }
   }
 
   Future<SignInResult> _tryRemoteParentSignIn({
@@ -687,7 +909,12 @@ class SessionNotifier extends Notifier<SessionState> {
           : _parents.findById(state.activeParentId!);
       ok = account != null && _parents.verifyPin(account, candidate);
     }
-    if (ok) state = state.copyWith(pinVerified: true);
+    if (ok) {
+      if (state.activeRole != null) {
+        _settings.put('activeRole', state.activeRole!.name);
+      }
+      state = state.copyWith(pinVerified: true);
+    }
     return ok;
   }
 
@@ -789,6 +1016,9 @@ class SessionNotifier extends Notifier<SessionState> {
     );
     if (profile.id != null) {
       await _settings.put('activeLearnerId', profile.id);
+      if (state.activeParentId != null) {
+        await _settings.put('lastSelectedLearner_${state.activeParentId}', profile.id);
+      }
     }
     state = state.copyWith(learner: profile);
     // Best-effort — see the matching comment on the parent/teacher register
@@ -827,6 +1057,9 @@ class SessionNotifier extends Notifier<SessionState> {
     final profile = _learners.findById(learnerId);
     if (profile == null) return;
     await _settings.put('activeLearnerId', learnerId);
+    if (state.activeParentId != null) {
+      await _settings.put('lastSelectedLearner_${state.activeParentId}', learnerId);
+    }
     state = state.copyWith(learner: profile);
   }
 
@@ -874,8 +1107,10 @@ class SessionNotifier extends Notifier<SessionState> {
     final next = remaining.isEmpty ? null : remaining.first;
     if (next?.id != null) {
       await _settings.put('activeLearnerId', next!.id!);
+      await _settings.put('lastSelectedLearner_${state.activeParentId}', next.id!);
     } else {
       await _settings.delete('activeLearnerId');
+      await _settings.delete('lastSelectedLearner_${state.activeParentId}');
     }
     state = SessionState(
       languageCode: state.languageCode,
@@ -888,7 +1123,46 @@ class SessionNotifier extends Notifier<SessionState> {
     );
   }
 
-  void lockAdminModules() => state = state.copyWith(pinVerified: false);
+  /// Called when [learnerSyncProvider] detects a learner was deleted remotely
+  /// (e.g. admin web panel). Removes the local Hive record (the provider
+  /// already called [LearnerRepository.delete], but we re-delete here to
+  /// cover race conditions) and re-picks the active learner if this was it.
+  Future<void> onRemoteLearnerDeleted(String learnerId) async {
+    await _learners.delete(learnerId);
+
+    if (state.learner?.id != learnerId) return;
+
+    final remaining = _learners.byParentId(state.activeParentId ?? '');
+    final next = remaining.isEmpty ? null : remaining.first;
+    if (next?.id != null) {
+      await _settings.put('activeLearnerId', next!.id!);
+      await _settings.put('lastSelectedLearner_${state.activeParentId}', next.id!);
+    } else {
+      await _settings.delete('activeLearnerId');
+      await _settings.delete('lastSelectedLearner_${state.activeParentId}');
+    }
+    state = SessionState(
+      languageCode: state.languageCode,
+      consent: state.consent,
+      activeRole: state.activeRole,
+      pinVerified: state.pinVerified,
+      activeParentId: state.activeParentId,
+      activeTeacherId: state.activeTeacherId,
+      learner: next,
+    );
+  }
+
+  void lockAdminModules() {
+    _settings.delete('activeRole');
+    state = SessionState(
+      languageCode: state.languageCode,
+      consent: state.consent,
+      activeParentId: state.activeParentId,
+      activeTeacherId: state.activeTeacherId,
+      learner: state.learner,
+      pinVerified: false,
+    );
+  }
 
   /// Full sign-out (the dashboards' "Logout" button) — distinct from
   /// [lockAdminModules], which only re-locks the PIN gate but keeps the
@@ -897,14 +1171,22 @@ class SessionNotifier extends Notifier<SessionState> {
   /// requires email + password again, not just the PIN. Leaves every
   /// account's data untouched on disk — only [eraseAll] deletes data.
   ///
-  /// Deliberately does NOT delete `activeLearnerId` — that's kept as "last
-  /// selected child" memory so [signIn] can restore the same child's
-  /// dashboard on the next login instead of showing a generic no-child
-  /// state every time.
+  /// Also clears `activeLearnerId` — [build]'s startup rehydration reads it
+  /// back regardless of `activeRole`, so leaving it set (the previous
+  /// behavior, meant as "last selected child" memory for [signIn] to
+  /// restore) meant a parent logging out on a shared device could still
+  /// have the app cold-launch straight into their kid's hub next time,
+  /// bypassing sign-in entirely the moment `activeRole` next became
+  /// `learner` for any reason (e.g. just tapping the Learner card on
+  /// `/roles`, which persists that role immediately — see
+  /// `role_picker_screen.dart`). [signIn]'s "restore last child" note now
+  /// only applies within a single still-logged-in session, not across a
+  /// logout.
   Future<void> logout() async {
     await _settings.delete('activeRole');
     await _settings.delete('activeParentId');
     await _settings.delete('activeTeacherId');
+    await _settings.delete('activeLearnerId');
     state = SessionState(
       languageCode: state.languageCode,
       consent: state.consent,
@@ -963,11 +1245,78 @@ class SessionNotifier extends Notifier<SessionState> {
   }
 }
 
-/// See [SessionNotifier.verifyActiveAccountStillExists] doc. `autoDispose`
-/// so a stale result doesn't linger in memory once the dashboard that
-/// triggered it is gone — the next dashboard visit re-checks fresh.
-final accountStillExistsProvider = FutureProvider.autoDispose<bool>((ref) {
-  return ref.read(sessionProvider.notifier).verifyActiveAccountStillExists();
+/// Real-time account existence stream. Watches the current parent/teacher
+/// document in Firestore via `onSnapshot`. Emits `false` immediately when
+/// the admin web panel deletes the doc, so the dashboard user sees a
+/// warning in real time instead of waiting for the next app launch.
+/// `autoDispose` so the listener is torn down when the dashboard unmounts.
+final accountStreamProvider = StreamProvider.autoDispose<bool>((ref) {
+  final session = ref.watch(sessionProvider);
+  final role = session.activeRole;
+  final id = role == UserRole.asatidz
+      ? session.activeTeacherId
+      : session.activeParentId;
+
+  if (role == null || id == null) return const Stream.empty();
+
+  final collection =
+      role == UserRole.asatidz ? HiveBoxes.teachers : HiveBoxes.parents;
+
+  return FirestoreMirror().watchDocExistence(collection, id);
+});
+
+/// Real-time learner sync stream for the active parent. Listens to
+/// Firestore's `learners` collection filtered by [activeParentId] via
+/// `onSnapshot` and diffs against the local Hive set. Any learner that
+/// exists in Hive but not in the Firestore snapshot is treated as a remote
+/// deletion (admin web panel) — its Hive record is removed and, if it was
+/// the active learner, another sibling is re-picked.
+final learnerSyncProvider = StreamProvider.autoDispose<DateTime>((ref) async* {
+  final parentId = ref.watch(sessionProvider.select((s) => s.activeParentId));
+  if (parentId == null) return;
+
+  final repo = LearnerRepository();
+  final notifier = ref.read(sessionProvider.notifier);
+  await for (final firestoreIds in FirestoreMirror().watchLearnersForParent(parentId)) {
+    final hiveLearners = repo.byParentId(parentId);
+    final hiveIds = hiveLearners.map((l) => l.id).whereType<String>().toSet();
+
+    final deleted = hiveIds.difference(firestoreIds);
+    if (deleted.isNotEmpty) {
+      for (final id in deleted) {
+        await notifier.onRemoteLearnerDeleted(id);
+      }
+    }
+
+    final added = firestoreIds.difference(hiveIds);
+    if (added.isNotEmpty) {
+      final mirror = FirestoreMirror();
+      for (final id in added) {
+        final remote = await mirror.fetchLearner(id);
+        if (remote != null) {
+          await repo.saveFromRemote(
+            id: remote.id,
+            parentId: remote.parentId ?? parentId,
+            name: remote.name,
+            age: remote.age,
+            avatar: remote.avatar,
+            gradeLevel: remote.gradeLevel,
+            username: remote.username,
+            createdAt: remote.createdAt,
+          );
+        }
+      }
+      // If there's no active learner yet, pick the first restored one
+      if (ref.read(sessionProvider).learner == null && added.isNotEmpty) {
+        final all = repo.byParentId(parentId);
+        if (all.isNotEmpty) {
+          await notifier.switchActiveLearner(all.first.id!);
+        }
+      }
+    }
+
+    yield DateTime.now();
+  }
 });
 
 final sessionProvider = NotifierProvider<SessionNotifier, SessionState>(

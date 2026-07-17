@@ -50,3 +50,21 @@ final unlockedBadgesProvider =
     NotifierProvider<UnlockedBadgesNotifier, List<String>>(
   UnlockedBadgesNotifier.new,
 );
+
+/// How many earned badges the learner has actually seen on the Backpack
+/// screen — drives the "something new" dot on the bottom nav's Backpack
+/// tab. `BackpackScreen` calls `markSeen` with the current earned count as
+/// soon as it opens, so the dot only shows between an unlock and the next
+/// visit to that tab.
+class SeenBadgeCountNotifier extends Notifier<int> {
+  @override
+  int build() => ref.read(unlockedBadgesProvider).length;
+
+  void markSeen(int count) {
+    if (count > state) state = count;
+  }
+}
+
+final seenBadgeCountProvider = NotifierProvider<SeenBadgeCountNotifier, int>(
+  SeenBadgeCountNotifier.new,
+);

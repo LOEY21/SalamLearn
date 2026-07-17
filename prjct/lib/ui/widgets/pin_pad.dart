@@ -2,13 +2,22 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 
-/// 4-digit PIN pad matching mockup Figure 4.2: soft outlined keys on
-/// cream, teal-filled progress dots, shake on wrong entry.
+/// 4-digit PIN pad — filled digit boxes (lift + accent border when filled)
+/// above a borderless circular numpad, floating free on white rather than
+/// inside a card. Shake + red boxes on wrong entry.
 class PinPad extends StatefulWidget {
-  const PinPad({super.key, required this.onSubmit});
+  const PinPad({
+    super.key,
+    required this.onSubmit,
+    this.accentColor = AppColors.teal,
+  });
 
   /// Called with the 4-digit string; return false to shake and clear.
   final bool Function(String pin) onSubmit;
+
+  /// Filled-box border/shadow color — teal for the Parent gate, gold for
+  /// Teacher/Learner.
+  final Color accentColor;
 
   @override
   State<PinPad> createState() => _PinPadState();
@@ -69,32 +78,18 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               for (var i = 0; i < 4; i++)
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 20,
-                  height: 20,
-                  margin: const EdgeInsets.symmetric(horizontal: 6),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _error
-                        ? AppColors.danger
-                        : (i < _entry.length
-                            ? AppColors.teal
-                            : Colors.transparent),
-                    border: Border.all(
-                      color: _error
-                          ? AppColors.danger
-                          : (i < _entry.length
-                              ? AppColors.teal
-                              : AppColors.mintBorder),
-                      width: 2,
-                    ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  child: _PinBox(
+                    filled: i < _entry.length,
+                    error: _error,
+                    accentColor: widget.accentColor,
                   ),
                 ),
             ],
           ),
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 30),
         for (final row in const [
           ['1', '2', '3'],
           ['4', '5', '6'],
@@ -102,15 +97,15 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
           ['', '0', '<'],
         ])
           Padding(
-            padding: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.only(bottom: 6),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 for (final key in row)
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 7),
+                    padding: const EdgeInsets.symmetric(horizontal: 9),
                     child: key.isEmpty
-                        ? const SizedBox(width: 80, height: 80)
+                        ? const SizedBox(width: 76, height: 76)
                         : _PinKey(
                             label: key,
                             onTap: key == '<' ? _backspace : () => _tap(key),
@@ -124,6 +119,60 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
   }
 }
 
+class _PinBox extends StatelessWidget {
+  const _PinBox({
+    required this.filled,
+    required this.error,
+    required this.accentColor,
+  });
+
+  final bool filled;
+  final bool error;
+  final Color accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = error
+        ? AppColors.danger
+        : (filled ? accentColor : AppColors.creamBorder);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+      width: 46,
+      height: 54,
+      transform: Matrix4.translationValues(0, filled && !error ? -2 : 0, 0),
+      decoration: BoxDecoration(
+        color: error
+            ? const Color(0xFFFEF2F2)
+            : (filled ? AppColors.surface : AppColors.neutralTint),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: 1.5),
+        boxShadow: filled && !error
+            ? [
+                BoxShadow(
+                  color: accentColor.withValues(alpha: 0.28),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
+      ),
+      alignment: Alignment.center,
+      child: filled
+          ? const Text(
+              '•',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                color: AppColors.ink,
+              ),
+            )
+          : null,
+    );
+  }
+}
+
 class _PinKey extends StatelessWidget {
   const _PinKey({required this.label, required this.onTap});
 
@@ -133,22 +182,18 @@ class _PinKey extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.surface,
-      shape: const CircleBorder(
-        side: BorderSide(color: AppColors.mintBorder, width: 1.6),
-      ),
-      elevation: 1,
-      shadowColor: AppColors.ink.withValues(alpha: 0.08),
+      color: Colors.transparent,
+      shape: const CircleBorder(),
       child: InkWell(
         onTap: onTap,
         customBorder: const CircleBorder(),
         child: SizedBox(
-          width: 80,
-          height: 80,
+          width: 76,
+          height: 76,
           child: Center(
             child: label == '<'
                 ? const Icon(Icons.backspace_outlined,
-                    color: AppColors.ink, size: 26)
+                    color: AppColors.textMuted, size: 26)
                 : Text(
                     label,
                     style: const TextStyle(

@@ -7,6 +7,7 @@ import '../models/consent_record.dart';
 import '../models/custom_lesson.dart';
 import '../models/enrollment.dart';
 import '../models/learner_profile.dart';
+import '../models/lesson_folder.dart';
 import '../models/parent_account.dart';
 import '../models/progress_record.dart';
 import '../models/streak_state.dart';
@@ -28,6 +29,7 @@ class HiveBoxes {
   static const streaks = 'streaks';
   static const badges = 'badges';
   static const customLessons = 'custom_lessons';
+  static const lessonFolders = 'lesson_folders';
   static const settings = 'settings';
 }
 
@@ -55,6 +57,7 @@ class HiveService {
     registerOnce(8, StreakStateAdapter());
     registerOnce(9, BadgeAwardAdapter());
     registerOnce(10, CustomLessonAdapter());
+    registerOnce(11, LessonFolderAdapter());
 
     await _openAllBoxes();
   }
@@ -72,6 +75,7 @@ class HiveService {
       Hive.openBox<StreakState>(HiveBoxes.streaks),
       Hive.openBox<BadgeAward>(HiveBoxes.badges),
       Hive.openBox<CustomLesson>(HiveBoxes.customLessons),
+      Hive.openBox<LessonFolder>(HiveBoxes.lessonFolders),
       Hive.openBox<dynamic>(HiveBoxes.settings),
     ]);
   }

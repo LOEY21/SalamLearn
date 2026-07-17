@@ -113,7 +113,7 @@ void main() {
         ),
       );
 
-      final firstModule = coreModules.first;
+      final secondModule = coreModules[1];
 
       // Tap via the node badge's own Key, not the title text — the label
       // pill sits below the badge as a Column sibling, outside the actual
@@ -124,18 +124,18 @@ void main() {
       // background breathing, Noor Energy lantern flicker) — pumpAndSettle
       // never returns here. Advance explicitly instead, same pattern this
       // repo already uses for other continuously-animated screens.
-      await tester.tap(find.byKey(ValueKey('node-badge-${firstModule.id}')));
+      await tester.tap(find.byKey(ValueKey('node-badge-${secondModule.id}')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('${firstModule.title} is Locked'), findsOneWidget);
+      expect(find.text('${secondModule.title} is Locked'), findsOneWidget);
       expect(find.byType(DestinationLevelsSheet), findsNothing);
 
       await tester.tap(find.text('OK'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('${firstModule.title} is Locked'), findsNothing);
+      expect(find.text('${secondModule.title} is Locked'), findsNothing);
     },
   );
 

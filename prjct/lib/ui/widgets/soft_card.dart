@@ -12,6 +12,7 @@ class SoftCard extends StatelessWidget {
     this.color = AppColors.surface,
     this.borderColor,
     this.onTap,
+    this.onLongPress,
     this.padding = const EdgeInsets.all(16),
     this.radius = 16,
   });
@@ -20,6 +21,7 @@ class SoftCard extends StatelessWidget {
   final Color color;
   final Color? borderColor;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final EdgeInsetsGeometry padding;
   final double radius;
 
@@ -34,11 +36,12 @@ class SoftCard extends StatelessWidget {
       ),
       child: child,
     );
-    if (onTap == null) return card;
+    if (onTap == null && onLongPress == null) return card;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(radius),
         child: card,
       ),

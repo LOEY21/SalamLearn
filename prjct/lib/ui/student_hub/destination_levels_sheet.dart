@@ -7,14 +7,18 @@ import '../theme/app_colors.dart';
 /// `src/screens/learner/lesson/DestinationModal.tsx` — the bottom sheet
 /// shown when a learner taps a destination node on the adventure map. Splits
 /// a destination's lessons into 3 "levels" (Beginner/Practice/Mastery),
-/// gates each level/lesson by completion state, and hands off straight to
-/// `onStartLesson` on tap — there is no intermediate "Start Activity"
-/// confirmation screen, matching the source exactly.
+/// gates each level/lesson by the teacher's `maxLevel`/`maxLessons`
+/// assignment (not by completion — nothing auto-unlocks from finishing a
+/// prior lesson), and hands off straight to `onStartLesson` on tap — there
+/// is no intermediate "Start Activity" confirmation screen, matching the
+/// source exactly.
 ///
 /// The exact overshoot easing the source's `slideUp` keyframe uses
 /// (`cubic-bezier(0.34, 1.56, 0.64, 1)`) — same curve/name precedent as
 /// `_overshoot` in `adventure_map_screen.dart`.
 const _overshoot = Cubic(0.34, 1.56, 0.64, 1.0);
+
+const _debugUnlockAllLevels = true;
 
 class _LevelMeta {
   const _LevelMeta({
@@ -67,12 +71,27 @@ class DestinationLevelsSheet extends StatelessWidget {
     required this.completedLessons,
     required this.noorEnergy,
     required this.onStartLesson,
+    this.maxLevel = 3,
+    this.maxLessons,
   });
 
   final Destination destination;
   final Set<String> completedLessons;
   final int noorEnergy;
   final void Function(Lesson lesson, bool isNewLevel) onStartLesson;
+
+  /// How far (1–3) the teacher has allowed this destination's assignment
+  /// to reach. Level index `li` (0-based) is only ever unlocked when
+  /// `li < maxLevel` — a hard teacher-set ceiling, not driven by lesson
+  /// completion. Defaults to 3 (no ceiling) for callers that don't assign
+  /// per-level.
+  final int maxLevel;
+
+  /// How many lessons ("games") within the top allowed level (index
+  /// `maxLevel - 1`) are unlocked, in lesson order. Earlier levels (fully
+  /// admitted by [maxLevel]) always have every lesson open. `null` means no
+  /// cap on the top level either.
+  final int? maxLessons;
 
   /// Presents this sheet over [context], matching the source's overlay
   /// (semi-transparent backdrop, tap-outside-to-close, sheet sliding up with
@@ -84,6 +103,8 @@ class DestinationLevelsSheet extends StatelessWidget {
     required Set<String> completedLessons,
     required int noorEnergy,
     required void Function(Lesson lesson, bool isNewLevel) onStartLesson,
+    int maxLevel = 3,
+    int? maxLessons,
   }) {
     return showGeneralDialog<void>(
       context: context,
@@ -97,6 +118,8 @@ class DestinationLevelsSheet extends StatelessWidget {
           completedLessons: completedLessons,
           noorEnergy: noorEnergy,
           onStartLesson: onStartLesson,
+          maxLevel: maxLevel,
+          maxLessons: maxLessons,
         );
       },
       transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
@@ -129,13 +152,21 @@ class DestinationLevelsSheet extends StatelessWidget {
     return group.every((l) => !completedLessons.contains(l.id));
   }
 
-  bool _isLevelUnlocked(List<List<Lesson>> levels, int levelIdx) {
-    if (levelIdx == 0) return destination.state != DestinationState.locked;
-    final prevGroup = (levelIdx - 1) < levels.length
-        ? levels[levelIdx - 1]
-        : const <Lesson>[];
-    return prevGroup.every((l) => completedLessons.contains(l.id));
+  bool _isLevelUnlocked(int levelIdx) {
+    if (_debugUnlockAllLevels) return true;
+    if (destination.state == DestinationState.locked) {
+      return false;
+    }
+    if (levelIdx == 0) return true;
+    // Sequential level unlock: Level unlocks when the previous level is complete.
+    return _isLevelComplete(_levels, levelIdx - 1);
   }
+
+  /// How many lessons within level [levelIdx] are unlocked, in order —
+  /// `null` means every lesson in that level is open. Only the top
+  /// teacher-allowed level ([maxLevel] - 1) can carry a cap; any level
+  /// below it that [_isLevelUnlocked] already admits is fully open.
+  int? _lessonCapFor(int levelIdx) => levelIdx == maxLevel - 1 ? maxLessons : null;
 
   bool _isLevelComplete(List<List<Lesson>> levels, int levelIdx) {
     final group = levelIdx < levels.length
@@ -148,7 +179,8 @@ class DestinationLevelsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isLocked = destination.state == DestinationState.locked;
+    final isLocked =
+        !_debugUnlockAllLevels && destination.state == DestinationState.locked;
     final levels = _levels;
     final destColor = _hexColor(destination.color);
     final destBg = _hexColor(destination.bg);
@@ -327,7 +359,8 @@ class DestinationLevelsSheet extends StatelessWidget {
                                     meta: _levelMeta[li < 2 ? li : 2],
                                     levelIndex: li,
                                     group: levels[li],
-                                    unlocked: _isLevelUnlocked(levels, li),
+                                    unlocked: _isLevelUnlocked(li),
+                                    lessonCap: _lessonCapFor(li),
                                     complete: _isLevelComplete(levels, li),
                                     isNew: _isLevelNew(levels, li),
                                     noorEnergy: noorEnergy,
@@ -358,6 +391,7 @@ class _LevelSection extends StatelessWidget {
     required this.levelIndex,
     required this.group,
     required this.unlocked,
+    this.lessonCap,
     required this.complete,
     required this.isNew,
     required this.noorEnergy,
@@ -369,6 +403,10 @@ class _LevelSection extends StatelessWidget {
   final int levelIndex;
   final List<Lesson> group;
   final bool unlocked;
+
+  /// How many lessons in [group], in order, are teacher-unlocked — `null`
+  /// means all of them.
+  final int? lessonCap;
   final bool complete;
   final bool isNew;
   final int noorEnergy;
@@ -498,7 +536,8 @@ class _LevelSection extends StatelessWidget {
                   final done = completedLessons.contains(lesson.id);
                   final lessonUnlocked =
                       unlocked &&
-                      (idx == 0 ||
+                      (_debugUnlockAllLevels ||
+                          idx == 0 ||
                           completedLessons.contains(group[idx - 1].id));
                   final canStart = lessonUnlocked && (done || !noEnergy);
                   final energyBlocked = lessonUnlocked && !done && noEnergy;
@@ -550,12 +589,12 @@ class _LessonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lessonColor = _hexColor(lesson.color);
-    final borderColor = completed
+    final borderColor = unlocked && completed
         ? AppColors.adventureGreen
         : unlocked
         ? lessonColor
         : const Color(0xFFDDDDDD);
-    final bgColor = completed
+    final bgColor = unlocked && completed
         ? const Color(0xFFDCF0E6)
         : unlocked
         ? Colors.white
@@ -587,7 +626,7 @@ class _LessonCard extends StatelessWidget {
               height: 28,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: completed
+                color: unlocked && completed
                     ? AppColors.adventureGreen
                     : unlocked
                     ? lessonColor
@@ -595,7 +634,7 @@ class _LessonCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(9),
               ),
               child: Text(
-                completed ? '✓' : '${index + 1}',
+                unlocked && completed ? '✓' : '${index + 1}',
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,

@@ -28,7 +28,7 @@ class QuizActivity extends StatefulWidget {
   final List<QuizQ> questions;
   final int xp;
   final Color color;
-  final void Function(int xp) onComplete;
+  final void Function(int xp, double accuracyPct, int errors) onComplete;
 
   @override
   State<QuizActivity> createState() => _QuizActivityState();
@@ -47,6 +47,7 @@ class _QuizActivityState extends State<QuizActivity> {
   _QuizState _state = _QuizState.answering;
   int _hearts = 3;
   int _score = 0;
+  int _errors = 0;
 
   QuizQ get _q => widget.questions[_qi];
 
@@ -64,18 +65,23 @@ class _QuizActivityState extends State<QuizActivity> {
       } else {
         _state = _QuizState.wrong;
         _hearts = math.max(0, _hearts - 1);
+        _errors += 1;
       }
     });
   }
 
   void _handleNext() {
     if (_qi + 1 >= widget.questions.length) {
+      final correctCount =
+          _score + (_state == _QuizState.correct ? 1 : 0);
       final finalXp =
-          (widget.xp *
-                  (_score + (_state == _QuizState.correct ? 1 : 0)) /
-                  widget.questions.length)
-              .round();
-      widget.onComplete(math.max((widget.xp * 0.4).round(), finalXp));
+          (widget.xp * correctCount / widget.questions.length).round();
+      final accuracyPct = correctCount / widget.questions.length * 100;
+      widget.onComplete(
+        math.max((widget.xp * 0.4).round(), finalXp),
+        accuracyPct,
+        _errors,
+      );
     } else {
       setState(() {
         _qi += 1;

@@ -15,6 +15,8 @@ class ProgressRecord extends HiveObject {
     required this.timeOnTaskSeconds,
     required this.completedAt,
     this.assignedByTeacher = false,
+    this.lessonId,
+    this.isClassroomMode = false,
   });
 
   final String id;
@@ -25,6 +27,20 @@ class ProgressRecord extends HiveObject {
   final int timeOnTaskSeconds;
   final DateTime completedAt;
   final bool assignedByTeacher;
+
+  /// True only for telemetry written live during a teacher's Cast session
+  /// (Hot Seat tracing) — as opposed to solo Student Hub/Adventure Map
+  /// play, which never sets this. Lets the Teacher Dashboard's Class
+  /// Health Index (FR-6.2) count classroom activity exclusively, matching
+  /// what the SRS actually specifies for that widget.
+  final bool isClassroomMode;
+
+  /// The specific lesson (within [moduleId]'s destination) this record
+  /// completed — drives the Adventure Map's per-lesson/per-level unlock
+  /// gating in `destination_levels_sheet.dart`. Nullable/field-8 so old
+  /// records written before this existed still decode fine (`fields[8]`
+  /// simply reads as null).
+  final String? lessonId;
 }
 
 class ProgressRecordAdapter extends TypeAdapter<ProgressRecord> {
@@ -46,13 +62,15 @@ class ProgressRecordAdapter extends TypeAdapter<ProgressRecord> {
       timeOnTaskSeconds: fields[5] as int,
       completedAt: fields[6] as DateTime,
       assignedByTeacher: fields[7] as bool,
+      lessonId: fields[8] as String?,
+      isClassroomMode: fields[9] as bool? ?? false,
     );
   }
 
   @override
   void write(BinaryWriter writer, ProgressRecord obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -68,6 +86,10 @@ class ProgressRecordAdapter extends TypeAdapter<ProgressRecord> {
       ..writeByte(6)
       ..write(obj.completedAt)
       ..writeByte(7)
-      ..write(obj.assignedByTeacher);
+      ..write(obj.assignedByTeacher)
+      ..writeByte(8)
+      ..write(obj.lessonId)
+      ..writeByte(9)
+      ..write(obj.isClassroomMode);
   }
 }

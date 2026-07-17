@@ -232,6 +232,33 @@ class ParentRepository {
   List<String> debugAllEmails() =>
       _box.values.map((a) => a.email ?? '<none>').toList();
 
+  /// Rehashes and stores a new password locally — used when a password
+  /// reset via Firebase's emailed link (which only updates the *remote*
+  /// credential, since it happens outside the app) has diverged from this
+  /// device's locally cached hash. See `SessionNotifier.signIn`'s
+  /// remote-verification fallback, which calls this after confirming the
+  /// new password against Firebase Auth.
+  Future<ParentAccount> updatePasswordLocally({
+    required ParentAccount account,
+    required String newPassword,
+  }) async {
+    final passwordSalt = CredentialHasher.generateSalt();
+    final updated = ParentAccount(
+      id: account.id,
+      fullName: account.fullName,
+      email: account.email,
+      mobileNumber: account.mobileNumber,
+      passwordHash: CredentialHasher.hash(newPassword, passwordSalt),
+      passwordSalt: passwordSalt,
+      pinHash: account.pinHash,
+      pinSalt: account.pinSalt,
+      createdAt: account.createdAt,
+      firebaseUid: account.firebaseUid,
+    );
+    await _box.put(account.id, updated);
+    return updated;
+  }
+
   bool verifyPassword(ParentAccount account, String candidate) {
     if (account.passwordHash == null || account.passwordSalt == null) {
       return false;

@@ -20,6 +20,32 @@ class ProgressSummary {
   final int errorCount;
 }
 
+/// One day's normalized activity value plus its axis label, as returned by
+/// [ProgressRepository.weeklyChartData].
+class ChartPoint {
+  const ChartPoint(this.label, this.value);
+
+  final String label;
+  final double value;
+}
+
+/// Per-`moduleId` (adventure/destination) rollup — backs the Parent
+/// Dashboard's per-adventure breakdown, distinct from [ProgressSummary]'s
+/// whole-learner aggregate.
+class ModuleSummary {
+  const ModuleSummary({
+    required this.moduleId,
+    required this.accuracyPct,
+    required this.errorCount,
+    required this.sessionCount,
+  });
+
+  final String moduleId;
+  final double accuracyPct;
+  final int errorCount;
+  final int sessionCount;
+}
+
 /// Hive-backed CRUD for [ProgressRecord] (the SRS's `ProgressBox`) plus the
 /// [StreakState]/[BadgeAward] side-state that gets updated alongside it on
 /// every completed activity (FR-3.2, FR-3.3, FR-5.1, FR-5.2, FR-6.2).
@@ -35,6 +61,8 @@ class ProgressRepository {
     required int sequencingErrors,
     required int timeOnTaskSeconds,
     bool assignedByTeacher = false,
+    String? lessonId,
+    bool isClassroomMode = false,
   }) async {
     final record = ProgressRecord(
       id: const Uuid().v4(),
@@ -45,6 +73,8 @@ class ProgressRepository {
       timeOnTaskSeconds: timeOnTaskSeconds,
       completedAt: DateTime.now(),
       assignedByTeacher: assignedByTeacher,
+      lessonId: lessonId,
+      isClassroomMode: isClassroomMode,
     );
     await _progress.put(record.id, record);
     await _bumpStreak(learnerId);
@@ -54,6 +84,15 @@ class ProgressRepository {
   List<ProgressRecord> byLearnerId(String learnerId) =>
       _progress.values.where((p) => p.learnerId == learnerId).toList()
         ..sort((a, b) => b.completedAt.compareTo(a.completedAt));
+
+  /// Every `lessonId` this learner has finished, across all destinations —
+  /// feeds the Adventure Map's real per-lesson/per-level unlock gating in
+  /// `destination_levels_sheet.dart` (replaces the previous hardcoded empty
+  /// placeholder set).
+  Set<String> completedLessonIds(String learnerId) => _progress.values
+      .where((p) => p.learnerId == learnerId && p.lessonId != null)
+      .map((p) => p.lessonId!)
+      .toSet();
 
   List<ProgressRecord> _sinceDays(String learnerId, int days) {
     final cutoff = DateTime.now().subtract(Duration(days: days));
@@ -87,9 +126,16 @@ class ProgressRepository {
     );
   }
 
-  /// FR-5.1 weekly activity chart — one normalized (0.0–1.0) value per of
-  /// the last 7 calendar days, keyed by single-letter weekday label.
-  Map<String, double> weeklyChartData(String learnerId, {int windowDays = 7}) {
+  /// FR-5.1 activity chart — one normalized (0.0–1.0) value per calendar day,
+  /// oldest first. For a 7-day window this is always the current Sun–Sat
+  /// week (not a rolling "last 7 days"), so the chart consistently starts
+  /// on Sunday. Longer windows (30-day/Term) stay a rolling last-[windowDays]
+  /// window ending today. Returns an ordered list (not a
+  /// `Map<String, double>`) because a weekday-name key collides once
+  /// [windowDays] exceeds 7 — e.g. two different Mondays would overwrite
+  /// each other. Label is a short weekday ("Mon") for a 7-day window, else
+  /// "d/M" so 30-day/Term charts stay unambiguous.
+  List<ChartPoint> weeklyChartData(String learnerId, {int windowDays = 7}) {
     final records = _sinceDays(learnerId, windowDays);
     final secondsByDay = <DateTime, int>{};
     for (final r in records) {
@@ -100,42 +146,51 @@ class ProgressRepository {
         ? 1
         : secondsByDay.values.reduce((a, b) => a > b ? a : b);
 
-    const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     final today = DateTime.now();
-    final result = <String, double>{};
-    for (var i = windowDays - 1; i >= 0; i--) {
-      final day = DateTime(today.year, today.month, today.day).subtract(Duration(days: i));
-      final label = labels[day.weekday - 1];
+    final todayDate = DateTime(today.year, today.month, today.day);
+    // DateTime.weekday: Mon=1..Sun=7 — days since the most recent Sunday.
+    final daysSinceSunday = todayDate.weekday % 7;
+    final windowStart = windowDays <= 7
+        ? todayDate.subtract(Duration(days: daysSinceSunday))
+        : todayDate.subtract(Duration(days: windowDays - 1));
+
+    final result = <ChartPoint>[];
+    for (var i = 0; i < windowDays; i++) {
+      final day = windowStart.add(Duration(days: i));
+      final label = windowDays <= 7 ? weekdayLabels[day.weekday % 7] : '${day.day}/${day.month}';
       final value = (secondsByDay[day] ?? 0) / maxSeconds;
-      result[label] = value.clamp(0.0, 1.0);
+      result.add(ChartPoint(label, value.clamp(0.0, 1.0)));
     }
     return result;
+  }
+
+  /// FR-5.1 per-adventure breakdown — one [ModuleSummary] per `moduleId`
+  /// (destination id) the learner has recorded activity in over the last
+  /// [days], ranked weakest-accuracy-first by the caller.
+  List<ModuleSummary> summaryByModule(String learnerId, {int days = 7}) {
+    final byModule = <String, List<ProgressRecord>>{};
+    for (final r in _sinceDays(learnerId, days)) {
+      byModule.putIfAbsent(r.moduleId, () => []).add(r);
+    }
+    return byModule.entries.map((entry) {
+      final records = entry.value;
+      final avgAccuracy =
+          records.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) / records.length;
+      final totalErrors = records.map((r) => r.sequencingErrors).reduce((a, b) => a + b);
+      return ModuleSummary(
+        moduleId: entry.key,
+        accuracyPct: avgAccuracy,
+        errorCount: totalErrors,
+        sessionCount: records.length,
+      );
+    }).toList();
   }
 
   /// FR-5.2 — curriculum-aligned practice prompts, generated from whichever
   /// module has accumulated the most sequencing errors recently. Falls back
   /// to a generic prompt when there isn't enough history yet.
-  List<String> latestSuggestions(String learnerId, {int maxSuggestions = 3}) {
-    final records = _sinceDays(learnerId, 14);
-    if (records.isEmpty) {
-      return const ['Complete a few lessons to unlock personalized practice suggestions.'];
-    }
-    final errorsByModule = <String, int>{};
-    for (final r in records) {
-      errorsByModule[r.moduleId] = (errorsByModule[r.moduleId] ?? 0) + r.sequencingErrors;
-    }
-    final ranked = errorsByModule.entries.where((e) => e.value > 0).toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    if (ranked.isEmpty) {
-      return const ['Great work — no recent weak points detected. Keep up the streak!'];
-    }
-    return ranked
-        .take(maxSuggestions)
-        .map((e) => 'Practice "${e.key}" together — ${e.value} recent errors logged.')
-        .toList();
-  }
-
-  Future<void> _bumpStreak(String learnerId) async {
+Future<void> _bumpStreak(String learnerId) async {
     final today = DateTime.now();
     final todayDate = DateTime(today.year, today.month, today.day);
     final existing = _streaks.get(learnerId);

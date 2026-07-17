@@ -14,6 +14,14 @@ import 'package:salamlearn/ui/teacher_dashboard/teacher_dashboard_screen.dart';
 import 'package:salamlearn/ui/widgets/pin_pad.dart';
 import 'package:salamlearn/ui/widgets/streak_tracker.dart';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:salamlearn/data/models/enrollment.dart';
+import 'package:salamlearn/data/remote/firestore_mirror.dart';
+import 'package:salamlearn/data/repositories/class_repository.dart';
+import 'package:salamlearn/data/repositories/learner_repository.dart';
+import 'package:salamlearn/logic/sync/sync_manager.dart';
+import 'package:salamlearn/logic/teacher/teacher_providers.dart';
+
 import 'test_helpers/hive_test_setup.dart';
 
 void main() {
@@ -91,6 +99,267 @@ void main() {
       expect(state.consent, isNull);
       expect(state.hasPin, isFalse);
       expect(state.languageCode, isNull);
+    });
+
+    test('added child is preserved and restored after logout and login', () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(sessionProvider.notifier);
+
+      notifier.setLanguage('en');
+      await notifier.giveConsent();
+      
+      // Stage registration and setup parent account
+      notifier.stageParentRegistration(
+        fullName: 'Parent Test',
+        email: 'parent@example.com',
+        password: 'Password123',
+      );
+      await notifier.createPin('1234');
+      
+      // Verify parent is logged in
+      var state = container.read(sessionProvider);
+      expect(state.activeParentId, isNotNull);
+      
+      // Create a learner
+      await notifier.createLearner(
+        name: 'Amir',
+        age: 7,
+        username: 'amir_test',
+        avatar: 'boy_mascot',
+        gradeLevel: 'Grade 1',
+      );
+      
+      state = container.read(sessionProvider);
+      expect(state.learner, isNotNull);
+      expect(state.learner?.name, 'Amir');
+      final learnerId = state.learner?.id;
+      
+      // Logout
+      await notifier.logout();
+      state = container.read(sessionProvider);
+      expect(state.activeParentId, isNull);
+      expect(state.learner, isNull);
+      
+      // Log back in
+      final result = await notifier.signIn(
+        role: UserRole.parent,
+        email: 'parent@example.com',
+        password: 'Password123',
+      );
+      expect(result, SignInResult.success);
+      
+      state = container.read(sessionProvider);
+      expect(state.activeParentId, isNotNull);
+      expect(state.learner, isNotNull);
+      expect(state.learner?.id, learnerId);
+      expect(state.learner?.name, 'Amir');
+    });
+
+    test('previously selected child is preserved and restored after logout and login', () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(sessionProvider.notifier);
+
+      notifier.setLanguage('en');
+      await notifier.giveConsent();
+      
+      // Stage registration and setup parent account
+      notifier.stageParentRegistration(
+        fullName: 'Parent Test',
+        email: 'parent@example.com',
+        password: 'Password123',
+      );
+      await notifier.createPin('1234');
+      
+      // Create first learner (Amir)
+      await notifier.createLearner(
+        name: 'Amir',
+        age: 7,
+        username: 'amir_test',
+        avatar: 'boy_mascot',
+        gradeLevel: 'Grade 1',
+      );
+      
+      // Create second learner (Zara)
+      final zara = await notifier.createLearner(
+        name: 'Zara',
+        age: 6,
+        username: 'zara_test',
+        avatar: 'girl_mascot',
+        gradeLevel: 'Grade 1',
+      );
+      
+      // Select Zara as active learner
+      await notifier.switchActiveLearner(zara.id!);
+      
+      var state = container.read(sessionProvider);
+      expect(state.learner?.name, 'Zara');
+      final lastSelectedLearnerId = state.learner?.id;
+      
+      // Logout
+      await notifier.logout();
+      state = container.read(sessionProvider);
+      expect(state.learner, isNull);
+      
+      // Log back in
+      final result = await notifier.signIn(
+        role: UserRole.parent,
+        email: 'parent@example.com',
+        password: 'Password123',
+      );
+      expect(result, SignInResult.success);
+      
+      state = container.read(sessionProvider);
+      expect(state.learner, isNotNull);
+      expect(state.learner?.id, lastSelectedLearnerId);
+      expect(state.learner?.name, 'Zara');
+    });
+
+    test('teacher sync pulls new remote enrollments and learner profiles', () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final sessionNotifier = container.read(sessionProvider.notifier);
+
+      sessionNotifier.setLanguage('en');
+      await sessionNotifier.giveConsent();
+
+      // Create a teacher account and a class locally
+      sessionNotifier.stageTeacherRegistration(
+        fullName: 'Teacher Test',
+        school: 'Test School',
+        email: 'teacher@example.com',
+        password: 'Password123',
+      );
+      await sessionNotifier.createPin('5678');
+      
+      await container.read(teacherClassControllerProvider.notifier).createClass(
+        gradeLevel: 'Grade 1',
+        section: 'A',
+      );
+      
+      final activeClass = container.read(teacherClassControllerProvider);
+      expect(activeClass, isNotNull);
+      final classId = activeClass!.id;
+
+      // Ensure local roster is initially empty
+      var roster = container.read(classRosterProvider(classId));
+      expect(roster, isEmpty);
+
+      // Setup fake remote enrollment and learner
+      const studentId = 'student-uuid-123';
+      final remoteEnrollment = Enrollment(
+        classId: classId,
+        learnerId: studentId,
+        enrolledAt: DateTime.now(),
+      );
+      const remoteLearner = RemoteLearnerRef(
+        id: studentId,
+        name: 'Remote Student',
+        age: 8,
+        avatar: 'girl_mascot',
+        gradeLevel: 'Grade 2',
+        parentId: 'parent-uuid-456',
+      );
+
+      final fakeMirror = _FakeFirestoreMirror(
+        enrollments: [remoteEnrollment],
+        learners: {studentId: remoteLearner},
+      );
+
+      // Create SyncManager with fake connectivity and mirror
+      final syncManager = SyncManager(
+        connectivity: Connectivity(),
+        mirror: fakeMirror,
+        ref: container,
+      );
+
+      // Run sync!
+      await syncManager.syncNow();
+
+      // Verify the enrollment and learner profile were pulled and saved locally
+      final classRepo = ClassRepository();
+      expect(classRepo.isEnrolled(classId: classId, learnerId: studentId), isTrue);
+
+      final learnerRepo = LearnerRepository();
+      final localLearner = learnerRepo.findById(studentId);
+      expect(localLearner, isNotNull);
+      expect(localLearner?.name, 'Remote Student');
+      expect(localLearner?.age, 8);
+
+      // Verify that the classRosterProvider refreshed and now shows the student
+      roster = container.read(classRosterProvider(classId));
+      expect(roster, hasLength(1));
+      expect(roster.first['name'], 'Remote Student');
+    });
+
+    test('teacher can unenroll/remove student from class', () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final sessionNotifier = container.read(sessionProvider.notifier);
+
+      sessionNotifier.setLanguage('en');
+      await sessionNotifier.giveConsent();
+
+      // Create teacher and class
+      sessionNotifier.stageTeacherRegistration(
+        fullName: 'Teacher Test',
+        school: 'Test School',
+        email: 'teacher@example.com',
+        password: 'Password123',
+      );
+      await sessionNotifier.createPin('5678');
+      
+      await container.read(teacherClassControllerProvider.notifier).createClass(
+        gradeLevel: 'Grade 1',
+        section: 'A',
+      );
+      
+      final activeClass = container.read(teacherClassControllerProvider);
+      final classId = activeClass!.id;
+
+      // Enroll a student
+      const studentId = 'student-uuid-999';
+      final classRepo = ClassRepository();
+      await classRepo.enroll(classId: classId, learnerId: studentId);
+      
+      // Save learner profile locally
+      final learnerRepo = LearnerRepository();
+      await learnerRepo.saveFromRemote(
+        id: studentId,
+        parentId: 'parent-1',
+        name: 'Zara Test',
+        age: 6,
+        avatar: 'girl_mascot',
+        gradeLevel: 'Grade 1',
+      );
+
+      // Verify enrolled and in roster initially
+      expect(classRepo.isEnrolled(classId: classId, learnerId: studentId), isTrue);
+      var roster = container.read(classRosterProvider(classId));
+      expect(roster, hasLength(1));
+      expect(roster.first['name'], 'Zara Test');
+
+      // Assign a module to this student
+      await classRepo.assignModule(
+        classId: classId,
+        learnerId: studentId,
+        moduleId: 'Letters Tracing (Alif to Kha)',
+        dueDate: DateTime.now().add(const Duration(days: 3)),
+      );
+      expect(classRepo.assignmentsFor(classId: classId, learnerId: studentId), isNotEmpty);
+
+      // Unenroll the student!
+      await classRepo.unenroll(classId: classId, learnerId: studentId);
+
+      // Verify unenrollment cleared both enrollment and student's assignments in this class
+      expect(classRepo.isEnrolled(classId: classId, learnerId: studentId), isFalse);
+      expect(classRepo.assignmentsFor(classId: classId, learnerId: studentId), isEmpty);
+
+      // Verify that roster refreshed to be empty
+      container.read(rosterRefreshProvider.notifier).bump();
+      roster = container.read(classRosterProvider(classId));
+      expect(roster, isEmpty);
     });
   });
 
@@ -332,12 +601,10 @@ void main() {
         expect(find.text('92% tracing · active 2h ago'), findsOneWidget);
         // Phone uses the dotted mastery pill draft: uppercase text.
         expect(find.text('HIGH'), findsOneWidget);
-        // Hot Seat, Choral, and Progression Override must be reachable on
-        // phone too, not desktop-only (FR-6.5/6.6/6.7).
-        expect(find.text('Hot seat'), findsOneWidget);
-        expect(find.text('Choral controller'), findsOneWidget);
+        // Progression Override must be reachable on phone too, not
+        // desktop-only (FR-6.7). Hot Seat/Choral Controller were removed
+        // from the Home quick actions (still reachable from Cast).
         expect(find.text('Progression override'), findsOneWidget);
-        expect(find.text('Cast to class'), findsOneWidget);
       },
     );
 
@@ -361,4 +628,44 @@ void main() {
       expect(find.text('Needs help'), findsAtLeastNWidgets(1));
     });
   });
+}
+
+class _FakeFirestoreMirror extends FirestoreMirror {
+  _FakeFirestoreMirror({
+    List<Enrollment>? enrollments,
+    Map<String, RemoteLearnerRef>? learners,
+  }) : _enrollments = enrollments ?? [],
+       _learners = learners ?? {};
+
+  final List<Enrollment> _enrollments;
+  final Map<String, RemoteLearnerRef> _learners;
+
+  @override
+  Future<List<Enrollment>> fetchEnrollmentsForClass(String classId) async {
+    return _enrollments.where((e) => e.classId == classId).toList();
+  }
+
+  @override
+  Future<RemoteLearnerRef?> fetchLearner(String learnerId) async {
+    return _learners[learnerId];
+  }
+
+  @override
+  Future<void> pushParent(dynamic account) async {}
+  @override
+  Future<void> pushTeacher(dynamic account) async {}
+  @override
+  Future<void> pushLearner(dynamic learner) async {}
+  @override
+  Future<void> pushClass(dynamic section) async {}
+  @override
+  Future<void> pushEnrollment(dynamic enrollment) async {}
+  @override
+  Future<void> pushProgress(dynamic record) async {}
+  @override
+  Future<void> pushAssignedModule(dynamic assignment) async {}
+  @override
+  Future<void> pushCustomLesson(dynamic lesson) async {}
+  @override
+  Future<void> pushConsent(dynamic key, dynamic record) async {}
 }
