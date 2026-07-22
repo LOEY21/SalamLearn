@@ -166,21 +166,43 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                 ],
               ),
               const SizedBox(height: 14),
-              Text(
-                'Greeting Match',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  color: widget.color,
+              Container(
+                width: 260,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 16,
                 ),
-              ),
-              const SizedBox(height: 2),
-              const Text(
-                'Listen, then tap what it means',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textMuted,
+                decoration: const BoxDecoration(
+                  image: DecorationImage(
+                    image: AssetImage(
+                      'assets/images/greeting_match/phrase_scroll_bg.png',
+                    ),
+                    fit: BoxFit.fill,
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Greeting Match',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: widget.color,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Listen, then tap what it means',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Expanded(
@@ -190,33 +212,26 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                     child: GestureDetector(
                       onTap: _playPhrase,
                       child: Container(
-                        width: 300,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 34,
-                          vertical: 26,
+                          horizontal: 22,
+                          vertical: 14,
                         ),
-                        decoration: const BoxDecoration(
-                          image: DecorationImage(
-                            image: AssetImage(
-                              'assets/images/greeting_match/phrase_scroll_bg.png',
-                            ),
-                            fit: BoxFit.fill,
-                          ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: widget.color, width: 2.5),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const Text('🔊', style: TextStyle(fontSize: 24)),
                             const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                _question.phrase,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                  color: widget.color,
-                                ),
+                            Text(
+                              _question.phrase,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: widget.color,
                               ),
                             ),
                           ],
