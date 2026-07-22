@@ -8,7 +8,7 @@ import '../../logic/learner/learner_xp_provider.dart';
 import '../../logic/recent_module_provider.dart';
 import '../theme/app_colors.dart';
 import 'activities/fiqh_drag_activity.dart';
-import 'activities/pronounce_activity.dart';
+import 'activities/greeting_match_activity.dart';
 import 'activities/quiz_activity.dart';
 import 'activities/quran_sync_activity.dart';
 import 'activities/story_activity.dart';
@@ -79,8 +79,11 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     final learnerId = ref.read(sessionProvider).learner?.id;
-    _alreadyCompleted = learnerId != null &&
-        ProgressRepository().completedLessonIds(learnerId).contains(widget.lesson.id);
+    _alreadyCompleted =
+        learnerId != null &&
+        ProgressRepository()
+            .completedLessonIds(learnerId)
+            .contains(widget.lesson.id);
   }
 
   // Pause the stopwatch while backgrounded so time-on-task reflects actual
@@ -175,7 +178,9 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
   void _writeProgressRecord() {
     final learnerId = ref.read(sessionProvider).learner?.id;
     if (learnerId == null) return;
-    final avgAccuracy = _accuracyCount == 0 ? 0.0 : _accuracySum / _accuracyCount;
+    final avgAccuracy = _accuracyCount == 0
+        ? 0.0
+        : _accuracySum / _accuracyCount;
     ProgressRepository().writeProgress(
       learnerId: learnerId,
       moduleId: '${widget.destinationId}',
@@ -213,22 +218,30 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFFFF7E9),
-        body: Column(
-          children: [
-            _buildTopBar(lessonColor, progress, totalXp),
-            Expanded(
-              child: SafeArea(
-                top: false,
-                child: Column(
-                  children: [
-                    _buildActivityTitleRow(),
-                    Expanded(child: _buildActivityContent(lessonColor)),
-                  ],
-                ),
+        // Trace's scenery background is meant to run fully edge-to-edge —
+        // under the status bar too — so unlike every other activity type
+        // it skips the opaque top bar and title row entirely instead of
+        // just relocating them; exiting is handled by the yellow back
+        // arrow baked into the trace background art itself (see
+        // `TraceActivity.onBack`), so no floating close button here.
+        body: _activity.type == ActivityType.trace
+            ? _buildActivityContent(lessonColor)
+            : Column(
+                children: [
+                  _buildTopBar(lessonColor, progress, totalXp),
+                  Expanded(
+                    child: SafeArea(
+                      top: false,
+                      child: Column(
+                        children: [
+                          _buildActivityTitleRow(),
+                          Expanded(child: _buildActivityContent(lessonColor)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -393,10 +406,11 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         xp: activity.xp,
         color: lessonColor,
         onComplete: _handleActivityComplete,
+        onBack: _confirmExit,
       ),
-      ActivityType.pronounce => PronounceActivity(
+      ActivityType.pronounce => GreetingMatchActivity(
         key: ValueKey(activity.id),
-        cards: activity.cards!,
+        questions: activity.greetingQuestions!,
         xp: activity.xp,
         color: lessonColor,
         onComplete: _handleActivityComplete,
