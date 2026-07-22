@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -25,6 +26,7 @@ import '../../ui/student_hub/hub_shell.dart';
 import '../../ui/student_hub/profile_screen.dart';
 import '../../ui/teacher_dashboard/archived_classes_screen.dart';
 import '../../ui/teacher_dashboard/cast_screen.dart';
+import '../../ui/teacher_dashboard/greeting_match_cast_screen.dart';
 import '../../ui/teacher_dashboard/class_detail_screen.dart';
 import '../../ui/teacher_dashboard/class_health_detail_screen.dart';
 import '../../ui/teacher_dashboard/classroom_management_screen.dart';
@@ -99,6 +101,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Learner can never reach admin areas.
       if (session.activeRole == UserRole.learner && needsAdmin) {
         return '/hub';
+      }
+
+      // Debug-only Hive inspector dumps raw credential hashes — never
+      // reachable outside a debug build, regardless of PIN state.
+      if (path == '/debug/database' && !kDebugMode) {
+        return '/settings';
       }
 
       // Admin areas demand a verified PIN. The originally-requested path is
@@ -243,6 +251,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(path: '/cast', builder: (_, _) => const CastScreen()),
+      GoRoute(
+        path: '/cast-greeting-match',
+        builder: (_, _) => const GreetingMatchCastScreen(),
+      ),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       GoRoute(
         path: '/debug/database',

@@ -1800,6 +1800,13 @@ class _ActionColumn extends ConsumerWidget {
             bg: AppColors.coralTint,
             onTap: () => context.push('/teacher/module-library'),
           ),
+          (
+            icon: Icons.campaign_rounded,
+            label: 'Cast Greeting Match',
+            color: AppColors.teal,
+            bg: AppColors.mint,
+            onTap: () => context.push('/cast-greeting-match'),
+          ),
         ];
 
     if (panelStyle) {
