@@ -110,20 +110,25 @@ void main() {
       );
       await tester.pump();
 
-      // First activity's single correct choice is visible.
-      expect(find.text('As-salāmu ʿalaykum'), findsWidgets);
+      // First activity's single correct choice is visible. Its translit
+      // matches the phrase shown on the play button too (the correct
+      // choice always repeats the phrase), so two widgets show this text —
+      // the play button, then the choice card.
+      expect(find.text('As-salāmu ʿalaykum'), findsNWidgets(2));
       expect(find.byType(LessonCompleteScreen), findsNothing);
 
-      // Tap the correct choice — auto-advances after a short delay.
-      await tester.tap(find.text('Peace be upon you.'));
+      // Tap the correct choice card (the second match) — auto-advances
+      // after a short delay.
+      await tester.tap(find.text('As-salāmu ʿalaykum').last);
       await tester.pump(const Duration(milliseconds: 700));
 
-      // Auto-advanced straight into the second activity.
-      expect(find.text('Marhaban'), findsWidgets);
+      // Auto-advanced straight into the second activity; same
+      // phrase-equals-correct-choice duplication as above.
+      expect(find.text('Marhaban'), findsNWidgets(2));
       expect(find.byType(LessonCompleteScreen), findsNothing);
 
       // Finish the last activity.
-      await tester.tap(find.text('Hello'));
+      await tester.tap(find.text('Marhaban').last);
       await tester.pump(const Duration(milliseconds: 700));
 
       expect(find.byType(LessonCompleteScreen), findsOneWidget);

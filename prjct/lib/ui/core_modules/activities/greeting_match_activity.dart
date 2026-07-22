@@ -6,14 +6,14 @@ import 'package:flutter/services.dart';
 import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../theme/app_colors.dart';
 
-/// The 4 chunky quiz-tile card art assets, one per grid position — a
-/// fixed color per position (not per correctness), matching the classic
+/// One (fill, border, avatar-circle) tint set per grid position — a fixed
+/// color per position (not per correctness), matching the classic
 /// A/B/C/D quiz-tile convention.
-const _choiceCardAssets = [
-  'assets/images/greeting_match/choice_card_purple.png',
-  'assets/images/greeting_match/choice_card_blue.png',
-  'assets/images/greeting_match/choice_card_green.png',
-  'assets/images/greeting_match/choice_card_red.png',
+const _choiceTints = [
+  (fill: AppColors.mint, border: AppColors.adventureGreen),
+  (fill: Color(0xFFE1F1FB), border: AppColors.adventureBlue),
+  (fill: Color(0xFFEDEBFB), border: AppColors.adventurePurple),
+  (fill: AppColors.goldTint, border: AppColors.gold),
 ];
 
 /// Greeting Match Home Mode: play a greeting phrase, tap the choice with
@@ -219,29 +219,26 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                   ),
                 ),
               ),
-              // Choices pinned to the bottom of the screen, all 4 in a
-              // single row of the chunky quiz-tile card art. Fixed height
-              // (rather than an aspect ratio driven by the row's width) so
-              // this stays a sane size on both phone-narrow and wide/test
-              // viewports instead of stretching very tall.
+              // Choices pinned to the bottom of the screen, wide 2x2 cards
+              // (avatar circle + bold title), fixed height so this stays a
+              // sane size on both phone-narrow and wide/test viewports.
               SizedBox(
-                height: 170,
-                child: Row(
+                height: 200,
+                child: GridView.count(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  childAspectRatio: 2.5,
+                  physics: const NeverScrollableScrollPhysics(),
                   children: [
-                    for (var i = 0; i < _question.choices.length; i++) ...[
-                      if (i != 0) const SizedBox(width: 8),
-                      Expanded(
-                        child: _ChoiceCard(
-                          asset:
-                              _choiceCardAssets[i % _choiceCardAssets.length],
-                          choice: _question.choices[i],
-                          revealed:
-                              _answeredCorrectly &&
-                              _question.choices[i].correct,
-                          onTap: () => _handleChoice(_question.choices[i]),
-                        ),
+                    for (var i = 0; i < _question.choices.length; i++)
+                      _ChoiceCard(
+                        tint: _choiceTints[i % _choiceTints.length],
+                        choice: _question.choices[i],
+                        revealed:
+                            _answeredCorrectly && _question.choices[i].correct,
+                        onTap: () => _handleChoice(_question.choices[i]),
                       ),
-                    ],
                   ],
                 ),
               ),
@@ -253,19 +250,22 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
   }
 }
 
-/// One answer choice, rendered on top of a chunky quiz-tile card asset.
+/// One answer choice — a wide tinted card with a left avatar circle and
+/// bold title, matching the reference layout (2x2 grid, mascot-in-a-circle
+/// + colored bold text). No illustration assets yet, so the circle just
+/// holds a placeholder wave emoji — swap for real per-choice art later.
 /// Ripple + haptic tap feedback; when [revealed] (this choice is the
 /// correct one and the question's been answered), it gets a green
 /// checkmark badge and a slight pop.
 class _ChoiceCard extends StatelessWidget {
   const _ChoiceCard({
-    required this.asset,
+    required this.tint,
     required this.choice,
     required this.revealed,
     required this.onTap,
   });
 
-  final String asset;
+  final ({Color fill, Color border}) tint;
   final GreetingChoice choice;
   final bool revealed;
   final VoidCallback onTap;
@@ -284,54 +284,51 @@ class _ChoiceCard extends StatelessWidget {
             HapticFeedback.lightImpact();
             onTap();
           },
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.asset(asset, fit: BoxFit.fill),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 6,
-                  vertical: 10,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: tint.fill,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: tint.border, width: 2),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: tint.border, width: 2),
+                  ),
+                  child: const Text('👋', style: TextStyle(fontSize: 18)),
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      choice.translit,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.ink,
-                      ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    choice.translit,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: tint.border,
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      choice.meaning,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 9,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (revealed)
-                const Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Icon(
-                    Icons.check_circle_rounded,
-                    color: AppColors.adventureGreen,
-                    size: 22,
                   ),
                 ),
-            ],
+                if (revealed)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 2),
+                    child: Icon(
+                      Icons.check_circle_rounded,
+                      color: AppColors.adventureGreen,
+                      size: 20,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
