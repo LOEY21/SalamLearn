@@ -33,14 +33,30 @@ class _FakeSessionNotifier extends SessionNotifier {
   SessionState build() => const SessionState();
 }
 
-Lesson _twoPronounceActivityLesson() {
-  const card = FlashCard(
-    id: 'c1',
-    emoji: '🌟',
-    arabic: 'كَلِمَة',
-    translit: 'Kalima',
-    english: 'Word',
-    color: '#FDECC8',
+Lesson _twoGreetingMatchActivityLesson() {
+  const questionA = GreetingQuestion(
+    id: 'q1',
+    phrase: 'As-salāmu ʿalaykum',
+    choices: [
+      GreetingChoice(translit: 'Marhaban', meaning: 'Hello', correct: false),
+      GreetingChoice(
+        translit: 'As-salāmu ʿalaykum',
+        meaning: 'Peace be upon you.',
+        correct: true,
+      ),
+    ],
+  );
+  const questionB = GreetingQuestion(
+    id: 'q2',
+    phrase: 'Marhaban',
+    choices: [
+      GreetingChoice(translit: 'Marhaban', meaning: 'Hello', correct: true),
+      GreetingChoice(
+        translit: 'Maʿa as-salāmah',
+        meaning: 'Goodbye',
+        correct: false,
+      ),
+    ],
   );
   return const Lesson(
     id: 'test-lesson',
@@ -53,18 +69,18 @@ Lesson _twoPronounceActivityLesson() {
       Activity(
         id: 'a1',
         type: ActivityType.pronounce,
-        title: 'Listen One',
-        icon: '🔊',
+        title: 'Greeting One',
+        icon: '👋',
         xp: 10,
-        cards: [card],
+        greetingQuestions: [questionA],
       ),
       Activity(
         id: 'a2',
         type: ActivityType.pronounce,
-        title: 'Listen Two',
-        icon: '🔊',
+        title: 'Greeting Two',
+        icon: '👋',
         xp: 10,
-        cards: [card],
+        greetingQuestions: [questionB],
       ),
     ],
   );
@@ -75,7 +91,7 @@ void main() {
     'activities auto-advance with no manual "start next activity" step, '
     'and finishing the lesson awards XP/streak/badge then shows completion',
     (tester) async {
-      final lesson = _twoPronounceActivityLesson();
+      final lesson = _twoGreetingMatchActivityLesson();
 
       await tester.pumpWidget(
         ProviderScope(
@@ -94,31 +110,21 @@ void main() {
       );
       await tester.pump();
 
-      // First activity showing, no completion screen yet.
-      expect(find.text('Listen One'), findsOneWidget);
-      expect(find.text('1/2'), findsOneWidget);
+      // First activity's single correct choice is visible.
+      expect(find.text('As-salāmu ʿalaykum'), findsWidgets);
       expect(find.byType(LessonCompleteScreen), findsNothing);
 
-      // Tap the speaker to "play" the clip (900ms mock playback, see
-      // `PronounceActivity`'s AUDIO PLUG POINT), which reveals the
-      // translation and enables the Next/Done button — the only button in
-      // the whole flow between one activity and the next; there is no
-      // separate "start" step anywhere.
-      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
-      await tester.pump(const Duration(milliseconds: 950));
-      await tester.tap(find.text('✓ Done!'));
-      await tester.pump();
+      // Tap the correct choice — auto-advances after a short delay.
+      await tester.tap(find.text('Peace be upon you.'));
+      await tester.pump(const Duration(milliseconds: 700));
 
       // Auto-advanced straight into the second activity.
-      expect(find.text('Listen Two'), findsOneWidget);
-      expect(find.text('2/2'), findsOneWidget);
+      expect(find.text('Marhaban'), findsWidgets);
       expect(find.byType(LessonCompleteScreen), findsNothing);
 
       // Finish the last activity.
-      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
-      await tester.pump(const Duration(milliseconds: 950));
-      await tester.tap(find.text('✓ Done!'));
-      await tester.pump();
+      await tester.tap(find.text('Hello'));
+      await tester.pump(const Duration(milliseconds: 700));
 
       expect(find.byType(LessonCompleteScreen), findsOneWidget);
       expect(find.text('+20 XP'), findsOneWidget);
