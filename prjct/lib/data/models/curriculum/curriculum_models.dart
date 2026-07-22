@@ -43,6 +43,42 @@ class FlashCard {
   final String? audioAsset;
 }
 
+/// One choice on a [GreetingQuestion] — its translit text, English
+/// meaning, and whether it's the correct answer for that question.
+/// Distractors are other greetings' translit/meaning pairs, so the
+/// wrong choices still read as valid Arabic greetings, not nonsense.
+class GreetingChoice {
+  const GreetingChoice({
+    required this.translit,
+    required this.meaning,
+    required this.correct,
+  });
+
+  final String translit;
+  final String meaning;
+  final bool correct;
+}
+
+/// Greeting Match's content shape: one spoken/displayed greeting phrase
+/// and 4 [GreetingChoice]s, exactly one of which is correct — the correct
+/// choice is always that same phrase paired with its real meaning.
+/// `audioAsset` is nullable for the same placeholder-phase reason as
+/// [FlashCard.audioAsset]: the tap-to-play button exists and shows
+/// feedback, it just doesn't play a real recording yet.
+class GreetingQuestion {
+  const GreetingQuestion({
+    required this.id,
+    required this.phrase,
+    required this.choices,
+    this.audioAsset,
+  });
+
+  final String id;
+  final String phrase;
+  final List<GreetingChoice> choices;
+  final String? audioAsset;
+}
+
 class QuizQ {
   const QuizQ({
     required this.id,
@@ -179,6 +215,7 @@ class Activity {
     required this.icon,
     required this.xp,
     this.cards,
+    this.greetingQuestions,
     this.questions,
     this.panels,
     this.quranLine,
@@ -192,8 +229,11 @@ class Activity {
   final String icon;
   final int xp;
 
-  /// Used by both `trace` and `pronounce` (see [FlashCard] doc).
+  /// Used by `trace` (see [FlashCard] doc).
   final List<FlashCard>? cards;
+
+  /// Used by `pronounce`, now Greeting Match (see [GreetingQuestion] doc).
+  final List<GreetingQuestion>? greetingQuestions;
   final List<QuizQ>? questions;
   final List<StoryPanel>? panels;
   final QuranSyncLine? quranLine;
