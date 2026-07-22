@@ -190,26 +190,33 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                     child: GestureDetector(
                       onTap: _playPhrase,
                       child: Container(
+                        width: 300,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 22,
-                          vertical: 14,
+                          horizontal: 34,
+                          vertical: 26,
                         ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: widget.color, width: 2.5),
+                        decoration: const BoxDecoration(
+                          image: DecorationImage(
+                            image: AssetImage(
+                              'assets/images/greeting_match/phrase_scroll_bg.png',
+                            ),
+                            fit: BoxFit.fill,
+                          ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const Text('🔊', style: TextStyle(fontSize: 24)),
                             const SizedBox(width: 8),
-                            Text(
-                              _question.phrase,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: widget.color,
+                            Flexible(
+                              child: Text(
+                                _question.phrase,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: widget.color,
+                                ),
                               ),
                             ),
                           ],
