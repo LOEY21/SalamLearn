@@ -1,10 +1,20 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../theme/app_colors.dart';
-import '../../widgets/soft_card.dart';
+
+/// The 4 chunky quiz-tile card art assets, one per grid position — a
+/// fixed color per position (not per correctness), matching the classic
+/// A/B/C/D quiz-tile convention.
+const _choiceCardAssets = [
+  'assets/images/greeting_match/choice_card_purple.png',
+  'assets/images/greeting_match/choice_card_blue.png',
+  'assets/images/greeting_match/choice_card_green.png',
+  'assets/images/greeting_match/choice_card_red.png',
+];
 
 /// Greeting Match Home Mode: play a greeting phrase, tap the choice with
 /// its correct meaning among 3 other real (but wrong) greeting phrases.
@@ -173,86 +183,146 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                   color: AppColors.textMuted,
                 ),
               ),
-              const SizedBox(height: 18),
-              Transform.translate(
-                offset: Offset(_wobble, 0),
-                child: GestureDetector(
-                  onTap: _playPhrase,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 22,
-                      vertical: 14,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: widget.color, width: 2.5),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('🔊', style: TextStyle(fontSize: 24)),
-                        const SizedBox(width: 8),
-                        Text(
-                          _question.phrase,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: widget.color,
-                          ),
+              Expanded(
+                child: Center(
+                  child: Transform.translate(
+                    offset: Offset(_wobble, 0),
+                    child: GestureDetector(
+                      onTap: _playPhrase,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 22,
+                          vertical: 14,
                         ),
-                      ],
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: widget.color, width: 2.5),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('🔊', style: TextStyle(fontSize: 24)),
+                            const SizedBox(width: 8),
+                            Text(
+                              _question.phrase,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: widget.color,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-              Expanded(
-                child: ListView.separated(
-                  itemCount: _question.choices.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, i) {
-                    final choice = _question.choices[i];
-                    final revealed = _answeredCorrectly && choice.correct;
-                    return SoftCard(
-                      color: revealed ? AppColors.mint : AppColors.surface,
-                      borderColor: revealed ? AppColors.adventureGreen : null,
-                      onTap: () => _handleChoice(choice),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  choice.translit,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.ink,
-                                  ),
-                                ),
-                                Text(
-                                  choice.meaning,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: AppColors.textMuted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (revealed)
-                            const Icon(
-                              Icons.check_circle_rounded,
-                              color: AppColors.adventureGreen,
-                            ),
-                        ],
+              // Choices pinned to the bottom of the screen, 2x2 grid of the
+              // chunky quiz-tile card art.
+              SizedBox(
+                height: 320,
+                child: GridView.count(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 0.68,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    for (var i = 0; i < _question.choices.length; i++)
+                      _ChoiceCard(
+                        asset: _choiceCardAssets[i % _choiceCardAssets.length],
+                        choice: _question.choices[i],
+                        revealed:
+                            _answeredCorrectly && _question.choices[i].correct,
+                        onTap: () => _handleChoice(_question.choices[i]),
                       ),
-                    );
-                  },
+                  ],
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One answer choice, rendered on top of a chunky quiz-tile card asset.
+/// Ripple + haptic tap feedback; when [revealed] (this choice is the
+/// correct one and the question's been answered), it gets a green
+/// checkmark badge and a slight pop.
+class _ChoiceCard extends StatelessWidget {
+  const _ChoiceCard({
+    required this.asset,
+    required this.choice,
+    required this.revealed,
+    required this.onTap,
+  });
+
+  final String asset;
+  final GreetingChoice choice;
+  final bool revealed;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      scale: revealed ? 1.05 : 1.0,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () {
+            HapticFeedback.lightImpact();
+            onTap();
+          },
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(asset, fit: BoxFit.fill),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 16,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      choice.translit,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      choice.meaning,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (revealed)
+                const Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Icon(
+                    Icons.check_circle_rounded,
+                    color: AppColors.adventureGreen,
+                    size: 22,
+                  ),
+                ),
             ],
           ),
         ),
