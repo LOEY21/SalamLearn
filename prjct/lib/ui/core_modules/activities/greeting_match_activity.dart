@@ -47,15 +47,16 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
   @override
   void initState() {
     super.initState();
-    _wobbleController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    )..addListener(() {
-        final t = _wobbleController.value;
-        setState(() {
-          _wobble = math.sin(t * math.pi * 3) * 8 * (1 - t);
+    _wobbleController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 400),
+        )..addListener(() {
+          final t = _wobbleController.value;
+          setState(() {
+            _wobble = math.sin(t * math.pi * 3) * 8 * (1 - t);
+          });
         });
-      });
   }
 
   @override
@@ -113,130 +114,142 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-      child: Column(
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < widget.questions.length; i++) ...[
-                if (i != 0) const SizedBox(width: 5),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  width: i == _idx ? 20 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: i < _idx
-                        ? AppColors.adventureGreen
-                        : i == _idx
-                        ? widget.color
-                        : AppColors.creamDark,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ],
-            ],
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: const BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage(
+            'assets/images/greeting_match/greeting_match_bg.png',
           ),
-          const SizedBox(height: 14),
-          Text(
-            'Greeting Match',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              color: widget.color,
-            ),
-          ),
-          const SizedBox(height: 2),
-          const Text(
-            'Listen, then tap what it means',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textMuted,
-            ),
-          ),
-          const SizedBox(height: 18),
-          Transform.translate(
-            offset: Offset(_wobble, 0),
-            child: GestureDetector(
-              onTap: _playPhrase,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 22,
-                  vertical: 14,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: widget.color, width: 2.5),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('🔊', style: TextStyle(fontSize: 24)),
-                    const SizedBox(width: 8),
-                    Text(
-                      _question.phrase,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: widget.color,
-                      ),
+          fit: BoxFit.cover,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < widget.questions.length; i++) ...[
+                  if (i != 0) const SizedBox(width: 5),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    width: i == _idx ? 20 : 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: i < _idx
+                          ? AppColors.adventureGreen
+                          : i == _idx
+                          ? widget.color
+                          : AppColors.creamDark,
+                      borderRadius: BorderRadius.circular(4),
                     ),
-                  ],
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Greeting Match',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: widget.color,
+              ),
+            ),
+            const SizedBox(height: 2),
+            const Text(
+              'Listen, then tap what it means',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textMuted,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Transform.translate(
+              offset: Offset(_wobble, 0),
+              child: GestureDetector(
+                onTap: _playPhrase,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: widget.color, width: 2.5),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('🔊', style: TextStyle(fontSize: 24)),
+                      const SizedBox(width: 8),
+                      Text(
+                        _question.phrase,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: widget.color,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 20),
-          Expanded(
-            child: ListView.separated(
-              itemCount: _question.choices.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, i) {
-                final choice = _question.choices[i];
-                final revealed = _answeredCorrectly && choice.correct;
-                return SoftCard(
-                  color: revealed ? AppColors.mint : AppColors.surface,
-                  borderColor: revealed ? AppColors.adventureGreen : null,
-                  onTap: () => _handleChoice(choice),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              choice.translit,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.ink,
+            const SizedBox(height: 20),
+            Expanded(
+              child: ListView.separated(
+                itemCount: _question.choices.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, i) {
+                  final choice = _question.choices[i];
+                  final revealed = _answeredCorrectly && choice.correct;
+                  return SoftCard(
+                    color: revealed ? AppColors.mint : AppColors.surface,
+                    borderColor: revealed ? AppColors.adventureGreen : null,
+                    onTap: () => _handleChoice(choice),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                choice.translit,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.ink,
+                                ),
                               ),
-                            ),
-                            Text(
-                              choice.meaning,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textMuted,
+                              Text(
+                                choice.meaning,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textMuted,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      if (revealed)
-                        const Icon(
-                          Icons.check_circle_rounded,
-                          color: AppColors.adventureGreen,
-                        ),
-                    ],
-                  ),
-                );
-              },
+                        if (revealed)
+                          const Icon(
+                            Icons.check_circle_rounded,
+                            color: AppColors.adventureGreen,
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

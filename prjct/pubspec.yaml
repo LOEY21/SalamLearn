@@ -91,6 +91,10 @@ flutter:
   assets:
     - assets/images/
     - assets/images/adventure_map/
+    - assets/images/greeting_match/
+    - assets/images/mascot/boy/
+    - assets/images/mascot/girl/
+    - assets/images/tracing/
     - assets/lottie/
     - assets/videos/
 
