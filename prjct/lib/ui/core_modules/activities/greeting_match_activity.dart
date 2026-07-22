@@ -219,25 +219,29 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                   ),
                 ),
               ),
-              // Choices pinned to the bottom of the screen, 2x2 grid of the
-              // chunky quiz-tile card art.
+              // Choices pinned to the bottom of the screen, all 4 in a
+              // single row of the chunky quiz-tile card art. Fixed height
+              // (rather than an aspect ratio driven by the row's width) so
+              // this stays a sane size on both phone-narrow and wide/test
+              // viewports instead of stretching very tall.
               SizedBox(
-                height: 320,
-                child: GridView.count(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 0.68,
-                  physics: const NeverScrollableScrollPhysics(),
+                height: 170,
+                child: Row(
                   children: [
-                    for (var i = 0; i < _question.choices.length; i++)
-                      _ChoiceCard(
-                        asset: _choiceCardAssets[i % _choiceCardAssets.length],
-                        choice: _question.choices[i],
-                        revealed:
-                            _answeredCorrectly && _question.choices[i].correct,
-                        onTap: () => _handleChoice(_question.choices[i]),
+                    for (var i = 0; i < _question.choices.length; i++) ...[
+                      if (i != 0) const SizedBox(width: 8),
+                      Expanded(
+                        child: _ChoiceCard(
+                          asset:
+                              _choiceCardAssets[i % _choiceCardAssets.length],
+                          choice: _question.choices[i],
+                          revealed:
+                              _answeredCorrectly &&
+                              _question.choices[i].correct,
+                          onTap: () => _handleChoice(_question.choices[i]),
+                        ),
                       ),
+                    ],
                   ],
                 ),
               ),
@@ -286,8 +290,8 @@ class _ChoiceCard extends StatelessWidget {
               Image.asset(asset, fit: BoxFit.fill),
               Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 16,
+                  horizontal: 6,
+                  vertical: 10,
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -295,18 +299,22 @@ class _ChoiceCard extends StatelessWidget {
                     Text(
                       choice.translit,
                       textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 15,
+                        fontSize: 12,
                         fontWeight: FontWeight.w800,
                         color: AppColors.ink,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 3),
                     Text(
                       choice.meaning,
                       textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 11.5,
+                        fontSize: 9,
                         color: AppColors.textMuted,
                       ),
                     ),
