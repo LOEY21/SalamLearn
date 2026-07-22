@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/curriculum/curriculum_models.dart';
@@ -260,26 +261,33 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
   }
 
   Widget _buildFloatingClose() {
-    return GestureDetector(
-      onTap: _confirmExit,
-      child: Container(
-        width: 36,
-        height: 36,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: const Text(
-          '✕',
-          style: TextStyle(fontSize: 18, color: Color(0xFF666666)),
+    return Material(
+      color: Colors.transparent,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: () {
+          HapticFeedback.lightImpact();
+          _confirmExit();
+        },
+        child: Container(
+          width: 44,
+          height: 44,
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Image.asset(
+            'assets/images/greeting_match/greeting_match_back_button.png',
+            fit: BoxFit.contain,
+          ),
         ),
       ),
     );
