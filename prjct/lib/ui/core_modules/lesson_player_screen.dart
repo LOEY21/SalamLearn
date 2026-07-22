@@ -218,30 +218,69 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFFFF7E9),
-        // Trace's scenery background is meant to run fully edge-to-edge —
-        // under the status bar too — so unlike every other activity type
-        // it skips the opaque top bar and title row entirely instead of
-        // just relocating them; exiting is handled by the yellow back
-        // arrow baked into the trace background art itself (see
-        // `TraceActivity.onBack`), so no floating close button here.
-        body: _activity.type == ActivityType.trace
-            ? _buildActivityContent(lessonColor)
-            : Column(
-                children: [
-                  _buildTopBar(lessonColor, progress, totalXp),
-                  Expanded(
-                    child: SafeArea(
-                      top: false,
-                      child: Column(
-                        children: [
-                          _buildActivityTitleRow(),
-                          Expanded(child: _buildActivityContent(lessonColor)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+        // Trace's and Greeting Match's own scenery backgrounds are meant to
+        // run fully edge-to-edge — under the status bar too — so unlike
+        // every other activity type they skip the opaque top bar and title
+        // row entirely instead of just relocating them. Trace's exit is
+        // handled by the yellow back arrow baked into its background art
+        // (see `TraceActivity.onBack`); Greeting Match's background has no
+        // such baked-in control, so it gets a small floating close button
+        // instead.
+        body: switch (_activity.type) {
+          ActivityType.trace => _buildActivityContent(lessonColor),
+          ActivityType.pronounce => Stack(
+            children: [
+              Positioned.fill(child: _buildActivityContent(lessonColor)),
+              Positioned(
+                left: 16,
+                top: MediaQuery.of(context).padding.top + 12,
+                child: _buildFloatingClose(),
               ),
+            ],
+          ),
+          _ => Column(
+            children: [
+              _buildTopBar(lessonColor, progress, totalXp),
+              Expanded(
+                child: SafeArea(
+                  top: false,
+                  child: Column(
+                    children: [
+                      _buildActivityTitleRow(),
+                      Expanded(child: _buildActivityContent(lessonColor)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        },
+      ),
+    );
+  }
+
+  Widget _buildFloatingClose() {
+    return GestureDetector(
+      onTap: _confirmExit,
+      child: Container(
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: const Text(
+          '✕',
+          style: TextStyle(fontSize: 18, color: Color(0xFF666666)),
+        ),
       ),
     );
   }
