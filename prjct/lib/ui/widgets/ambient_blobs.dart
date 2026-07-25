@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 
 /// Two drifting background blobs rendered at the Scaffold level (outside
 /// SafeArea) so they bleed to the true screen edges. Positions/colors/sizes

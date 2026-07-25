@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../theme/app_colors.dart';
 

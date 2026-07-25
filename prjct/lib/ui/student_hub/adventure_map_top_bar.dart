@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../logic/learner/learner_xp_provider.dart';
@@ -8,6 +9,7 @@ import '../../logic/learner/noor_energy_provider.dart';
 import '../../logic/recent_module_provider.dart';
 import '../theme/app_colors.dart';
 import 'noor_energy_info_sheet.dart';
+import 'tutorial/tutorial_anchors.dart';
 
 /// Pill-style stat row replacing the Learner Hub's previous plain header —
 /// see the Adventure Map design spec's "TopBar" section. Shown across the
@@ -20,6 +22,7 @@ class AdventureMapTopBar extends ConsumerWidget {
     final streak = ref.watch(learnerStreakProvider);
     final xp = ref.watch(learnerXpProvider);
     final energy = ref.watch(noorEnergyProvider);
+    final anchors = ref.watch(tutorialAnchorsProvider);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
@@ -27,6 +30,7 @@ class AdventureMapTopBar extends ConsumerWidget {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _Pill(
+            key: anchors.streakPillKey,
             index: 0,
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -67,6 +71,7 @@ class AdventureMapTopBar extends ConsumerWidget {
             ),
           ),
           _Pill(
+            key: anchors.energyPillKey,
             index: 2,
             onTap: () => showNoorEnergyInfoSheet(context),
             child: Row(
@@ -86,7 +91,7 @@ class AdventureMapTopBar extends ConsumerWidget {
 }
 
 class _Pill extends StatefulWidget {
-  const _Pill({required this.index, required this.child, this.onTap});
+  const _Pill({super.key, required this.index, required this.child, this.onTap});
 
   final int index;
   final Widget child;

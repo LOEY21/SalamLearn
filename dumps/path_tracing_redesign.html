@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Path Tracing — redesign mock</title>
+<style>
+  :root{
+    --gold:#F0B93E; --gold-bright:#F9D77A; --gold-deep:#D9901E; --gold-border:#B0700F;
+    --sand-light:#F6E7BE; --sand-deep:#E6C77E; --sand-track:#CBA657;
+    --dome:#2E8B5E; --dome-top:#3DA778; --dome-deep:#1C6B45; --dome-rim:#6FCBA0;
+    --brown:#5C3D14;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{background:#2a2a2a;min-height:100vh;display:flex;align-items:center;justify-content:center;
+    font-family:-apple-system,'Segoe UI',Roboto,sans-serif;padding:20px}
+
+  .phone{position:relative;width:390px;height:844px;border-radius:34px;overflow:hidden;
+    background:#7ec6f4 url('../prjct/assets/images/tracing/trace_screen_bg.png') center/cover no-repeat;
+    box-shadow:0 24px 60px rgba(0,0,0,.5)}
+
+  /* Back arrow / sound are baked into the art — hotspots only, no widget */
+
+  /* Letter plaque: gold rail + hard bevel over parchment fill */
+  .plaque{position:absolute;left:50%;top:40%;transform:translate(-50%,-100%);
+    width:152px;padding:4px;border-radius:22px;
+    background:linear-gradient(180deg,var(--gold-bright),var(--gold),var(--gold-deep));
+    border:1.5px solid var(--gold-border);
+    box-shadow:0 4px 0 var(--gold-border), 0 6px 10px rgba(0,0,0,.2)}
+  .plaque-inner{border-radius:16px;padding:11px 10px;text-align:center;
+    background:linear-gradient(180deg,#FBF0D4,var(--sand-light))}
+  .plaque-title{font-size:12.5px;font-weight:800;color:var(--brown)}
+  .plaque-letter{font-size:40px;font-weight:800;color:var(--brown);margin-top:6px;line-height:1}
+
+  /* Accuracy bar: gold-framed sand panel */
+  .acc{position:absolute;left:8%;top:45%;width:84%;
+    padding:11px 14px;border-radius:18px;display:flex;align-items:center;gap:8px;
+    background:linear-gradient(180deg,var(--sand-light),var(--sand-deep));
+    border:3px solid var(--gold);
+    box-shadow:0 3px 0 var(--gold-deep), 0 5px 8px rgba(0,0,0,.2)}
+  .track{flex:1;height:13px;border-radius:99px;overflow:hidden;background:var(--sand-track)}
+  .fill{height:100%;width:62%;border-radius:99px;
+    background:linear-gradient(180deg,#7bb896,var(--dome))}
+  .pct{width:42px;text-align:right;font-size:13px;font-weight:900;color:var(--dome)}
+
+  /* Bottom stack */
+  .bottom{position:absolute;left:0;right:0;bottom:0;padding:12px 20px 22px;
+    display:flex;flex-direction:column;align-items:center;gap:14px}
+  .dots{display:flex;gap:5px;align-items:center}
+  .dot{width:9px;height:9px;border-radius:5px;background:rgba(203,166,87,.53)}
+  .dot.done{background:var(--dome);border:1px solid rgba(255,255,255,.7)}
+  .dot.cur{width:22px;background:var(--gold-bright);border:1px solid rgba(255,255,255,.7)}
+
+  .btns{display:flex;gap:10px;width:100%}
+  .btn{border:none;cursor:pointer;padding:14px 0;border-radius:18px;font-weight:900;
+    font-size:15px;transition:transform .09s ease, box-shadow .09s ease;font-family:inherit}
+  .btn:active{transform:translateY(3px)}
+  .btn-clear{flex:1;color:var(--brown);
+    background:linear-gradient(180deg,var(--sand-light),var(--sand-deep));
+    border:2px solid var(--gold);
+    box-shadow:0 4px 0 var(--gold-deep), 0 5px 6px rgba(0,0,0,.2)}
+  .btn-clear:active{box-shadow:0 1px 0 var(--gold-deep), 0 2px 6px rgba(0,0,0,.2)}
+  .btn-go{flex:2;color:#fff;text-shadow:0 1px 0 var(--dome-deep);
+    background:linear-gradient(180deg,var(--dome-top),var(--dome));
+    border:2px solid var(--dome-rim);
+    box-shadow:0 4px 0 var(--dome-deep), 0 5px 6px rgba(0,0,0,.2)}
+  .btn-go:active{box-shadow:0 1px 0 var(--dome-deep), 0 2px 6px rgba(0,0,0,.2)}
+
+  .caption{margin-top:16px;color:#bbb;font-size:12px;text-align:center;max-width:390px}
+</style>
+</head>
+<body>
+  <div style="display:flex;flex-direction:column;align-items:center">
+    <div class="phone">
+      <div class="plaque">
+        <div class="plaque-inner">
+          <div class="plaque-title">Trace ا&nbsp;·&nbsp;Alif</div>
+          <div class="plaque-letter">ا</div>
+        </div>
+      </div>
+
+      <div class="acc">
+        <div class="track"><div class="fill"></div></div>
+        <div class="pct">62%</div>
+      </div>
+
+      <div class="bottom">
+        <div class="dots">
+          <span class="dot done"></span>
+          <span class="dot cur"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
+        <div class="btns">
+          <button class="btn btn-clear">Clear</button>
+          <button class="btn btn-go">Check my trace</button>
+        </div>
+      </div>
+    </div>
+    <div class="caption">Overlays reskinned to the desert-game background: gold-railed parchment plaque, gold-framed sand accuracy panel, green-dome glossy action button, gold progress dots. Tap buttons to feel the press-into-bevel.</div>
+  </div>
+</body>
+</html>

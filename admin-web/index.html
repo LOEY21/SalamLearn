@@ -96,6 +96,10 @@
           <svg class="tab-icon" viewBox="0 0 20 20" fill="none"><polyline points="4,7 16,7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M8 7V5h4v2M6 7l1 10h6l1-10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Trashbin
         </button>
+        <button class="tab-btn" data-tab="reports">
+          <svg class="tab-icon" viewBox="0 0 20 20" fill="none"><path d="M5 2h7l4 4v12a1 1 0 01-1 1H5a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M7 10h6M7 13h6M7 16h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Reports
+        </button>
       </nav>
 
       <div class="sidebar-footer">
@@ -111,6 +115,40 @@
 
     <!-- Main content -->
     <div class="main-wrap">
+      <!-- Topbar -->
+      <div class="topbar">
+        <div class="topbar-left">
+          <button class="topbar-toggle-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+          </button>
+          <div class="topbar-search">
+            <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" placeholder="Search for..." />
+          </div>
+        </div>
+        <div class="topbar-right">
+          <div class="topbar-badges">
+            <div class="badge-icon-wrap" title="Alerts">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+              <span class="badge-count badge-red">3</span>
+            </div>
+            <div class="badge-icon-wrap" title="Messages">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+              <span class="badge-count badge-yellow">2</span>
+            </div>
+            <div class="badge-icon-wrap" title="Tasks">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+              <span class="badge-count badge-green">5</span>
+            </div>
+          </div>
+          <div class="topbar-divider"></div>
+          <div class="topbar-user">
+            <span class="topbar-username" id="topbar-username">Admin User</span>
+            <div class="topbar-avatar" id="topbar-avatar">A</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Page header -->
       <header class="page-header">
         <div class="page-header-left">
@@ -130,6 +168,30 @@
         <!-- Overview -->
         <section id="tab-overview" class="tab-panel">
           <div class="stat-grid" id="stat-grid"></div>
+
+          <!-- Middle Row: Chart & Progress -->
+          <div class="chart-progress-grid">
+            <div class="dash-card chart-card">
+              <div class="dash-card-header">
+                <h3 class="dash-card-title">Monthly Activity Recap Report</h3>
+              </div>
+              <div class="dash-card-body chart-body">
+                <canvas id="recapChart" width="600" height="320"></canvas>
+              </div>
+            </div>
+            <div class="dash-card progress-card">
+              <div class="dash-card-header">
+                <h3 class="dash-card-title">Learning Modules Progress</h3>
+              </div>
+              <div class="dash-card-body progress-body">
+                <div class="progress-list" id="progress-list">
+                  <!-- Dynamically populated module progress bars -->
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Row: Tables & Insights -->
           <div class="dash-grid">
             <div class="dash-card" id="dash-recent-joins">
               <div class="dash-card-header">
@@ -297,6 +359,15 @@
             <table id="table-trashbin-admins"></table>
           </div>
         </section>
+
+        <!-- Reports -->
+        <section id="tab-reports" class="tab-panel" hidden>
+          <div class="panel-head no-print">
+            <h2>Platform Summary Report</h2>
+            <button id="print-report-btn" class="btn-primary btn-small">Print / Export PDF</button>
+          </div>
+          <div id="report-doc" class="report-doc"></div>
+        </section>
       </main>
     </div>
   </section>
@@ -324,6 +395,7 @@
       classes:   { title: 'Classes',             subtitle: 'Browse all registered class sections' },
       progress:  { title: 'Progress',            subtitle: 'Recent learning progress records' },
       trashbin:  { title: 'Trashbin',            subtitle: 'Deleted records from app users and admins' },
+      reports:   { title: 'Reports',             subtitle: 'Printable platform summary report' },
     };
     document.addEventListener('click', e => {
       const btn = e.target.closest('.tab-btn');

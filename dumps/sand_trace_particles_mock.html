@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Sand trace particles — motion preview</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #2b2116; font-family: -apple-system, 'Segoe UI', sans-serif;
+    gap: 32px; flex-wrap: wrap; padding: 24px;
+  }
+  .stage {
+    position: relative; width: 340px; height: 420px;
+    background-image: url('../prjct/assets/images/tracing/trace_screen_bg.png');
+    background-size: cover; background-position: center;
+    border-radius: 18px; overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0,0,0,.5);
+  }
+  .sandbox {
+    position: absolute;
+    left: 11.4%; top: 52.2%; width: 75.9%; height: 31.7%;
+    /* no border drawn here on purpose — it's already painted into the bg */
+  }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+  .label { color: #f4e6c8; text-align: center; font-size: 13px; margin-top: 10px; opacity: .8; }
+  .panel {
+    width: 300px; color: #e8dcc4; font-size: 12.5px; line-height: 1.6;
+    background: #1c1710; border-radius: 12px; padding: 16px 18px;
+  }
+  .panel b { color: #fff; }
+  .panel code { color: #ffd479; }
+</style>
+</head>
+<body>
+
+<div>
+  <div class="stage">
+    <div class="sandbox">
+      <canvas id="c"></canvas>
+    </div>
+  </div>
+  <div class="label">Drag inside the sand to trace — click Restart to clear</div>
+  <div class="label"><button id="restart" style="margin-top:8px;padding:6px 14px;border-radius:8px;border:none;background:#2FAE9E;color:#fff;font-weight:700;cursor:pointer;">↺ Restart</button></div>
+</div>
+
+<div class="panel">
+  <b>Sand-sprinkle trace effect</b><br><br>
+  Every few px of finger movement spawns 2-4 sand grains at the touch point:<br><br>
+  • <code>vx</code>: small random horizontal drift (±40px/s)<br>
+  • <code>vy</code>: starts near 0, gravity pulls down (~90px/s²)<br>
+  • size 2-4px, color sampled from 3 sand tones (light/mid/dark tan) + rare gold glint (10%)<br>
+  • rotation drifts slowly for a tumbling look<br>
+  • fades out over 550-750ms (opacity + slight scale-down), <b>not</b> linear — ease-in on the fade<br>
+  • grains land ~14-22px below the touch point on average, matching how real sand kicks up and settles just under/behind a dragging finger<br><br>
+  This is <b>ambient/secondary</b> motion only — ink stroke itself (ported separately) is the primary layer; sand is texture/feedback, never blocks legibility of the guide letter underneath.
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+  const r = canvas.getBoundingClientRect();
+  canvas.width = r.width * devicePixelRatio;
+  canvas.height = r.height * devicePixelRatio;
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  W = r.width; H = r.height;
+}
+window.addEventListener('resize', resize);
+resize();
+
+const SAND_TONES = ['#d9a94f', '#c68f3a', '#e8c374'];
+const GOLD = '#ffe08a';
+
+class Grain {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    const a = Math.random() * Math.PI * 2;
+    const spd = Math.random() * 30;
+    this.vx = Math.cos(a) * spd + (Math.random() - 0.5) * 20;
+    this.vy = -Math.random() * 20; // slight upward kick, then gravity takes over
+    this.size = 1.5 + Math.random() * 2.5;
+    this.rot = Math.random() * Math.PI;
+    this.rotSpeed = (Math.random() - 0.5) * 2;
+    this.gold = Math.random() < 0.1;
+    this.color = this.gold ? GOLD : SAND_TONES[(Math.random() * SAND_TONES.length) | 0];
+    this.life = 0;
+    this.maxLife = 550 + Math.random() * 200; // ms
+    this.dead = false;
+  }
+  update(dt) {
+    this.life += dt;
+    if (this.life >= this.maxLife) { this.dead = true; return; }
+    const t = this.life / this.maxLife;
+    this.vy += 90 * (dt / 1000); // gravity
+    this.x += this.vx * (dt / 1000);
+    this.y += this.vy * (dt / 1000);
+    this.rot += this.rotSpeed * (dt / 1000);
+    // ease-in fade: stays bright, then drops off toward the end
+    this.opacity = t < 0.6 ? 1 : 1 - Math.pow((t - 0.6) / 0.4, 2);
+    this.scale = 1 - 0.35 * Math.pow(t, 2);
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rot);
+    ctx.globalAlpha = Math.max(0, this.opacity);
+    ctx.fillStyle = this.color;
+    if (this.gold) {
+      ctx.shadowColor = GOLD;
+      ctx.shadowBlur = 4;
+    }
+    const s = this.size * this.scale;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s, s * 0.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+let grains = [];
+let dragging = false;
+let lastEmit = 0;
+let lastPt = null;
+let lastTs = performance.now();
+
+function pointerPos(e) {
+  const r = canvas.getBoundingClientRect();
+  const p = e.touches ? e.touches[0] : e;
+  return { x: p.clientX - r.left, y: p.clientY - r.top };
+}
+
+function emit(x, y, n) {
+  for (let i = 0; i < n; i++) {
+    const gx = x + (Math.random() - 0.5) * 6;
+    const gy = y + (Math.random() - 0.5) * 6;
+    grains.push(new Grain(gx, gy));
+  }
+}
+
+function down(e) {
+  dragging = true;
+  const p = pointerPos(e);
+  lastPt = p;
+  emit(p.x, p.y, 4);
+}
+function move(e) {
+  if (!dragging) return;
+  const p = pointerPos(e);
+  const dist = lastPt ? Math.hypot(p.x - lastPt.x, p.y - lastPt.y) : 999;
+  if (dist > 5) {
+    emit(p.x, p.y, 2 + Math.floor(Math.random() * 2));
+    lastPt = p;
+  }
+  e.preventDefault();
+}
+function up() { dragging = false; lastPt = null; }
+
+canvas.addEventListener('mousedown', down);
+canvas.addEventListener('mousemove', move);
+window.addEventListener('mouseup', up);
+canvas.addEventListener('touchstart', down, { passive: false });
+canvas.addEventListener('touchmove', move, { passive: false });
+window.addEventListener('touchend', up);
+
+document.getElementById('restart').onclick = () => { grains = []; };
+
+function frame(ts) {
+  const dt = ts - lastTs;
+  lastTs = ts;
+  ctx.clearRect(0, 0, W, H);
+  grains.forEach(g => g.update(dt));
+  grains = grains.filter(g => !g.dead);
+  grains.forEach(g => g.draw(ctx));
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>

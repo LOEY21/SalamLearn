@@ -1,6 +1,7 @@
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';

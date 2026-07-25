@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -19,7 +20,19 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {  @override
+  void initState() {
+    super.initState();
+    AppTranslations.currentLanguageCodeOverride = _language;
+  }
+
+  @override
+  void dispose() {
+    AppTranslations.currentLanguageCodeOverride = null;
+    _c.dispose();
+    super.dispose();
+  }
+
   String _language = 'en';
 
   late final AnimationController _c = AnimationController(
@@ -54,12 +67,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
   late final card2 = _in(0.44, 0.68);
   late final tip = _in(0.52, 0.74);
   late final cta = _in(0.50, 0.80, curve: Curves.easeOutBack);
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -168,7 +175,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
                       name: 'English',
                       subtitle: 'Lessons narrated in English',
                       selected: _language == 'en',
-                      onTap: () => setState(() => _language = 'en'),
+                      onTap: () => setState(() {
+                        _language = 'en';
+                        AppTranslations.currentLanguageCodeOverride = 'en';
+                      }),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -179,7 +189,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
                       name: 'Filipino',
                       subtitle: 'Mga aralin sa Filipino',
                       selected: _language == 'fil',
-                      onTap: () => setState(() => _language = 'fil'),
+                      onTap: () => setState(() {
+                        _language = 'fil';
+                        AppTranslations.currentLanguageCodeOverride = 'fil';
+                      }),
                     ),
                   ),
                   const SizedBox(height: 20),

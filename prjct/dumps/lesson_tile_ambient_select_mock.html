@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lesson Tile — Ambient Select Mock</title>
+<style>
+  :root{
+    --teal:#0F6E56; --teal-dark:#0A4F3E; --mint:#E7F3EF; --mint-border:#BFDCD2;
+    --gold:#EF9F27; --ink:#20241F; --cream-border:#ECEEEC; --neutral-tint:#F7F8F7;
+    --text-muted:#7A8580;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    background:#F7F8F7; padding:32px; color:var(--ink);
+  }
+  h1{font-size:14px; letter-spacing:.4px; text-transform:uppercase; color:var(--text-muted); font-weight:800; margin:0 0 4px;}
+  p{font-size:12px; color:var(--text-muted); margin:0 0 24px;}
+  .grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+    gap:12px; max-width:640px;
+  }
+  .tile{
+    position:relative; background:#fff; border-radius:16px; padding:14px;
+    border:1.4px solid var(--cream-border); cursor:pointer; user-select:none;
+    transition:background .18s ease-out, border-color .18s ease-out, box-shadow .18s ease-out;
+    overflow:hidden;
+  }
+
+  /* --- select pop (one-shot, existing behavior kept) --- */
+  .tile.selecting{ animation:pop 320ms cubic-bezier(0.175,0.885,0.32,1.275); }
+  @keyframes pop{
+    0%{ transform:scale(0.86); }
+    100%{ transform:scale(1); }
+  }
+
+  /* --- ambient loop: only runs while .added, stops immediately on removal --- */
+  .tile.added{
+    background:var(--mint);
+    border-color:var(--teal);
+  }
+  .tile.added .glow-ring{
+    opacity:1;
+    animation:breathe 2.6s cubic-bezier(0.4,0,0.2,1) infinite;
+  }
+  .glow-ring{
+    position:absolute; inset:0; border-radius:16px; pointer-events:none;
+    opacity:0;
+    box-shadow:0 0 0 0 rgba(15,110,86,0.0);
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 4px 14px rgba(15,110,86,0.14), 0 0 0 0 rgba(15,110,86,0.10); }
+    50%{ box-shadow:0 8px 22px rgba(15,110,86,0.24), 0 0 0 6px rgba(15,110,86,0.0); }
+  }
+
+  .icon{
+    width:32px; height:32px; border-radius:10px; background:var(--mint);
+    display:flex; align-items:center; justify-content:center; font-size:16px;
+    margin-bottom:8px; transition:transform .3s cubic-bezier(0.175,0.885,0.32,1.275);
+  }
+  .tile.added .icon{ background:#fff; }
+  .tile.selecting .icon{ transform:rotate(-8deg); }
+
+  .title{ font-size:12px; font-weight:700; margin-bottom:2px; }
+  .sub{ font-size:10px; color:var(--text-muted); }
+
+  .badge{
+    position:absolute; top:0; right:0; width:20px; height:20px; border-radius:50%;
+    background:var(--teal); color:#fff; display:flex; align-items:center; justify-content:center;
+    font-size:12px; transform:scale(0); transition:transform .26s cubic-bezier(0.175,0.885,0.32,1.275);
+  }
+  .tile.added .badge{ transform:scale(1); }
+
+  .order{
+    position:absolute; top:0; left:0; width:18px; height:18px; border-radius:6px;
+    background:var(--gold); color:var(--ink); font-size:9px; font-weight:800;
+    display:flex; align-items:center; justify-content:center;
+    transform:scale(0); transition:transform .26s cubic-bezier(0.175,0.885,0.32,1.275);
+  }
+  .tile.added .order{ transform:scale(1); }
+
+  .note{ margin-top:28px; font-size:11px; color:var(--text-muted); max-width:520px; line-height:1.5; }
+  code{ background:var(--neutral-tint); padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+
+<h1>Lesson Tile — Ambient Select</h1>
+<p>Tap a tile: pop-in once, then a constant soft breathing glow while selected. Tap again: glow stops immediately, tile returns to rest — no lingering animation.</p>
+
+<div class="grid" id="grid"></div>
+
+<div class="note">
+  Ambient loop is CSS-only (<code>infinite</code> keyframe on <code>.added</code>), removed the instant the class drops — no fade-out tail, no orphaned timers. One-shot <code>pop</code> class self-clears via <code>animationend</code> so it can replay on every toggle.
+</div>
+
+<script>
+  const modules = [
+    {icon:'🕌', title:'Wudhu Steps', sub:'Sort · Fiqh'},
+    {icon:'📖', title:'Surah Al-Fatiha', sub:'Playback · Quran'},
+    {icon:'🧩', title:'Match the Prophets', sub:'Match · Sirah'},
+    {icon:'✍️', title:'Arabic Tracing: Alif', sub:'Tracing · Huruf'},
+  ];
+  const grid = document.getElementById('grid');
+  let order = [];
+
+  modules.forEach((m, i) => {
+    const el = document.createElement('div');
+    el.className = 'tile';
+    el.dataset.id = i;
+    el.innerHTML = `
+      <div class="glow-ring"></div>
+      <div class="icon">${m.icon}</div>
+      <div class="title">${m.title}</div>
+      <div class="sub">${m.sub}</div>
+      <div class="badge">✓</div>
+      <div class="order"></div>
+    `;
+    el.addEventListener('click', () => toggle(el, i));
+    grid.appendChild(el);
+  });
+
+  function toggle(el, i) {
+    const idx = order.indexOf(i);
+    if (idx === -1) {
+      order.push(i);
+      el.classList.add('added');
+    } else {
+      order.splice(idx, 1);
+      el.classList.remove('added');
+    }
+    el.classList.remove('selecting');
+    void el.offsetWidth; // restart pop animation
+    el.classList.add('selecting');
+    el.addEventListener('animationend', () => el.classList.remove('selecting'), { once:true });
+
+    grid.querySelectorAll('.tile').forEach(t => {
+      const tid = Number(t.dataset.id);
+      const pos = order.indexOf(tid);
+      t.querySelector('.order').textContent = pos === -1 ? '' : pos + 1;
+    });
+  }
+</script>
+
+</body>
+</html>

@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive/hive.dart';
 
@@ -54,6 +55,15 @@ class DatabaseInspectorScreen extends StatelessWidget {
             icon: const Icon(Icons.arrow_back),
             onPressed: () => context.go('/settings'),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => _resetTutorial(context),
+              child: const Text(
+                'Reset tutorial',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
         ),
         body: ListView(
           padding: const EdgeInsets.all(12),
@@ -64,6 +74,23 @@ class DatabaseInspectorScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Clears every learner's `tutorial_seen_<id>` flag from the `settings`
+/// box, so the first-run mascot tutorial (`MascotTutorialOverlay`) fires
+/// again next time any learner opens the Adventure Map — the flag is
+/// permanent once set (see `TutorialSeenNotifier.markSeen`), and a single
+/// stray tap during testing is enough to set it, so this is the fast way
+/// back to "unseen" without wiping the whole settings box or reinstalling.
+void _resetTutorial(BuildContext context) {
+  final settings = Hive.box<dynamic>(HiveBoxes.settings);
+  final keys = settings.keys.where(
+    (k) => k is String && k.startsWith('tutorial_seen_'),
+  );
+  settings.deleteAll(keys);
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text('Cleared ${keys.length} tutorial_seen flag(s)')),
+  );
 }
 
 class _BoxSection extends StatelessWidget {

@@ -3,11 +3,12 @@
 //
 // `flashcard`/`match`/`sort` (Wireframe 0.3 port) retired in favor of the
 // capstone spec's real 5 core modules (FR-4.1–4.5): `trace` (FR-4.1),
-// `pronounce` (FR-4.2), `quranSync` (FR-4.3), `story` (FR-4.4, unchanged —
-// already matched), `fiqhDrag` (FR-4.5). `quiz` isn't one of the 5 FR
-// modules but is kept as an optional 6th assessment layer per the project
-// owner's call.
-enum ActivityType { trace, pronounce, quranSync, story, fiqhDrag, quiz, harakatPop }
+// `pronounce` (FR-4.2), `story` (FR-4.4, unchanged — already matched),
+// `fiqhDrag` (FR-4.5). `quiz` isn't one of the 5 FR modules but is kept as
+// an optional 6th assessment layer per the project owner's call. FR-4.3's
+// original `quranSync` ("Supplication Stepping Stones") was retired in
+// favor of `ayahBuilder` (Ayah Builder).
+enum ActivityType { trace, pronounce, story, fiqhDrag, quiz, harakatPop, ayahBuilder, quranSync }
 
 enum DestinationState { completed, current, locked }
 
@@ -52,11 +53,15 @@ class GreetingChoice {
     required this.translit,
     required this.meaning,
     required this.correct,
+    required this.emoji,
   });
 
   final String translit;
   final String meaning;
   final bool correct;
+
+  /// One glyph shown on the choice card (e.g. 🕊️ for "Peace be upon you").
+  final String emoji;
 }
 
 /// Greeting Match's content shape: one spoken/displayed greeting phrase
@@ -69,12 +74,16 @@ class GreetingQuestion {
   const GreetingQuestion({
     required this.id,
     required this.phrase,
+    required this.arabic,
     required this.choices,
     this.audioAsset,
   });
 
   final String id;
   final String phrase;
+
+  /// The prompt's Arabic script (e.g. "اَلسَّلامُ عَلَيْكُم").
+  final String arabic;
   final List<GreetingChoice> choices;
   final String? audioAsset;
 }
@@ -141,38 +150,6 @@ class StoryPanel {
   final String? captionAr;
 }
 
-/// FR-4.3's "highlights text strings ... synchronously with audio
-/// timestamps" — one Arabic line (ayah/hadith excerpt), word-by-word, each
-/// word paired with the millisecond offset (from the start of the clip)
-/// at which it should highlight. `audioAsset` is nullable for the same
-/// placeholder-phase reason as `FlashCard.audioAsset`; without it,
-/// `QuranSyncActivity` drives the highlight off a plain timer instead of
-/// real playback position, so the sync behavior is still exercisable.
-class QuranSyncLine {
-  const QuranSyncLine({
-    required this.id,
-    required this.arabicWords,
-    required this.translitWords,
-    required this.wordTimestampsMs,
-    required this.totalDurationMs,
-    this.audioAsset,
-    this.reference,
-  });
-
-  final String id;
-  final List<String> arabicWords;
-  final List<String> translitWords;
-
-  /// One timestamp per word, same length/order as [arabicWords].
-  final List<int> wordTimestampsMs;
-  final int totalDurationMs;
-  final String? audioAsset;
-
-  /// e.g. "Surah Al-Fatiha, 1:1" or "Hadith — Sahih al-Bukhari" — shown as
-  /// a small caption above the line.
-  final String? reference;
-}
-
 /// FR-4.5's "validates if a dragged item ID matches a target drop-zone ID"
 /// — one draggable chip. [correctZoneId] must equal a [FiqhDropZone.id] in
 /// the same activity's `fiqhZones` list. Covers both of the FR's own
@@ -207,6 +184,68 @@ class FiqhDropZone {
   final String? icon;
 }
 
+/// Ayah Builder's content shape: one Ayah (or standalone phrase like the
+/// Basmalah) split into its ordered Arabic words, each paired with a
+/// transliteration — the learner listens, then drags the word cards into
+/// the blanks in the correct order. [englishMeaning] is revealed once the
+/// Ayah is fully (and correctly) assembled. `audioAsset` is nullable for
+/// the same placeholder-phase reason as [FlashCard.audioAsset]; without it,
+/// `AyahBuilderActivity` substitutes a SnackBar reading out the
+/// transliteration while still driving the word-by-word highlight.
+/// FR-4.3's "highlights text strings ... synchronously with audio
+/// timestamps" — one Arabic line (ayah/hadith excerpt), word-by-word, each
+/// word paired with the millisecond offset (from the start of the clip)
+/// at which it should highlight. `audioAsset` is nullable for the same
+/// placeholder-phase reason as `FlashCard.audioAsset`; without it,
+/// `QuranSyncActivity` drives the highlight off a plain timer instead of
+/// real playback position, so the sync behavior is still exercisable.
+class QuranSyncLine {
+  const QuranSyncLine({
+    required this.id,
+    required this.arabicWords,
+    required this.translitWords,
+    required this.wordTimestampsMs,
+    required this.totalDurationMs,
+    this.audioAsset,
+    this.reference,
+  });
+
+  final String id;
+  final List<String> arabicWords;
+  final List<String> translitWords;
+
+  /// One timestamp per word, same length/order as [arabicWords].
+  final List<int> wordTimestampsMs;
+  final int totalDurationMs;
+  final String? audioAsset;
+
+  /// e.g. "Surah Al-Fatiha, 1:1" or "Hadith — Sahih al-Bukhari" — shown as
+  /// a small caption above the line.
+  final String? reference;
+}
+
+class AyahBuilderLevel {
+  const AyahBuilderLevel({
+    required this.id,
+    required this.reference,
+    required this.arabicWords,
+    required this.translitWords,
+    required this.englishMeaning,
+    this.audioAsset,
+  });
+
+  final String id;
+
+  /// e.g. "Surah Al-Fātiḥah (Ayah 1)".
+  final String reference;
+
+  /// Same length/order as [translitWords] — one entry per draggable word.
+  final List<String> arabicWords;
+  final List<String> translitWords;
+  final String englishMeaning;
+  final String? audioAsset;
+}
+
 class Activity {
   const Activity({
     required this.id,
@@ -221,6 +260,7 @@ class Activity {
     this.quranLine,
     this.fiqhItems,
     this.fiqhZones,
+    this.ayahLevels,
   });
 
   final String id;
@@ -239,6 +279,9 @@ class Activity {
   final QuranSyncLine? quranLine;
   final List<FiqhDragItem>? fiqhItems;
   final List<FiqhDropZone>? fiqhZones;
+
+  /// Used by `ayahBuilder` (see [AyahBuilderLevel] doc).
+  final List<AyahBuilderLevel>? ayahLevels;
 }
 
 class Lesson {

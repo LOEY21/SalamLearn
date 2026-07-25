@@ -1,14 +1,17 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../logic/auth/session.dart';
+import '../../logic/learner/hub_tab_provider.dart';
 import '../../logic/learner/map_zoom_provider.dart';
 import '../../logic/recent_module_provider.dart';
 import '../theme/app_colors.dart';
 import 'adventure_map_bottom_nav.dart';
 import 'hub_bottom_nav.dart';
+import 'tutorial/tutorial_anchors.dart';
 
 /// Shell for the Home / Backpack / Profile tabs, backing
 /// `StatefulShellRoute.indexedStack` in the router. Each branch's
@@ -51,6 +54,7 @@ class _HubShellState extends ConsumerState<HubShell> {
     setState(() => _opacity = 0);
     Future.delayed(_fadeDuration, () {
       widget.navigationShell.goBranch(index);
+      ref.read(activeHubTabIndexProvider.notifier).set(index);
       if (mounted) setState(() => _opacity = 1);
     });
   }
@@ -65,6 +69,7 @@ class _HubShellState extends ConsumerState<HubShell> {
     // clear out together while the learner pinch-zooms the map (in either
     // direction), and come back together on release.
     final chromeFade = ref.watch(mapZoomProvider);
+    final anchors = ref.watch(tutorialAnchorsProvider);
     // PopScope blocks the system back gesture: the learner cannot exit
     // to role selection without a grown-up (role lock requirement) — this
     // now guards all 4 tabs uniformly since they share this one Scaffold.
@@ -106,6 +111,7 @@ class _HubShellState extends ConsumerState<HubShell> {
                   onProfileTap: () => _switchTo(2),
                   learnerAvatar: learnerAvatar,
                   showBackpackBadge: hasNewBackpackItem,
+                  backpackKey: anchors.backpackTabKey,
                 ),
               ),
             ),

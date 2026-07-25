@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:lottie/lottie.dart';
 
 import '../theme/app_colors.dart';
@@ -23,6 +24,7 @@ class LetterTraceCanvas extends StatefulWidget {
     required this.guidePointsBuilder,
     required this.onStroke,
     required this.onDirectionViolation,
+    required this.coverTolerance,
     this.showPassBurst = true,
   });
 
@@ -32,6 +34,15 @@ class LetterTraceCanvas extends StatefulWidget {
   final List<List<Offset>> Function(Size size) guidePointsBuilder;
   final void Function(List<List<Offset>> userStrokes, Size canvasSize) onStroke;
   final VoidCallback onDirectionViolation;
+
+  /// How close (in canvas px) the learner's ink must pass to a guide point
+  /// to "cover" it — drives the double-masking reveal (see
+  /// `_TracePainter._paintGuideReveal`). Deliberately tighter than the
+  /// scoring tolerance `TraceActivity._computeAccuracy` uses for its
+  /// recall/pass check — that one stays lenient so near-misses still pass,
+  /// but a lenient radius here made the reveal spread out from a single
+  /// touch instead of only filling in along the actual dragged path.
+  final double coverTolerance;
 
   /// Whether to play the milestone-burst Lottie on [passed]. Trace
   /// Activity wants it; Hot Seat doesn't gate on a pass threshold, so it
@@ -46,6 +57,28 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
     with SingleTickerProviderStateMixin {
   final _strokes = <List<Offset>>[];
   final _key = GlobalKey();
+
+  /// Per guide stroke, per point: whether any user ink has passed within
+  /// `widget.coverTolerance` of it — drives `_TracePainter`'s revealed
+  /// (double-masking) layer. Recomputed only when `_strokes` actually
+  /// changes (pointer down/move), not inside `paint()`, since `paint()`
+  /// reruns every frame from the breathing/demo-shadow animations and a
+  /// fresh guide×user distance scan there would run continuously instead
+  /// of just on stroke updates.
+  List<List<bool>> _coveredMask = [];
+
+  void _recomputeCoveredMask(Size size) {
+    final guideStrokes = widget.guidePointsBuilder(size);
+    _coveredMask = [
+      for (final guide in guideStrokes)
+        [
+          for (final gp in guide)
+            _strokes.any(
+              (s) => s.any((up) => (up - gp).distance <= widget.coverTolerance),
+            ),
+        ],
+    ];
+  }
 
   /// Drives the traveling "shadow" that demonstrates the stroke order and
   /// direction — loops continuously so a learner who's stuck can just
@@ -132,7 +165,10 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
 
     setState(() {
       _strokes.add([startPt]);
-      if (size != null) _registerTouch(startPt, size);
+      if (size != null) {
+        _registerTouch(startPt, size);
+        _recomputeCoveredMask(size);
+      }
     });
 
     // A tap (down + up with no move in between, e.g. placing a diacritic
@@ -149,84 +185,77 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
 
     setState(() {
       currentStroke.add(newPoint);
-      if (size != null) _registerTouch(newPoint, size);
+      if (size != null) {
+        _registerTouch(newPoint, size);
+        _recomputeCoveredMask(size);
+      }
     });
 
     if (size != null) widget.onStroke(_strokes, size);
   }
 
-  void clear() => setState(_strokes.clear);
+  void clear() => setState(() {
+    _strokes.clear();
+    _coveredMask = [];
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF4A3A1E), Color(0xFF2F2410)],
-        ),
-        borderRadius: BorderRadius.circular(26),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.goldTint,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppColors.goldSoft, width: 3),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: GestureDetector(
-          // Absorb pan gestures so an ancestor ScrollView can't claim the
-          // arena; actual tracing goes through Listener's raw pointer
-          // events below, not these callbacks.
-          onVerticalDragStart: (_) {},
-          onVerticalDragUpdate: (_) {},
-          onHorizontalDragStart: (_) {},
-          onHorizontalDragUpdate: (_) {},
-          child: Listener(
-            onPointerDown: _onPointerDown,
-            onPointerMove: _onPointerMove,
-            child: AnimatedBuilder(
-              animation: Listenable.merge([widget.breathe, _guideDemo]),
-              builder: (context, _) {
-                final glow = Curves.easeInOut.transform(widget.breathe.value);
-                return Stack(
-                  children: [
-                    Positioned.fill(
-                      child: CustomPaint(
-                        key: _key,
-                        painter: _TracePainter(
-                          guideBuilder: widget.guidePointsBuilder,
-                          userStrokes: _strokes,
-                          strokeColor: widget.passed
-                              ? AppColors.adventureGreen
-                              : widget.failed
-                              ? AppColors.coral
-                              : AppColors.gold,
-                          guideOpacity: 0.30 + 0.15 * glow,
-                          demoProgress: _guideDemo.value,
-                          badgeHitAt: _badgeHitAt,
-                        ),
-                        child: widget.passed && widget.showPassBurst
-                            ? Center(
-                                child: SizedBox(
-                                  width: 96,
-                                  height: 96,
-                                  child: Lottie.asset(
-                                    'assets/lottie/milestone_burst.json',
-                                    repeat: false,
-                                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                                  ),
-                                ),
-                              )
-                            : null,
+    // No boxed card — traces directly over the sandbox scenery behind it
+    // (`TraceActivity`'s background), so the whole desert scene is the
+    // tracing surface instead of a separate cream/gold-bordered panel.
+    return SizedBox.expand(
+      child: GestureDetector(
+        // Absorb pan gestures so an ancestor ScrollView can't claim the
+        // arena; actual tracing goes through Listener's raw pointer
+        // events below, not these callbacks.
+        onVerticalDragStart: (_) {},
+        onVerticalDragUpdate: (_) {},
+        onHorizontalDragStart: (_) {},
+        onHorizontalDragUpdate: (_) {},
+        child: Listener(
+          onPointerDown: _onPointerDown,
+          onPointerMove: _onPointerMove,
+          child: AnimatedBuilder(
+            animation: Listenable.merge([widget.breathe, _guideDemo]),
+            builder: (context, _) {
+              final glow = Curves.easeInOut.transform(widget.breathe.value);
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    child: CustomPaint(
+                      key: _key,
+                      painter: _TracePainter(
+                        guideBuilder: widget.guidePointsBuilder,
+                        userStrokes: _strokes,
+                        strokeColor: widget.passed
+                            ? AppColors.adventureGreen
+                            : widget.failed
+                            ? AppColors.coral
+                            : AppColors.gold,
+                        guideOpacity: 0.30 + 0.15 * glow,
+                        demoProgress: _guideDemo.value,
+                        badgeHitAt: _badgeHitAt,
+                        coveredMask: _coveredMask,
                       ),
+                      child: widget.passed && widget.showPassBurst
+                          ? Center(
+                              child: SizedBox(
+                                width: 96,
+                                height: 96,
+                                child: Lottie.asset(
+                                  'assets/lottie/milestone_burst.json',
+                                  repeat: false,
+                                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                                ),
+                              ),
+                            )
+                          : null,
                     ),
-                  ],
-                );
-              },
-            ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -271,12 +300,19 @@ class _TracePainter extends CustomPainter {
     required this.guideOpacity,
     required this.demoProgress,
     required this.badgeHitAt,
+    required this.coveredMask,
   });
 
   final List<List<Offset>> Function(Size size) guideBuilder;
   final List<List<Offset>> userStrokes;
   final Color strokeColor;
   final double guideOpacity;
+
+  /// Precomputed by `_LetterTraceCanvasState._recomputeCoveredMask` (not
+  /// here — see that method's doc for why) — per guide stroke, per point,
+  /// whether the learner's ink has already passed near it. Drives
+  /// `_paintGuideReveal`'s double-masking layer.
+  final List<List<bool>> coveredMask;
 
   /// Badge number → the moment the learner's touch first passed near it
   /// (see `_LetterTraceCanvasState._registerTouch`) — drives each badge's
@@ -311,6 +347,52 @@ class _TracePainter extends CustomPainter {
         path.lineTo(p.dx, p.dy);
       }
       canvas.drawPath(path, paint..style = PaintingStyle.stroke);
+    }
+  }
+
+  /// Double-masking reveal: [_paintGuideBody] is the constant faint base
+  /// mask for the whole letter; this draws a second, bold, filled mask —
+  /// in [strokeColor], the same color the learner's own ink uses — but
+  /// only over the sub-segments [coveredMask] marks as already traced, so
+  /// tracing progress reads as the guide visibly "filling in" instead of
+  /// only the separate numeric accuracy bar moving.
+  void _paintGuideReveal(Canvas canvas, List<List<Offset>> guideStrokes) {
+    final paint = Paint()
+      ..color = strokeColor.withValues(alpha: 0.92)
+      ..strokeWidth = 26
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    for (var i = 0; i < guideStrokes.length; i++) {
+      final stroke = guideStrokes[i];
+      final covered = i < coveredMask.length ? coveredMask[i] : const <bool>[];
+
+      if (stroke.length == 1) {
+        if (covered.isNotEmpty && covered[0]) {
+          canvas.drawCircle(stroke.first, 13, paint..style = PaintingStyle.fill);
+        }
+        continue;
+      }
+      if (stroke.length < 2 || covered.length != stroke.length) continue;
+
+      var runStart = -1;
+      for (var j = 0; j <= stroke.length; j++) {
+        final isCovered = j < stroke.length && covered[j];
+        if (isCovered && runStart == -1) {
+          runStart = j;
+        } else if (!isCovered && runStart != -1) {
+          if (j - runStart >= 2) {
+            final path = Path()
+              ..moveTo(stroke[runStart].dx, stroke[runStart].dy);
+            for (var k = runStart + 1; k < j; k++) {
+              path.lineTo(stroke[k].dx, stroke[k].dy);
+            }
+            canvas.drawPath(path, paint..style = PaintingStyle.stroke);
+          }
+          runStart = -1;
+        }
+      }
     }
   }
 
@@ -426,6 +508,7 @@ class _TracePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final guideStrokes = guideBuilder(size);
     _paintGuideBody(canvas, guideStrokes);
+    _paintGuideReveal(canvas, guideStrokes);
     _paintDemoShadow(canvas, guideStrokes);
     _paintStrokeNumbers(canvas, guideStrokes);
 
@@ -461,5 +544,6 @@ class _TracePainter extends CustomPainter {
       oldDelegate.userStrokes != userStrokes ||
       oldDelegate.strokeColor != strokeColor ||
       oldDelegate.guideOpacity != guideOpacity ||
-      oldDelegate.demoProgress != demoProgress;
+      oldDelegate.demoProgress != demoProgress ||
+      oldDelegate.coveredMask != coveredMask;
 }

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lesson Builder Screen — Entrance Motion Mock</title>
+<style>
+  :root{
+    --teal:#0F6E56; --teal-dark:#0A4F3E; --mint:#E7F3EF; --mint-border:#BFDCD2;
+    --gold:#EF9F27; --ink:#20241F; --cream-border:#ECEEEC; --neutral-tint:#F7F8F7;
+    --text-muted:#7A8580; --coral:#D85A30;
+    --ease: cubic-bezier(0.2,0,0,1);
+    --ease-emph: cubic-bezier(0.05,0.7,0.1,1);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    background:#fff; color:var(--ink);
+  }
+  .replay{
+    position:fixed; top:12px; right:12px; z-index:10;
+    background:var(--teal); color:#fff; border:none; padding:8px 14px;
+    border-radius:999px; font-size:12px; font-weight:700; cursor:pointer;
+  }
+  .screen{ max-width:420px; margin:0 auto; padding:8px 16px 40px; }
+
+  /* app bar */
+  .appbar{ display:flex; align-items:center; padding:8px 2px 4px; gap:10px; }
+  .appbar.anim{ animation:barIn 380ms var(--ease-emph) both; }
+  @keyframes barIn{ 0%{ opacity:0; transform:translateY(-14px);} 100%{opacity:1; transform:translateY(0);} }
+  .back{ width:34px; height:34px; border-radius:11px; background:var(--neutral-tint); }
+  .title-block{ flex:1; }
+  .eyebrow{ font-size:10px; font-weight:700; letter-spacing:.4px; color:var(--text-muted); }
+  .title{ font-size:16px; font-weight:800; letter-spacing:-.2px; }
+  .pill{ background:var(--mint); border:1px solid var(--mint-border); border-radius:999px; padding:6px 10px; font-size:10.5px; font-weight:800; color:var(--teal-dark); }
+  hr{ border:none; border-top:1px solid var(--cream-border); margin:8px 0 0; }
+
+  .section{ opacity:0; }
+  .section.anim{ animation:sectionIn 340ms var(--ease) both; }
+  .label{ font-size:11px; font-weight:800; letter-spacing:.5px; color:var(--text-muted); text-transform:uppercase; margin:18px 0 10px; }
+  @keyframes sectionIn{ 0%{ opacity:0; transform:translateY(10px);} 100%{ opacity:1; transform:translateY(0);} }
+
+  input{ width:100%; padding:12px; border-radius:12px; border:1px solid var(--cream-border); background:var(--neutral-tint); font-size:13px; }
+
+  .chips{ display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; }
+  .chip{
+    flex:none; padding:7px 13px; border-radius:999px; border:1px solid var(--cream-border);
+    background:#fff; font-size:12px; font-weight:700; color:var(--text-muted);
+    transition:background 200ms var(--ease), border-color 200ms var(--ease), color 200ms var(--ease), transform 150ms var(--ease);
+    cursor:pointer;
+  }
+  .chip.sel{ background:var(--teal); border-color:var(--teal); color:#fff; transform:scale(1.04); }
+
+  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:4px; }
+  .tile{
+    border-radius:16px; border:1.4px solid var(--cream-border); padding:12px; background:#fff;
+    opacity:0; transform:translateY(14px) scale(0.97);
+  }
+  .tile.anim{ animation:tileIn 360ms var(--ease-emph) both; }
+  @keyframes tileIn{ 0%{opacity:0; transform:translateY(14px) scale(0.97);} 100%{opacity:1; transform:translateY(0) scale(1);} }
+  .ic{ width:32px; height:32px; border-radius:10px; background:var(--mint); margin-bottom:8px; }
+  .t1{ font-size:12px; font-weight:700; margin-bottom:2px; }
+  .t2{ font-size:10px; color:var(--text-muted); }
+
+  .empty{
+    border-radius:16px; border:1.4px solid var(--cream-border); padding:22px 16px; text-align:center;
+    font-size:12px; color:var(--text-muted);
+    opacity:0;
+  }
+  .empty.anim{ animation:sectionIn 340ms var(--ease) both; }
+
+  .save{
+    width:100%; height:50px; border:none; border-radius:14px; background:var(--teal); color:#fff;
+    font-weight:800; font-size:14.5px; margin-top:20px;
+    transition:transform 120ms var(--ease), box-shadow 200ms var(--ease);
+    box-shadow:0 6px 16px rgba(15,110,86,0.24);
+  }
+  .save:active{ transform:scale(0.97); box-shadow:0 3px 8px rgba(15,110,86,0.20); }
+
+  .note{ max-width:420px; margin:16px auto 0; font-size:11px; color:var(--text-muted); line-height:1.5; padding:0 16px; }
+</style>
+</head>
+<body>
+
+<button class="replay" onclick="replay()">Replay entrance</button>
+
+<div class="screen">
+  <div class="appbar" id="bar">
+    <div class="back"></div>
+    <div class="title-block">
+      <div class="eyebrow">CUSTOM LESSON BUILDER</div>
+      <div class="title">Build Lesson Folder</div>
+    </div>
+    <div class="pill">2 selected</div>
+  </div>
+  <hr>
+
+  <div class="section" id="s1" style="animation-delay:60ms">
+    <div class="label">Folder name</div>
+    <input placeholder="e.g. Week 4: Wudhu">
+  </div>
+
+  <div class="section" id="s2" style="animation-delay:120ms">
+    <div class="label">Module library</div>
+    <div class="chips">
+      <div class="chip sel">All</div>
+      <div class="chip">Tracing</div>
+      <div class="chip">Flashcard</div>
+      <div class="chip">Match</div>
+      <div class="chip">Sort</div>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="label" id="tlabel" style="opacity:0">Timeline (drag to reorder)</div>
+  <div class="empty" id="empty">Tap modules above to add them here, then drag to reorder.</div>
+
+  <button class="save" id="save">Save lesson folder</button>
+</div>
+
+<div class="note">
+  Entrance choreography only — no ambient loops, no per-item click animation (already stripped from tile tap per prior change). App bar leads (60ms), sections cascade 60ms apart, grid tiles stagger 40ms each with a slightly larger emphasis curve. Chip selection and save-button press use quick 120–200ms feedback, no bounce (Corporate personality — clean, not toy-like). Everything is one-shot on mount; nothing loops or lingers.
+</div>
+
+<script>
+  const modules = [
+    {icon:'🕌', t:'Wudhu Steps', s:'Sort · Fiqh'},
+    {icon:'📖', t:'Surah Al-Fatiha', s:'Playback · Quran'},
+    {icon:'🧩', t:'Match the Prophets', s:'Match · Sirah'},
+    {icon:'✍️', t:'Arabic Tracing: Alif', s:'Tracing · Huruf'},
+  ];
+  const grid = document.getElementById('grid');
+  function buildGrid(){
+    grid.innerHTML = '';
+    modules.forEach((m,i)=>{
+      const el = document.createElement('div');
+      el.className = 'tile';
+      el.style.animationDelay = (180 + i*40) + 'ms';
+      el.innerHTML = `<div class="ic"></div><div class="t1">${m.t}</div><div class="t2">${m.s}</div>`;
+      grid.appendChild(el);
+    });
+  }
+  buildGrid();
+
+  document.querySelectorAll('.chip').forEach(c=>{
+    c.addEventListener('click', ()=>{
+      document.querySelectorAll('.chip').forEach(x=>x.classList.remove('sel'));
+      c.classList.add('sel');
+    });
+  });
+
+  function replay(){
+    document.getElementById('bar').classList.remove('anim');
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('anim'));
+    document.getElementById('empty').classList.remove('anim');
+    buildGrid();
+    void document.body.offsetWidth;
+    document.getElementById('bar').classList.add('anim');
+    document.querySelectorAll('.section').forEach(s=>s.classList.add('anim'));
+    document.getElementById('empty').classList.add('anim');
+    document.getElementById('empty').style.animationDelay = '340ms';
+    document.querySelectorAll('.tile').forEach(t=>t.classList.add('anim'));
+  }
+  replay();
+</script>
+
+</body>
+</html>

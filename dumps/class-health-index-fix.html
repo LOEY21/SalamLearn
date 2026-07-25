@@ -1,0 +1,470 @@
+<title>Class Health Index — Classroom-Mode-Only Fix</title>
+<style>
+  :root {
+    --cream: #FAF6EC;
+    --teal: #0F6E56;
+    --teal-dark: #0A4F3E;
+    --gold: #EF9F27;
+    --coral: #D85A30;
+    --ink: #20241F;
+    --surface: #FFFFFF;
+    --mint: #E7F3EF;
+    --mint-border: #BFDCD2;
+    --gold-tint: #FDF1DE;
+    --gold-soft: #F7C86F;
+    --coral-tint: #FBE9E2;
+    --cream-border: #ECEEEC;
+    --cream-dark: #F1EADA;
+    --text-muted: #7A8079;
+    --neutral-tint: #F7F8F7;
+    --bg: var(--cream);
+    --surface-elev: var(--surface);
+    --border: var(--cream-border);
+    --text: var(--ink);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14201B;
+      --surface-elev: #1B2A23;
+      --border: #2C3F36;
+      --text: #EFEFE9;
+      --text-muted: #9FB0A7;
+      --mint: #1E332B;
+      --mint-border: #2E4A3F;
+      --gold-tint: #2E2413;
+      --coral-tint: #33201A;
+      --cream-dark: #22302A;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14201B;
+    --surface-elev: #1B2A23;
+    --border: #2C3F36;
+    --text: #EFEFE9;
+    --text-muted: #9FB0A7;
+    --mint: #1E332B;
+    --mint-border: #2E4A3F;
+    --gold-tint: #2E2413;
+    --coral-tint: #33201A;
+    --cream-dark: #22302A;
+  }
+  :root[data-theme="light"] {
+    --bg: var(--cream);
+    --surface-elev: var(--surface);
+    --border: var(--cream-border);
+    --text: var(--ink);
+    --text-muted: #7A8079;
+    --mint: #E7F3EF;
+    --mint-border: #BFDCD2;
+    --gold-tint: #FDF1DE;
+    --coral-tint: #FBE9E2;
+    --cream-dark: #F1EADA;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.55;
+  }
+  .wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+
+  .eyebrow {
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--teal);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-size: clamp(28px, 4.2vw, 38px);
+    font-weight: 700;
+    margin: 0 0 12px;
+    color: var(--text);
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  .dek {
+    font-size: 16.5px;
+    color: var(--text-muted);
+    max-width: 62ch;
+    margin: 0 0 28px;
+  }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 600;
+    border: 1px solid transparent;
+  }
+  .pill.coral { background: var(--coral-tint); color: var(--coral); border-color: color-mix(in srgb, var(--coral) 30%, transparent); }
+  .pill.teal { background: var(--mint); color: var(--teal); border-color: var(--mint-border); }
+  .pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  h2 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0 0 6px;
+    letter-spacing: -0.005em;
+  }
+  .section {
+    margin-top: 56px;
+  }
+  .section-lede {
+    color: var(--text-muted);
+    font-size: 15px;
+    max-width: 66ch;
+    margin: 0 0 22px;
+  }
+
+  /* Before/after comparison */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 640px) {
+    .compare { grid-template-columns: 1fr; }
+  }
+  .card {
+    background: var(--surface-elev);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px 20px 18px;
+  }
+  .card.bad { background: var(--coral-tint); border-color: color-mix(in srgb, var(--coral) 25%, var(--border)); }
+  .card.good { background: var(--mint); border-color: var(--mint-border); }
+  .card-label {
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 0 0 12px;
+  }
+  .card.bad .card-label { color: var(--coral); }
+  .card.good .card-label { color: var(--teal); }
+  .source-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 14.5px;
+  }
+  .source-row:last-child { border-bottom: none; }
+  .source-tag {
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .in { color: var(--teal); }
+  .out { color: var(--text-muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--text-muted) 60%, transparent); }
+
+  /* Data flow */
+  .flow {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .flow-node {
+    flex: 0 0 auto;
+    min-width: 168px;
+    background: var(--surface-elev);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+  }
+  .flow-node .t {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0 0 4px;
+  }
+  .flow-node .n {
+    font-size: 14.5px;
+    font-weight: 600;
+    margin: 0;
+  }
+  .flow-node.write { border-color: var(--mint-border); background: var(--mint); }
+  .flow-node.write .n { color: var(--teal-dark); }
+  .flow-arrow {
+    flex: 0 0 auto;
+    width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 16px;
+  }
+
+  /* Field spec table */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14px; background: var(--surface-elev); }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th {
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: var(--cream-dark);
+  }
+  tr:last-child td { border-bottom: none; }
+  code, .mono {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.92em;
+  }
+  td code { background: var(--cream-dark); padding: 1px 6px; border-radius: 5px; }
+
+  /* Checklist */
+  .steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+  .step {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 14px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .step:last-child { border-bottom: none; }
+  .step::before {
+    content: counter(step);
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--gold-tint);
+    color: var(--coral);
+    font-weight: 700;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .step-title { font-weight: 600; font-size: 15px; margin: 0 0 4px; }
+  .step-body { color: var(--text-muted); font-size: 14px; margin: 0; }
+  .step-body .mono { color: var(--text); }
+  .step-file {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 12.5px;
+    color: var(--teal);
+    background: var(--mint);
+    border: 1px solid var(--mint-border);
+    padding: 2px 8px;
+    border-radius: 6px;
+  }
+
+  /* Pseudocode block */
+  .code-block {
+    background: var(--ink);
+    color: #E7F3EF;
+    border-radius: 14px;
+    padding: 20px 22px;
+    overflow-x: auto;
+    font-size: 13.5px;
+    line-height: 1.65;
+  }
+  :root[data-theme="dark"] .code-block, @media (prefers-color-scheme: dark) { }
+  .code-block .kw { color: var(--gold-soft); }
+  .code-block .cm { color: #7FA491; font-style: italic; }
+  .code-block .str { color: #9FD8C2; }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Teacher Dashboard · Classroom Tab</p>
+  <h1>Class Health Index should count Classroom Mode only</h1>
+  <p class="dek">
+    Right now the index is built from whatever <span class="mono">ProgressRecord</span>s
+    happen to have a numeric <span class="mono">moduleId</span> — which is every solo
+    Student Hub lesson, not classroom activity. Hot Seat/Choral records use a
+    non-numeric <span class="mono">moduleId</span> and get silently dropped instead of
+    counted. Fix: tag records at write time and filter on that tag, not on the shape
+    of a string.
+  </p>
+
+  <div class="status-row">
+    <span class="pill coral"><span class="pill-dot"></span>Confirmed bug — not yet fixed</span>
+    <span class="pill teal"><span class="pill-dot"></span>Plan for review</span>
+  </div>
+
+  <div class="section">
+    <h2>What the index reads today, vs. what it should read</h2>
+    <p class="section-lede">Same learner, same week — two different play contexts, only one of which belongs in a teacher's classroom telemetry.</p>
+    <div class="compare">
+      <div class="card bad">
+        <p class="card-label">Counted today</p>
+        <div class="source-row"><span>Student Hub — solo lesson</span><span class="source-tag in">counted</span></div>
+        <div class="source-row"><span>Adventure Map — replay attempt</span><span class="source-tag in">counted</span></div>
+        <div class="source-row"><span>Classroom Mode — Hot Seat</span><span class="source-tag out">dropped</span></div>
+        <div class="source-row"><span>Classroom Mode — Choral</span><span class="source-tag out">dropped</span></div>
+      </div>
+      <div class="card good">
+        <p class="card-label">Should be counted</p>
+        <div class="source-row"><span>Student Hub — solo lesson</span><span class="source-tag out">excluded</span></div>
+        <div class="source-row"><span>Adventure Map — replay attempt</span><span class="source-tag out">excluded</span></div>
+        <div class="source-row"><span>Classroom Mode — Hot Seat</span><span class="source-tag in">counted</span></div>
+        <div class="source-row"><span>Classroom Mode — Choral</span><span class="source-tag in">counted</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Why it happens</h2>
+    <p class="section-lede">
+      Two writers, two <span class="mono">moduleId</span> shapes, and a reader that
+      only recognizes one of them.
+    </p>
+    <div class="flow">
+      <div class="flow-node write">
+        <p class="t">Home mode</p>
+        <p class="n">lesson_player_screen.dart</p>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-node">
+        <p class="t">moduleId</p>
+        <p class="n mono">"3"</p>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-node write">
+        <p class="t">reader matches</p>
+        <p class="n">curriculum.id.toString()</p>
+      </div>
+      <div class="flow-arrow" style="color: var(--teal);">&#10003;</div>
+    </div>
+    <div class="flow" style="margin-top: 10px;">
+      <div class="flow-node write">
+        <p class="t">Classroom mode</p>
+        <p class="n">hot_seat_choral.dart</p>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-node">
+        <p class="t">moduleId</p>
+        <p class="n mono">"hot_seat_A"</p>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-node">
+        <p class="t">reader matches</p>
+        <p class="n">— nothing —</p>
+      </div>
+      <div class="flow-arrow" style="color: var(--coral);">&#10007;</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>The tag</h2>
+    <p class="section-lede">One new field on the Hive model carries the real signal — where the record came from — instead of inferring it from string shape.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Field</th><th>Type</th><th>Hive index</th><th>Set by</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>isClassroomMode</code></td>
+            <td class="mono">bool</td>
+            <td class="mono">field 9</td>
+            <td>defaults <code>false</code>; <span class="mono">hot_seat_choral.dart</span> passes <code>true</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Implementation</h2>
+    <ol class="steps">
+      <li class="step">
+        <div>
+          <p class="step-title">Add the field to the Hive model</p>
+          <p class="step-body">New bool, defaults to <span class="mono">false</span> so every existing record (all Home-mode history) reads as non-classroom without a migration.</p>
+          <span class="step-file">lib/data/models/progress_record.dart</span>
+        </div>
+      </li>
+      <li class="step">
+        <div>
+          <p class="step-title">Bump the adapter</p>
+          <p class="step-body">Field 9 on the existing <span class="mono">typeId: 6</span> adapter — write/read the new byte, same pattern as the <span class="mono">lessonId</span> nullable-field precedent already in this file.</p>
+          <span class="step-file">lib/data/models/progress_record.dart</span>
+        </div>
+      </li>
+      <li class="step">
+        <div>
+          <p class="step-title">Pass the flag through the repository</p>
+          <p class="step-body">Add <span class="mono">isClassroomMode</span> as a named parameter on <span class="mono">writeProgress()</span>, default <span class="mono">false</span> — Home mode's call site needs no change.</p>
+          <span class="step-file">lib/data/repositories/progress_repository.dart</span>
+        </div>
+      </li>
+      <li class="step">
+        <div>
+          <p class="step-title">Set it true at the Classroom Mode writer</p>
+          <p class="step-body">The one call in <span class="mono">hot_seat_choral.dart</span> that already writes <span class="mono">assignedByTeacher: true</span> — add <span class="mono">isClassroomMode: true</span> alongside it.</p>
+          <span class="step-file">lib/ui/teacher_dashboard/hot_seat_choral.dart</span>
+        </div>
+      </li>
+      <li class="step">
+        <div>
+          <p class="step-title">Filter the index on the flag, not on moduleId shape</p>
+          <p class="step-body">In the per-learner bucketing loop, skip records where <span class="mono">!record.isClassroomMode</span> before grouping — this also fixes the silent drop, since Hot Seat's <span class="mono">moduleId</span> won't need to resemble a curriculum id anymore for its accuracy/error numbers to count.</p>
+          <span class="step-file">lib/logic/teacher/teacher_providers.dart — computeClassHealthIndex()</span>
+        </div>
+      </li>
+    </ol>
+  </div>
+
+  <div class="section">
+    <h2>Filter, precisely</h2>
+    <p class="section-lede">The one line that changes inside <span class="mono">computeClassHealthIndex</span>'s per-enrollment loop.</p>
+    <div class="code-block"><span class="cm">// before — every record with a numeric-looking moduleId counts</span>
+<span class="kw">for</span> (<span class="kw">final</span> record <span class="kw">in</span> progress.byLearnerId(enrollment.learnerId)) {
+  byModule.putIfAbsent(record.moduleId, () =&gt; []).add(record);
+}
+
+<span class="cm">// after — only what was actually played in Classroom Mode</span>
+<span class="kw">for</span> (<span class="kw">final</span> record <span class="kw">in</span> progress.byLearnerId(enrollment.learnerId)) {
+  <span class="kw">if</span> (!record.isClassroomMode) <span class="kw">continue</span>;
+  byModule.putIfAbsent(record.moduleId, () =&gt; []).add(record);
+}</div>
+  </div>
+
+  <footer>
+    <span>SalamLearn · Teacher Dashboard</span>
+    <span>Scope: 3 files touched, 1 new Hive field, no migration needed</span>
+  </footer>
+</div>

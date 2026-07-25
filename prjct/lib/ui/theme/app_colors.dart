@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 
 /// "Madrasah Classic" palette (REFERENCE mockup docs §3):
 /// deep teal + warm gold on a cream base — school product, not toy.

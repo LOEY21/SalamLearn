@@ -1,6 +1,7 @@
 import 'dart:math';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/repositories/progress_repository.dart';
@@ -888,6 +889,7 @@ class _HotSeatDrawingCanvasState extends ConsumerState<HotSeatDrawingCanvas>
             },
             onDirectionViolation: () {},
             showPassBurst: false,
+            coverTolerance: 250.0 * 0.02,
           ),
         ),
         const SizedBox(height: 12),

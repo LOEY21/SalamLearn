@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,6 +15,7 @@ import 'activities/quiz_activity.dart';
 import 'activities/quran_sync_activity.dart';
 import 'activities/story_activity.dart';
 import 'activities/trace_activity.dart';
+import 'activities/ayah_builder_activity.dart';
 import 'activities/harakat_pop_activity.dart';
 import 'lesson_complete_screen.dart';
 
@@ -219,16 +221,17 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFFFF7E9),
-        // Trace's and Greeting Match's own scenery backgrounds are meant to
-        // run fully edge-to-edge — under the status bar too — so unlike
-        // every other activity type they skip the opaque top bar and title
-        // row entirely instead of just relocating them. Trace's exit is
-        // handled by the yellow back arrow baked into its background art
-        // (see `TraceActivity.onBack`); Greeting Match's background has no
-        // such baked-in control, so it gets a small floating close button
-        // instead.
+        // Trace's, Ayah Builder's, and Greeting Match's own scenery
+        // backgrounds are meant to run fully edge-to-edge — under the status
+        // bar too — so unlike every other activity type they skip the
+        // opaque top bar and title row entirely instead of just relocating
+        // them. Trace's and Ayah Builder's exits are handled by the back
+        // arrow baked into their own layout (see `onBack`); Greeting
+        // Match's background has no such baked-in control, so it gets a
+        // small floating close button instead.
         body: switch (_activity.type) {
-          ActivityType.trace => _buildActivityContent(lessonColor),
+          ActivityType.trace ||
+          ActivityType.ayahBuilder => _buildActivityContent(lessonColor),
           ActivityType.pronounce => Stack(
             children: [
               Positioned.fill(child: _buildActivityContent(lessonColor)),
@@ -468,6 +471,14 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         xp: activity.xp,
         color: lessonColor,
         onComplete: _handleActivityComplete,
+      ),
+      ActivityType.ayahBuilder => AyahBuilderActivity(
+        key: ValueKey(activity.id),
+        levels: activity.ayahLevels!,
+        xp: activity.xp,
+        color: lessonColor,
+        onComplete: _handleActivityComplete,
+        onBack: _confirmExit,
       ),
       ActivityType.story => StoryActivity(
         key: ValueKey(activity.id),

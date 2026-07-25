@@ -1,6 +1,7 @@
 import 'dart:math';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -1807,6 +1808,7 @@ String _activityTypeLabel(ActivityType type) => switch (type) {
       ActivityType.fiqhDrag => 'Fiqh Match',
       ActivityType.quiz => 'Quiz',
       ActivityType.harakatPop => 'Harakat Pop',
+      ActivityType.ayahBuilder => 'Ayah Builder',
     };
 
 class _AdventureGameRow extends StatelessWidget {

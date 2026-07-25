@@ -2,6 +2,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
+import '../localization/app_translations.dart';
 
 import '../../data/local/hive_boxes.dart';
 import '../../data/models/consent_record.dart';
@@ -262,6 +263,7 @@ class SessionNotifier extends Notifier<SessionState> {
 
   void setLanguage(String code) {
     _settings.put('languageCode', code);
+    AppTranslations.currentLanguageCodeOverride = null;
     state = state.copyWith(languageCode: code);
   }
 
@@ -358,16 +360,17 @@ class SessionNotifier extends Notifier<SessionState> {
   Future<bool> beginParentEmailVerification() async {
     final pending = _pendingParent;
     if (pending == null) return false;
-    if (pending.firebaseUid != null) return true;
     try {
       final gateway = FirebaseAuthGateway();
-      final credential = await gateway.signUp(
-        email: pending.email,
-        password: pending.password,
-      );
-      final uid = credential.user?.uid;
-      if (uid == null) return false;
-      pending.firebaseUid = uid;
+      if (pending.firebaseUid == null) {
+        final credential = await gateway.signUp(
+          email: pending.email,
+          password: pending.password,
+        );
+        final uid = credential.user?.uid;
+        if (uid == null) return false;
+        pending.firebaseUid = uid;
+      }
       await gateway.sendEmailVerification();
       return true;
     } catch (e) {
@@ -1267,21 +1270,34 @@ final accountStreamProvider = StreamProvider.autoDispose<bool>((ref) {
 
 /// Real-time learner sync stream for the active parent. Listens to
 /// Firestore's `learners` collection filtered by [activeParentId] via
-/// `onSnapshot` and diffs against the local Hive set. Any learner that
-/// exists in Hive but not in the Firestore snapshot is treated as a remote
-/// deletion (admin web panel) — its Hive record is removed and, if it was
-/// the active learner, another sibling is re-picked.
+/// `onSnapshot` and diffs against the local Hive set. Any learner that was
+/// previously *confirmed* present in a Firestore snapshot but has since
+/// dropped out of one is treated as a remote deletion (admin web panel) —
+/// its Hive record is removed and, if it was the active learner, another
+/// sibling is re-picked.
+///
+/// Only ever diffs against ids this stream has itself already seen on
+/// Firestore (`knownRemoteIds`, grown monotonically below) — never against
+/// the full local Hive set. A learner just created on this device can be
+/// legitimately missing from the very first snapshot (the mirror push is
+/// best-effort and can lose the race, fail while offline, or be denied by
+/// the security rules for a PIN-only parent with no `firebaseUid` yet); if
+/// the diff ran against all of Hive, that first snapshot would misread
+/// "never synced yet" as "deleted" and immediately erase the brand-new
+/// profile the parent just made.
 final learnerSyncProvider = StreamProvider.autoDispose<DateTime>((ref) async* {
   final parentId = ref.watch(sessionProvider.select((s) => s.activeParentId));
   if (parentId == null) return;
 
   final repo = LearnerRepository();
   final notifier = ref.read(sessionProvider.notifier);
+  final knownRemoteIds = <String>{};
   await for (final firestoreIds in FirestoreMirror().watchLearnersForParent(parentId)) {
     final hiveLearners = repo.byParentId(parentId);
     final hiveIds = hiveLearners.map((l) => l.id).whereType<String>().toSet();
 
-    final deleted = hiveIds.difference(firestoreIds);
+    final deleted = knownRemoteIds.intersection(hiveIds).difference(firestoreIds);
+    knownRemoteIds.addAll(firestoreIds);
     if (deleted.isNotEmpty) {
       for (final id in deleted) {
         await notifier.onRemoteLearnerDeleted(id);

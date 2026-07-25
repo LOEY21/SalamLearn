@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>Tracing — Sand Tray Visual Mock</title>
+<style>
+  :root{
+    --cream:#FAF6EC; --teal:#0F6E56; --tealDark:#0A4F3E; --gold:#EF9F27;
+    --goldSoft:#F7C86F; --goldTint:#FDF1DE; --coral:#D85A30; --ink:#20241F;
+    --green:#5B9A1E; --creamDark:#F1EADA; --creamBorder:#ECEEEC; --muted:#7A8079;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(160deg,#e9f2ee,#f7efe0);
+    font-family:'Segoe UI',Tahoma,sans-serif;
+  }
+  .phone{
+    width:360px; height:778px; border-radius:28px;
+    box-shadow:0 20px 50px rgba(0,0,0,.18);
+    position:relative; overflow:hidden;
+    background:url('tracing_sand_bg.png') center/cover no-repeat;
+  }
+
+  /* title card + progress, floated in the sky gap the art leaves under
+     the back/sound buttons */
+  .top-ui{
+    position:absolute; left:16px; right:16px; top:66px;
+  }
+  .title-card{
+    background:rgba(255,255,255,.94); border:2px solid var(--creamBorder);
+    border-radius:16px; padding:6px 10px; text-align:center;
+    box-shadow:0 3px 8px rgba(0,0,0,.1);
+  }
+  .title-card .label{ font-size:12px; font-weight:800; color:var(--muted); }
+  .title-card .letter{ font-size:22px; font-weight:900; color:var(--ink); }
+
+  .progress-row{
+    display:flex; align-items:center; gap:10px; margin-top:8px;
+    background:rgba(255,255,255,.9); border-radius:14px; padding:6px 10px;
+    box-shadow:0 3px 8px rgba(0,0,0,.08);
+  }
+  .progress-bar-wrap{ flex:1; }
+  .progress-label{ font-size:11px; font-weight:800; color:var(--muted); margin-bottom:4px; }
+  .progress-track{
+    height:10px; border-radius:99px; background:var(--creamDark); overflow:hidden;
+  }
+  .progress-fill{
+    height:100%; width:10%; border-radius:99px;
+    background:linear-gradient(90deg,var(--green),#7cc93a);
+    animation:fillGrow 1.4s cubic-bezier(.2,0,0,1) forwards .3s;
+  }
+  @keyframes fillGrow{ from{width:0;} to{width:10%;} }
+  .progress-count{ font-size:12px; font-weight:900; color:var(--ink); white-space:nowrap; }
+
+  /* mascot, perched left of the tray like the reference pose */
+  .mascot-wrap{
+    position:absolute; left:2px; top:432px; width:96px; z-index:3;
+  }
+  .mascot{
+    width:74px; height:74px;
+    animation:mascotBob 2.6s ease-in-out infinite;
+    filter:drop-shadow(0 4px 5px rgba(0,0,0,.2));
+  }
+  @keyframes mascotBob{
+    0%,100%{ transform:translateY(0) rotate(-2deg); }
+    50%{ transform:translateY(-6px) rotate(2deg); }
+  }
+  .mascot svg{ width:100%; height:100%; }
+  .speech{
+    margin-top:-10px; margin-right:6px;
+    background:#fff; border:2px solid var(--creamBorder); border-radius:14px 14px 4px 14px;
+    padding:6px 10px; font-size:11.5px; font-weight:800; color:var(--teal);
+    box-shadow:0 3px 8px rgba(0,0,0,.1);
+    animation:speechPop .32s cubic-bezier(.175,.885,.32,1.275) both .5s;
+  }
+  @keyframes speechPop{ from{opacity:0; transform:scale(.85) translateY(6px);} to{opacity:1; transform:scale(1) translateY(0);} }
+  .speech b{ color:var(--gold); }
+
+  /* overlay drawn on top of the art's own sand-tray, aligned to its frame */
+  .tray-overlay{
+    position:absolute; left:23px; top:460px; width:314px; height:211px;
+  }
+  .letter-guide{
+    position:absolute; left:50%; top:2px; transform:translateX(-50%);
+    font-size:96px; font-weight:800; color:rgba(74,58,30,.28);
+    font-family:'Traditional Arabic','Segoe UI',serif; line-height:1;
+  }
+  .path-line{
+    stroke:rgba(255,255,255,.9); stroke-width:4; stroke-dasharray:6 8;
+    stroke-linecap:round; fill:none; opacity:.85;
+  }
+  .sparkle{ animation:sparkleFade 2.6s linear infinite; }
+  @keyframes sparkleFade{
+    0%{ opacity:0; } 5%{ opacity:1; } 30%{ opacity:0; } 100%{ opacity:0; }
+  }
+  /* hand cursor: image's fingertip sits ~34%/28% into its own frame, so
+     each translate target is offset by that fraction of the rendered
+     size to land the FINGERTIP on the path point, not the image corner */
+  .finger{
+    position:absolute; width:64px; height:96px; left:0; top:0;
+    filter:drop-shadow(0 4px 6px rgba(0,0,0,.3));
+    animation:fingerTravel 2.6s cubic-bezier(.45,0,.55,1) infinite;
+  }
+  @keyframes fingerTravel{
+    0%{ transform:translate(135px,3px); opacity:0; }
+    8%{ opacity:1; }
+    85%{ transform:translate(135px,148px); opacity:1; }
+    92%{ opacity:0; transform:translate(135px,148px) scale(.92); }
+    100%{ opacity:0; transform:translate(135px,3px); }
+  }
+
+  /* stars + praise, on the sand strip below the tray */
+  .stars-row{ position:absolute; left:0; right:0; top:684px; display:flex; justify-content:center; gap:8px; }
+  .star{ width:24px; height:24px; animation:starPop .4s cubic-bezier(.175,.885,.32,1.275) both; }
+  .star:nth-child(1){ animation-delay:.9s; }
+  .star:nth-child(2){ animation-delay:1.02s; }
+  .star:nth-child(3){ animation-delay:1.14s; }
+  @keyframes starPop{ from{opacity:0; transform:scale(0);} to{opacity:1; transform:scale(1);} }
+
+  .praise{
+    position:absolute; left:0; right:0; top:714px; text-align:center;
+    font-size:12.5px; font-weight:900; color:var(--tealDark);
+    text-shadow:0 1px 2px rgba(255,255,255,.6);
+  }
+
+  /* bottom buttons, on the ornamental sand strip at the very bottom */
+  .btn-row{ position:absolute; left:16px; right:16px; top:734px; display:flex; gap:10px; }
+  .btn{
+    flex:1; display:flex; align-items:center; justify-content:center; gap:6px;
+    padding:8px; border-radius:14px; font-weight:800; font-size:12.5px;
+    border:2px solid var(--creamBorder); background:rgba(255,255,255,.95); color:var(--teal);
+    box-shadow:0 3px 8px rgba(0,0,0,.12);
+    transition:transform .15s cubic-bezier(.2,0,0,1);
+  }
+  .btn:active{ transform:scale(.96); }
+  .btn.voice{
+    background:linear-gradient(135deg,var(--green),#457618); color:#fff; border:none;
+  }
+  .btn.restart{ flex:0 0 44px; }
+</style>
+</head>
+<body>
+
+<div class="phone">
+
+  <div class="top-ui">
+    <div class="title-card">
+      <div class="label">اكتب الحرف</div>
+      <div class="letter">ع</div>
+    </div>
+    <div class="progress-row">
+      <div class="progress-bar-wrap">
+        <div class="progress-label">التقدم</div>
+        <div class="progress-track"><div class="progress-fill"></div></div>
+      </div>
+      <div class="progress-count">1 / 10</div>
+    </div>
+  </div>
+
+  <div class="mascot-wrap">
+    <div class="mascot">
+      <svg viewBox="0 0 64 64">
+        <ellipse cx="32" cy="58" rx="16" ry="4" fill="rgba(0,0,0,.1)"/>
+        <path d="M14 40c0-12 8-22 18-22s18 10 18 22c0 4-3 6-6 6H20c-3 0-6-2-6-6z" fill="#0F6E56"/>
+        <circle cx="32" cy="24" r="14" fill="#F0C89A"/>
+        <path d="M18 20c0-8 6-14 14-14s14 6 14 14c-4-3-9-5-14-5s-10 2-14 5z" fill="#fff"/>
+        <circle cx="27" cy="24" r="2" fill="#20241F"/>
+        <circle cx="37" cy="24" r="2" fill="#20241F"/>
+        <path d="M27 30q5 4 10 0" stroke="#20241F" stroke-width="2" fill="none" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="speech">أحسنت! <b>لنكتب حرف ع</b></div>
+  </div>
+
+  <div class="tray-overlay">
+    <div class="letter-guide">ع</div>
+
+    <svg width="100%" height="100%" viewBox="0 0 314 211" style="position:absolute;inset:0;">
+      <path class="path-line" d="M157,30 C157,80 157,130 157,175"/>
+      <path d="M157,175 l-9,-14 h18 z" fill="rgba(255,255,255,.9)"/>
+
+      <circle class="sparkle" cx="147" cy="55" r="2.2" fill="#fff"/>
+      <circle class="sparkle" cx="169" cy="90" r="1.8" fill="#fff" style="animation-delay:.5s"/>
+      <circle class="sparkle" cx="145" cy="125" r="2.4" fill="#fff" style="animation-delay:1s"/>
+      <circle class="sparkle" cx="165" cy="155" r="1.8" fill="#fff" style="animation-delay:1.5s"/>
+    </svg>
+
+    <img class="finger" src="tracing_hand_cursor.png" alt="">
+
+  </div>
+
+  <div class="stars-row">
+    <svg class="star" viewBox="0 0 24 24"><path fill="#EF9F27" d="M12 2l2.9 6.6L22 9.3l-5 4.9 1.2 7L12 17.8 5.8 21.2 7 14.2 2 9.3l7.1-.7z"/></svg>
+    <svg class="star" viewBox="0 0 24 24"><path fill="#EF9F27" d="M12 2l2.9 6.6L22 9.3l-5 4.9 1.2 7L12 17.8 5.8 21.2 7 14.2 2 9.3l7.1-.7z"/></svg>
+    <svg class="star" viewBox="0 0 24 24"><path fill="#fff" stroke="#d8dad8" d="M12 2l2.9 6.6L22 9.3l-5 4.9 1.2 7L12 17.8 5.8 21.2 7 14.2 2 9.3l7.1-.7z"/></svg>
+  </div>
+
+  <div class="praise">أحسنت! استمر</div>
+
+  <div class="btn-row">
+    <div class="btn restart">↻</div>
+    <div class="btn voice">🔊 الصوت</div>
+  </div>
+
+</div>
+
+</body>
+</html>

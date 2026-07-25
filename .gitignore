@@ -1,0 +1,24 @@
+.superpowers/
+node_modules/
+
+# Tooling/IDE, not part of the app
+.claude/
+.claude-flow/
+.idea/
+.obsidian/
+.mcp.json
+.firebase/
+prjct/.firebase/
+graphify-out/
+prjct/graphify-out/
+prjct/scratch/
+
+# Unrelated clutter dirs (see CLAUDE.md)
+public-apis/
+lottie-android/
+skills/
+awesome-design-skills/
+dumps/open-design/
+
+# Secrets
+prjct/android/app/google-services.json

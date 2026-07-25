@@ -61,6 +61,7 @@ Future<Directory> setUpTestHive() async {
 }
 
 Future<void> tearDownTestHive(Directory tempDir) async {
+  await Hive.close();
   await Hive.deleteFromDisk();
   if (tempDir.existsSync()) {
     tempDir.deleteSync(recursive: true);

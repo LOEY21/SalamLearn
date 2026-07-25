@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/learner_avatar.dart';
@@ -17,12 +18,17 @@ class AdventureMapBottomNav extends StatelessWidget {
     required this.onProfileTap,
     this.learnerAvatar,
     this.showBackpackBadge = false,
+    this.backpackKey,
   });
 
   final HubTab active;
   final VoidCallback onHomeTap;
   final VoidCallback onBackpackTap;
   final VoidCallback onProfileTap;
+
+  /// Attached to the Backpack tab's [_Item] so the first-run mascot
+  /// tutorial can measure its real on-screen rect — see [TutorialAnchors].
+  final GlobalKey? backpackKey;
 
   /// The signed-in learner's own avatar — shown on the "Me" tab instead of
   /// a generic emoji so the nav reflects who's actually using the app.
@@ -137,6 +143,7 @@ class AdventureMapBottomNav extends StatelessWidget {
                       ),
                       Expanded(
                         child: _Item(
+                          key: backpackKey,
                           emoji: '🎒',
                           iconAsset: 'assets/images/adventure_map/tab_backpack.png',
                           label: 'Backpack',
@@ -198,6 +205,7 @@ class AdventureMapBottomNav extends StatelessWidget {
 
 class _Item extends StatefulWidget {
   const _Item({
+    super.key,
     required this.emoji,
     required this.label,
     required this.active,

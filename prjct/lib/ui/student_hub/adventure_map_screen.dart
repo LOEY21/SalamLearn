@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
@@ -10,6 +11,7 @@ import '../../data/models/curriculum/curriculum_models.dart';
 import '../../data/repositories/class_repository.dart';
 import '../../data/repositories/progress_repository.dart';
 import '../../logic/auth/session.dart';
+import '../../logic/learner/hub_tab_provider.dart';
 import '../../logic/learner/map_zoom_provider.dart';
 import '../../logic/learner/noor_energy_provider.dart';
 import '../../logic/recent_module_provider.dart';
@@ -22,6 +24,8 @@ import '../widgets/learner_avatar.dart';
 import 'adventure_map_top_bar.dart';
 import 'destination_levels_sheet.dart';
 import 'noor_energy_resting_sheet.dart';
+import 'tutorial/mascot_tutorial_overlay.dart';
+import 'tutorial/tutorial_anchors.dart';
 
 
 
@@ -125,10 +129,41 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
       final fraction = _nodePositions[currentId] ?? 0.5;
       final target = (_mapHeight * fraction) - 300;
       _scrollController.jumpTo(target.clamp(0, _mapHeight));
+      _playTutorial();
     });
     _release.addListener(() {
       final t = Curves.easeOutCubic.transform(_release.value);
       _setPinchZoom(_releaseFromZoom + (1.0 - _releaseFromZoom) * t);
+    });
+  }
+
+  bool _tutorialActive = false;
+
+  /// Plays the mascot tutorial every time the Home tab becomes active —
+  /// once on first landing here (called from `initState`), and again on
+  /// every later switch back from Backpack/Profile (see the `ref.listen`
+  /// on `activeHubTabIndexProvider` in `build`). `_tutorialActive` just
+  /// stops two overlays stacking if a replay is triggered while one is
+  /// already up; it isn't a "seen" flag, so this is never permanently
+  /// skipped.
+  void _playTutorial() {
+    if (_tutorialActive) return;
+    final learner = ref.read(sessionProvider).learner;
+    if (learner == null) return;
+    _tutorialActive = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!mounted) {
+          _tutorialActive = false;
+          return;
+        }
+        MascotTutorialOverlay.show(
+          context,
+          learnerName: learner.name,
+          isGirl: learner.avatar == 'girl_mascot',
+          onFinished: () => _tutorialActive = false,
+        );
+      });
     });
   }
 
@@ -353,6 +388,10 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
     final currentId = ref.watch(recentModuleProvider) ?? coreModules.first.id;
     final learnerAvatar = ref.watch(sessionProvider).learner?.avatar;
     final chromeFade = ref.watch(mapZoomProvider);
+    final anchors = ref.watch(tutorialAnchorsProvider);
+    ref.listen(activeHubTabIndexProvider, (prev, next) {
+      if (next == 0 && prev != null && prev != 0) _playTutorial();
+    });
 
     return Scaffold(
       backgroundColor: AppColors.cream,
@@ -416,14 +455,20 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
                               module,
                               _isModuleAssigned(module.id),
                             ),
+                            anchorKey: module.id == currentId
+                                ? anchors.currentNodeKey
+                                : null,
                           ),
-                        _MascotAvatar(
-                          topFraction: _nodePositions[currentId] ?? 0.5,
-                          left:
-                              constraints.maxWidth *
-                              (_nodePositionsX[currentId] ?? 0.33),
-                          mapHeight: effectiveMapHeight,
-                          avatar: learnerAvatar,
+                        KeyedSubtree(
+                          key: anchors.mapAvatarKey,
+                          child: _MascotAvatar(
+                            topFraction: _nodePositions[currentId] ?? 0.5,
+                            left:
+                                constraints.maxWidth *
+                                (_nodePositionsX[currentId] ?? 0.33),
+                            mapHeight: effectiveMapHeight,
+                            avatar: learnerAvatar,
+                          ),
                         ),
                       ],
                     ),
@@ -681,6 +726,7 @@ class _MapNode extends StatefulWidget {
     required this.overdue,
     required this.entranceDelay,
     required this.onTap,
+    this.anchorKey,
   });
 
   final ModuleInfo module;
@@ -692,6 +738,10 @@ class _MapNode extends StatefulWidget {
   final bool overdue;
   final Duration entranceDelay;
   final VoidCallback onTap;
+
+  /// Attached only to the current-lesson node so the first-run mascot
+  /// tutorial can spotlight its real on-screen rect — see [TutorialAnchors].
+  final GlobalKey? anchorKey;
 
   @override
   State<_MapNode> createState() => _MapNodeState();
@@ -827,7 +877,9 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     return Positioned(
       top: widget.mapHeight * widget.topFraction - size / 2,
       left: widget.left - size / 2,
-      child: AnimatedBuilder(
+      child: KeyedSubtree(
+        key: widget.anchorKey,
+        child: AnimatedBuilder(
         animation: _animations,
         builder: (context, child) {
           final entranceT = _overshoot.transform(_entrance.value);
@@ -935,6 +987,7 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
             ),
           );
         },
+        ),
       ),
     );
   }

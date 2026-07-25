@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 
 /// Shared role glyphs — used by the role picker and the sign-in/sign-up
 /// screen so the same icon always means the same role everywhere.

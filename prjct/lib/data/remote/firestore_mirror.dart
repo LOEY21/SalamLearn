@@ -301,41 +301,49 @@ class FirestoreMirror {
   /// just authenticated as matches the rule's `resource.data.firebaseUid
   /// == request.auth.uid` condition directly, so Firestore can verify it.
   Future<RemoteParentRef?> fetchParentByFirebaseUid(String firebaseUid) async {
-    final snapshot = await _db
-        .collection(HiveBoxes.parents)
-        .where('firebaseUid', isEqualTo: firebaseUid)
-        .limit(1)
-        .get(const GetOptions(source: Source.server));
-    if (snapshot.docs.isEmpty) return null;
-    final doc = snapshot.docs.first;
-    final data = doc.data();
-    return RemoteParentRef(
-      id: doc.id,
-      fullName: data['fullName'] as String? ?? 'Parent',
-      mobileNumber: data['mobileNumber'] as String?,
-      firebaseUid: data['firebaseUid'] as String?,
-    );
+    try {
+      final snapshot = await _db
+          .collection(HiveBoxes.parents)
+          .where('firebaseUid', isEqualTo: firebaseUid)
+          .limit(1)
+          .get(const GetOptions(source: Source.server));
+      if (snapshot.docs.isEmpty) return null;
+      final doc = snapshot.docs.first;
+      final data = doc.data();
+      return RemoteParentRef(
+        id: doc.id,
+        fullName: data['fullName'] as String? ?? 'Parent',
+        mobileNumber: data['mobileNumber'] as String?,
+        firebaseUid: data['firebaseUid'] as String?,
+      );
+    } catch (_) {
+      return null; // fail-closed — caller falls back to local-only sign-in
+    }
   }
 
   /// See [fetchParentByFirebaseUid] doc.
   Future<RemoteTeacherRef?> fetchTeacherByFirebaseUid(
     String firebaseUid,
   ) async {
-    final snapshot = await _db
-        .collection(HiveBoxes.teachers)
-        .where('firebaseUid', isEqualTo: firebaseUid)
-        .limit(1)
-        .get(const GetOptions(source: Source.server));
-    if (snapshot.docs.isEmpty) return null;
-    final doc = snapshot.docs.first;
-    final data = doc.data();
-    return RemoteTeacherRef(
-      id: doc.id,
-      fullName: data['fullName'] as String? ?? 'Asatidz',
-      school: data['school'] as String?,
-      mobileNumber: data['mobileNumber'] as String?,
-      firebaseUid: data['firebaseUid'] as String?,
-    );
+    try {
+      final snapshot = await _db
+          .collection(HiveBoxes.teachers)
+          .where('firebaseUid', isEqualTo: firebaseUid)
+          .limit(1)
+          .get(const GetOptions(source: Source.server));
+      if (snapshot.docs.isEmpty) return null;
+      final doc = snapshot.docs.first;
+      final data = doc.data();
+      return RemoteTeacherRef(
+        id: doc.id,
+        fullName: data['fullName'] as String? ?? 'Asatidz',
+        school: data['school'] as String?,
+        mobileNumber: data['mobileNumber'] as String?,
+        firebaseUid: data['firebaseUid'] as String?,
+      );
+    } catch (_) {
+      return null; // fail-closed — caller falls back to local-only sign-in
+    }
   }
 
   /// FR-7.2 "sign in on any device" — pulls every child profile belonging

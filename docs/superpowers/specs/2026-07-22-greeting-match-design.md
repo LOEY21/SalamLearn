@@ -45,6 +45,16 @@ structure with plain/default styling (existing `AppColors`, `SoftCard`,
 button patterns already used elsewhere in the app). Visual redesign is a
 follow-up once the project owner provides the asset pack.
 
+## Replacement, not addition
+
+Greeting Match **replaces** the current `PronounceActivity` (the
+market-basket item-counting drag game in `pronounce_activity.dart`) in
+place — same `ActivityType.pronounce` slot in the enum and in
+`lesson_player_screen.dart`'s `_buildActivityContent` switch, same
+`onComplete` contract. No new `ActivityType` value is added. The old
+basket-counting mechanic, its emoji-pool distractor logic, and its
+`_wobbleController`/`_pulseController` are deleted, not kept behind a flag.
+
 ## Data model
 
 New types in `lib/data/models/curriculum/curriculum_models.dart`:

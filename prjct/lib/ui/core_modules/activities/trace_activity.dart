@@ -1,8 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/letter_trace_canvas.dart';
+import '../../widgets/trace_ambient_background.dart';
 
 /// FR-4.1's Tactile Recognition Engine — tracks the learner's continuous
 /// drag (X/Y samples) and validates it against a predefined right-to-left
@@ -20,12 +22,19 @@ class TraceActivity extends StatefulWidget {
     required this.xp,
     required this.color,
     required this.onComplete,
+    required this.onBack,
   });
 
   final List<FlashCard> cards;
   final int xp;
   final Color color;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
+  /// `LessonPlayerScreen` skips its own top bar for trace (see its
+  /// `_activity.type` switch) since this scene's back control is baked into
+  /// its own scenery instead — the yellow circular arrow drawn here, not a
+  /// bar-mounted one.
+  final VoidCallback onBack;
 
   @override
   State<TraceActivity> createState() => _TraceActivityState();
@@ -144,7 +153,36 @@ class _TraceActivityState extends State<TraceActivity>
     return result;
   }
 
-  static const _boxSize = 320.0;
+  /// Reference size used for tolerance math (`_computeAccuracy`,
+  /// `coverTolerance`) — a fraction of the *actual* canvas's shortest
+  /// side, not a fixed px value, so those stay proportional no matter how
+  /// big the tray region ends up on a given device.
+  double _boxSizeFor(Size size) => size.shortestSide * 0.78;
+
+  /// Each letter's raw path in `_paths` is normalised loosely against a
+  /// notional 0..1 square, but few of them actually *use* the full
+  /// square — ب's main stroke, for instance, only spans y≈0.34–0.89 (plus
+  /// its dot trailing to 1.05), not 0..1. Centering a fixed 0..1 box
+  /// therefore centered an invisible reference square while the visible
+  /// ink inside it still looked off-center. This finds the letter's own
+  /// tight bounding box in raw coordinates so [_guideStrokes] can center
+  /// *that* instead.
+  ({double minX, double maxX, double minY, double maxY}) _letterBounds(
+    List<List<double>> raw,
+  ) {
+    var minX = double.infinity, maxX = -double.infinity;
+    var minY = double.infinity, maxY = -double.infinity;
+    for (final stroke in raw) {
+      for (var i = 0; i < stroke.length; i += 2) {
+        final x = stroke[i], y = stroke[i + 1];
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+    return (minX: minX, maxX: maxX, minY: minY, maxY: maxY);
+  }
 
   List<List<Offset>> _guideStrokes(Size size) {
     var key = _letter;
@@ -154,17 +192,27 @@ class _TraceActivityState extends State<TraceActivity>
     final raw = _paths[key];
     if (raw == null) return [];
 
-    const boxSize = _boxSize;
-    final left = (size.width - boxSize) / 2;
-    final top = (size.height - boxSize) / 2;
+    final bounds = _letterBounds(raw);
+    final letterW = bounds.maxX - bounds.minX;
+    final letterH = bounds.maxY - bounds.minY;
+
+    // Uniform scale so the letter's longer side fills the available box
+    // fraction, then center the *scaled letter bounds* (not a fixed 0..1
+    // square) in the canvas both ways.
+    final maxBoxSize = _boxSizeFor(size);
+    final scale = letterW > letterH
+        ? maxBoxSize / letterW
+        : maxBoxSize / letterH;
+    final left = (size.width - letterW * scale) / 2 - bounds.minX * scale;
+    final top = (size.height - letterH * scale) / 2 - bounds.minY * scale;
 
     final strokesList = <List<Offset>>[];
 
     for (final stroke in raw) {
       final pts = <Offset>[];
       for (var i = 0; i < stroke.length; i += 2) {
-        final px = left + stroke[i] * boxSize;
-        final py = top + stroke[i + 1] * boxSize;
+        final px = left + stroke[i] * scale;
+        final py = top + stroke[i + 1] * scale;
         pts.add(Offset(px, py));
       }
       if (pts.length > 1) {
@@ -190,7 +238,7 @@ class _TraceActivityState extends State<TraceActivity>
     if (userStrokes.isEmpty) return 0.0;
     final guideStrokes = _guideStrokes(canvasSize);
     if (guideStrokes.isEmpty) return 0.0;
-    final tolerance = _boxSize * 0.12;
+    final tolerance = _boxSizeFor(canvasSize) * 0.12;
 
     var totalScore = 0.0;
     for (var i = 0; i < guideStrokes.length; i++) {
@@ -294,213 +342,283 @@ class _TraceActivityState extends State<TraceActivity>
     super.dispose();
   }
 
+  // Fractions measured directly off `trace_screen_bg.png`'s baked-in sand
+  // tray (the image is a full-scene mockup — sky/palms/city and the tray
+  // itself are all one asset, not composed from separate layers), so the
+  // tracing surface below lands exactly inside the visible tray instead
+  // of the full available height that flow layout would otherwise give
+  // it. `LetterTraceCanvas`'s own guide box centers itself within
+  // whatever size it's given, so matching this fraction is what actually
+  // centers the letter in the tray.
+  static const _trayLeft = 0.12;
+  static const _trayTop = 0.49;
+  static const _trayRight = 0.12; // from the right edge
+  static const _trayBottom = 0.135; // from the bottom edge
+
   @override
   Widget build(BuildContext context) {
     final accColor = _accuracyColor(_accuracy);
+    final topInset = MediaQuery.of(context).padding.top;
+    final bottomInset = MediaQuery.of(context).padding.bottom;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-      child: Column(
-        children: [
-          // Card progress dots
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < widget.cards.length; i++) ...[
-                if (i != 0) const SizedBox(width: 5),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  width: i == _idx ? 20 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: i < _idx
-                        ? AppColors.adventureGreen
-                        : i == _idx
-                        ? widget.color
-                        : AppColors.creamDark,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 6),
-          // Card label: shows letter name + the actual letter
-          Text(
-            'Trace $_letter  ·  ${_card.translit}',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: AppColors.ink,
-            ),
-          ),
-          const SizedBox(height: 4),
-          // Large Arabic letter display above the canvas
-          Text(
-            _letter,
-            style: TextStyle(
-              fontSize: 56,
-              fontWeight: FontWeight.w700,
-              color: AppColors.ink.withValues(alpha: 0.30),
-              fontFamily: 'sans',
-            ),
-          ),
-          const SizedBox(height: 8),
-          // Real-time accuracy bar
-          Row(
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(99),
-                  child: SizedBox(
-                    height: 12,
-                    child: Stack(
-                      children: [
-                        Container(color: AppColors.creamDark),
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            return AnimatedContainer(
-                              duration: const Duration(milliseconds: 120),
-                              curve: Curves.easeOut,
-                              width:
-                                  constraints.maxWidth * _accuracy.clamp(0.0, 1.0),
-                              color: accColor,
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final h = constraints.maxHeight;
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: Image.asset(
+                'assets/images/tracing/trace_screen_bg.png',
+                fit: BoxFit.cover,
               ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 42,
-                child: Text(
-                  '${(_accuracy * 100).clamp(0, 100).round()}%',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w900,
-                    color: accColor,
-                  ),
+            ),
+            const Positioned.fill(child: TraceAmbientBackground()),
+            Positioned(
+              top: topInset + h * 0.10,
+              left: 24,
+              right: 24,
+              child: _buildHeader(accColor),
+            ),
+            Positioned(
+              left: w * _trayLeft,
+              right: w * _trayRight,
+              top: h * _trayTop,
+              bottom: h * _trayBottom,
+              child: _buildCanvas(),
+            ),
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: bottomInset + 14,
+              child: _buildButtons(),
+            ),
+            // Tap target over the image's own baked-in back arrow —
+            // there's no separate Flutter-drawn button since one's
+            // already painted into the scenery at this spot.
+            Positioned(
+              top: topInset,
+              left: 0,
+              width: w * 0.18,
+              height: h * 0.09,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onBack,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildHeader(Color accColor) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Card progress dots
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < widget.cards.length; i++) ...[
+              if (i != 0) const SizedBox(width: 5),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: i == _idx ? 20 : 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: i < _idx
+                      ? AppColors.adventureGreen
+                      : i == _idx
+                      ? widget.color
+                      : AppColors.creamDark,
+                  borderRadius: BorderRadius.circular(4),
                 ),
               ),
             ],
+          ],
+        ),
+        const SizedBox(height: 6),
+        // Card label: shows letter name + the actual letter
+        Text(
+          'Trace $_letter  ·  ${_card.translit}',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: AppColors.ink,
           ),
-          const SizedBox(height: 10),
-          // Trace canvas
-          Expanded(
-            child: AnimatedBuilder(
-              animation: Listenable.merge([_entrance, _wobble]),
-              builder: (context, child) {
-                final e = _overshoot.transform(_entrance.value);
-                final wobbleT = Curves.easeInOut.transform(_wobble.value);
-                final dx = _wobble.isAnimating
-                    ? (wobbleT < 0.5 ? -6.0 : 6.0) *
-                          (1 - (wobbleT - 0.5).abs() * 2)
-                    : 0.0;
-                return Opacity(
-                  opacity: e.clamp(0.0, 1.0),
-                  child: Transform.translate(
-                    offset: Offset(dx, 12 * (1 - e)),
-                    child: child,
+        ),
+        const SizedBox(height: 4),
+        // Large Arabic letter display above the canvas
+        Text(
+          _letter,
+          style: TextStyle(
+            fontSize: 56,
+            fontWeight: FontWeight.w700,
+            color: AppColors.ink.withValues(alpha: 0.30),
+            fontFamily: 'sans',
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Real-time accuracy bar
+        Row(
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: SizedBox(
+                  height: 12,
+                  child: Stack(
+                    children: [
+                      Container(color: AppColors.creamDark),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 120),
+                            curve: Curves.easeOut,
+                            width:
+                                constraints.maxWidth * _accuracy.clamp(0.0, 1.0),
+                            color: accColor,
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                );
-              },
-              child: LetterTraceCanvas(
-                key: ValueKey('${_card.id}_${_idx}_$_clearCounter'),
-                passed: _checked && _passed,
-                failed: _checked && !_passed,
-                breathe: _breathe,
-                guidePointsBuilder: _guideStrokes,
-                onStroke: _handleStroke,
-                onDirectionViolation: () {
-                  _wobble.forward(from: 0);
-                },
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 14),
-          // Bottom buttons
-          Row(
-            children: [
-              Expanded(
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: _clear,
-                    borderRadius: BorderRadius.circular(16),
-                    child: Ink(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppColors.creamDark,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.creamBorder, width: 2),
-                      ),
-                      child: const Center(
-                        child: Text(
-                          'Clear',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 42,
+              child: Text(
+                '${(_accuracy * 100).clamp(0, 100).round()}%',
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w900,
+                  color: accColor,
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: _passed ? _next : _handleCheck,
-                    borderRadius: BorderRadius.circular(16),
-                    child: Ink(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: _passed
-                              ? const [
-                                  AppColors.adventureGreen,
-                                  Color(0xFF457618),
-                                ]
-                              : [AppColors.teal, AppColors.tealDark],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: (_passed ? AppColors.adventureGreen : AppColors.teal)
-                                .withValues(alpha: 0.35),
-                            blurRadius: 10,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Text(
-                          _passed
-                              ? (_idx + 1 >= widget.cards.length
-                                    ? 'Done!'
-                                    : 'Next')
-                              : 'Check my trace',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCanvas() {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_entrance, _wobble]),
+      builder: (context, child) {
+        final e = _overshoot.transform(_entrance.value);
+        final wobbleT = Curves.easeInOut.transform(_wobble.value);
+        final dx = _wobble.isAnimating
+            ? (wobbleT < 0.5 ? -6.0 : 6.0) * (1 - (wobbleT - 0.5).abs() * 2)
+            : 0.0;
+        return Opacity(
+          opacity: e.clamp(0.0, 1.0),
+          child: Transform.translate(
+            offset: Offset(dx, 12 * (1 - e)),
+            child: child,
           ),
-        ],
+        );
+      },
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final boxSize = _boxSizeFor(
+            Size(constraints.maxWidth, constraints.maxHeight),
+          );
+          return LetterTraceCanvas(
+            key: ValueKey('${_card.id}_${_idx}_$_clearCounter'),
+            passed: _checked && _passed,
+            failed: _checked && !_passed,
+            breathe: _breathe,
+            guidePointsBuilder: _guideStrokes,
+            onStroke: _handleStroke,
+            onDirectionViolation: () {
+              _wobble.forward(from: 0);
+            },
+            coverTolerance: boxSize * 0.02,
+          );
+        },
       ),
+    );
+  }
+
+  Widget _buildButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _clear,
+              borderRadius: BorderRadius.circular(16),
+              child: Ink(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.creamDark,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.creamBorder, width: 2),
+                ),
+                child: const Center(
+                  child: Text(
+                    'Clear',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          flex: 2,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _passed ? _next : _handleCheck,
+              borderRadius: BorderRadius.circular(16),
+              child: Ink(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: _passed
+                        ? const [
+                            AppColors.adventureGreen,
+                            Color(0xFF457618),
+                          ]
+                        : [AppColors.teal, AppColors.tealDark],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (_passed ? AppColors.adventureGreen : AppColors.teal)
+                          .withValues(alpha: 0.35),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    _passed
+                        ? (_idx + 1 >= widget.cards.length ? 'Done!' : 'Next')
+                        : 'Check my trace',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

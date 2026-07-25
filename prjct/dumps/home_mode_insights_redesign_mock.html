@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Home Mode Insights — redesign mock</title>
+<style>
+  :root{
+    --cream:#FAF6EC; --teal:#0F6E56; --teal-dark:#0A4F3E; --gold:#EF9F27;
+    --coral:#D85A30; --ink:#20241F; --surface:#FFFFFF;
+    --mint:#E7F3EF; --mint-border:#BFDCD2; --gold-tint:#FDF1DE; --gold-soft:#F7C86F;
+    --mint-green:#5BC4A0; --coral-tint:#FBE9E2; --cream-border:#ECEEEC; --cream-dark:#F1EADA;
+    --text-muted:#7A8079; --neutral-tint:#F7F8F7;
+    --page-bg:#EFEAE0; --page-fg:#20241F;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --page-bg:#15140F; --page-fg:#EDE8DA; }
+  }
+  :root[data-theme="dark"]{ --page-bg:#15140F; --page-fg:#EDE8DA; }
+  :root[data-theme="light"]{ --page-bg:#EFEAE0; --page-fg:#20241F; }
+
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; padding:40px 16px; min-height:100vh;
+    background:var(--page-bg); color:var(--page-fg);
+    font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    display:flex; flex-direction:column; align-items:center; gap:18px;
+  }
+  .caption{ font-size:13px; letter-spacing:.02em; opacity:.65; text-align:center; max-width:420px; }
+  .switcher{ display:flex; gap:8px; }
+  .switcher button{
+    font: inherit; font-size:12.5px; font-weight:700; letter-spacing:.02em;
+    padding:8px 16px; border-radius:999px; border:1px solid color-mix(in srgb, var(--page-fg) 18%, transparent);
+    background:transparent; color:var(--page-fg); cursor:pointer;
+  }
+  .switcher button.active{ background:var(--teal); border-color:var(--teal); color:#fff; }
+
+  .phone{
+    width:390px; max-width:100%; height:844px;
+    background:var(--cream); border-radius:44px; overflow:hidden;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,.45), 0 0 0 10px #0b0b0b, 0 0 0 12px #2a2a2a;
+    position:relative; display:flex; flex-direction:column; color:var(--ink);
+  }
+  .notch{
+    position:absolute; top:0; left:50%; transform:translateX(-50%);
+    width:120px; height:26px; background:#0b0b0b; border-radius:0 0 16px 16px; z-index:20;
+  }
+
+  /* ---------- app bar ---------- */
+  .appbar{
+    padding:44px 18px 12px; background:linear-gradient(165deg,var(--teal) 0%,var(--teal-dark) 130%);
+    color:#fff; flex-shrink:0;
+  }
+  .appbar-top{ display:flex; align-items:center; gap:12px; }
+  .back{
+    width:32px; height:32px; border-radius:10px; background:rgba(255,255,255,.16);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .back svg{ width:16px; height:16px; stroke:#fff; }
+  .appbar-title{ flex:1; min-width:0; }
+  .appbar-eyebrow{ font-size:9.5px; font-weight:700; letter-spacing:.08em; color:rgba(255,255,255,.68); }
+  .appbar-heading{ font-size:17px; font-weight:800; letter-spacing:-.2px; margin-top:1px; }
+
+  .toggle{
+    margin-top:16px; height:38px; border-radius:19px; background:rgba(255,255,255,.14);
+    display:flex; padding:3px; position:relative;
+  }
+  .toggle .thumb{
+    position:absolute; top:3px; bottom:3px; width:calc(50% - 3px); border-radius:16px;
+    background:#fff; transition:transform .22s cubic-bezier(.4,0,.2,1); left:3px;
+  }
+  .toggle.aggregate .thumb{ transform:translateX(100%); }
+  .toggle button{
+    flex:1; z-index:1; border:0; background:transparent; font:inherit; font-size:12.5px;
+    font-weight:700; cursor:pointer; color:rgba(255,255,255,.85);
+  }
+  .toggle button.active{ color:var(--teal-dark); }
+
+  /* ---------- scroll body ---------- */
+  .screen{ flex:1; overflow-y:auto; padding:16px 16px 28px; }
+  .screen::-webkit-scrollbar{ width:0; }
+  .view{ display:none; flex-direction:column; gap:16px; }
+  .view.active{ display:flex; }
+
+  .card{
+    background:var(--surface); border:1px solid var(--cream-border); border-radius:18px;
+    padding:16px; box-shadow:0 1px 2px rgba(32,36,31,.03);
+  }
+  .label{ font-size:10.5px; font-weight:800; letter-spacing:.06em; color:var(--text-muted); text-transform:uppercase; }
+
+  /* ---------- student chips ---------- */
+  .chips{ display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; }
+  .chip{
+    flex-shrink:0; display:flex; align-items:center; gap:6px; padding:0 12px; height:38px;
+    border-radius:19px; border:1px solid var(--cream-border); background:var(--neutral-tint);
+    font-size:12.5px; font-weight:700; color:var(--ink); cursor:pointer;
+  }
+  .chip.active{ background:var(--teal); border-color:var(--teal); color:#fff; }
+  .chip .av{ width:18px; height:18px; border-radius:5px; background:var(--mint-green); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:#fff; }
+  .chip.active .av{ background:rgba(255,255,255,.28); }
+
+  /* ---------- hero profile ---------- */
+  .hero{ display:flex; align-items:center; gap:14px; }
+  .hero-av{
+    width:52px; height:52px; border-radius:14px; background:var(--mint-green); flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:18px;
+  }
+  .hero-name{ font-size:15.5px; font-weight:800; }
+  .streak{ display:flex; align-items:center; gap:4px; margin-top:3px; font-size:11px; font-weight:700; color:var(--text-muted); }
+  .streak svg{ width:13px; height:13px; fill:var(--gold); }
+
+  .ring-wrap{ position:relative; width:64px; height:64px; flex-shrink:0; }
+  .ring-wrap svg{ width:64px; height:64px; transform:rotate(-90deg); }
+  .ring-wrap .num{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:15px; font-weight:800; color:var(--teal-dark);
+  }
+  .ring-caption{ text-align:center; font-size:8.5px; font-weight:700; color:var(--text-muted); letter-spacing:.03em; margin-top:2px; }
+
+  .hero-foot{ display:flex; gap:10px; margin-top:14px; padding-top:14px; border-top:1px solid var(--cream-border); }
+  .hero-stat{ flex:1; }
+  .hero-stat .v{ font-size:13.5px; font-weight:800; color:var(--ink); }
+  .hero-stat .l{ font-size:9.5px; font-weight:700; color:var(--text-muted); letter-spacing:.03em; }
+
+  /* ---------- weekly chart ---------- */
+  .chart-head{ display:flex; justify-content:space-between; align-items:flex-start; }
+  .chart-sub{ font-size:10.5px; color:var(--text-muted); font-weight:500; margin-top:2px; }
+  .bars{ display:flex; justify-content:space-between; align-items:flex-end; height:92px; margin-top:18px; padding:0 2px; }
+  .bar-col{ display:flex; flex-direction:column; align-items:center; gap:6px; width:34px; }
+  .bar-track{ width:26px; height:64px; display:flex; align-items:flex-end; }
+  .bar{ width:100%; border-radius:7px; background:linear-gradient(180deg,var(--teal) 0%,var(--teal-dark) 100%); }
+  .bar.empty{ height:6px !important; border:1.5px dashed var(--cream-dark); background:transparent; border-radius:6px; }
+  .bar-val{ font-size:8.5px; font-weight:800; color:var(--teal-dark); height:10px; }
+  .bar-day{ font-size:9.5px; font-weight:700; color:var(--text-muted); }
+  .bar-col.today .bar-day{ color:var(--teal); }
+
+  /* ---------- adventure tiles ---------- */
+  .tiles{ display:flex; gap:10px; overflow-x:auto; padding:2px 2px 4px; }
+  .tile{
+    flex-shrink:0; width:104px; border:1px solid var(--cream-border); border-radius:14px; padding:12px 10px;
+    display:flex; flex-direction:column; align-items:center; gap:6px; background:var(--neutral-tint);
+  }
+  .tile .ring-wrap{ width:44px; height:44px; }
+  .tile .ring-wrap svg{ width:44px; height:44px; }
+  .tile .ring-wrap .num{ font-size:11px; }
+  .tile-name{ font-size:11px; font-weight:700; text-align:center; line-height:1.2; }
+  .tile-meta{ font-size:9px; color:var(--text-muted); }
+
+  /* ---------- history ---------- */
+  .day-divider{ font-size:9.5px; font-weight:800; letter-spacing:.05em; color:var(--text-muted); text-transform:uppercase; margin:2px 0 6px; }
+  .history-row{ display:flex; align-items:center; gap:10px; padding:9px 2px; border-bottom:1px solid var(--cream-border); }
+  .history-row:last-child{ border-bottom:0; }
+  .dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .history-name{ flex:1; font-size:12.5px; font-weight:600; }
+  .history-acc{ font-size:10.5px; font-weight:800; padding:3px 7px; border-radius:6px; background:var(--mint); color:var(--teal-dark); }
+  .history-date{ font-size:11px; color:var(--text-muted); width:34px; text-align:right; }
+
+  /* ---------- misconception banner ---------- */
+  .banner{ background:var(--coral-tint); border:1px solid rgba(216,90,48,.2); border-radius:18px; padding:16px; }
+  .banner-head{ display:flex; gap:12px; align-items:flex-start; }
+  .banner-icon{ width:32px; height:32px; border-radius:9px; background:rgba(216,90,48,.14); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .banner-icon svg{ width:16px; height:16px; stroke:var(--coral); }
+  .banner-eyebrow{ font-size:9px; font-weight:800; letter-spacing:.05em; color:var(--coral); }
+  .banner-title{ font-size:13.5px; font-weight:800; margin-top:2px; }
+  .banner-body{ font-size:11px; color:var(--text-muted); font-weight:500; margin-top:5px; line-height:1.45; }
+  .banner-actions{ display:flex; gap:8px; margin-top:14px; }
+  .btn-outline, .btn-fill{ flex:1; padding:9px 0; border-radius:9px; font-size:11.5px; font-weight:700; text-align:center; cursor:pointer; }
+  .btn-outline{ border:1.4px solid rgba(216,90,48,.3); color:var(--coral); background:transparent; }
+  .btn-fill{ background:var(--coral); color:#fff; border:1.4px solid var(--coral); }
+
+  /* ---------- stat strip ---------- */
+  .stat-strip{
+    background:linear-gradient(120deg,var(--teal) 0%,var(--teal-dark) 100%); border-radius:18px;
+    padding:16px; display:flex; color:#fff;
+  }
+  .stat{ flex:1; display:flex; flex-direction:column; gap:5px; }
+  .stat + .stat{ border-left:1px solid rgba(255,255,255,.18); margin-left:10px; padding-left:10px; }
+  .stat-icon{ width:22px; height:22px; }
+  .stat-icon svg{ width:14px; height:14px; stroke:#fff; }
+  .stat-val{ font-size:16.5px; font-weight:800; }
+  .stat-lbl{ font-size:9px; font-weight:700; letter-spacing:.04em; color:rgba(255,255,255,.75); text-transform:uppercase; }
+
+  /* ---------- module health cards ---------- */
+  .mod-card{ border:1px solid var(--cream-border); border-radius:16px; padding:14px; }
+  .mod-card + .mod-card{ margin-top:10px; }
+  .mod-top{ display:flex; align-items:center; gap:8px; }
+  .mod-name{ flex:1; font-size:13.5px; font-weight:800; }
+  .pill{ display:flex; align-items:center; gap:6px; padding:5px 9px; border-radius:8px; font-size:10px; font-weight:700; letter-spacing:.02em; }
+  .pill .d{ width:6px; height:6px; border-radius:50%; }
+  .pill.high{ background:var(--mint); color:var(--ink); } .pill.high .d{ background:var(--teal-dark); }
+  .pill.med{ background:var(--gold-tint); color:var(--ink); } .pill.med .d{ background:#8A5A12; }
+  .pill.low{ background:var(--coral-tint); color:var(--ink); } .pill.low .d{ background:var(--coral); }
+  .mod-bar{ height:6px; border-radius:6px; background:var(--cream-dark); margin-top:10px; overflow:hidden; }
+  .mod-bar span{ display:block; height:100%; border-radius:6px; }
+  .mod-meta{ font-size:10.5px; color:var(--text-muted); margin-top:6px; }
+  .mod-trend{ display:flex; align-items:center; gap:4px; font-size:10.5px; font-weight:700; margin-top:8px; }
+  .mod-trend svg{ width:12px; height:12px; }
+  .mod-trend.up{ color:var(--teal); } .mod-trend.up svg{ fill:var(--teal); }
+  .mod-trend.down{ color:var(--coral); } .mod-trend.down svg{ fill:var(--coral); }
+
+  /* ---------- peaks chart ---------- */
+  .peaks-svg{ width:100%; height:78px; margin-top:14px; }
+  .peaks-axis{ display:flex; justify-content:space-around; margin-top:6px; }
+  .peaks-axis span{ font-size:8.5px; font-weight:700; color:var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="switcher">
+    <button class="active" onclick="setView('individual', this)">Individual</button>
+    <button onclick="setView('aggregate', this)">Aggregate</button>
+  </div>
+
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="appbar">
+      <div class="appbar-top">
+        <div class="back"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+        <div class="appbar-title">
+          <div class="appbar-eyebrow">HOME MODE INSIGHTS</div>
+          <div class="appbar-heading">Home Performance</div>
+        </div>
+      </div>
+      <div class="toggle" id="toggle">
+        <div class="thumb"></div>
+        <button class="active" id="btn-individual" onclick="setView('individual', this)">Individual</button>
+        <button id="btn-aggregate" onclick="setView('aggregate', this)">Aggregate</button>
+      </div>
+    </div>
+
+    <div class="screen">
+      <!-- ============ INDIVIDUAL ============ -->
+      <div class="view active" id="view-individual">
+        <div class="chips">
+          <div class="chip active"><div class="av">A</div>Amira</div>
+          <div class="chip"><div class="av" style="background:#F7C86F">Y</div>Yusuf</div>
+          <div class="chip"><div class="av" style="background:var(--coral)">K</div>Khadija</div>
+          <div class="chip"><div class="av" style="background:var(--mint-green)">O</div>Omar</div>
+        </div>
+
+        <div class="card hero">
+          <div class="hero-av">A</div>
+          <div style="flex:1">
+            <div class="hero-name">Amira</div>
+            <div class="streak">
+              <svg viewBox="0 0 24 24"><path d="M12 2c1 4-3 5-3 9a3 3 0 006 0c0-1.5-1-2-1-3.5 2 1 3 3.5 3 5.5a5 5 0 01-10 0C7 8 10 6 12 2z"/></svg>
+              6-day streak
+            </div>
+          </div>
+          <div class="ring-wrap">
+            <svg viewBox="0 0 64 64">
+              <circle cx="32" cy="32" r="27" fill="none" stroke="var(--cream-dark)" stroke-width="7"/>
+              <circle cx="32" cy="32" r="27" fill="none" stroke="var(--teal)" stroke-width="7" stroke-linecap="round"
+                stroke-dasharray="169.6" stroke-dashoffset="27"/>
+            </svg>
+            <div class="num">84%</div>
+          </div>
+          <div class="ring-caption" style="position:absolute"></div>
+        </div>
+        <div class="card" style="margin-top:-10px; padding-top:0; border:0; box-shadow:none; background:transparent;">
+          <div class="hero-foot" style="border:0; margin:0; padding:0;">
+            <div class="hero-stat"><div class="v">42m</div><div class="l">HOME PLAYTIME</div></div>
+            <div class="hero-stat"><div class="v">84% match</div><div class="l">AVG ACCURACY</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="chart-head">
+            <div>
+              <div class="label">Weekly Progress</div>
+              <div class="chart-sub">Minutes practiced per day at home</div>
+            </div>
+          </div>
+          <div class="bars">
+            <div class="bar-col"><div class="bar-val"></div><div class="bar-track"><div class="bar empty"></div></div><div class="bar-day">Mon</div></div>
+            <div class="bar-col"><div class="bar-val">12m</div><div class="bar-track"><div class="bar" style="height:38%"></div></div><div class="bar-day">Tue</div></div>
+            <div class="bar-col"><div class="bar-val">28m</div><div class="bar-track"><div class="bar" style="height:70%"></div></div><div class="bar-day">Wed</div></div>
+            <div class="bar-col"><div class="bar-val">9m</div><div class="bar-track"><div class="bar" style="height:24%"></div></div><div class="bar-day">Thu</div></div>
+            <div class="bar-col today"><div class="bar-val">34m</div><div class="bar-track"><div class="bar" style="height:100%"></div></div><div class="bar-day">Fri</div></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="label" style="margin-bottom:10px;">Amira · Mastery by adventure</div>
+          <div class="tiles">
+            <div class="tile">
+              <div class="ring-wrap"><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="var(--cream-dark)" stroke-width="5"/><circle cx="22" cy="22" r="18" fill="none" stroke="var(--teal)" stroke-width="5" stroke-linecap="round" stroke-dasharray="113" stroke-dashoffset="14" transform="rotate(-90 22 22)"/></svg><div class="num">88%</div></div>
+              <div class="tile-name">Desert of Letters</div>
+              <div class="tile-meta">6 sessions</div>
+            </div>
+            <div class="tile">
+              <div class="ring-wrap"><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="var(--cream-dark)" stroke-width="5"/><circle cx="22" cy="22" r="18" fill="none" stroke="var(--gold)" stroke-width="5" stroke-linecap="round" stroke-dasharray="113" stroke-dashoffset="52" transform="rotate(-90 22 22)"/></svg><div class="num">54%</div></div>
+              <div class="tile-name">Garden of Words</div>
+              <div class="tile-meta">3 sessions</div>
+            </div>
+            <div class="tile">
+              <div class="ring-wrap"><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="var(--cream-dark)" stroke-width="5"/><circle cx="22" cy="22" r="18" fill="none" stroke="var(--coral)" stroke-width="5" stroke-linecap="round" stroke-dasharray="113" stroke-dashoffset="90" transform="rotate(-90 22 22)"/></svg><div class="num">20%</div></div>
+              <div class="tile-name">Village of Salaam</div>
+              <div class="tile-meta">1 session</div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="label" style="margin-bottom:10px;">Completion history</div>
+          <div class="card" style="padding:4px 12px;">
+            <div class="day-divider" style="margin-top:8px;">Today</div>
+            <div class="history-row"><div class="dot" style="background:var(--teal)"></div><div class="history-name">Desert of Letters</div><div class="history-acc">92%</div><div class="history-date">7/16</div></div>
+            <div class="day-divider">This week</div>
+            <div class="history-row"><div class="dot" style="background:var(--gold)"></div><div class="history-name">Garden of Words</div><div class="history-acc">61%</div><div class="history-date">7/14</div></div>
+            <div class="history-row"><div class="dot" style="background:var(--teal)"></div><div class="history-name">Desert of Letters</div><div class="history-acc">85%</div><div class="history-date">7/13</div></div>
+            <div class="history-row"><div class="dot" style="background:var(--coral)"></div><div class="history-name">Village of Salaam</div><div class="history-acc">38%</div><div class="history-date">7/12</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ AGGREGATE ============ -->
+      <div class="view" id="view-aggregate">
+        <div class="banner">
+          <div class="banner-head">
+            <div class="banner-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9L2.8 17a2 2 0 001.7 3h15a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg></div>
+            <div>
+              <div class="banner-eyebrow">CLASS-WIDE MISCONCEPTION</div>
+              <div class="banner-title">Village of Salaam</div>
+              <div class="banner-body">Collective accuracy at home is currently at 41%. Students are consistently experiencing sequencing errors.</div>
+            </div>
+          </div>
+          <div class="banner-actions">
+            <div class="btn-outline">Modify Lesson</div>
+            <div class="btn-fill">Assign Homework</div>
+          </div>
+        </div>
+
+        <div class="stat-strip">
+          <div class="stat">
+            <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><path d="M5 3l14 9-14 9V3z"/></svg></div>
+            <div class="stat-val">72%</div>
+            <div class="stat-lbl">Play rate</div>
+          </div>
+          <div class="stat">
+            <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+            <div class="stat-val">21m</div>
+            <div class="stat-lbl">Time / student</div>
+          </div>
+          <div class="stat">
+            <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+            <div class="stat-val">67%</div>
+            <div class="stat-lbl">Avg accuracy</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="label" style="margin-bottom:10px;">Collective mastery trends</div>
+
+          <div class="mod-card">
+            <div class="mod-top">
+              <div class="mod-name">Desert of Letters</div>
+              <div class="mod-trend up" style="margin:0;"><svg viewBox="0 0 24 24"><path d="M12 4l7 8h-4v8h-6v-8H5z"/></svg></div>
+              <div class="pill high"><div class="d"></div>HIGH</div>
+            </div>
+            <div class="mod-bar"><span style="width:88%; background:var(--teal);"></span></div>
+            <div class="mod-meta">88% of class played at home · 91% avg accuracy · 0.4 errors/session</div>
+            <div class="mod-trend up"><svg viewBox="0 0 24 24"><path d="M12 4l7 8h-4v8h-6v-8H5z"/></svg>+4.2 pts vs. last week</div>
+          </div>
+
+          <div class="mod-card">
+            <div class="mod-top">
+              <div class="mod-name">Garden of Words</div>
+              <div class="mod-trend down" style="margin:0;"><svg viewBox="0 0 24 24"><path d="M12 20l-7-8h4V4h6v8h4z"/></svg></div>
+              <div class="pill med"><div class="d"></div>MEDIUM</div>
+            </div>
+            <div class="mod-bar"><span style="width:64%; background:var(--gold);"></span></div>
+            <div class="mod-meta">64% of class played at home · 61% avg accuracy · 1.2 errors/session</div>
+            <div class="mod-trend down"><svg viewBox="0 0 24 24"><path d="M12 20l-7-8h4V4h6v8h4z"/></svg>-2.1 pts vs. last week</div>
+          </div>
+
+          <div class="mod-card">
+            <div class="mod-top">
+              <div class="mod-name">Village of Salaam</div>
+              <div class="pill low"><div class="d"></div>NEEDS HELP</div>
+            </div>
+            <div class="mod-bar"><span style="width:32%; background:var(--coral);"></span></div>
+            <div class="mod-meta">32% of class played at home · 41% avg accuracy · 2.8 errors/session</div>
+          </div>
+
+          <div class="mod-card">
+            <div class="mod-top">
+              <div class="mod-name">River of Sirah</div>
+              <div style="flex:1"></div>
+              <div style="font-size:11.5px; color:var(--text-muted);">No activity yet</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="chart-head">
+            <div>
+              <div class="label">Class home peaks</div>
+              <div class="chart-sub">Distribution of active users during the week</div>
+            </div>
+          </div>
+          <svg class="peaks-svg" viewBox="0 0 300 78" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="peakFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="var(--teal)" stop-opacity="0.16"/>
+                <stop offset="100%" stop-color="var(--teal)" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <line x1="0" y1="66" x2="300" y2="66" stroke="var(--cream-dark)" stroke-width="1"/>
+            <path d="M15,50 C45,42 75,40 105,20 C135,0 165,10 195,26 C225,42 255,16 285,8 L285,72 L15,72 Z" fill="url(#peakFill)"/>
+            <path d="M15,50 C45,42 75,40 105,20 C135,0 165,10 195,26 C225,42 255,16 285,8" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="285" cy="8" r="5" fill="var(--teal)"/>
+            <circle cx="285" cy="8" r="9" fill="var(--teal)" opacity="0.18"/>
+          </svg>
+          <div class="peaks-axis">
+            <span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="caption">Home Mode Insights — redesign mock. Toggle above switches Individual / Aggregate view (mirrors the in-app segmented control).</div>
+
+<script>
+  function setView(name, el){
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + name).classList.add('active');
+
+    document.querySelectorAll('.switcher button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.switcher button').forEach(b => {
+      if (b.textContent.toLowerCase() === name) b.classList.add('active');
+    });
+
+    document.getElementById('btn-individual').classList.toggle('active', name === 'individual');
+    document.getElementById('btn-aggregate').classList.toggle('active', name === 'aggregate');
+    document.getElementById('toggle').classList.toggle('aggregate', name === 'aggregate');
+  }
+</script>
+</body>
+</html>

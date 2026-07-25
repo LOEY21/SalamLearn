@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Profile Tab — Redesign Mock</title>
+<style>
+  :root {
+    --cream: #FAF6EC;
+    --teal: #0F6E56;
+    --teal-dark: #0A4F3E;
+    --gold: #EF9F27;
+    --gold-tint: #FDF1DE;
+    --coral: #D85A30;
+    --ink: #20241F;
+    --surface: #FFFFFF;
+    --mint: #E7F3EF;
+    --mint-border: #BFDCD2;
+    --cream-border: #ECEEEC;
+    --text-muted: #7A8079;
+    --neutral-tint: #F7F8F7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--cream);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--ink);
+    display: flex;
+    justify-content: center;
+    padding: 24px 12px;
+  }
+  .phone {
+    width: 390px;
+    background: var(--surface);
+    border-radius: 28px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+  }
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px 10px;
+  }
+  .avatar-ring {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: var(--mint); border: 1.5px solid var(--teal);
+    display: flex; align-items: center; justify-content: center; font-size: 16px;
+  }
+  .eyebrow { font-size: 10px; font-weight: 700; letter-spacing: .4px; color: var(--text-muted); text-transform: uppercase; }
+  .name { font-size: 15px; font-weight: 800; }
+  .sync-pill { display:inline-flex; align-items:center; gap:5px; font-size:9.5px; font-weight:700; color: var(--teal); margin-top:2px; }
+  .sync-pill .dot { width:5px; height:5px; border-radius:50%; background: var(--teal); }
+  .spacer { flex: 1; }
+  .icon-btn { width: 34px; height: 34px; border-radius: 11px; background: var(--neutral-tint); border: 1px solid var(--cream-border); display:flex; align-items:center; justify-content:center; font-size: 14px; }
+
+  .tabstrip { display:flex; gap:2px; padding: 0 14px; border-bottom: 1px solid var(--cream-border); }
+  .tab { flex:1; text-align:center; padding: 10px 4px 10px; font-size: 10.5px; font-weight: 700; color: var(--text-muted); border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--teal); border-color: var(--teal); }
+
+  .section { padding: 16px 18px 0; }
+  .section-label { font-size: 11px; font-weight: 800; letter-spacing: .6px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px; }
+
+  .child-row { display:flex; gap: 10px; overflow-x: auto; padding-bottom: 2px; }
+  .child-chip { width: 68px; flex: none; padding: 8px 6px; border-radius: 16px; background: var(--surface); border: 1px solid var(--cream-border); text-align: center; }
+  .child-chip.active { background: var(--gold-tint); border: 2px solid var(--gold); }
+  .child-chip .av { width: 34px; height: 34px; border-radius: 50%; background: var(--mint); margin: 0 auto 4px; display:flex; align-items:center; justify-content:center; font-size: 15px; }
+  .child-chip .cn { font-size: 10px; font-weight: 700; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .child-chip.active .cn { color: #8A5A12; font-weight: 800; }
+
+  .card { background: var(--surface); border: 1.4px solid var(--cream-border); border-radius: 16px; padding: 4px; margin-bottom: 4px; }
+  .row { display:flex; align-items:center; gap:12px; padding: 13px 12px; }
+  .row + .row { border-top: 1px solid var(--cream-border); }
+  .row-icon { width: 34px; height:34px; border-radius: 11px; background: var(--mint); display:flex; align-items:center; justify-content:center; font-size:16px; flex:none; }
+  .row-icon.gold { background: var(--gold-tint); }
+  .row-body { flex:1; min-width:0; }
+  .row-title { font-size: 13.5px; font-weight: 700; }
+  .row-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+  .pill-btn { font-size: 11.5px; font-weight: 800; padding: 7px 12px; border-radius: 999px; border: 1.4px solid var(--teal); color: var(--teal); background: white; white-space: nowrap; }
+  .chevron { color: var(--text-muted); font-size: 14px; }
+
+  .code-card { margin: 0 18px; border: 1.4px dashed var(--teal); border-radius: 16px; padding: 14px; background: var(--mint); }
+  .code-card .cc-title { font-size: 13px; font-weight: 800; margin-bottom: 3px; }
+  .code-card .cc-sub { font-size: 11px; color: var(--text-muted); margin-bottom: 10px; line-height: 1.4; }
+  .code-input-row { display:flex; gap: 8px; }
+  .code-input { flex:1; background: white; border: 1.4px solid var(--mint-border); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; color: var(--text-muted); }
+  .join-btn { background: var(--teal); color: white; font-weight: 800; font-size: 12.5px; border-radius: 10px; padding: 0 16px; display:flex; align-items:center; }
+
+  .enrolled-pill { display:flex; align-items:center; gap:8px; background: white; border:1px solid var(--mint-border); border-radius: 10px; padding: 10px; font-size:12.5px; font-weight:700; margin-bottom:10px; }
+
+  .cta-gold { display:flex; align-items:center; justify-content:center; gap:8px; background: var(--gold); color: #2b1e05; font-weight: 800; font-size: 13px; border-radius: 14px; padding: 13px; margin: 0 18px; }
+
+  .footnote { text-align:center; font-size:10.5px; color: var(--text-muted); padding: 18px; }
+
+  .annot { max-width: 390px; margin-top: 18px; font-size: 12.5px; line-height: 1.5; color: #444; }
+  .annot h3 { font-size: 13px; margin: 14px 0 4px; color: var(--teal-dark); }
+</style>
+</head>
+<body>
+<div>
+<div class="phone">
+  <div class="topbar">
+    <div class="avatar-ring">🧒</div>
+    <div>
+      <div class="eyebrow">Assalamu'alaikum, Jude Mancita</div>
+      <div class="name">John Michael Mancita's progress</div>
+      <div class="sync-pill"><span class="dot"></span>Synced just now</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="icon-btn">🔄</div>
+  </div>
+  <div class="tabstrip">
+    <div class="tab">Progress</div>
+    <div class="tab active">Profile</div>
+    <div class="tab">Settings</div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Children</div>
+    <div class="child-row">
+      <div class="child-chip"><div class="av">🧒</div><div class="cn">Frenzen R.</div></div>
+      <div class="child-chip active"><div class="av">🧒</div><div class="cn">John Mic...</div></div>
+      <div class="child-chip"><div class="av">🧒</div><div class="cn">Froiland R.</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Profile</div>
+    <div class="card">
+      <div class="row">
+        <div class="row-icon">🧒</div>
+        <div class="row-body">
+          <div class="row-title">Edit child profile</div>
+          <div class="row-sub">John Michael Mancita · Age 11 · Grade 4</div>
+        </div>
+        <button class="pill-btn">Edit</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Class</div>
+    <div class="code-card">
+      <div class="cc-title">Join a class</div>
+      <div class="cc-sub">Not in a class yet. Enter the invitation code your child's teacher shared with you.</div>
+      <div class="code-input-row">
+        <div class="code-input">Invitation code</div>
+        <div class="join-btn">Join</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">More</div>
+    <div class="card">
+      <div class="row">
+        <div class="row-icon gold">➕</div>
+        <div class="row-body">
+          <div class="row-title">Add child profile</div>
+          <div class="row-sub">Set up a new learning journey on this device</div>
+        </div>
+        <div class="chevron">›</div>
+      </div>
+      <div class="row">
+        <div class="row-icon">🔄</div>
+        <div class="row-body">
+          <div class="row-title">Sync profile data</div>
+          <div class="row-sub">Backup and sync progress with the cloud</div>
+        </div>
+        <button class="pill-btn">Sync</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="footnote">Same tab bar, same colors — just regrouped</div>
+</div>
+
+<div class="annot">
+  <h3>What changed vs. current screenshot</h3>
+  <p><b>1. Section labels added</b> — "Children / Profile / Class / More" eyebrows group the five stacked cards into a scannable list instead of five same-weight blocks in a row.</p>
+  <p><b>2. Edit Child Profile</b> — was already a compact row (kept as-is, no change needed, it already matches this pattern).</p>
+  <p><b>3. Class card gets the dashed-border "code card" treatment</b> — matches the teacher-side invitation-code card style (mint fill, dashed teal border) instead of a plain white bordered SoftCard, so it reads as "enter a code here" at a glance.</p>
+  <p><b>4. Add Child Profile + Sync Profile Data merged into one "More" list</b> — was two separate full-width SoftCards each with a heading + paragraph + full-width button (~260px combined). Collapsed into one bordered list with icon+title+sub+action per row (~110px), same pattern as the redesigned Settings screen's "Account & Data" list. Add Child keeps a gold icon tint since it's the primary/positive action.</p>
+  <p><b>5. Sync keeps a pill button, not a full-width bar</b> — consistent with Settings' Sync row.</p>
+</div>
+</div>
+</body>
+</html>

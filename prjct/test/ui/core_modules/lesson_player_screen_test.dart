@@ -37,24 +37,28 @@ Lesson _twoGreetingMatchActivityLesson() {
   const questionA = GreetingQuestion(
     id: 'q1',
     phrase: 'As-salāmu ʿalaykum',
+    arabic: 'اَلسَّلامُ عَلَيْكُم',
     choices: [
-      GreetingChoice(translit: 'Marhaban', meaning: 'Hello', correct: false),
+      GreetingChoice(translit: 'Marhaban', meaning: 'Hello', correct: false, emoji: '👋'),
       GreetingChoice(
         translit: 'As-salāmu ʿalaykum',
         meaning: 'Peace be upon you.',
         correct: true,
+        emoji: '🕊️',
       ),
     ],
   );
   const questionB = GreetingQuestion(
     id: 'q2',
     phrase: 'Marhaban',
+    arabic: 'مَرْحَبًا',
     choices: [
-      GreetingChoice(translit: 'Marhaban', meaning: 'Hello', correct: true),
+      GreetingChoice(translit: 'Marhaban', meaning: 'Hello', correct: true, emoji: '👋'),
       GreetingChoice(
         translit: 'Maʿa as-salāmah',
         meaning: 'Goodbye',
         correct: false,
+        emoji: '🤗',
       ),
     ],
   );
