@@ -10,6 +10,10 @@ The Flutter app lives entirely under `prjct/` — treat that as the project root
 
 `Assets/` holds the original brand source files (`Color Pallete.png`, `SalamLearn Logo.png`).
 
+## Setup after cloning
+
+`prjct/android/app/google-services.json` (and iOS `GoogleService-Info.plist`, if building iOS) are **not** in the repo — gitignored on purpose since they're Firebase secrets. Android builds fail at Gradle sync without `google-services.json`; pull it from the Firebase console (project settings → your Android app) and drop it in before running `flutter build apk`/`flutter run` on Android. Web/desktop builds don't need it — `prjct/lib/firebase_options.dart` (tracked, safe to expose) covers those.
+
 ## Commands (run from `prjct/`)
 
 - `flutter pub get` — install deps
