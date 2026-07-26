@@ -194,6 +194,10 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
     );
   }
 
+  bool get _isWudhuActivity =>
+      _activity.type == ActivityType.fiqhDrag &&
+      FiqhDragActivity.modeFor(_activity.id) == FiqhMode.wudhu;
+
   @override
   Widget build(BuildContext context) {
     if (_finished) {
@@ -232,6 +236,10 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         body: switch (_activity.type) {
           ActivityType.trace ||
           ActivityType.ayahBuilder => _buildActivityContent(lessonColor),
+          // Wudhu Master brings its own background, HUD and back chip, so it
+          // runs edge-to-edge like Trace does.
+          ActivityType.fiqhDrag when _isWudhuActivity =>
+            _buildActivityContent(lessonColor),
           ActivityType.pronounce => Stack(
             children: [
               Positioned.fill(child: _buildActivityContent(lessonColor)),
@@ -495,6 +503,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         xp: activity.xp,
         color: lessonColor,
         onComplete: _handleActivityComplete,
+        onBack: _confirmExit,
       ),
       ActivityType.quiz => QuizActivity(
         key: ValueKey(activity.id),

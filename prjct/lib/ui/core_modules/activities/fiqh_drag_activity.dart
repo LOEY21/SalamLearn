@@ -4,11 +4,12 @@ import 'package:lottie/lottie.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../theme/app_colors.dart';
+import 'wudhu_master_game.dart';
 
 /// FR-4.5: Fiqh & Taharah — three sub-games auto-selected by [activityId]:
 ///   *-fiqh-1  → Water Purity Sorter      (FR-4.5.1 / FR-4.5.2)
 ///   *-fiqh-2  → Fitrah Hygiene Match      (FR-4.5.3 / FR-4.5.4)
-///   *-fiqh-3+ → Wudhu Ritual Sequencer    (FR-4.5.5 / FR-4.5.6)
+///   *-fiqh-3+ → Wudhu Master              (FR-4.5.5 / FR-4.5.6)
 class FiqhDragActivity extends StatefulWidget {
   const FiqhDragActivity({
     super.key,
@@ -18,6 +19,7 @@ class FiqhDragActivity extends StatefulWidget {
     required this.color,
     required this.onComplete,
     this.activityId = '',
+    this.onBack,
   });
 
   final List<FiqhDragItem> items;
@@ -27,8 +29,13 @@ class FiqhDragActivity extends StatefulWidget {
   final void Function(int xp, double accuracyPct, int errors) onComplete;
   /// Activity ID used to derive which sub-game to render.
   final String activityId;
+  /// Exit hook — only the full-bleed Wudhu Master game uses it, since it
+  /// renders without the shared lesson top bar.
+  final VoidCallback? onBack;
 
-  FiqhMode get mode {
+  FiqhMode get mode => modeFor(activityId);
+
+  static FiqhMode modeFor(String activityId) {
     if (activityId.contains('-fiqh-2')) {
       return FiqhMode.hygiene;
     }
@@ -53,13 +60,17 @@ class _FiqhDragActivityState extends State<FiqhDragActivity>
   final Set<String> _wrongZone = {};
   int _wrongAttempts = 0;
   bool _success = false;
-  /// Ordered slots for the Wudhu Sequencer (6 steps).
-  final List<String?> _wudhuSlots = List.filled(6, null);
 
-  late final _entrance = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 320),
-  )..forward();
+  late final AnimationController _entrance;
+
+  @override
+  void initState() {
+    super.initState();
+    _entrance = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+    )..forward();
+  }
 
   static const _overshoot = Cubic(0.34, 1.56, 0.64, 1.0);
 
@@ -99,22 +110,6 @@ class _FiqhDragActivityState extends State<FiqhDragActivity>
     }
   }
 
-  /// Ordered-slot drop (wudhu sequencer).
-  void _handleWudhuDrop(FiqhDragItem item, int slotIndex) {
-    if (_success) return;
-    final correctSlot = int.tryParse(item.correctZoneId) ?? -1;
-    if (correctSlot == slotIndex + 1) {
-      setState(() => _wudhuSlots[slotIndex] = item.id);
-      if (_wudhuSlots.every((s) => s != null)) _triggerSuccess();
-    } else {
-      _wrongAttempts++;
-      setState(() => _wrongZone.add('slot$slotIndex'));
-      Future.delayed(const Duration(milliseconds: 600), () {
-        if (mounted) setState(() => _wrongZone.remove('slot$slotIndex'));
-      });
-    }
-  }
-
   void _triggerSuccess() {
     setState(() => _success = true);
     Future.delayed(const Duration(milliseconds: 1800), () {
@@ -135,6 +130,16 @@ class _FiqhDragActivityState extends State<FiqhDragActivity>
 
   @override
   Widget build(BuildContext context) {
+    // The Wudhu game ships its own intro, HUD, background and win overlay —
+    // it runs full-bleed and skips the shared entrance/success chrome.
+    if (widget.mode == FiqhMode.wudhu) {
+      return WudhuMasterGame(
+        items: widget.items,
+        xp: widget.xp,
+        onComplete: widget.onComplete,
+        onExit: widget.onBack,
+      );
+    }
     return AnimatedBuilder(
       animation: _entrance,
       builder: (context, child) {
@@ -170,12 +175,7 @@ class _FiqhDragActivityState extends State<FiqhDragActivity>
           onDrop: _handleDrop,
         );
       case FiqhMode.wudhu:
-        return _WudhuSequencerGame(
-          items: widget.items,
-          wudhuSlots: _wudhuSlots,
-          wrongZone: _wrongZone,
-          onDrop: _handleWudhuDrop,
-        );
+        return const SizedBox.shrink(); // handled in build()
     }
   }
 
@@ -552,130 +552,4 @@ class _HygieneTool extends StatelessWidget {
   }
 }
 
-// =============================================================================
-// FR-4.5.5 / FR-4.5.6  WUDHU RITUAL SEQUENCER
-// =============================================================================
-class _WudhuSequencerGame extends StatefulWidget {
-  const _WudhuSequencerGame({required this.items, required this.wudhuSlots, required this.wrongZone, required this.onDrop});
-  final List<FiqhDragItem> items;
-  final List<String?> wudhuSlots;
-  final Set<String> wrongZone;
-  final void Function(FiqhDragItem, int) onDrop;
-  @override
-  State<_WudhuSequencerGame> createState() => _WudhuSequencerGameState();
-}
-
-class _WudhuSequencerGameState extends State<_WudhuSequencerGame> {
-  final Set<int> _hovering = {};
-
-  @override
-  Widget build(BuildContext context) {
-    final placedIds = widget.wudhuSlots.whereType<String>().toSet();
-    final tray = widget.items.where((i) => !placedIds.contains(i.id)).toList();
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      child: Column(children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF1A237E), Color(0xFF283593)]), borderRadius: BorderRadius.circular(18)),
-          child: const Row(children: [
-            Text('🚿', style: TextStyle(fontSize: 24)),
-            SizedBox(width: 10),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Wudhu Sequencer', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Colors.white)),
-              Text('Place the Wudhu steps in the correct order!', style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w600)),
-            ])),
-          ]),
-        ),
-        const SizedBox(height: 12),
-        Expanded(flex: 3, child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Text('Steps in order →', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
-          const SizedBox(height: 8),
-          Row(children: List.generate(3, (i) => _buildSlot(i))),
-          const SizedBox(height: 8),
-          Row(children: List.generate(3, (i) => _buildSlot(i + 3))),
-        ])),
-        const SizedBox(height: 10),
-        Expanded(flex: 3, child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-          decoration: BoxDecoration(color: const Color(0xFF1A237E).withValues(alpha: 0.05), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFF1A237E).withValues(alpha: 0.15), width: 2)),
-          child: tray.isEmpty
-            ? const Center(child: Text('✅ All steps placed!', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.adventureGreen)))
-            : Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: tray.map((item) => _WudhuStepCard(item: item)).toList()),
-        )),
-      ]),
-    );
-  }
-
-  Widget _buildSlot(int index) {
-    final slotNum = index + 1;
-    final placedId = widget.wudhuSlots[index];
-    final isFilled = placedId != null;
-    final isWrong = widget.wrongZone.contains('slot$index');
-    final isHovering = _hovering.contains(index);
-    final placedItem = isFilled ? widget.items.firstWhere((i) => i.id == placedId, orElse: () => widget.items.first) : null;
-
-    return Expanded(child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 3),
-      child: DragTarget<FiqhDragItem>(
-        onWillAcceptWithDetails: (_) { setState(() => _hovering.add(index)); return !isFilled; },
-        onLeave: (_) => setState(() => _hovering.remove(index)),
-        onAcceptWithDetails: (details) { setState(() => _hovering.remove(index)); widget.onDrop(details.data, index); },
-        builder: (context, candidate, rejected) {
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            height: 80,
-            decoration: BoxDecoration(
-              color: isWrong ? AppColors.coralTint : isFilled ? const Color(0xFFE8EAF6) : isHovering ? const Color(0xFFE3F2FD) : Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: isWrong ? AppColors.coral : isFilled ? const Color(0xFF1A237E) : isHovering ? const Color(0xFF1565C0) : const Color(0xFF1A237E).withValues(alpha: 0.2), width: isFilled || isHovering ? 2.5 : 1.5),
-              boxShadow: isHovering ? [BoxShadow(color: const Color(0xFF1565C0).withValues(alpha: 0.22), blurRadius: 8, offset: const Offset(0,3))] : [],
-            ),
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Container(
-                width: 20, height: 20,
-                decoration: BoxDecoration(color: isFilled ? AppColors.adventureGreen : const Color(0xFF1A237E).withValues(alpha: 0.6), shape: BoxShape.circle),
-                alignment: Alignment.center,
-                child: Text('$slotNum', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white)),
-              ),
-              const SizedBox(height: 4),
-              if (isFilled) ...[
-                Text(placedItem!.emoji, style: const TextStyle(fontSize: 20)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: Text(placedItem.label, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: Color(0xFF1A237E))),
-                ),
-              ] else
-                Icon(Icons.add_circle_outline, size: 18, color: const Color(0xFF1A237E).withValues(alpha: 0.28)),
-            ]),
-          );
-        },
-      ),
-    ));
-  }
-}
-
-class _WudhuStepCard extends StatelessWidget {
-  const _WudhuStepCard({required this.item});
-  final FiqhDragItem item;
-  @override
-  Widget build(BuildContext context) {
-    final chip = Container(
-      width: 76, height: 70,
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFF1A237E).withValues(alpha: 0.22), width: 2), boxShadow: const [BoxShadow(color: Color(0x10000000), blurRadius: 5, offset: Offset(0, 2))]),
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Text(item.emoji, style: const TextStyle(fontSize: 26)),
-        const SizedBox(height: 3),
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 3), child: Text(item.label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: AppColors.ink))),
-      ]),
-    );
-    return Draggable<FiqhDragItem>(
-      data: item,
-      feedback: Material(color: Colors.transparent, child: Transform.scale(scale: 1.1, child: chip)),
-      childWhenDragging: Opacity(opacity: 0.25, child: chip),
-      child: chip,
-    );
-  }
-}
+// FR-4.5.5 / FR-4.5.6  WUDHU MASTER — see wudhu_master_game.dart
