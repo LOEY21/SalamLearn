@@ -8,7 +8,17 @@
 // an optional 6th assessment layer per the project owner's call. FR-4.3's
 // original `quranSync` ("Supplication Stepping Stones") was retired in
 // favor of `ayahBuilder` (Ayah Builder).
-enum ActivityType { trace, pronounce, story, fiqhDrag, quiz, harakatPop, ayahBuilder, quranSync }
+enum ActivityType {
+  trace,
+  pronounce,
+  story,
+  fiqhDrag,
+  quiz,
+  harakatPop,
+  ayahBuilder,
+  quranSync,
+  creationHunt,
+}
 
 enum DestinationState { completed, current, locked }
 
@@ -246,6 +256,120 @@ class AyahBuilderLevel {
   final String? audioAsset;
 }
 
+/// One tappable region in an [CreationHuntStage]'s artwork — a hitbox
+/// expressed as a fraction of the 393x852 reference frame the stage art was
+/// drawn against, so it scales with the background instead of being pinned
+/// to device pixels.
+///
+/// [x]/[y] are the *centre* of the box, [w]/[h] its size, all 0..1.
+/// [isCreation] splits the two verdicts the game teaches: things Allah
+/// created (a find) versus things people made (a decoy).
+class CreationHuntSpot {
+  const CreationHuntSpot({
+    required this.id,
+    required this.isCreation,
+    required this.x,
+    required this.y,
+    required this.w,
+    required this.h,
+    required this.radius,
+    required this.icon,
+    this.label,
+    this.group,
+    this.alias = false,
+  });
+
+  final String id;
+  final bool isCreation;
+  final double x;
+  final double y;
+  final double w;
+  final double h;
+
+  /// Corner rounding for the highlight ring, as an `BorderRadius`-style
+  /// description of the artwork's shape — see [CreationHuntSpot.borderRadius].
+  /// Mirrors the source design's per-spot CSS `border-radius` (e.g. a round
+  /// sun versus a boxy car), so the found-ring hugs the thing it circles.
+  final CreationHuntRadius radius;
+
+  /// Emoji shown on the verdict card and in the token tray slot.
+  final String icon;
+
+  /// Reader-friendly name used in the verdict copy ("Allah created the
+  /// **tree**"). Falls back to [id] when null.
+  final String? label;
+
+  /// Several spots can stand for the same creation (five separate pine
+  /// trees all counting as "tree"). The first is the canonical one; the
+  /// rest set [alias] and point [group] at it, so tapping any of them
+  /// fills the same single token.
+  final String? group;
+  final bool alias;
+
+  String get key => group ?? id;
+  String get name => label ?? id;
+}
+
+/// The handful of corner-rounding shapes the stage artwork needs. Kept as a
+/// closed set rather than a raw CSS string so the Flutter side can build a
+/// real [BorderRadius] without parsing.
+enum CreationHuntRadius {
+  /// Fully round — sun, moon, bird, ball.
+  circle,
+
+  /// Rounded top, squarer base — a tree canopy, a mountain, a tent.
+  domed,
+
+  /// Tall rounded blob — a hot-air balloon, a cat.
+  blob,
+
+  /// A gently rounded rectangle — a car, a bench, a patch of grass.
+  soft,
+
+  /// A kite's diamond.
+  diamond,
+}
+
+/// One stage of Allah's Creation Hunt: a single illustrated scene, the
+/// spots hidden in it, and the line of instruction shown over it.
+///
+/// The three stages (Forest / Sky / Garden) are authored in
+/// `curriculum_data.dart` and handed to the game one at a time — each
+/// session plays exactly one stage, but every session opens on the same
+/// title and how-to screens.
+class CreationHuntStage {
+  const CreationHuntStage({
+    required this.name,
+    required this.icon,
+    required this.background,
+    required this.instruction,
+    required this.spots,
+    this.hudAtBottom = false,
+    this.instructionAtTop = false,
+  });
+
+  /// e.g. "The Forest" — used in the completion line.
+  final String name;
+  final String icon;
+
+  /// Full-bleed scene asset (393x852-ish portrait artwork).
+  final String background;
+  final String instruction;
+  final List<CreationHuntSpot> spots;
+
+  /// The Sky scene's own art fills the top of the frame, so its HUD moves
+  /// to the bottom rather than covering the sun and moon.
+  final bool hudAtBottom;
+
+  /// The Garden scene is busiest at the bottom, so its instruction line
+  /// sits high instead.
+  final bool instructionAtTop;
+
+  /// Creations only, aliases collapsed — the number the learner must find.
+  List<CreationHuntSpot> get creations =>
+      spots.where((s) => s.isCreation && !s.alias).toList();
+}
+
 class Activity {
   const Activity({
     required this.id,
@@ -261,6 +385,7 @@ class Activity {
     this.fiqhItems,
     this.fiqhZones,
     this.ayahLevels,
+    this.huntStage,
   });
 
   final String id;
@@ -282,6 +407,9 @@ class Activity {
 
   /// Used by `ayahBuilder` (see [AyahBuilderLevel] doc).
   final List<AyahBuilderLevel>? ayahLevels;
+
+  /// Used by `creationHunt` — the one scene this session hunts through.
+  final CreationHuntStage? huntStage;
 }
 
 class Lesson {

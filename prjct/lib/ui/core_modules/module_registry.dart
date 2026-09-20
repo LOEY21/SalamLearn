@@ -73,12 +73,12 @@ String _slugFor(int destinationId) => switch (destinationId) {
 };
 
 IconData _iconFor(int destinationId) => switch (destinationId) {
-  1 => Icons.home_outlined, // Village of Salaam — greetings/expressions
-  2 => Icons.draw_outlined, // Desert of Letters — Arabic alphabet tracing
-  3 => Icons.local_florist_outlined, // Garden of Words — vocabulary
-  4 => Icons.menu_book_outlined, // River of Sirah — Prophet's life/hadith
-  5 => Icons.mosque_outlined, // Masjid of Salah — prayer/wudu/fiqh
-  6 => Icons.terrain_outlined, // Mountain of Iman — aqidah/values
-  7 => Icons.auto_stories_outlined, // Qur'an Corner — Qur'an review
+  1 => Icons.home_outlined, // Welcome to Madrasah — greetings/expressions
+  2 => Icons.draw_outlined, // Exploring Our World — letters/creation
+  3 => Icons.local_florist_outlined, // A Growing Muslim — vocabulary/etiquette
+  4 => Icons.menu_book_outlined, // Stories & Letters — Sirah/tracing
+  5 => Icons.mosque_outlined, // Cleanliness & Character — wudu/kindness
+  6 => Icons.terrain_outlined, // The Path of the Prophet — Sirah/wudu/pillars
+  7 => Icons.auto_stories_outlined, // The Good Deed Hero — final review
   _ => Icons.explore_outlined,
 };

@@ -16,6 +16,7 @@ import 'activities/quran_sync_activity.dart';
 import 'activities/story_activity.dart';
 import 'activities/trace_activity.dart';
 import 'activities/ayah_builder_activity.dart';
+import 'activities/creation_hunt_game.dart';
 import 'activities/harakat_pop_activity.dart';
 import 'lesson_complete_screen.dart';
 
@@ -122,6 +123,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
           _xpEarned = 0;
           _finished = true;
         });
+        if (_skipCompleteScreen) widget.onClose();
         return;
       }
       ref.read(learnerXpProvider.notifier).addXp(next);
@@ -134,6 +136,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         _xpEarned = next;
         _finished = true;
       });
+      if (_skipCompleteScreen) widget.onClose();
     } else {
       setState(() {
         _xpEarned = next;
@@ -194,6 +197,12 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
     );
   }
 
+  // The hunt's own badge screen already carries the continue button.
+  bool get _skipCompleteScreen => _activity.type == ActivityType.creationHunt;
+
+  bool get _isFullBleedActivity =>
+      _activity.type == ActivityType.creationHunt || _isWudhuActivity;
+
   bool get _isWudhuActivity =>
       _activity.type == ActivityType.fiqhDrag &&
       FiqhDragActivity.modeFor(_activity.id) == FiqhMode.wudhu;
@@ -236,9 +245,11 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         body: switch (_activity.type) {
           ActivityType.trace ||
           ActivityType.ayahBuilder => _buildActivityContent(lessonColor),
-          // Wudhu Master brings its own background, HUD and back chip, so it
-          // runs edge-to-edge like Trace does.
-          ActivityType.fiqhDrag when _isWudhuActivity =>
+          // Wudhu Master and Allah's Creation Hunt bring their own
+          // background, HUD and exit chip, so they run edge-to-edge like
+          // Trace does.
+          ActivityType.creationHunt || ActivityType.fiqhDrag
+              when _isFullBleedActivity =>
             _buildActivityContent(lessonColor),
           ActivityType.pronounce => Stack(
             children: [
@@ -511,6 +522,13 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         xp: activity.xp,
         color: lessonColor,
         onComplete: _handleActivityComplete,
+      ),
+      ActivityType.creationHunt => CreationHuntGame(
+        key: ValueKey(activity.id),
+        stage: activity.huntStage!,
+        xp: activity.xp,
+        onComplete: _handleActivityComplete,
+        onExit: _confirmExit,
       ),
       ActivityType.harakatPop => HarakatPopActivity(
         key: ValueKey(activity.id),
