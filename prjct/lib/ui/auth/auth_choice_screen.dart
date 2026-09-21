@@ -1430,6 +1430,15 @@ class _GrownupSignInFormState extends ConsumerState<_GrownupSignInForm> {
               'can no longer be used. Please contact your school '
               'administrator if you believe this was a mistake.';
         });
+      case SignInResult.noProfileForRole:
+        setState(() {
+          _submitting = false;
+          _error = widget.role == UserRole.asatidz
+              ? 'No Teacher account is linked to this email. '
+                  'Check that you picked the right role.'
+              : 'No Parent account is linked to this email. '
+                  'Check that you picked the right role, or create a new account.';
+        });
       case SignInResult.invalidCredentials:
         setState(() {
           _submitting = false;

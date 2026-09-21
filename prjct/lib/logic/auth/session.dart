@@ -40,6 +40,12 @@ enum SignInResult {
   /// distinct message instead of "wrong password".
   accountDeleted,
 
+  /// Firebase Auth accepted the email + password, but there's no cloud
+  /// profile for the requested role (e.g. a Teacher email on the Parent tab,
+  /// or an Auth user whose profile was never synced/was removed) — must not
+  /// read as "incorrect password", since the password *is* correct.
+  noProfileForRole,
+
   /// No local account matched, and this device has no internet connection
   /// to try the remote fallback — genuinely different from wrong
   /// credentials, so the UI shouldn't say "incorrect password" (misleading)
@@ -256,10 +262,20 @@ class SessionNotifier extends Notifier<SessionState> {
       _settings.delete('activeLearnerId');
     }
 
+    // `selectRole(UserRole.learner)` persists the role even when no learner
+    // profile exists yet (e.g. a PIN screen's back button on a device with no
+    // account) — without this, the next cold start sends splash straight to
+    // an empty Student Hub instead of the role picker.
+    var activeRole = roleName == null ? null : UserRole.values.byName(roleName);
+    if (activeRole == UserRole.learner && learner == null) {
+      _settings.delete('activeRole');
+      activeRole = null;
+    }
+
     return SessionState(
       languageCode: languageCode,
       consent: _consents.get(_consentKey),
-      activeRole: roleName == null ? null : UserRole.values.byName(roleName),
+      activeRole: activeRole,
       activeParentId: activeParentId,
       activeTeacherId: activeTeacherId,
       learner: learner,
@@ -854,7 +870,7 @@ class SessionNotifier extends Notifier<SessionState> {
       final uid = credential.user?.uid;
       if (uid == null) return SignInResult.invalidCredentials;
       final remote = await FirestoreMirror().fetchParentByFirebaseUid(uid);
-      if (remote == null) return SignInResult.invalidCredentials;
+      if (remote == null) return SignInResult.noProfileForRole;
       _pendingParent = _PendingParentRegistration(
         fullName: remote.fullName,
         email: email,
@@ -885,7 +901,7 @@ class SessionNotifier extends Notifier<SessionState> {
       final uid = credential.user?.uid;
       if (uid == null) return SignInResult.invalidCredentials;
       final remote = await FirestoreMirror().fetchTeacherByFirebaseUid(uid);
-      if (remote == null) return SignInResult.invalidCredentials;
+      if (remote == null) return SignInResult.noProfileForRole;
       _pendingTeacher = _PendingTeacherRegistration(
         fullName: remote.fullName,
         school: remote.school ?? '',
