@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
@@ -26,9 +27,6 @@ import 'destination_levels_sheet.dart';
 import 'noor_energy_resting_sheet.dart';
 import 'tutorial/mascot_tutorial_overlay.dart';
 import 'tutorial/tutorial_anchors.dart';
-
-
-
 
 /// The Wireframe 0.3 curriculum entry each core module represents — looked
 /// up once via `ModuleInfo.destinationId`, since the map's real layout
@@ -83,25 +81,16 @@ class AdventureMapScreen extends ConsumerStatefulWidget {
 
 class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
     with TickerProviderStateMixin {
-  final _scrollController = ScrollController();
+  // Pinch zooms in (never below the resting 1x fit-to-width) and one
+  // finger pans. The video, tiles, icons and mascot all live inside the
+  // same transformed canvas, so checkpoints stay locked to their tiles at
+  // every zoom level.
+  final _viewer = TransformationController();
+  static const _maxZoom = 3.0;
   // Resting balance point: zoomed in enough to read as a tall scrollable
   // journey (not the whole 7-destination map flattened onto one screen),
   // without over-cropping the background video.
   static const _baseMapHeight = 1300.0;
-
-  // Pinch-zoom tracking. Uses raw `Listener` pointer events rather than a
-  // `GestureDetector`'s scale recognizer so a 2-finger pinch never steals
-  // the gesture arena from the map's own `SingleChildScrollView` —
-  // one-finger scrolling keeps working untouched underneath.
-  final Map<int, Offset> _activePointers = {};
-  double? _pinchStartDistance;
-  double _pinchStartZoom = 1.0;
-  double _pinchZoom = 1.0;
-  late final _release = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 350),
-  );
-  double _releaseFromZoom = 1.0;
 
   /// Set once the background video reports its real decoded size (width /
   /// height) — lets the map track the video's own aspect ratio instead of
@@ -112,41 +101,94 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
 
   double _mapHeightFor(double width) {
     final ratio = _videoAspectRatio;
-    final natural = ratio != null ? width / ratio : _baseMapHeight;
-    return natural * _pinchZoom;
+    return ratio != null ? width / ratio : _baseMapHeight;
   }
 
-  /// How much the pinch has moved away from resting (1.0) before the top
-  /// bar / bottom nav are fully faded out — same distance either direction,
-  /// so zooming in and zooming out both clear the chrome away.
-  static const _chromeFadeRange = 0.12;
-
-  void _setPinchZoom(double value) {
-    setState(() => _pinchZoom = value.clamp(0.6, 1.6));
-    final fade = (1.0 - (_pinchZoom - 1.0).abs() / _chromeFadeRange).clamp(
-      0.0,
-      1.0,
-    );
-    ref.read(mapZoomProvider.notifier).set(fade);
+  /// Top bar / bottom nav hide only while two fingers are pinching, and
+  /// come back as soon as the pinch ends (as the map eases back to 1x).
+  void _setChromeHidden(bool hidden) {
+    ref.read(mapZoomProvider.notifier).set(hidden ? 0.0 : 1.0);
   }
 
   @override
   void initState() {
     super.initState();
+    _snapBack =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 300),
+        )..addListener(() {
+          final a = _snapAnim;
+          if (a != null) _viewer.value = a.value;
+        });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final currentId = ref.read(recentModuleProvider) ?? coreModules.first.id;
-      final fraction = _nodePositions[currentId] ?? 0.5;
-      final width = MediaQuery.sizeOf(context).width;
-      final mapHeight = _mapHeightFor(width);
-      final target = (mapHeight * fraction) - 300;
-      _scrollController.jumpTo(target.clamp(0, mapHeight));
-      _playTutorial();
+      if (mounted) _playTutorial();
     });
-    _release.addListener(() {
-      final t = Curves.easeOutCubic.transform(_release.value);
-      _setPinchZoom(_releaseFromZoom + (1.0 - _releaseFromZoom) * t);
-    });
+  }
+
+  bool _initialPlaced = false;
+  bool _userMoved = false;
+  Size _viewport = Size.zero;
+  double _mapHeight = 0;
+
+  // After a pinch, the map eases back to its resting 1x size, keeping the
+  // spot the learner zoomed into centered on screen.
+  late final AnimationController _snapBack;
+  Animation<Matrix4>? _snapAnim;
+
+  void _startSnapBack() {
+    final m = _viewer.value;
+    final scale = m.getMaxScaleOnAxis();
+    if (scale <= 1.001 || _viewport == Size.zero) return;
+    final ty = m.getTranslation().y;
+    final centerY = (_viewport.height / 2 - ty) / scale;
+    final minY = math.min(0.0, _viewport.height - _mapHeight);
+    final y = (_viewport.height / 2 - centerY).clamp(minY, 0.0).toDouble();
+    _snapAnim = Matrix4Tween(
+      begin: m.clone(),
+      end: Matrix4.translationValues(0, y, 0),
+    ).animate(CurvedAnimation(parent: _snapBack, curve: Curves.easeOutCubic));
+    _snapBack.forward(from: 0);
+  }
+
+  /// Starts the map scrolled to the learner's current checkpoint. Runs in
+  /// the first layout pass, before `InteractiveViewer` mounts, so the very
+  /// first frame is already in place (no jump, and taps hit immediately).
+  void _placeInitialView(double mapHeight, double viewportHeight) {
+    if (_initialPlaced) return;
+    _initialPlaced = true;
+    _centerOnCurrent(mapHeight, viewportHeight);
+  }
+
+  void _centerOnCurrent(double mapHeight, double viewportHeight) {
+    final currentId = ref.read(recentModuleProvider) ?? coreModules.first.id;
+    final fraction = _nodePositions[currentId] ?? 0.5;
+    final target = ((mapHeight * fraction) - 300)
+        .clamp(0.0, math.max(0.0, mapHeight - viewportHeight))
+        .toDouble();
+    _viewer.value = Matrix4.translationValues(0, -target, 0);
+  }
+
+  /// The first layout uses a fallback map height until the video reports
+  /// its real aspect ratio; once it does, the map usually gets shorter, which
+  /// would leave the view scrolled past the new bottom edge (blank strip)
+  /// until the next touch. Re-center if the learner hasn't moved yet,
+  /// otherwise just pull the current view back inside the map.
+  void _onVideoAspectRatio(double ratio) {
+    if (_videoAspectRatio == ratio) return;
+    setState(() => _videoAspectRatio = ratio);
+    if (_viewport == Size.zero) return;
+    final mapHeight = _mapHeightFor(_viewport.width);
+    if (!_userMoved) {
+      _centerOnCurrent(mapHeight, _viewport.height);
+      return;
+    }
+    final m = _viewer.value.clone();
+    final scale = m.getMaxScaleOnAxis();
+    final t = m.getTranslation();
+    final minY = math.min(0.0, _viewport.height - mapHeight * scale);
+    m.setTranslationRaw(t.x, t.y.clamp(minY, 0.0).toDouble(), t.z);
+    _viewer.value = m;
   }
 
   bool _tutorialActive = false;
@@ -179,44 +221,10 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
     });
   }
 
-  void _onPointerDown(PointerDownEvent event) {
-    _activePointers[event.pointer] = event.position;
-    if (_activePointers.length == 2) {
-      _release.stop();
-      final pts = _activePointers.values.toList();
-      _pinchStartDistance = (pts[0] - pts[1]).distance;
-      _pinchStartZoom = _pinchZoom;
-    }
-  }
-
-  void _onPointerMove(PointerMoveEvent event) {
-    if (!_activePointers.containsKey(event.pointer)) return;
-    _activePointers[event.pointer] = event.position;
-    final startDistance = _pinchStartDistance;
-    if (_activePointers.length != 2 || startDistance == null) return;
-    final pts = _activePointers.values.toList();
-    final distance = (pts[0] - pts[1]).distance;
-    // Ratio < 1 (fingers moved closer together) zooms out; ratio > 1
-    // (spread apart) zooms in.
-    final ratio = distance / startDistance;
-    _setPinchZoom(_pinchStartZoom * ratio);
-  }
-
-  void _onPointerEnd(PointerEvent event) {
-    _activePointers.remove(event.pointer);
-    if (_activePointers.length < 2) {
-      _pinchStartDistance = null;
-      if (_pinchZoom != 1.0) {
-        _releaseFromZoom = _pinchZoom;
-        _release.forward(from: 0);
-      }
-    }
-  }
-
   @override
   void dispose() {
-    _scrollController.dispose();
-    _release.dispose();
+    _snapBack.dispose();
+    _viewer.dispose();
     super.dispose();
   }
 
@@ -238,8 +246,13 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
 
     // Check if previous module is completed
     final prevModule = coreModules[index - 1];
-    final dest = curriculum.firstWhere((d) => d.id == prevModule.destinationId, orElse: () => curriculum.first);
-    final isPrevCompleted = dest.lessons.every((lesson) => completed.contains(lesson.id));
+    final dest = curriculum.firstWhere(
+      (d) => d.id == prevModule.destinationId,
+      orElse: () => curriculum.first,
+    );
+    final isPrevCompleted = dest.lessons.every(
+      (lesson) => completed.contains(lesson.id),
+    );
     if (isPrevCompleted) return true;
 
     // 2. Teacher assignment override (unlocks the module early):
@@ -252,10 +265,16 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
     final enrolledClassIds = enrollments.map((e) => e.classId).toSet();
 
     for (final classId in enrolledClassIds) {
-      final classAssignments = ClassRepository().assignmentsFor(classId: classId, learnerId: null);
+      final classAssignments = ClassRepository().assignmentsFor(
+        classId: classId,
+        learnerId: null,
+      );
       if (classAssignments.any((a) => a.moduleId == moduleId)) return true;
 
-      final personalAssignments = ClassRepository().assignmentsFor(classId: classId, learnerId: learnerId);
+      final personalAssignments = ClassRepository().assignmentsFor(
+        classId: classId,
+        learnerId: learnerId,
+      );
       if (personalAssignments.any((a) => a.moduleId == moduleId)) return true;
     }
 
@@ -288,11 +307,17 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
     final enrolledClassIds = enrollments.map((e) => e.classId).toSet();
 
     for (final classId in enrolledClassIds) {
-      final classAssignments = ClassRepository().assignmentsFor(classId: classId, learnerId: null);
+      final classAssignments = ClassRepository().assignmentsFor(
+        classId: classId,
+        learnerId: null,
+      );
       for (final a in classAssignments) {
         if (a.moduleId == moduleId && a.dueDate.isBefore(now)) return true;
       }
-      final personalAssignments = ClassRepository().assignmentsFor(classId: classId, learnerId: learnerId);
+      final personalAssignments = ClassRepository().assignmentsFor(
+        classId: classId,
+        learnerId: learnerId,
+      );
       for (final a in personalAssignments) {
         if (a.moduleId == moduleId && a.dueDate.isBefore(now)) return true;
       }
@@ -407,105 +432,111 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
 
     return Scaffold(
       backgroundColor: AppColors.cream,
-      body: Listener(
-        onPointerDown: _onPointerDown,
-        onPointerMove: _onPointerMove,
-        onPointerUp: _onPointerEnd,
-        onPointerCancel: _onPointerEnd,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final mapHeight = _mapHeightFor(constraints.maxWidth);
-            // Once the video's real aspect ratio is known, its natural
-            // height is used as-is (no cropping) so it shows at original
-            // size — the old floor-to-viewport-height trick only still
-            // applies before that, to avoid a flash of bare cream space
-            // below the fallback-sized placeholder.
-            final effectiveMapHeight = _videoAspectRatio != null
-                ? mapHeight
-                : math.max(mapHeight, constraints.maxHeight);
-            return Stack(
-              children: [
-                SingleChildScrollView(
-                  controller: _scrollController,
-                  // `HubShell`'s outer Scaffold uses `extendBody: true` so
-                  // the floating pill nav doesn't shorten this screen's
-                  // visible height. No bottom padding here — matching the
-                  // approved preview exactly, the nav simply floats *over*
-                  // whatever's currently at the bottom of the scroll, the
-                  // same way it does in
-                  // dumps/adventure_map_preview/preview.html. Padding here
-                  // would just add dead cream space past the image's real
-                  // end.
-                  child: SizedBox(
-                    height: effectiveMapHeight,
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: _MapVideoBackground(
-                            onAspectRatio: (ratio) {
-                              if (_videoAspectRatio == ratio) return;
-                              setState(() => _videoAspectRatio = ratio);
-                            },
-                          ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final mapHeight = _mapHeightFor(constraints.maxWidth);
+          // Once the video's real aspect ratio is known, its natural
+          // height is used as-is (no cropping) so it shows at original
+          // size — the old floor-to-viewport-height trick only still
+          // applies before that, to avoid a flash of bare cream space
+          // below the fallback-sized placeholder.
+          final effectiveMapHeight = _videoAspectRatio != null
+              ? mapHeight
+              : math.max(mapHeight, constraints.maxHeight);
+          _viewport = constraints.biggest;
+          _mapHeight = effectiveMapHeight;
+          _placeInitialView(effectiveMapHeight, constraints.maxHeight);
+          return Stack(
+            children: [
+              InteractiveViewer(
+                transformationController: _viewer,
+                minScale: 1.0,
+                maxScale: _maxZoom,
+                constrained: false,
+                boundaryMargin: EdgeInsets.zero,
+                onInteractionStart: (_) {
+                  _userMoved = true;
+                  _snapBack.stop();
+                },
+                onInteractionUpdate: (details) {
+                  if (details.pointerCount >= 2) _setChromeHidden(true);
+                },
+                onInteractionEnd: (_) {
+                  _setChromeHidden(false);
+                  _startSnapBack();
+                },
+                // `HubShell`'s outer Scaffold uses `extendBody: true` so
+                // the floating pill nav doesn't shorten this screen's
+                // visible height. No bottom padding here — matching the
+                // approved preview exactly, the nav simply floats *over*
+                // whatever's currently at the bottom of the scroll, the
+                // same way it does in
+                // dumps/adventure_map_preview/preview.html. Padding here
+                // would just add dead cream space past the image's real
+                // end.
+                child: SizedBox(
+                  width: constraints.maxWidth,
+                  height: effectiveMapHeight,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: _MapVideoBackground(
+                          onAspectRatio: _onVideoAspectRatio,
                         ),
-                        const Positioned.fill(child: _AmbientBreathing()),
-                        const _MapSparkles(),
-                        for (final (i, module) in coreModules.indexed)
-                          _MapNode(
-                            key: ValueKey(module.id),
-                            module: module,
-                            topFraction: _nodePositions[module.id] ?? 0.5,
-                            left:
-                                constraints.maxWidth *
-                                (_nodePositionsX[module.id] ?? 0.33),
-                            mapHeight: effectiveMapHeight,
-                            color: _nodeColors[module.id] ?? AppColors.teal,
-                            state: _stateFor(
-                              module,
-                              currentId,
-                              _isModuleAssigned(module.id),
-                            ),
-                            overdue: _isModuleOverdue(module.id),
-                            entranceDelay: Duration(milliseconds: 40 + i * 50),
-                            onTap: () => _onNodeTap(
-                              module,
-                              _isModuleAssigned(module.id),
-                            ),
-                            anchorKey: module.id == currentId
-                                ? anchors.currentNodeKey
-                                : null,
-                          ),
-                        KeyedSubtree(
-                          key: anchors.mapAvatarKey,
-                          child: _MascotAvatar(
-                            topFraction: _nodePositions[currentId] ?? 0.5,
-                            left:
-                                constraints.maxWidth *
-                                (_nodePositionsX[currentId] ?? 0.33),
-                            mapHeight: effectiveMapHeight,
-                            avatar: learnerAvatar,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                IgnorePointer(
-                  ignoring: chromeFade < 0.5,
-                  child: Opacity(
-                    opacity: chromeFade,
-                    child: Transform.translate(
-                      offset: Offset(0, -16 * (1 - chromeFade)),
-                      child: const SafeArea(
-                        child: AdventureMapTopBar(),
                       ),
-                    ),
+                      const Positioned.fill(child: _AmbientBreathing()),
+                      const _MapSparkles(),
+                      for (final (i, module) in coreModules.indexed)
+                        _MapNode(
+                          key: ValueKey(module.id),
+                          module: module,
+                          topFraction: _nodePositions[module.id] ?? 0.5,
+                          left:
+                              constraints.maxWidth *
+                              (_nodePositionsX[module.id] ?? 0.33),
+                          mapHeight: effectiveMapHeight,
+                          color: _nodeColors[module.id] ?? AppColors.teal,
+                          state: _stateFor(
+                            module,
+                            currentId,
+                            _isModuleAssigned(module.id),
+                          ),
+                          overdue: _isModuleOverdue(module.id),
+                          entranceDelay: Duration(milliseconds: 40 + i * 50),
+                          onTap: () =>
+                              _onNodeTap(module, _isModuleAssigned(module.id)),
+                          anchorKey: module.id == currentId
+                              ? anchors.currentNodeKey
+                              : null,
+                        ),
+                      KeyedSubtree(
+                        key: anchors.mapAvatarKey,
+                        child: _MascotAvatar(
+                          topFraction: _nodePositions[currentId] ?? 0.5,
+                          left:
+                              constraints.maxWidth *
+                              (_nodePositionsX[currentId] ?? 0.33),
+                          mapHeight: effectiveMapHeight,
+                          avatar: learnerAvatar,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            );
-          },
-        ),
+              ),
+              IgnorePointer(
+                ignoring: chromeFade < 0.5,
+                child: Opacity(
+                  opacity: chromeFade,
+                  child: Transform.translate(
+                    offset: Offset(0, -16 * (1 - chromeFade)),
+                    child: const SafeArea(child: AdventureMapTopBar()),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -772,16 +803,16 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     vsync: this,
     duration: const Duration(milliseconds: 260),
   );
-  // Current & available nodes idle-tilt continuously (3400ms, ±4deg).
-  late final _idleTilt = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 3400),
-  );
-  // Current node also pulses its glow ring (2600ms, matches the shared
+  // Current node also pulses its glow (2600ms, matches the shared
   // ambient rhythm used across the whole Adventure Map).
   late final _pulse = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 2600),
+  );
+  // Drives the glow breathing and the twinkling sparkles.
+  late final _shine = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 3600),
   );
   // One-shot "no" wobble when a locked node is tapped, before the dialog.
   late final _wobble = AnimationController(
@@ -791,10 +822,19 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
   Timer? _entranceTimer;
   late final _animations = Listenable.merge([
     _entrance,
-    _idleTilt,
     _pulse,
+    _shine,
     _wobble,
   ]);
+
+  /// Checkpoint art per destination (1-6). Destination 7 has no icon yet —
+  /// only its tile shows until that asset exists.
+  String? get _iconAsset {
+    final id = widget.module.destinationId;
+    return id >= 1 && id <= 6
+        ? 'assets/images/adventure_map/checkpoint_$id.png'
+        : null;
+  }
 
   @override
   void initState() {
@@ -802,6 +842,8 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     _entranceTimer = Timer(widget.entranceDelay, () {
       if (mounted) _entrance.forward();
     });
+    // Offset each checkpoint's phase so they don't all shine in lockstep.
+    _shine.value = (widget.module.destinationId % 7) / 7;
     _syncContinuousAnimations(previousState: null);
   }
 
@@ -814,21 +856,19 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     // instance (matched by `ValueKey(module.id)`) can flip between
     // available/current/completed without ever being recreated. Without
     // this, a node that just became current would never start pulsing, and
-    // one that just finished would keep tilting forever.
+    // one that just unlocked would never start shining.
     if (oldWidget.state != widget.state) {
       _syncContinuousAnimations(previousState: oldWidget.state);
     }
   }
 
   void _syncContinuousAnimations({required _NodeState? previousState}) {
-    final wantsTilt =
-        widget.state == _NodeState.current ||
-        widget.state == _NodeState.available;
-    if (wantsTilt && !_idleTilt.isAnimating) {
-      _idleTilt.repeat(reverse: true);
-    } else if (!wantsTilt && _idleTilt.isAnimating) {
-      _idleTilt.stop();
-      _idleTilt.value = 0;
+    final alive = widget.state != _NodeState.locked;
+    if (alive && !_shine.isAnimating) {
+      _shine.repeat();
+    } else if (!alive && _shine.isAnimating) {
+      _shine.stop();
+      _shine.value = 0;
     }
 
     final wantsPulse = widget.state == _NodeState.current;
@@ -844,8 +884,8 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
   void dispose() {
     _entranceTimer?.cancel();
     _entrance.dispose();
-    _idleTilt.dispose();
     _pulse.dispose();
+    _shine.dispose();
     _wobble.dispose();
     super.dispose();
   }
@@ -857,158 +897,309 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     widget.onTap();
   }
 
-  /// Each level keeps its own destination color (from the wireframe) as
-  /// its badge fill — only "locked" overrides to a neutral gray. The
-  /// number/icon stays white on top, same contrast pattern every state
-  /// already used, just recoloring the fill per destination instead of
-  /// per state.
-  (Color, Color) _colorsFor(_NodeState state) {
-    if (state == _NodeState.locked) {
-      return (const Color(0xFFC9C2AE), const Color(0xFF7A8B85));
-    }
-    return (widget.color, Colors.white);
-  }
+  static const _grayscale = ColorFilter.matrix(<double>[
+    0.2126, 0.7152, 0.0722, 0, 0, //
+    0.2126, 0.7152, 0.0722, 0, 0, //
+    0.2126, 0.7152, 0.0722, 0, 0, //
+    0, 0, 0, 1, 0,
+  ]);
 
   @override
   Widget build(BuildContext context) {
     final isCurrent = widget.state == _NodeState.current;
-    // Small enough to sit on the path without covering the artwork's own
-    // landmarks (buildings, trees) — was 64-78px, oversized against the
-    // background's actual scale.
-    final size = isCurrent ? 40.0 : 34.0;
-    final (bg, fg) = _colorsFor(widget.state);
-
-    Widget icon = switch (widget.state) {
-      _NodeState.locked => const Icon(
-        Icons.lock_rounded,
-        color: Color(0xFF7A8B85),
-        size: 16,
-      ),
-      _NodeState.completed => Icon(Icons.check_rounded, color: fg, size: 18),
-      // Numbered badge (1-7, the destination's position on the journey)
-      // rather than the module's topic icon — makes the map read as a
-      // level sequence at a glance.
-      _ => Text(
-        '${widget.module.destinationId}',
-        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: fg),
-      ),
-    };
+    final locked = widget.state == _NodeState.locked;
+    // Sized to the oval slots painted on the map path (~180px of the
+    // 1080px-wide artwork, i.e. roughly 65px on a phone).
+    final tileW = isCurrent ? 74.0 : 66.0;
+    final tileH = tileW * 180 / 320;
+    final iconBox = tileW * 0.78;
+    final width = tileW + 24;
+    final height = tileH / 2 + iconBox + 12;
+    final iconAsset = _iconAsset;
 
     return Positioned(
-      top: widget.mapHeight * widget.topFraction - size / 2,
-      left: widget.left - size / 2,
+      // The tile's center sits exactly on the destination's map point.
+      top: widget.mapHeight * widget.topFraction - (height - tileH / 2),
+      left: widget.left - width / 2,
       child: KeyedSubtree(
         key: widget.anchorKey,
         child: AnimatedBuilder(
-        animation: _animations,
-        builder: (context, child) {
-          final entranceT = _overshoot.transform(_entrance.value);
-          final tiltT = Curves.easeInOut.transform(_idleTilt.value);
-          final pulseT = Curves.easeInOut.transform(_pulse.value);
-          final wobbleT = Curves.easeInOut.transform(_wobble.value);
+          animation: _animations,
+          builder: (context, child) {
+            final entranceT = _overshoot.transform(_entrance.value);
+            final pulseT = Curves.easeInOut.transform(_pulse.value);
+            final wobbleT = Curves.easeInOut.transform(_wobble.value);
+            final shineT = _shine.value;
 
-          final scale = 0.5 + 0.5 * entranceT;
-          final opacity = entranceT.clamp(0.0, 1.0);
-          final tiltAngle =
-              (widget.state == _NodeState.current ||
-                  widget.state == _NodeState.available)
-              ? (tiltT * 2 - 1) *
-                    0.07 // ±4deg in radians
-              : 0.0;
-          final wobbleDx = widget.state == _NodeState.locked
-              ? (wobbleT < 0.5 ? -4.0 : 4.0) * (1 - (wobbleT - 0.5).abs() * 2)
-              : 0.0;
-          final glowSpread = isCurrent ? 6 + 6 * pulseT : 0.0;
+            final scale = 0.5 + 0.5 * entranceT;
+            final opacity = entranceT.clamp(0.0, 1.0);
+            final wobbleDx = locked
+                ? (wobbleT < 0.5 ? -4.0 : 4.0) * (1 - (wobbleT - 0.5).abs() * 2)
+                : 0.0;
+            // Soft breathing on every lit checkpoint; the current one burns
+            // brighter and swells with its pulse.
+            final breathe = 0.5 + 0.5 * math.sin(shineT * 2 * math.pi);
+            final glowOpacity = locked || iconAsset == null
+                ? 0.0
+                : isCurrent
+                ? 0.9 + 0.1 * pulseT
+                : 0.8 + 0.2 * breathe;
+            final tileTop = height - tileH;
+            final iconBottom = tileH / 2 - 2;
 
-          return Opacity(
-            opacity: opacity,
-            child: Transform.translate(
-              offset: Offset(wobbleDx, 0),
-              child: Transform.scale(
-                scale: scale,
-                child: Transform.rotate(
-                  angle: tiltAngle,
+            Widget? iconImage;
+            if (iconAsset != null) {
+              iconImage = Image.asset(iconAsset, fit: BoxFit.contain);
+              if (locked) {
+                iconImage = ColorFiltered(
+                  colorFilter: _grayscale,
+                  child: Opacity(opacity: 0.7, child: iconImage),
+                );
+              }
+            }
+
+            return Opacity(
+              opacity: opacity,
+              child: Transform.translate(
+                offset: Offset(wobbleDx, 0),
+                child: Transform.scale(
+                  scale: scale,
+                  alignment: Alignment(0, 1 - tileH / height),
                   child: Semantics(
                     button: true,
-                    label: widget.state == _NodeState.locked
+                    label: locked
                         ? '${widget.module.title} module, locked by teacher'
                         : '${widget.module.title} module',
-                    child: Material(
-                      color: Colors.transparent,
-                      shape: const CircleBorder(),
-                      child: InkWell(
-                        key: ValueKey('node-badge-${widget.module.id}'),
-                        customBorder: const CircleBorder(),
-                        onTap: _handleTap,
-                        child: SizedBox(
-                          width: size,
-                          height: size,
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Container(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: bg,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 2.5,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.25,
-                                      ),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                    if (isCurrent)
-                                      BoxShadow(
-                                        color: AppColors.gold.withValues(
-                                          alpha: 0.35,
+                    child: GestureDetector(
+                      key: ValueKey('node-badge-${widget.module.id}'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _handleTap,
+                      child: SizedBox(
+                        width: width,
+                        height: height,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          alignment: Alignment.topCenter,
+                          children: [
+                            // Golden glow that hugs the checkpoint's own
+                            // outline (tile + icon): a gold silhouette,
+                            // blurred wide and then tight, behind the art.
+                            if (glowOpacity > 0)
+                              for (final (sigma, strength) in const [
+                                (24.0, 1.0),
+                                (12.0, 1.0),
+                                (5.0, 1.0),
+                                (2.0, 0.8),
+                              ])
+                                Positioned.fill(
+                                  child: IgnorePointer(
+                                    child: Opacity(
+                                      opacity: glowOpacity * strength,
+                                      child: ImageFiltered(
+                                        imageFilter: ui.ImageFilter.blur(
+                                          sigmaX: sigma,
+                                          sigmaY: sigma,
+                                          tileMode: TileMode.decal,
                                         ),
-                                        blurRadius: 0,
-                                        spreadRadius: glowSpread,
+                                        child: ColorFiltered(
+                                          colorFilter: const ColorFilter.mode(
+                                            Color(0xFFFFD54A),
+                                            BlendMode.srcIn,
+                                          ),
+                                          child: Stack(
+                                            clipBehavior: Clip.none,
+                                            alignment: Alignment.topCenter,
+                                            children: [
+                                              Positioned(
+                                                top: tileTop,
+                                                width: tileW,
+                                                height: tileH,
+                                                child: Image.asset(
+                                                  'assets/images/adventure_map/checkpoint_tile.png',
+                                                ),
+                                              ),
+                                              Positioned(
+                                                bottom: iconBottom,
+                                                width: iconBox,
+                                                height: iconBox,
+                                                child: Align(
+                                                  alignment:
+                                                      Alignment.bottomCenter,
+                                                  child: Image.asset(
+                                                    iconAsset!,
+                                                    fit: BoxFit.contain,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
-                                  ],
+                                    ),
+                                  ),
                                 ),
-                                alignment: Alignment.center,
-                                child: icon,
-                              ),
-                              if (widget.overdue &&
-                                  widget.state != _NodeState.locked)
-                                const Positioned(
-                                  top: -2,
-                                  right: -2,
-                                  child: _OverdueBadge(),
-                                ),
+                            Positioned(
+                              top: tileTop,
+                              width: tileW,
+                              height: tileH,
+                              child: locked
+                                  ? ColorFiltered(
+                                      colorFilter: _grayscale,
+                                      child: Image.asset(
+                                        'assets/images/adventure_map/checkpoint_tile.png',
+                                      ),
+                                    )
+                                  : Image.asset(
+                                      'assets/images/adventure_map/checkpoint_tile.png',
+                                    ),
+                            ),
+                            // Contact shadow under the icon on the tile.
+                            if (iconImage != null)
                               Positioned(
-                                top: size + 6,
-                                left: -46,
-                                right: -46,
+                                top: tileTop + tileH / 2 - 5,
                                 child: IgnorePointer(
-                                  child: Center(
-                                    child: _NodeLabel(
-                                      title: widget.module.title,
-                                      locked: widget.state == _NodeState.locked,
-                                      isCurrent: isCurrent,
+                                  child: Container(
+                                    width: iconBox * 0.62,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(99),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.38,
+                                          ),
+                                          blurRadius: 6,
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
+                            if (iconImage != null)
+                              Positioned(
+                                bottom: iconBottom,
+                                width: iconBox,
+                                height: iconBox,
+                                child: Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: iconImage,
+                                ),
+                              ),
+                            if (!locked)
+                              for (final (i, (dx, dy)) in const [
+                                (-0.42, 0.12),
+                                (0.40, 0.28),
+                                (0.22, -0.02),
+                              ].indexed)
+                                Positioned(
+                                  left: width / 2 + dx * iconBox - 5,
+                                  top: dy * iconBox + 8,
+                                  child: _Twinkle(t: (shineT + i / 3) % 1),
+                                ),
+                            if (locked)
+                              Positioned(
+                                top: tileTop - 6,
+                                child: const _LockChip(),
+                              ),
+                            if (widget.state == _NodeState.completed)
+                              Positioned(
+                                bottom: tileH / 2 + iconBox * 0.7,
+                                right: 6,
+                                child: const _DoneChip(),
+                              ),
+                            if (widget.overdue && !locked)
+                              Positioned(
+                                bottom: tileH / 2 + iconBox * 0.7,
+                                left: 6,
+                                child: const _OverdueBadge(),
+                              ),
+                            Positioned(
+                              top: height + 2,
+                              left: -40,
+                              right: -40,
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: _NodeLabel(
+                                    title: widget.module.title,
+                                    locked: locked,
+                                    isCurrent: isCurrent,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
         ),
       ),
+    );
+  }
+}
+
+/// Four-point sparkle that fades/scales in and out over one [t] cycle.
+class _Twinkle extends StatelessWidget {
+  const _Twinkle({required this.t});
+
+  final double t;
+
+  @override
+  Widget build(BuildContext context) {
+    final v = math.sin(t * math.pi);
+    return IgnorePointer(
+      child: Opacity(
+        opacity: v * v,
+        child: Transform.scale(
+          scale: 0.4 + 0.6 * v,
+          child: const Icon(
+            Icons.auto_awesome,
+            size: 10,
+            color: Color(0xFFFFF3C4),
+            shadows: [Shadow(color: Color(0xFFFFD36B), blurRadius: 6)],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LockChip extends StatelessWidget {
+  const _LockChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: Color(0xFF7A8B85),
+        boxShadow: [BoxShadow(color: Color(0x40000000), blurRadius: 4)],
+      ),
+      child: const Icon(Icons.lock_rounded, color: Colors.white, size: 13),
+    );
+  }
+}
+
+class _DoneChip extends StatelessWidget {
+  const _DoneChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 18,
+      height: 18,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.teal,
+        border: Border.all(color: Colors.white, width: 1.5),
+      ),
+      child: const Icon(Icons.check_rounded, color: Colors.white, size: 12),
     );
   }
 }
@@ -1156,7 +1347,7 @@ class _MascotAvatarState extends State<_MascotAvatar>
   Widget build(BuildContext context) {
     return Positioned(
       top: widget.mapHeight * widget.topFraction - 64,
-      left: widget.left + 22,
+      left: widget.left + 34,
       child: SizedBox(
         width: 84,
         height: 100,
@@ -1302,5 +1493,3 @@ class _MascotAvatarState extends State<_MascotAvatar>
     );
   }
 }
-
-
