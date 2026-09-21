@@ -3874,6 +3874,180 @@ const CreationHuntStage gardenHuntStage = CreationHuntStage(
 );
 
 // ─────────────────────────────────────────────────────────────
+// CLASSROOM HEROES -- SESSION DATA
+// ─────────────────────────────────────────────────────────────
+// Ported 1:1 from the supplied "Classroom Heroes" prototype's own
+// `SESSIONS` table: same scenario artwork, prompts, choices, feedback,
+// retry lines and finish lines, word for word.
+//
+// One session per stage, distributed across the journey exactly as the
+// prototype's own `stage:` field says: Session 1 (Respect) in Destination
+// 4, Session 2 (Kindness) in 5, Session 3 (Responsibility) in 6, Session 4
+// (Teamwork) in 7. Every session opens on the same title screen -- only the
+// session card and the scenarios change.
+// ─────────────────────────────────────────────────────────────
+
+const String _heroesBg = 'assets/images/classroom_heroes/bg';
+
+const ClassroomHeroesSession heroesRespectSession = ClassroomHeroesSession(
+  number: 1,
+  tag: 'SESSION 1 · RESPECT',
+  title: 'Respecting Teachers',
+  blurb: 'Greeting · Listening · Asking permission',
+  retryText:
+      'That choice does not show respect. You don’t earn progress yet — '
+      'listen once more and pick the kind choice.',
+  finishText:
+      'You completed 3 respectful choices. Ahmad and Amina are proud of you!',
+  questions: [
+    ClassroomHeroesQuestion(
+      scenarioImage: '$_heroesBg/amina_enters_class.jpg',
+      promptText:
+          'Amina enters the classroom and sees her teacher. What should she do?',
+      correctText: 'Greet the teacher politely.',
+      decoyText: 'Ignore the teacher.',
+      successFeedback: 'Great job! Greeting your teacher shows respect.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: '$_heroesBg/teacher_explaining.jpg',
+      promptText:
+          'The teacher is explaining a new lesson. What should Ahmad do?',
+      correctText: 'Listen carefully and pay attention.',
+      decoyText: 'Talk loudly with friends.',
+      successFeedback:
+          'Excellent! A good student listens when the teacher speaks.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: '$_heroesBg/ahmad_needs_leave.jpg',
+      promptText:
+          'Ahmad needs to leave the classroom. What should he do first?',
+      correctText: 'Raise his hand and ask permission.',
+      decoyText: 'Leave without telling anyone.',
+      successFeedback: 'Good choice! Asking permission shows respect.',
+    ),
+  ],
+);
+
+const ClassroomHeroesSession heroesKindnessSession = ClassroomHeroesSession(
+  number: 2,
+  tag: 'SESSION 2 · KINDNESS',
+  title: 'Showing Kindness',
+  blurb: 'Helping · Sharing · Comforting friends',
+  retryText:
+      'That choice is not kind. You don’t earn progress yet — think about '
+      'your classmate’s feelings and pick again.',
+  finishText: 'You completed 3 kind choices. Ahmad and Amina are proud of you!',
+  questions: [
+    ClassroomHeroesQuestion(
+      scenarioImage: '$_heroesBg/dropped_books.jpg',
+      promptText:
+          'Amina sees her classmate drop their books. What should she do?',
+      correctText: 'Help pick up the books.',
+      decoyText: 'Laugh at her classmate.',
+      successFeedback: 'Wonderful! Helping others shows true kindness.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: '$_heroesBg/forgot_pencil.jpg',
+      promptText: 'A classmate forgot to bring a pencil. What should Ahmad do?',
+      correctText: 'Share an extra pencil.',
+      decoyText: 'Hide his pencils.',
+      successFeedback: 'Great! Sharing what we have is a kind action.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: '$_heroesBg/sad_friend.jpg',
+      promptText:
+          'Your friend feels sad because they made a mistake. What should you do?',
+      correctText: 'Encourage and comfort them.',
+      decoyText: 'Make fun of them.',
+      successFeedback: 'Excellent! Good friends support each other.',
+    ),
+  ],
+);
+
+const ClassroomHeroesSession heroesResponsibilitySession =
+    ClassroomHeroesSession(
+      number: 3,
+      tag: 'SESSION 3 · RESPONSIBILITY',
+      title: 'Being Responsible',
+      blurb: 'Tidying up · Book care · Homework',
+      retryText:
+          'That choice is not responsible. You don’t earn progress yet — '
+          'think about caring for your class and pick again.',
+      finishText:
+          'You completed 3 responsible choices. Ahmad and Amina are proud '
+          'of you!',
+      questions: [
+        ClassroomHeroesQuestion(
+          scenarioImage: '$_heroesBg/paper_on_floor.jpg',
+          promptText:
+              'Ahmad sees a piece of paper on the floor. What should he do?',
+          correctText: 'Pick it up and throw it in the bin.',
+          decoyText: 'Step on it and leave it there.',
+          successFeedback: 'Great! Keeping places clean is our responsibility.',
+        ),
+        ClassroomHeroesQuestion(
+          scenarioImage: '$_heroesBg/finished_book.jpg',
+          promptText: 'Amina finished using her textbook. What should she do?',
+          correctText: 'Return it neatly to the shelf.',
+          decoyText: 'Throw it on the floor.',
+          successFeedback:
+              'Excellent! We must take care of the things given to us.',
+        ),
+        ClassroomHeroesQuestion(
+          scenarioImage: '$_heroesBg/teacher_homework.jpg',
+          promptText:
+              'The teacher gives the class an assignment. What should a '
+              'responsible student do?',
+          correctText: 'Complete it and submit it on time.',
+          decoyText: 'Ignore it.',
+          successFeedback: 'Good job! Responsibility helps us learn and grow.',
+        ),
+      ],
+    );
+
+const ClassroomHeroesSession heroesTeamworkSession = ClassroomHeroesSession(
+  number: 4,
+  tag: 'SESSION 4 · TEAMWORK',
+  title: 'Working Together',
+  blurb: 'Sharing ideas · Taking turns · Welcoming',
+  retryText:
+      'That choice does not help the team. You don’t earn progress yet — '
+      'think about your classmates and pick again.',
+  finishText:
+      'You completed 3 teamwork choices. Ahmad and Amina are proud of you!',
+  questions: [
+    ClassroomHeroesQuestion(
+      scenarioImage: '$_heroesBg/group_activity.jpg',
+      promptText:
+          'The teacher asks the students to work together on a project. '
+          'What should the group do?',
+      correctText: 'Share ideas and help each other.',
+      decoyText: 'Argue and let one person do all the work.',
+      successFeedback:
+          'Great teamwork! Helping each other makes learning better.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: '$_heroesBg/many_want_to_answer.jpg',
+      promptText:
+          "Many students want to answer the teacher's question. What should "
+          'you do?',
+      correctText: 'Wait patiently for your turn.',
+      decoyText: 'Shout your answer over the others.',
+      successFeedback:
+          'Excellent! Patience and waiting your turn are good manners.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: '$_heroesBg/new_student.jpg',
+      promptText:
+          'A new student joins the class and feels shy. What should you do?',
+      correctText: 'Welcome them and introduce yourself.',
+      decoyText: 'Ignore them and make them feel left out.',
+      successFeedback: 'Wonderful! Kindness makes everyone feel welcome.',
+    ),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
 // FULL CURRICULUM ARRAY -- Journey Map (7 stages, 40 sessions)
 // ─────────────────────────────────────────────────────────────
 
@@ -4407,40 +4581,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest4-s2-act',
-            type: ActivityType.fiqhDrag,
+            type: ActivityType.classroomHeroes,
             title: 'Classroom Heroes (Respect)',
             icon: '🤝',
             xp: 30,
-            fiqhItems: [
-              FiqhDragItem(
-                id: 'resp1',
-                emoji: '🙋',
-                label: 'Raising your hand to speak',
-                correctZoneId: 'good',
-              ),
-              FiqhDragItem(
-                id: 'resp2',
-                emoji: '👂',
-                label: 'Listening to the teacher',
-                correctZoneId: 'good',
-              ),
-              FiqhDragItem(
-                id: 'resp3',
-                emoji: '🗣️',
-                label: 'Interrupting a friend',
-                correctZoneId: 'bad',
-              ),
-              FiqhDragItem(
-                id: 'resp4',
-                emoji: '😤',
-                label: 'Rolling your eyes at ustadzah',
-                correctZoneId: 'bad',
-              ),
-            ],
-            fiqhZones: [
-              FiqhDropZone(id: 'good', label: 'Respectful ✅', icon: '✅'),
-              FiqhDropZone(id: 'bad', label: 'Not Respectful ❌', icon: '❌'),
-            ],
+            heroesSession: heroesRespectSession,
           ),
         ],
       ),
@@ -4665,11 +4810,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest5-s3-act',
-            type: ActivityType.story,
+            type: ActivityType.classroomHeroes,
             title: 'Classroom Heroes (Kindness)',
             icon: '🤝',
             xp: 30,
-            panels: storyMiko,
+            heroesSession: heroesKindnessSession,
           ),
         ],
       ),
@@ -4837,40 +4982,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest6-s2-act',
-            type: ActivityType.fiqhDrag,
+            type: ActivityType.classroomHeroes,
             title: 'Classroom Heroes (Responsibility)',
             icon: '🤝',
             xp: 30,
-            fiqhItems: [
-              FiqhDragItem(
-                id: 'resb1',
-                emoji: '🧹',
-                label: 'Tidying up your desk',
-                correctZoneId: 'good',
-              ),
-              FiqhDragItem(
-                id: 'resb2',
-                emoji: '📚',
-                label: 'Finishing your homework',
-                correctZoneId: 'good',
-              ),
-              FiqhDragItem(
-                id: 'resb3',
-                emoji: '🗑️',
-                label: 'Leaving trash on the floor',
-                correctZoneId: 'bad',
-              ),
-              FiqhDragItem(
-                id: 'resb4',
-                emoji: '😴',
-                label: 'Forgetting your books at home',
-                correctZoneId: 'bad',
-              ),
-            ],
-            fiqhZones: [
-              FiqhDropZone(id: 'good', label: 'Responsible ✅', icon: '✅'),
-              FiqhDropZone(id: 'bad', label: 'Not Responsible ❌', icon: '❌'),
-            ],
+            heroesSession: heroesResponsibilitySession,
           ),
         ],
       ),
@@ -5101,40 +5217,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest7-s2-act',
-            type: ActivityType.fiqhDrag,
+            type: ActivityType.classroomHeroes,
             title: 'Classroom Heroes (Teamwork)',
             icon: '🤝',
             xp: 30,
-            fiqhItems: [
-              FiqhDragItem(
-                id: 'team1',
-                emoji: '🤲',
-                label: 'Sharing your pencils',
-                correctZoneId: 'good',
-              ),
-              FiqhDragItem(
-                id: 'team2',
-                emoji: '🧺',
-                label: 'Helping clean up together',
-                correctZoneId: 'good',
-              ),
-              FiqhDragItem(
-                id: 'team3',
-                emoji: '🙅',
-                label: 'Refusing to let others play',
-                correctZoneId: 'bad',
-              ),
-              FiqhDragItem(
-                id: 'team4',
-                emoji: '😠',
-                label: 'Blaming your group for a mistake',
-                correctZoneId: 'bad',
-              ),
-            ],
-            fiqhZones: [
-              FiqhDropZone(id: 'good', label: 'Good Teamwork ✅', icon: '✅'),
-              FiqhDropZone(id: 'bad', label: 'Not Teamwork ❌', icon: '❌'),
-            ],
+            heroesSession: heroesTeamworkSession,
           ),
         ],
       ),

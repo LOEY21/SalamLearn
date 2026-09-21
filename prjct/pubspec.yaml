@@ -92,6 +92,8 @@ flutter:
     - assets/images/
     - assets/images/adventure_map/
     - assets/images/ayah_builder/
+    - assets/images/classroom_heroes/
+    - assets/images/classroom_heroes/bg/
     - assets/images/creation_hunt/
     - assets/images/greeting_match/
     - assets/images/mascot/boy/

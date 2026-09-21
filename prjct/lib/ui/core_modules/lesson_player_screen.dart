@@ -16,6 +16,7 @@ import 'activities/quran_sync_activity.dart';
 import 'activities/story_activity.dart';
 import 'activities/trace_activity.dart';
 import 'activities/ayah_builder_activity.dart';
+import 'activities/classroom_heroes_game.dart';
 import 'activities/creation_hunt_game.dart';
 import 'activities/harakat_pop_activity.dart';
 import 'lesson_complete_screen.dart';
@@ -197,11 +198,16 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
     );
   }
 
-  // The hunt's own badge screen already carries the continue button.
-  bool get _skipCompleteScreen => _activity.type == ActivityType.creationHunt;
+  // The hunt's and Classroom Heroes' own badge screens already carry the
+  // continue button.
+  bool get _skipCompleteScreen =>
+      _activity.type == ActivityType.creationHunt ||
+      _activity.type == ActivityType.classroomHeroes;
 
   bool get _isFullBleedActivity =>
-      _activity.type == ActivityType.creationHunt || _isWudhuActivity;
+      _activity.type == ActivityType.creationHunt ||
+      _activity.type == ActivityType.classroomHeroes ||
+      _isWudhuActivity;
 
   bool get _isWudhuActivity =>
       _activity.type == ActivityType.fiqhDrag &&
@@ -248,8 +254,9 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
           // Wudhu Master and Allah's Creation Hunt bring their own
           // background, HUD and exit chip, so they run edge-to-edge like
           // Trace does.
-          ActivityType.creationHunt || ActivityType.fiqhDrag
-              when _isFullBleedActivity =>
+          ActivityType.creationHunt ||
+          ActivityType.classroomHeroes ||
+          ActivityType.fiqhDrag when _isFullBleedActivity =>
             _buildActivityContent(lessonColor),
           ActivityType.pronounce => Stack(
             children: [
@@ -526,6 +533,13 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       ActivityType.creationHunt => CreationHuntGame(
         key: ValueKey(activity.id),
         stage: activity.huntStage!,
+        xp: activity.xp,
+        onComplete: _handleActivityComplete,
+        onExit: _confirmExit,
+      ),
+      ActivityType.classroomHeroes => ClassroomHeroesGame(
+        key: ValueKey(activity.id),
+        session: activity.heroesSession!,
         xp: activity.xp,
         onComplete: _handleActivityComplete,
         onExit: _confirmExit,

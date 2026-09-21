@@ -18,6 +18,7 @@ enum ActivityType {
   ayahBuilder,
   quranSync,
   creationHunt,
+  classroomHeroes,
 }
 
 enum DestinationState { completed, current, locked }
@@ -370,6 +371,66 @@ class CreationHuntStage {
       spots.where((s) => s.isCreation && !s.alias).toList();
 }
 
+/// One classroom scenario in Classroom Heroes: the illustrated moment, the
+/// question asked about it, the two choices, and the line said back when the
+/// good one is picked.
+///
+/// Always exactly two choices — one right, one decoy — because the game's
+/// whole teaching move is "this or that, which is the hero choice?".
+class ClassroomHeroesQuestion {
+  const ClassroomHeroesQuestion({
+    required this.scenarioImage,
+    required this.promptText,
+    required this.correctText,
+    required this.decoyText,
+    required this.successFeedback,
+  });
+
+  final String scenarioImage;
+  final String promptText;
+  final String correctText;
+  final String decoyText;
+  final String successFeedback;
+}
+
+/// One session of Classroom Heroes — a single good-manners theme (respect,
+/// kindness, responsibility, teamwork) and the three scenarios that teach it.
+///
+/// The four sessions are authored in `curriculum_data.dart` and distributed
+/// one per stage (Destinations 4–7). Every session opens on the same title
+/// screen, so a learner meets the identical opening whichever one they are
+/// on — see [CreationHuntStage] for the same arrangement.
+class ClassroomHeroesSession {
+  const ClassroomHeroesSession({
+    required this.number,
+    required this.tag,
+    required this.title,
+    required this.blurb,
+    required this.retryText,
+    required this.finishText,
+    required this.questions,
+  });
+
+  /// 1-4 — shown in the session card's badge.
+  final int number;
+
+  /// e.g. "SESSION 1 · RESPECT" — the curtain's eyebrow line.
+  final String tag;
+  final String title;
+
+  /// The card's one-line "Greeting · Listening · Asking permission" summary.
+  final String blurb;
+
+  /// Shown in the Try again card — says *why* the decoy isn't the hero
+  /// choice, in this session's own terms.
+  final String retryText;
+
+  /// The line on the Classroom Hero badge at the end of the session.
+  final String finishText;
+
+  final List<ClassroomHeroesQuestion> questions;
+}
+
 class Activity {
   const Activity({
     required this.id,
@@ -386,6 +447,7 @@ class Activity {
     this.fiqhZones,
     this.ayahLevels,
     this.huntStage,
+    this.heroesSession,
   });
 
   final String id;
@@ -410,6 +472,9 @@ class Activity {
 
   /// Used by `creationHunt` — the one scene this session hunts through.
   final CreationHuntStage? huntStage;
+
+  /// Used by `classroomHeroes` — the one session this lesson plays.
+  final ClassroomHeroesSession? heroesSession;
 }
 
 class Lesson {
