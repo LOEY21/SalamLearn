@@ -100,6 +100,8 @@ const double _kBoardW = 1000.0;
 const double _kBoardAspect = 1347 / 1002;
 const _kBoardPad = EdgeInsets.fromLTRB(90, 208, 90, 60);
 const double _kSpeakerD = 84.0;
+const double _kPlateW = 960.0; // the curtain's announcement plate
+const double _kPlateAspect = 1906 / 729;
 
 const _stageBack = Color(0xFF1C1710);
 const _panelTop = Color(0xFFFAF0D8);
@@ -577,20 +579,23 @@ class _SirahStoryGameState extends State<SirahStoryGame>
                 child: SizedBox(
                   width: _kW,
                   height: _kH,
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: _screen == _Screen.start
-                            ? _buildStart()
-                            : _buildPlay(),
-                      ),
-                      if (_curtain) _buildCurtain(),
-                    ],
-                  ),
+                  child: _screen == _Screen.start
+                      ? _buildStart()
+                      : _buildPlay(),
                 ),
               ),
             ),
           ),
+          // The curtain is drawn at screen size, not inside the stage: the
+          // stage is letterboxed on screens that aren't its exact shape, and
+          // a curtain drawn in there left those bands uncovered.
+          if (_curtain)
+            Positioned.fill(
+              child: LayoutBuilder(
+                builder: (context, box) =>
+                    _buildCurtain(box.maxWidth, box.maxHeight),
+              ),
+            ),
         ],
       ),
     );
@@ -846,8 +851,14 @@ class _SirahStoryGameState extends State<SirahStoryGame>
 
   /// The wipe itself — two halves of a wood curtain meeting in the middle,
   /// with the question's own plate swelling between them while they are shut.
-  Widget _buildCurtain() {
-    return Positioned.fill(
+  /// [w] x [h] is the whole screen. The two halves meet across all of it;
+  /// the plate between them is scaled with the stage, so it is the same size
+  /// relative to the scene on every device.
+  Widget _buildCurtain(double w, double h) {
+    final k = math.min(w / _kW, h / _kH);
+    return SizedBox(
+      width: w,
+      height: h,
       child: IgnorePointer(
         child: ClipRect(
           child: _fx((t) {
@@ -877,7 +888,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
               [0.7, 1.04, 1, 1, 0.92],
               Curves.easeOut,
             );
-            const half = _kH * 0.502;
+            final half = h * 0.502;
             return Stack(
               children: [
                 Positioned(
@@ -922,7 +933,12 @@ class _SirahStoryGameState extends State<SirahStoryGame>
                       opacity: _c01(plate),
                       child: Transform.scale(
                         scale: plateScale,
-                        child: _curtainPlate(),
+                        // Laid out at stage size, then fitted to this screen.
+                        child: SizedBox(
+                          width: _kPlateW * k,
+                          height: _kPlateW / _kPlateAspect * k,
+                          child: FittedBox(child: _curtainPlate()),
+                        ),
                       ),
                     ),
                   ),
@@ -950,10 +966,9 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   );
 
   Widget _curtainPlate() {
-    const w = 960.0;
     return SizedBox(
-      width: w,
-      height: w / (1906 / 729),
+      width: _kPlateW,
+      height: _kPlateW / _kPlateAspect,
       child: Stack(
         children: [
           Positioned.fill(

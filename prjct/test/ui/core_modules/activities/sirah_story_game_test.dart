@@ -392,6 +392,59 @@ void main() {
     expect(row.bottom, greaterThanOrEqualTo(chipRect.bottom - 0.5));
   });
 
+  testWidgets('the curtain covers the whole screen on any shape of screen', (
+    tester,
+  ) async {
+    final view =
+        TestWidgetsFlutterBinding.instance.platformDispatcher.implicitView!;
+    // A tall-ish tablet, a very wide phone, and a small old phone — none of
+    // them the stage's own shape, so the stage is letterboxed on each.
+    for (final size in const [
+      Size(1600, 1200),
+      Size(2400, 900),
+      Size(800, 480),
+    ]) {
+      view.physicalSize = size;
+      await tester.pumpWidget(host(sirahBirthSession));
+      await tester.pump(const Duration(milliseconds: 1200));
+      await tester.tap(find.byKey(const ValueKey('sirah-play')));
+      // Curtain fully shut, plate up.
+      await run(tester, const Duration(milliseconds: 2000));
+
+      final halves = find.byWidgetPredicate(
+        (w) =>
+            w is DecoratedBox &&
+            w.decoration is BoxDecoration &&
+            (w.decoration as BoxDecoration).gradient is LinearGradient &&
+            ((w.decoration as BoxDecoration).gradient as LinearGradient).colors
+                .contains(const Color(0xFF6B4A1E)),
+      );
+      expect(halves, findsNWidgets(2), reason: '$size');
+      final top = tester.getRect(halves.at(0));
+      final bottom = tester.getRect(halves.at(1));
+      // Edge to edge, and together they meet over the full height.
+      expect(top.left, 0, reason: '$size');
+      expect(top.right, size.width, reason: '$size');
+      expect(top.top, lessThanOrEqualTo(0.5), reason: '$size');
+      expect(bottom.bottom, greaterThanOrEqualTo(size.height - 0.5));
+      expect(bottom.top, lessThanOrEqualTo(top.bottom + 0.5));
+
+      // And the plate is still fully on screen.
+      final plate = tester.getRect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Image &&
+              (w.image as AssetImage).assetName ==
+                  'assets/images/sirah_story/curtain_plate.png',
+        ),
+      );
+      expect(plate.left, greaterThanOrEqualTo(0), reason: '$size');
+      expect(plate.right, lessThanOrEqualTo(size.width), reason: '$size');
+
+      await tester.pumpWidget(const SizedBox());
+    }
+  });
+
   testWidgets('the decoy never advances the story', (tester) async {
     const session = sirahHalimahSession;
     await tester.pumpWidget(host(session));
