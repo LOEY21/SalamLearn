@@ -96,6 +96,7 @@ flutter:
     - assets/images/classroom_heroes/bg/
     - assets/images/creation_hunt/
     - assets/images/greeting_match/
+    - assets/images/sirah_story/
     - assets/images/mascot/boy/
     - assets/images/mascot/girl/
     - assets/images/tracing/
@@ -125,6 +126,17 @@ flutter:
     - family: Cairo
       fonts:
         - asset: assets/fonts/Cairo-Regular.ttf
+    - family: Baloo2Var
+      fonts:
+        - asset: assets/fonts/Baloo2-Variable.ttf
+    - family: NunitoVar
+      fonts:
+        - asset: assets/fonts/Nunito-Variable.ttf
+    - family: ScheherazadeNew
+      fonts:
+        - asset: assets/fonts/ScheherazadeNew-Regular.ttf
+        - asset: assets/fonts/ScheherazadeNew-Bold.ttf
+          weight: 700
 
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package

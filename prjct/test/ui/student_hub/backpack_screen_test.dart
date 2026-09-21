@@ -56,7 +56,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
 
     expect(find.text('HOW TO UNLOCK'), findsOneWidget);
-    expect(find.text('Complete Desert of Letters'), findsOneWidget);
+    expect(find.text('Complete Exploring Our World'), findsOneWidget);
   });
 
   testWidgets('tapping a locked badge shows its XP reward', (tester) async {

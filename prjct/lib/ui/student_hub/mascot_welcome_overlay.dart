@@ -37,7 +37,7 @@ class _MascotWelcomeOverlayState extends State<MascotWelcomeOverlay>
   late final List<String> _lines = [
     "Assalamu'alaikum, ${widget.learnerName}! 🌟",
     "I'm Amir, your learning companion, and I am so excited to meet you!",
-    "Together, we're going to go on a grand adventure through the Village of Salaam and the Desert of Letters. 🗺️",
+    "Together, we're going to go on a grand adventure through Madrasah and out into Exploring Our World. 🗺️",
     "We will collect shiny stars, light up beautiful lanterns of knowledge, and learn to read together! ✨",
     "Grab your backpack and let's start our first step on the map! Bismillah! 🚀",
   ];

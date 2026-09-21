@@ -19,6 +19,7 @@ import 'package:salamlearn/data/models/enrollment.dart';
 import 'package:salamlearn/data/remote/firestore_mirror.dart';
 import 'package:salamlearn/data/repositories/class_repository.dart';
 import 'package:salamlearn/data/repositories/learner_repository.dart';
+import 'package:salamlearn/data/repositories/teacher_repository.dart';
 import 'package:salamlearn/logic/sync/sync_manager.dart';
 import 'package:salamlearn/logic/teacher/teacher_providers.dart';
 
@@ -291,6 +292,53 @@ void main() {
       roster = container.read(classRosterProvider(classId));
       expect(roster, hasLength(1));
       expect(roster.first['name'], 'Remote Student');
+    });
+
+    test('new teacher starts pending and only becomes approved via status update', () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(sessionProvider.notifier);
+
+      notifier.setLanguage('en');
+      await notifier.giveConsent();
+      notifier.stageTeacherRegistration(
+        fullName: 'Pending Teacher',
+        school: 'Test School',
+        email: 'pending@example.com',
+        password: 'Password123',
+      );
+      await notifier.createPin('5678');
+
+      expect(notifier.activeTeacherStatus, 'pending');
+      expect(notifier.activeTeacherApproved, isFalse);
+
+      final repo = TeacherRepository();
+      final account = repo.findByEmail('pending@example.com')!;
+      await repo.updateVerificationStatus(account: account, status: 'approved');
+      expect(notifier.activeTeacherApproved, isTrue);
+    });
+
+    test('teacher account without a status (pre-verification) counts as approved', () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(sessionProvider.notifier);
+
+      final legacy = await TeacherRepository().createFromRemote(
+        id: 'legacy-1',
+        fullName: 'Legacy Teacher',
+        email: 'legacy@example.com',
+        password: 'Password123',
+        pin: '1234',
+      );
+      notifier.selectRole(UserRole.asatidz);
+      await notifier.signIn(
+        role: UserRole.asatidz,
+        email: 'legacy@example.com',
+        password: 'Password123',
+      );
+
+      expect(legacy.verificationStatus, isNull);
+      expect(notifier.activeTeacherApproved, isTrue);
     });
 
     test('teacher can unenroll/remove student from class', () async {

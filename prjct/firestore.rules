@@ -121,8 +121,9 @@ service cloud.firestore {
     }
 
     function isValidNewTeacher(data) {
-      return data.keys().hasOnly(['fullName', 'school', 'email', 'firebaseUid', 'mobileNumber', 'createdAt']) &&
+      return data.keys().hasOnly(['fullName', 'school', 'email', 'firebaseUid', 'mobileNumber', 'createdAt', 'verificationStatus']) &&
         data.keys().hasAll(['fullName', 'email', 'createdAt', 'firebaseUid']) &&
+        (!('verificationStatus' in data) || data.verificationStatus == 'approved') &&
         data.fullName is string && data.fullName.size() > 0 && data.fullName.size() < 100 &&
         (!('school' in data) || data.school == null || (data.school is string && data.school.size() < 100)) &&
         isValidEmail(data.email) &&
@@ -178,7 +179,7 @@ service cloud.firestore {
     // No `allow create/update/delete` anywhere means every client write is
     // denied by default, including from an already-admin account.
     match /admins/{uid} {
-      allow read: if false;
+      allow read: if isSignedIn() && request.auth.uid == uid;
     }
 
     match /parents/{parentId} {
@@ -202,9 +203,20 @@ service cloud.firestore {
     match /teachers/{teacherId} {
       // See `/parents/{parentId}` doc above — same reasoning.
       allow read: if isAdmin() || isPrincipal() || (isSignedIn() && (resource == null || resource.data.firebaseUid == request.auth.uid));
-      allow create: if (isSignedIn() && request.resource.data.firebaseUid == request.auth.uid) ||
+      // Teacher verification (SL-TEA-01..03): a self-registered teacher doc
+      // can only ever be created as 'pending', and the owner can never
+      // change `verificationStatus` afterwards — only an admin can
+      // (approve / reject / back to pending so a rejected teacher may
+      // re-apply). A doc with no status at all is a pre-verification
+      // (legacy) account, which the app treats as approved.
+      allow create: if (isSignedIn() && request.resource.data.firebaseUid == request.auth.uid &&
+          request.resource.data.get('verificationStatus', null) == 'pending') ||
         (isAdmin() && isValidNewTeacher(request.resource.data));
-      allow update: if resource.data.firebaseUid == request.auth.uid;
+      allow update: if (resource.data.firebaseUid == request.auth.uid &&
+          request.resource.data.get('verificationStatus', null) == resource.data.get('verificationStatus', null)) ||
+        (isAdmin() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['verificationStatus']) &&
+          request.resource.data.verificationStatus in ['pending', 'approved', 'rejected']);
       allow delete: if isAdmin() || (resource != null && resource.data.firebaseUid == request.auth.uid);
     }
 

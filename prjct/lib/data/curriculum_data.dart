@@ -1189,78 +1189,124 @@ const List<FlashCard> colorsCards = [
   ),
 ];
 
-const List<AyahBuilderLevel> ayahBuilderLevels = [
-  AyahBuilderLevel(
-    id: 'ayah-basmalah',
-    reference: 'Basmalah',
-    arabicWords: ['بِسْمِ', 'اللَّهِ', 'الرَّحْمَٰنِ', 'الرَّحِيمِ'],
-    translitWords: ['Bismi', 'Allāhi', 'Ar-Raḥmāni', 'Ar-Raḥīm'],
-    englishMeaning:
-        'In the name of Allah, the Most Compassionate, the Most Merciful.',
-  ),
-  AyahBuilderLevel(
-    id: 'ayah-fatiha-1',
-    reference: 'Surah Al-Fātiḥah (Ayah 1)',
-    arabicWords: ['الْحَمْدُ', 'لِلَّهِ', 'رَبِّ', 'الْعَالَمِينَ'],
-    translitWords: ['Al-ḥamdu', 'Lillāhi', 'Rabbi', "Al-'ālamīn"],
-    englishMeaning: 'All praise belongs to Allah, Lord of all worlds.',
-  ),
-  AyahBuilderLevel(
-    id: 'ayah-fatiha-2',
-    reference: 'Surah Al-Fātiḥah (Ayah 2)',
-    arabicWords: ['الرَّحْمَٰنِ', 'الرَّحِيمِ'],
-    translitWords: ['Ar-Raḥmāni', 'Ar-Raḥīm'],
-    englishMeaning: 'The Most Compassionate, the Most Merciful.',
-  ),
-  AyahBuilderLevel(
-    id: 'ayah-ikhlas-1',
-    reference: 'Surah Al-Ikhlāṣ (Ayah 1)',
-    arabicWords: ['قُلْ', 'هُوَ', 'اللَّهُ', 'أَحَدٌ'],
-    translitWords: ['Qul', 'Huwa', 'Allāhu', 'Aḥad'],
-    englishMeaning: 'Say, He is Allah, the One.',
-  ),
-  AyahBuilderLevel(
-    id: 'ayah-ikhlas-2',
-    reference: 'Surah Al-Ikhlāṣ (Ayah 2)',
-    arabicWords: ['اللَّهُ', 'الصَّمَدُ'],
-    translitWords: ['Allāhu', 'Aṣ-Ṣamad'],
-    englishMeaning: 'Allah, the Eternal Refuge.',
-  ),
-  AyahBuilderLevel(
-    id: 'ayah-falaq-1',
-    reference: 'Surah Al-Falaq (Ayah 1)',
-    arabicWords: ['قُلْ', 'أَعُوذُ', 'بِرَبِّ', 'الْفَلَقِ'],
-    translitWords: ['Qul', "A'ūdhu", 'Birabbi', 'Al-Falaq'],
-    englishMeaning: 'Say, I seek refuge in the Lord of daybreak.',
-  ),
-  AyahBuilderLevel(
-    id: 'ayah-nas-1',
-    reference: 'Surah An-Nās (Ayah 1)',
-    arabicWords: ['قُلْ', 'أَعُوذُ', 'بِرَبِّ', 'النَّاسِ'],
-    translitWords: ['Qul', "A'ūdhu", 'Birabbi', 'An-Nās'],
-    englishMeaning: 'Say, I seek refuge in the Lord of mankind.',
-  ),
-  AyahBuilderLevel(
-    id: 'ayah-kawthar-1',
-    reference: 'Surah Al-Kawthar (Ayah 1)',
-    arabicWords: ['إِنَّا', 'أَعْطَيْنَاكَ', 'الْكَوْثَرَ'],
-    translitWords: ['Innā', "A'ṭaynāka", 'Al-Kawthar'],
-    englishMeaning: 'Indeed, We have given you Al-Kawthar.',
-  ),
-  AyahBuilderLevel(
-    id: 'ayah-asr-1',
-    reference: "Surah Al-'Aṣr (Ayah 1)",
-    arabicWords: ['وَالْعَصْرِ'],
-    translitWords: ["Wal-'Aṣr"],
-    englishMeaning: 'By Time.',
-  ),
-  AyahBuilderLevel(
-    id: 'ayah-nasr-1',
-    reference: 'Surah An-Naṣr (Ayah 1)',
-    arabicWords: ['إِذَا', 'جَاءَ', 'نَصْرُ', 'اللَّهِ', 'وَالْفَتْحُ'],
-    translitWords: ['Idhā', "Jā'a", 'Naṣru', 'Allāhi', 'Wal-Fatḥ'],
-    englishMeaning: 'When the victory of Allah and the conquest come.',
-  ),
+/// Ayah Builder's seven sessions, ported word-for-word from the source
+/// prototype and distributed one per stage as it lists them (Stage 2-7, with
+/// Al-Falaq and An-Nas both in Stage 6).
+const AyahBuilderSession ayahBasmalahSession = AyahBuilderSession(
+  stage: 2,
+  label: 'Session 1',
+  sessionName: 'The Basmalah',
+  short: 'the Basmalah',
+  englishTranslation:
+      'In the name of Allah, the Most Compassionate, the Most Merciful.',
+  cheer: 'Same words. Bigger hearts. Brighter futures.',
+  words: [
+    AyahBuilderWord('بِسْمِ', 'Bismi'),
+    AyahBuilderWord('اللَّهِ', 'Allahi'),
+    AyahBuilderWord('الرَّحْمَٰنِ', 'Ar-Rahman'),
+    AyahBuilderWord('الرَّحِيمِ', 'Ar-Rahim'),
+  ],
+);
+
+const AyahBuilderSession ayahFatihah1Session = AyahBuilderSession(
+  stage: 3,
+  label: 'Session 2',
+  sessionName: 'Al-Fatihah Pt 1',
+  short: 'Al-Fatihah',
+  englishTranslation: 'All praise belongs to Allah, Lord of the worlds.',
+  cheer: 'Small steps, big imaan.',
+  words: [
+    AyahBuilderWord('الْحَمْدُ', 'Al-hamdu'),
+    AyahBuilderWord('لِلَّهِ', 'lillahi'),
+    AyahBuilderWord('رَبِّ', 'Rabbi'),
+    AyahBuilderWord('الْعَالَمِينَ', 'al-alamin'),
+  ],
+);
+
+const AyahBuilderSession ayahFatihah2Session = AyahBuilderSession(
+  stage: 4,
+  label: 'Session 3',
+  sessionName: 'Al-Fatihah Pt 2',
+  short: 'Al-Fatihah Pt 2',
+  englishTranslation:
+      'The Most Compassionate, the Most Merciful. Master of the Day of Judgment.',
+  cheer: 'Five words, one ayah, well done.',
+  words: [
+    AyahBuilderWord('الرَّحْمَٰنِ', 'Ar-Rahman'),
+    AyahBuilderWord('الرَّحِيمِ', 'Ar-Rahim'),
+    AyahBuilderWord('مَالِكِ', 'Maliki'),
+    AyahBuilderWord('يَوْمِ', 'yawmi'),
+    AyahBuilderWord('الدِّينِ', 'ad-din'),
+  ],
+);
+
+const AyahBuilderSession ayahIkhlasSession = AyahBuilderSession(
+  stage: 5,
+  label: 'Session 4',
+  sessionName: 'Al-Ikhlas',
+  short: 'Al-Ikhlas',
+  englishTranslation: 'Say, He is Allah, the One.',
+  cheer: 'One Allah. One beautiful ayah.',
+  words: [
+    AyahBuilderWord('قُلْ', 'Qul'),
+    AyahBuilderWord('هُوَ', 'Huwa'),
+    AyahBuilderWord('اللَّهُ', 'Allahu'),
+    AyahBuilderWord('أَحَدٌ', 'Ahad'),
+  ],
+);
+
+const AyahBuilderSession ayahFalaqSession = AyahBuilderSession(
+  stage: 6,
+  label: 'Session 5',
+  sessionName: 'Al-Falaq',
+  short: 'Al-Falaq',
+  englishTranslation: 'Say, I seek refuge in the Lord of daybreak.',
+  cheer: 'Seeking refuge, word by word.',
+  words: [
+    AyahBuilderWord('قُلْ', 'Qul'),
+    AyahBuilderWord('أَعُوذُ', "A'udhu"),
+    AyahBuilderWord('بِرَبِّ', 'Birabbi'),
+    AyahBuilderWord('الْفَلَقِ', 'Al-Falaq'),
+  ],
+);
+
+const AyahBuilderSession ayahNasSession = AyahBuilderSession(
+  stage: 6,
+  label: 'Session 6',
+  sessionName: 'An-Nas',
+  short: 'An-Nas',
+  englishTranslation: 'Say, I seek refuge in the Lord of mankind.',
+  cheer: 'You know this one now.',
+  words: [
+    AyahBuilderWord('قُلْ', 'Qul'),
+    AyahBuilderWord('أَعُوذُ', "A'udhu"),
+    AyahBuilderWord('بِرَبِّ', 'Birabbi'),
+    AyahBuilderWord('النَّاسِ', 'An-Nas'),
+  ],
+);
+
+const AyahBuilderSession ayahKawtharSession = AyahBuilderSession(
+  stage: 7,
+  label: 'Session 7',
+  sessionName: 'Al-Kawthar',
+  short: 'Al-Kawthar',
+  englishTranslation: 'Indeed, We have given you Al-Kawthar.',
+  cheer: 'Three words. A whole ayah.',
+  words: [
+    AyahBuilderWord('إِنَّا', 'Inna'),
+    AyahBuilderWord('أَعْطَيْنَاكَ', "A'taynaka"),
+    AyahBuilderWord('الْكَوْثَرَ', 'Al-Kawthar'),
+  ],
+);
+
+const List<AyahBuilderSession> ayahBuilderSessions = [
+  ayahBasmalahSession,
+  ayahFatihah1Session,
+  ayahFatihah2Session,
+  ayahIkhlasSession,
+  ayahFalaqSession,
+  ayahNasSession,
+  ayahKawtharSession,
 ];
 
 const List<GreetingQuestion> greetingQuestions = [
@@ -3874,6 +3920,204 @@ const CreationHuntStage gardenHuntStage = CreationHuntStage(
 );
 
 // ─────────────────────────────────────────────────────────────
+// SIRAH STORY -- SESSION DATA
+// ─────────────────────────────────────────────────────────────
+// Ported 1:1 from the supplied "Sirah Story" prototype's own per-session
+// `PAGES` tables: same narration lines, same questions, same right and
+// wrong answers, word for word.
+//
+// One session per stage, distributed across the journey the way the
+// prototype's Session Select screen orders them: Session 1 (Birth) in
+// Destination 4, Session 2 (Halimah) in 5, Session 3 (Family) in 6,
+// Session 4 (Al-Amin) in 7 -- landing on the four "Sirah Story Module"
+// lessons that were already there. Every session opens on the same start
+// screen; only the session card and the two scenes change.
+//
+// The scene art is new: full-width painted backdrops sized to the screen.
+// The prototype's own cut-out layers sit on top of them unchanged — each
+// one's placement ported from its CSS percentages to the wider frame with
+// its aspect ratio preserved (see [SirahStoryLayer]).
+// ─────────────────────────────────────────────────────────────
+
+const String _sirahBg = 'assets/images/sirah_story';
+
+const SirahStorySession sirahBirthSession = SirahStorySession(
+  number: 1,
+  title: 'A Special Birth in Makkah',
+  blurb: 'The night a light came to the city of the Kaaba.',
+  pages: [
+    SirahStoryPage(
+      background: '$_sirahBg/s1p1_bg.png',
+      narration:
+          'Long ago, a blessed child was born in the city of Makkah. '
+          'His name was Muhammad.',
+      narrationMs: 6200,
+      glow: SirahStoryLayer(
+        asset: '$_sirahBg/s1p1_kaaba.png',
+        x: 0.4971,
+        y: 0.5338,
+        w: 0.2402,
+        h: 0.485,
+      ),
+      prompt: 'Where was Prophet Muhammad born?',
+      correct: 'In Makkah',
+      decoy: 'In a forest',
+    ),
+    SirahStoryPage(
+      background: '$_sirahBg/s1p2_bg.png',
+      narration:
+          "His father's name was Abdullah, and his mother's name was Aminah.",
+      narrationMs: 5200,
+      glow: SirahStoryLayer(
+        asset: '$_sirahBg/s1p2_bed.png',
+        x: 0.3921,
+        y: 0.6217,
+        w: 0.5019,
+        h: 0.744,
+      ),
+      prompt: "What was his mother's name?",
+      correct: 'Aminah',
+      decoy: 'Fatimah',
+    ),
+  ],
+);
+
+const SirahStorySession sirahHalimahSession = SirahStorySession(
+  number: 2,
+  title: 'Halimah and the Desert',
+  blurb: 'A kind woman takes the baby to the open desert.',
+  pages: [
+    SirahStoryPage(
+      background: '$_sirahBg/s2p1_bg.png',
+      narration:
+          'When he was a baby, he was sent to live in the desert to grow up '
+          'healthy and strong.',
+      narrationMs: 6400,
+      glow: SirahStoryLayer(
+        asset: '$_sirahBg/s2p1_tent.png',
+        x: 0.5003,
+        y: 0.5074,
+        w: 0.606,
+        h: 0.8983,
+      ),
+      prompt: 'Where did he spend his early childhood?',
+      correct: 'In the desert',
+      decoy: 'In a castle',
+    ),
+    SirahStoryPage(
+      background: '$_sirahBg/s2p2_bg.png',
+      narration:
+          'A kind woman named Halimah cared for him. She loved him very much.',
+      narrationMs: 5200,
+      glow: SirahStoryLayer(
+        asset: '$_sirahBg/s2p2_halimah.png',
+        x: 0.361,
+        y: 0.5278,
+        w: 0.4569,
+        h: 0.9365,
+      ),
+      prompt: 'Who was the kind woman that cared for him?',
+      correct: 'Halimah',
+      decoy: 'Khadijah',
+    ),
+  ],
+);
+
+const SirahStorySession sirahFamilySession = SirahStorySession(
+  number: 3,
+  title: 'Cared by Family',
+  blurb: 'A grandfather and an uncle who never let him go.',
+  pages: [
+    SirahStoryPage(
+      background: '$_sirahBg/s3p1_bg.png',
+      narration:
+          'When he was young, his mother passed away. His loving grandfather, '
+          'Abdul-Muttalib, took care of him.',
+      narrationMs: 7200,
+      glow: SirahStoryLayer(
+        asset: '$_sirahBg/s3p1_staff.png',
+        x: 0.8464,
+        y: 0.6699,
+        w: 0.0928,
+        h: 0.6192,
+      ),
+      prompt: 'Who took care of him after his mother?',
+      correct: 'His grandfather',
+      decoy: 'A king',
+    ),
+    SirahStoryPage(
+      background: '$_sirahBg/s3p2_bg.png',
+      narration:
+          'Later, his grandfather also passed away. Then, his uncle Abu Talib '
+          'protected him and treated him like his own son.',
+      narrationMs: 8000,
+      glow: SirahStoryLayer(
+        asset: '$_sirahBg/s3p2_camel.png',
+        x: 0.8345,
+        y: 0.4792,
+        w: 0.3214,
+        h: 0.7443,
+      ),
+      prompt: 'Who protected him next?',
+      correct: 'His uncle, Abu Talib',
+      decoy: 'A neighbor',
+    ),
+  ],
+);
+
+const SirahStorySession sirahAlAminSession = SirahStorySession(
+  number: 4,
+  title: 'Al-Amin, The Trustworthy',
+  blurb: 'The shepherd boy everyone learned to trust.',
+  pages: [
+    SirahStoryPage(
+      background: '$_sirahBg/s4p1_bg.png',
+      narration:
+          'As a boy, Muhammad helped his family by working as a shepherd. '
+          'Taking care of sheep taught him to be patient and kind.',
+      narrationMs: 8000,
+      glow: SirahStoryLayer(
+        asset: '$_sirahBg/s4p1_sheep.png',
+        x: 0.5987,
+        y: 0.6939,
+        w: 0.3245,
+        h: 0.5411,
+      ),
+      deco: [
+        SirahStoryLayer(
+          asset: '$_sirahBg/s4p1_boy.png',
+          x: 0.3881,
+          y: 0.452,
+          w: 0.264,
+          h: 0.7828,
+        ),
+      ],
+      prompt: 'What work did he do when he was young?',
+      correct: 'A shepherd',
+      decoy: 'A soldier',
+    ),
+    SirahStoryPage(
+      background: '$_sirahBg/s4p2_bg.png',
+      narration:
+          'He never lied and always kept his promises. The people loved him '
+          'and called him Al-Amin, which means The Trustworthy.',
+      narrationMs: 8400,
+      glow: SirahStoryLayer(
+        asset: '$_sirahBg/s4p2_star.png',
+        x: 0.5002,
+        y: 0.2067,
+        w: 0.1309,
+        h: 0.2801,
+      ),
+      prompt: "What does 'Al-Amin' mean?",
+      correct: 'The Trustworthy',
+      decoy: 'The Fastest Runner',
+      celebrate: true,
+    ),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
 // CLASSROOM HEROES -- SESSION DATA
 // ─────────────────────────────────────────────────────────────
 // Ported 1:1 from the supplied "Classroom Heroes" prototype's own
@@ -4306,21 +4550,7 @@ const List<Destination> curriculum = [
             title: 'Ayah Builder (Basmalah)',
             icon: '🧩',
             xp: 50,
-            ayahLevels: [
-              AyahBuilderLevel(
-                id: 'ayah-basmalah',
-                reference: 'Basmalah',
-                arabicWords: [
-                  'بِسْمِ',
-                  'اللَّهِ',
-                  'الرَّحْمَٰنِ',
-                  'الرَّحِيمِ',
-                ],
-                translitWords: ['Bismi', 'Allāhi', 'Ar-Raḥmāni', 'Ar-Raḥīm'],
-                englishMeaning:
-                    'In the name of Allah, the Most Compassionate, the Most Merciful.',
-              ),
-            ],
+            ayahSession: ayahBasmalahSession,
           ),
         ],
       ),
@@ -4489,16 +4719,7 @@ const List<Destination> curriculum = [
             title: 'Ayah Builder (Al-Fatihah 1)',
             icon: '🧩',
             xp: 50,
-            ayahLevels: [
-              AyahBuilderLevel(
-                id: 'ayah-fatiha-1',
-                reference: 'Surah Al-Fātiḥah (Ayah 1)',
-                arabicWords: ['الْحَمْدُ', 'لِلَّهِ', 'رَبِّ', 'الْعَالَمِينَ'],
-                translitWords: ['Al-ḥamdu', 'Lillāhi', 'Rabbi', "Al-'ālamīn"],
-                englishMeaning:
-                    'All praise belongs to Allah, Lord of all worlds.',
-              ),
-            ],
+            ayahSession: ayahFatihah1Session,
           ),
         ],
       ),
@@ -4528,46 +4749,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest4-s1-act',
-            type: ActivityType.story,
+            type: ActivityType.sirahStory,
             title: 'Sirah Story Module (Birth)',
             icon: '🌙',
             xp: 40,
-            panels: [
-              StoryPanel(
-                id: 'pr_s1',
-                bg: 'linear-gradient(160deg, #1a2744 0%, #2A3F6F 100%)',
-                scene: [
-                  StorySceneItem(emoji: '🌙', x: 65, y: 10, size: 55),
-                  StorySceneItem(emoji: '⭐', x: 22, y: 22, size: 38),
-                  StorySceneItem(emoji: '⭐', x: 75, y: 35, size: 28),
-                  StorySceneItem(emoji: '✨', x: 43, y: 18, size: 22),
-                  StorySceneItem(emoji: '🕌', x: 43, y: 55, size: 85),
-                  StorySceneItem(emoji: '🌟', x: 15, y: 55, size: 30),
-                ],
-                caption:
-                    'In the holy city of Makkah, in the Year of the Elephant (570 CE), a special night arrived...',
-                captionAr:
-                    'في مدينة مكّة المكرَّمة، في عام الفيل (570م)، جاءت ليلةٌ مميَّزة...',
-              ),
-              StoryPanel(
-                id: 'pr_s2',
-                bg: 'linear-gradient(160deg, #FDECC8 0%, #EF9F27 100%)',
-                scene: [
-                  StorySceneItem(emoji: '👶🏽', x: 43, y: 35, size: 80),
-                  StorySceneItem(emoji: '🌟', x: 30, y: 15, size: 45),
-                  StorySceneItem(emoji: '✨', x: 65, y: 20, size: 35),
-                  StorySceneItem(emoji: '💛', x: 43, y: 68, size: 35),
-                ],
-                bubble: StoryBubble(
-                  text: 'مُحَمَّد — The Praised One ﷺ',
-                  side: 'center',
-                ),
-                caption:
-                    "A baby boy was born -- his grandfather named him Muhammad, 'The Praised One'. The angels rejoiced!",
-                captionAr:
-                    'وُلِد طفلٌ — سمّاه جدّه مُحَمَّداً \'المحمود\'. فرحت الملائكة!',
-              ),
-            ],
+            sirahSession: sirahBirthSession,
           ),
         ],
       ),
@@ -4639,15 +4825,7 @@ const List<Destination> curriculum = [
             title: 'Ayah Builder (Al-Fatihah 2)',
             icon: '🧩',
             xp: 50,
-            ayahLevels: [
-              AyahBuilderLevel(
-                id: 'ayah-fatiha-2',
-                reference: 'Surah Al-Fātiḥah (Ayah 2)',
-                arabicWords: ['الرَّحْمَٰنِ', 'الرَّحِيمِ'],
-                translitWords: ['Ar-Raḥmāni', 'Ar-Raḥīm'],
-                englishMeaning: 'The Most Compassionate, the Most Merciful.',
-              ),
-            ],
+            ayahSession: ayahFatihah2Session,
           ),
         ],
       ),
@@ -4772,31 +4950,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest5-s2-act',
-            type: ActivityType.story,
+            type: ActivityType.sirahStory,
             title: 'Sirah Story Module (Halimah/Desert)',
             icon: '🐑',
             xp: 40,
-            panels: [
-              StoryPanel(
-                id: 'pr_s3',
-                bg: 'linear-gradient(160deg, #DCF0E6 0%, #5B9A1E 100%)',
-                scene: [
-                  StorySceneItem(emoji: '🤱🏽', x: 28, y: 42, size: 80),
-                  StorySceneItem(emoji: '👶🏽', x: 58, y: 48, size: 60),
-                  StorySceneItem(emoji: '🐑', x: 15, y: 68, size: 40),
-                  StorySceneItem(emoji: '🐑', x: 72, y: 65, size: 38),
-                  StorySceneItem(emoji: '🌸', x: 43, y: 15, size: 50),
-                ],
-                bubble: StoryBubble(
-                  text: 'بَارَكَ اللّٰهُ فِيكَ! 💚',
-                  side: 'left',
-                ),
-                caption:
-                    'A Bedouin woman named Halimah became his nurse. Wherever baby Muhammad ﷺ went -- blessings followed!',
-                captionAr:
-                    'أصبحت امرأة بدوية تُدعى حليمة مُرضِعَته. أينما ذهب الطفل محمّد ﷺ — تبعته البركة!',
-              ),
-            ],
+            sirahSession: sirahHalimahSession,
           ),
         ],
       ),
@@ -4888,15 +5046,7 @@ const List<Destination> curriculum = [
             title: 'Ayah Builder (Al-Ikhlas)',
             icon: '🧩',
             xp: 50,
-            ayahLevels: [
-              AyahBuilderLevel(
-                id: 'ayah-ikhlas-1',
-                reference: 'Surah Al-Ikhlāṣ (Ayah 1)',
-                arabicWords: ['قُلْ', 'هُوَ', 'اللَّهُ', 'أَحَدٌ'],
-                translitWords: ['Qul', 'Huwa', 'Allāhu', 'Aḥad'],
-                englishMeaning: 'Say, He is Allah, the One.',
-              ),
-            ],
+            ayahSession: ayahIkhlasSession,
           ),
         ],
       ),
@@ -4944,31 +5094,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest6-s1-act',
-            type: ActivityType.story,
+            type: ActivityType.sirahStory,
             title: 'Sirah Story Module (Family Care)',
             icon: '💚',
             xp: 40,
-            panels: [
-              StoryPanel(
-                id: 'pr_s3b',
-                bg: 'linear-gradient(160deg, #DCF0E6 0%, #5B9A1E 100%)',
-                scene: [
-                  StorySceneItem(emoji: '🤱🏽', x: 28, y: 42, size: 80),
-                  StorySceneItem(emoji: '👶🏽', x: 58, y: 48, size: 60),
-                  StorySceneItem(emoji: '🐑', x: 15, y: 68, size: 40),
-                  StorySceneItem(emoji: '🐑', x: 72, y: 65, size: 38),
-                  StorySceneItem(emoji: '🌸', x: 43, y: 15, size: 50),
-                ],
-                bubble: StoryBubble(
-                  text: 'بَارَكَ اللّٰهُ فِيكَ! 💚',
-                  side: 'left',
-                ),
-                caption:
-                    'A Bedouin woman named Halimah became his nurse. Wherever baby Muhammad ﷺ went -- blessings followed!',
-                captionAr:
-                    'أصبحت امرأة بدوية تُدعى حليمة مُرضِعَته. أينما ذهب الطفل محمّد ﷺ — تبعته البركة!',
-              ),
-            ],
+            sirahSession: sirahFamilySession,
           ),
         ],
       ),
@@ -5060,15 +5190,7 @@ const List<Destination> curriculum = [
             title: 'Ayah Builder (Al-Falaq)',
             icon: '🧩',
             xp: 50,
-            ayahLevels: [
-              AyahBuilderLevel(
-                id: 'ayah-falaq-1',
-                reference: 'Surah Al-Falaq (Ayah 1)',
-                arabicWords: ['قُلْ', 'أَعُوذُ', 'بِرَبِّ', 'الْفَلَقِ'],
-                translitWords: ['Qul', "A'ūdhu", 'Birabbi', 'Al-Falaq'],
-                englishMeaning: 'Say, I seek refuge in the Lord of daybreak.',
-              ),
-            ],
+            ayahSession: ayahFalaqSession,
           ),
         ],
       ),
@@ -5086,15 +5208,7 @@ const List<Destination> curriculum = [
             title: 'Ayah Builder (An-Nas)',
             icon: '🧩',
             xp: 50,
-            ayahLevels: [
-              AyahBuilderLevel(
-                id: 'ayah-nas-1',
-                reference: 'Surah An-Nās (Ayah 1)',
-                arabicWords: ['قُلْ', 'أَعُوذُ', 'بِرَبِّ', 'النَّاسِ'],
-                translitWords: ['Qul', "A'ūdhu", 'Birabbi', 'An-Nās'],
-                englishMeaning: 'Say, I seek refuge in the Lord of mankind.',
-              ),
-            ],
+            ayahSession: ayahNasSession,
           ),
         ],
       ),
@@ -5180,30 +5294,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest7-s1-act',
-            type: ActivityType.story,
+            type: ActivityType.sirahStory,
             title: 'Sirah Story Module (Character/Al-Amin)',
             icon: '✅',
             xp: 40,
-            panels: [
-              StoryPanel(
-                id: 'pr_s4',
-                bg: 'linear-gradient(160deg, #FDECC8 0%, #D85A30 100%)',
-                scene: [
-                  StorySceneItem(emoji: '👦🏽', x: 43, y: 48, size: 78),
-                  StorySceneItem(emoji: '👥', x: 22, y: 58, size: 50),
-                  StorySceneItem(emoji: '👥', x: 65, y: 55, size: 48),
-                  StorySceneItem(emoji: '💚', x: 43, y: 20, size: 45),
-                ],
-                bubble: StoryBubble(
-                  text: 'الأَمِين — The Trustworthy! ✅',
-                  side: 'center',
-                ),
-                caption:
-                    'Young Muhammad ﷺ never lied, never hurt anyone. Everyone loved and trusted him -- Al-Amin!',
-                captionAr:
-                    'محمّد الشابّ ﷺ لم يكذب ولم يؤذِ أحداً. كلّ الناس أحبّوه ووثقوا به — الأمين!',
-              ),
-            ],
+            sirahSession: sirahAlAminSession,
           ),
         ],
       ),
@@ -5239,15 +5334,7 @@ const List<Destination> curriculum = [
             title: 'Ayah Builder (Al-Kawthar)',
             icon: '🧩',
             xp: 50,
-            ayahLevels: [
-              AyahBuilderLevel(
-                id: 'ayah-kawthar-1',
-                reference: 'Surah Al-Kawthar (Ayah 1)',
-                arabicWords: ['إِنَّا', 'أَعْطَيْنَاكَ', 'الْكَوْثَرَ'],
-                translitWords: ['Innā', "A'ṭaynāka", 'Al-Kawthar'],
-                englishMeaning: 'Indeed, We have given you Al-Kawthar.',
-              ),
-            ],
+            ayahSession: ayahKawtharSession,
           ),
         ],
       ),

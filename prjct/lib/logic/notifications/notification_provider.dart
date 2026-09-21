@@ -42,13 +42,13 @@ String _titleForModuleId(String id) {
     _ => id,
   };
   return switch (cleanId) {
-    'village-of-salaam' => 'Village of Salaam',
-    'desert-of-letters' => 'Desert of Letters',
-    'garden-of-words' => 'Garden of Words',
-    'river-of-sirah' => 'River of Sirah',
-    'masjid-of-salah' => 'Masjid of Salah',
-    'mountain-of-iman' => 'Mountain of Iman',
-    'quran-corner' => 'Qur\'an Corner',
+    'village-of-salaam' => 'Welcome to Madrasah',
+    'desert-of-letters' => 'Exploring Our World',
+    'garden-of-words' => 'A Growing Muslim',
+    'river-of-sirah' => 'Stories & Letters',
+    'masjid-of-salah' => 'Cleanliness & Character',
+    'mountain-of-iman' => 'The Path of the Prophet',
+    'quran-corner' => 'The Good Deed Hero',
     _ => cleanId,
   };
 }

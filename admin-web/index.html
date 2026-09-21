@@ -76,10 +76,12 @@
           <svg class="tab-icon" viewBox="0 0 20 20" fill="none"><path d="M10 2L2 6l8 4 8-4-8-4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 10l8 4 8-4M2 14l8 4 8-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Asatidz
         </button>
+        <!--
         <button class="tab-btn" data-tab="principals">
           <svg class="tab-icon" viewBox="0 0 20 20" fill="none"><path d="M10 3a3 3 0 100 6 3 3 0 000-6z" stroke="currentColor" stroke-width="1.5"/><path d="M4 17c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M10 11V8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           Principals
         </button>
+        -->
         <button class="tab-btn" data-tab="learners">
           <svg class="tab-icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M3 18c0-3.3 3.1-6 7-6s7 2.7 7 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           Learners
@@ -169,7 +171,7 @@
         <section id="tab-overview" class="tab-panel">
           <div class="stat-grid" id="stat-grid"></div>
 
-          <!-- Middle Row: Chart & Progress -->
+          <!-- Middle Row: Chart & Progress (Temporarily Commented Out)
           <div class="chart-progress-grid">
             <div class="dash-card chart-card">
               <div class="dash-card-header">
@@ -185,11 +187,12 @@
               </div>
               <div class="dash-card-body progress-body">
                 <div class="progress-list" id="progress-list">
-                  <!-- Dynamically populated module progress bars -->
+                  Dynamically populated module progress bars
                 </div>
               </div>
             </div>
           </div>
+          -->
 
           <!-- Bottom Row: Tables & Insights -->
           <div class="dash-grid">
@@ -257,7 +260,7 @@
           <div class="table-wrap"><table id="table-teachers"></table></div>
         </section>
 
-        <!-- Principals -->
+        <!-- Principals
         <section id="tab-principals" class="tab-panel" hidden>
           <div class="panel-head">
             <h2>Principals</h2>
@@ -276,6 +279,11 @@
           <div class="table-search-wrap"><input class="table-search" data-table="table-principals" type="search" placeholder="Search principals…" /></div>
           <div class="table-wrap"><table id="table-principals"></table></div>
         </section>
+        -->
+        <div id="tab-principals" class="tab-panel" hidden style="display: none !important;">
+          <form id="form-principal"></form>
+          <table id="table-principals"></table>
+        </div>
 
         <!-- Learners -->
         <section id="tab-learners" class="tab-panel" hidden>
@@ -390,7 +398,7 @@
       overview:  { title: 'Overview',          subtitle: 'Platform-wide statistics and recent activity' },
       parents:   { title: 'Parents / Guardians', subtitle: 'Manage parent and guardian accounts' },
       teachers:  { title: 'Asatidz',            subtitle: 'Manage teacher accounts and assignments' },
-      principals: { title: 'Principals',         subtitle: 'Manage principal (read-only monitoring) accounts' },
+      // principals: { title: 'Principals',         subtitle: 'Manage principal (read-only monitoring) accounts' },
       learners:  { title: 'Learners',            subtitle: 'View and manage student profiles' },
       classes:   { title: 'Classes',             subtitle: 'Browse all registered class sections' },
       progress:  { title: 'Progress',            subtitle: 'Recent learning progress records' },

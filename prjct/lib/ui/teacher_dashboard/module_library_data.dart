@@ -95,6 +95,12 @@ const Map<ActivityType, ActivityTypeStyle> activityTypeStyles = {
     color: AppColors.coral,
     bg: AppColors.coralTint,
   ),
+  ActivityType.sirahStory: ActivityTypeStyle(
+    label: 'Sirah Story',
+    icon: Icons.nights_stay_outlined,
+    color: AppColors.ink,
+    bg: AppColors.neutralTint,
+  ),
   ActivityType.story: ActivityTypeStyle(
     label: 'Story',
     icon: Icons.auto_stories_outlined,

@@ -19,6 +19,7 @@ class TeacherAccount extends HiveObject {
     this.passwordHash,
     this.passwordSalt,
     this.firebaseUid,
+    this.verificationStatus,
   });
 
   final String id;
@@ -34,6 +35,12 @@ class TeacherAccount extends HiveObject {
 
   /// See `ParentAccount.firebaseUid` doc.
   final String? firebaseUid;
+
+  /// 'pending' | 'approved' | 'rejected' — set to 'pending' at registration
+  /// and changed only by an admin (web panel; enforced by firestore.rules).
+  /// Null is an account from before verification existed, treated as
+  /// approved so those teachers aren't locked out.
+  final String? verificationStatus;
 }
 
 class TeacherAccountAdapter extends TypeAdapter<TeacherAccount> {
@@ -58,13 +65,14 @@ class TeacherAccountAdapter extends TypeAdapter<TeacherAccount> {
       pinSalt: fields[8] as String,
       createdAt: fields[9] as DateTime,
       firebaseUid: fields[10] as String?,
+      verificationStatus: fields[11] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, TeacherAccount obj) {
     writer
-      ..writeByte(11)
+      ..writeByte(12)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -86,6 +94,8 @@ class TeacherAccountAdapter extends TypeAdapter<TeacherAccount> {
       ..writeByte(9)
       ..write(obj.createdAt)
       ..writeByte(10)
-      ..write(obj.firebaseUid);
+      ..write(obj.firebaseUid)
+      ..writeByte(11)
+      ..write(obj.verificationStatus);
   }
 }

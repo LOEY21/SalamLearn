@@ -3,6 +3,7 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/curriculum_data.dart';
 import '../../data/models/curriculum/curriculum_models.dart';
 import '../../data/repositories/progress_repository.dart';
 import '../../logic/auth/session.dart';
@@ -15,10 +16,11 @@ import 'activities/quiz_activity.dart';
 import 'activities/quran_sync_activity.dart';
 import 'activities/story_activity.dart';
 import 'activities/trace_activity.dart';
-import 'activities/ayah_builder_activity.dart';
+import 'activities/ayah_builder_game.dart';
 import 'activities/classroom_heroes_game.dart';
 import 'activities/creation_hunt_game.dart';
 import 'activities/harakat_pop_activity.dart';
+import 'activities/sirah_story_game.dart';
 import 'lesson_complete_screen.dart';
 
 /// Parses the model's `#RRGGBB` hex strings into a [Color] — same
@@ -198,15 +200,18 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
     );
   }
 
-  // The hunt's and Classroom Heroes' own badge screens already carry the
-  // continue button.
+  // The hunt's, Classroom Heroes' and Ayah Builder's own reward screens
+  // already carry the continue button.
   bool get _skipCompleteScreen =>
+      _activity.type == ActivityType.ayahBuilder ||
       _activity.type == ActivityType.creationHunt ||
-      _activity.type == ActivityType.classroomHeroes;
+      _activity.type == ActivityType.classroomHeroes ||
+      _activity.type == ActivityType.sirahStory;
 
   bool get _isFullBleedActivity =>
       _activity.type == ActivityType.creationHunt ||
       _activity.type == ActivityType.classroomHeroes ||
+      _activity.type == ActivityType.sirahStory ||
       _isWudhuActivity;
 
   bool get _isWudhuActivity =>
@@ -256,6 +261,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
           // Trace does.
           ActivityType.creationHunt ||
           ActivityType.classroomHeroes ||
+          ActivityType.sirahStory ||
           ActivityType.fiqhDrag when _isFullBleedActivity =>
             _buildActivityContent(lessonColor),
           ActivityType.pronounce => Stack(
@@ -498,13 +504,13 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         color: lessonColor,
         onComplete: _handleActivityComplete,
       ),
-      ActivityType.ayahBuilder => AyahBuilderActivity(
+      ActivityType.ayahBuilder => AyahBuilderGame(
         key: ValueKey(activity.id),
-        levels: activity.ayahLevels!,
+        sessions: ayahBuilderSessions,
+        initialIndex: ayahBuilderSessions.indexOf(activity.ayahSession!),
         xp: activity.xp,
-        color: lessonColor,
         onComplete: _handleActivityComplete,
-        onBack: _confirmExit,
+        onExit: _confirmExit,
       ),
       ActivityType.story => StoryActivity(
         key: ValueKey(activity.id),
@@ -540,6 +546,13 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       ActivityType.classroomHeroes => ClassroomHeroesGame(
         key: ValueKey(activity.id),
         session: activity.heroesSession!,
+        xp: activity.xp,
+        onComplete: _handleActivityComplete,
+        onExit: _confirmExit,
+      ),
+      ActivityType.sirahStory => SirahStoryGame(
+        key: ValueKey(activity.id),
+        session: activity.sirahSession!,
         xp: activity.xp,
         onComplete: _handleActivityComplete,
         onExit: _confirmExit,

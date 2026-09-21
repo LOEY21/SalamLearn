@@ -37,13 +37,12 @@ import 'tutorial/tutorial_anchors.dart';
 Destination _destinationFor(ModuleInfo module) =>
     curriculum.firstWhere((d) => d.id == module.destinationId);
 
-/// `mapX`/`mapY` on each `Destination` are pixel coordinates from the
-/// approved Wireframe 0.3 preview's 390x1980 canvas (village at the
-/// bottom, Hall of Knowledge at the top) — these fractions place every
-/// node exactly where that preview does, instead of a straight-line
-/// placeholder spacing.
-const _wireframeCanvasWidth = 390.0;
-const _wireframeCanvasHeight = 1980.0;
+/// `mapX`/`mapY` on each `Destination` are pixel coordinates on the Journey
+/// Map background's own 1080x3060 canvas (Madrasah at the bottom, mosque
+/// summit at the top) — measured directly off that artwork's plaque
+/// positions, so each node badge lands exactly on its stage sign.
+const _wireframeCanvasWidth = 1080.0;
+const _wireframeCanvasHeight = 3060.0;
 
 final _nodePositions = <String, double>{
   for (final module in coreModules)
@@ -104,7 +103,18 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
   );
   double _releaseFromZoom = 1.0;
 
-  double get _mapHeight => _baseMapHeight * _pinchZoom;
+  /// Set once the background video reports its real decoded size (width /
+  /// height) — lets the map track the video's own aspect ratio instead of
+  /// the old fixed 1300px canvas, so the new Journey Map video shows at its
+  /// native proportions instead of being cropped/stretched to fit the
+  /// previous map's dimensions.
+  double? _videoAspectRatio;
+
+  double _mapHeightFor(double width) {
+    final ratio = _videoAspectRatio;
+    final natural = ratio != null ? width / ratio : _baseMapHeight;
+    return natural * _pinchZoom;
+  }
 
   /// How much the pinch has moved away from resting (1.0) before the top
   /// bar / bottom nav are fully faded out — same distance either direction,
@@ -127,8 +137,10 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
       if (!mounted) return;
       final currentId = ref.read(recentModuleProvider) ?? coreModules.first.id;
       final fraction = _nodePositions[currentId] ?? 0.5;
-      final target = (_mapHeight * fraction) - 300;
-      _scrollController.jumpTo(target.clamp(0, _mapHeight));
+      final width = MediaQuery.sizeOf(context).width;
+      final mapHeight = _mapHeightFor(width);
+      final target = (mapHeight * fraction) - 300;
+      _scrollController.jumpTo(target.clamp(0, mapHeight));
       _playTutorial();
     });
     _release.addListener(() {
@@ -402,18 +414,15 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
         onPointerCancel: _onPointerEnd,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            // Never shorter than the viewport: at low pinch-zoom,
-            // `_mapHeight` alone can end up shorter than the screen,
-            // leaving bare cream space below the map once scrolled to the
-            // bottom. Flooring it at the viewport height instead makes
-            // `BoxFit.cover` crop a touch more off the video at that point
-            // — no visible seam, since it's already covering by design —
-            // and keeps the map filling the whole screen at every zoom
-            // level.
-            final effectiveMapHeight = math.max(
-              _mapHeight,
-              constraints.maxHeight,
-            );
+            final mapHeight = _mapHeightFor(constraints.maxWidth);
+            // Once the video's real aspect ratio is known, its natural
+            // height is used as-is (no cropping) so it shows at original
+            // size — the old floor-to-viewport-height trick only still
+            // applies before that, to avoid a flash of bare cream space
+            // below the fallback-sized placeholder.
+            final effectiveMapHeight = _videoAspectRatio != null
+                ? mapHeight
+                : math.max(mapHeight, constraints.maxHeight);
             return Stack(
               children: [
                 SingleChildScrollView(
@@ -431,7 +440,14 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
                     height: effectiveMapHeight,
                     child: Stack(
                       children: [
-                        const Positioned.fill(child: _MapVideoBackground()),
+                        Positioned.fill(
+                          child: _MapVideoBackground(
+                            onAspectRatio: (ratio) {
+                              if (_videoAspectRatio == ratio) return;
+                              setState(() => _videoAspectRatio = ratio);
+                            },
+                          ),
+                        ),
                         const Positioned.fill(child: _AmbientBreathing()),
                         const _MapSparkles(),
                         for (final (i, module) in coreModules.indexed)
@@ -499,11 +515,14 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
 /// `map_background.png`. Falls back to the still image while the video
 /// decodes (or if it fails to load) so there's never a blank/black frame.
 ///
-/// `BoxFit.cover` — same framing the static image always used. (A prior
-/// `contain` + scale-down pass was reverted: it left dead cream space
-/// below the map instead of filling the screen.)
+/// Reports its decoded aspect ratio via [onAspectRatio] once known, so the
+/// parent can size the scrollable map to the video's own natural
+/// proportions instead of a fixed canvas — the video is then shown with
+/// `BoxFit.fitWidth` (no cropping) rather than `BoxFit.cover`.
 class _MapVideoBackground extends StatefulWidget {
-  const _MapVideoBackground();
+  const _MapVideoBackground({required this.onAspectRatio});
+
+  final ValueChanged<double> onAspectRatio;
 
   @override
   State<_MapVideoBackground> createState() => _MapVideoBackgroundState();
@@ -535,6 +554,7 @@ class _MapVideoBackgroundState extends State<_MapVideoBackground> {
     await _controller.setLooping(true);
     await _controller.setVolume(0);
     await _controller.play();
+    widget.onAspectRatio(_controller.value.aspectRatio);
     if (mounted) setState(() => _ready = true);
   }
 
@@ -551,7 +571,7 @@ class _MapVideoBackgroundState extends State<_MapVideoBackground> {
       child: _ready
           ? ClipRect(
               child: FittedBox(
-                fit: BoxFit.cover,
+                fit: BoxFit.fitWidth,
                 child: SizedBox(
                   width: _controller.value.size.width,
                   height: _controller.value.size.height,

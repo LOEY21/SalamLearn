@@ -19,6 +19,7 @@ enum ActivityType {
   quranSync,
   creationHunt,
   classroomHeroes,
+  sirahStory,
 }
 
 enum DestinationState { completed, current, locked }
@@ -195,14 +196,6 @@ class FiqhDropZone {
   final String? icon;
 }
 
-/// Ayah Builder's content shape: one Ayah (or standalone phrase like the
-/// Basmalah) split into its ordered Arabic words, each paired with a
-/// transliteration — the learner listens, then drags the word cards into
-/// the blanks in the correct order. [englishMeaning] is revealed once the
-/// Ayah is fully (and correctly) assembled. `audioAsset` is nullable for
-/// the same placeholder-phase reason as [FlashCard.audioAsset]; without it,
-/// `AyahBuilderActivity` substitutes a SnackBar reading out the
-/// transliteration while still driving the word-by-word highlight.
 /// FR-4.3's "highlights text strings ... synchronously with audio
 /// timestamps" — one Arabic line (ayah/hadith excerpt), word-by-word, each
 /// word paired with the millisecond offset (from the start of the clip)
@@ -235,26 +228,51 @@ class QuranSyncLine {
   final String? reference;
 }
 
-class AyahBuilderLevel {
-  const AyahBuilderLevel({
-    required this.id,
-    required this.reference,
-    required this.arabicWords,
-    required this.translitWords,
-    required this.englishMeaning,
-    this.audioAsset,
+/// One draggable word card in an [AyahBuilderSession] — its Arabic text and
+/// transliteration. The card's correct slot is its position in
+/// [AyahBuilderSession.words].
+class AyahBuilderWord {
+  const AyahBuilderWord(this.text, this.transliteration);
+
+  final String text;
+  final String transliteration;
+}
+
+/// One session of Ayah Builder: a single ayah split into its ordered word
+/// cards — the learner listens, then drags the cards into the numbered
+/// slots in order.
+///
+/// The seven sessions are authored in `curriculum_data.dart` as
+/// `ayahBuilderSessions` and distributed across the stages exactly as the
+/// source prototype lists them (Stage 2-7, two in Stage 6). Every session
+/// opens on the same start screen.
+class AyahBuilderSession {
+  const AyahBuilderSession({
+    required this.stage,
+    required this.label,
+    required this.sessionName,
+    required this.short,
+    required this.englishTranslation,
+    required this.cheer,
+    required this.words,
   });
 
-  final String id;
+  /// The stage (Destination id) this session is played in.
+  final int stage;
 
-  /// e.g. "Surah Al-Fātiḥah (Ayah 1)".
-  final String reference;
+  /// e.g. "Session 1".
+  final String label;
 
-  /// Same length/order as [translitWords] — one entry per draggable word.
-  final List<String> arabicWords;
-  final List<String> translitWords;
-  final String englishMeaning;
-  final String? audioAsset;
+  /// e.g. "The Basmalah".
+  final String sessionName;
+
+  /// Used in "Let's build [short] together!".
+  final String short;
+  final String englishTranslation;
+
+  /// The mascot's line on the reward screen.
+  final String cheer;
+  final List<AyahBuilderWord> words;
 }
 
 /// One tappable region in an [CreationHuntStage]'s artwork — a hitbox
@@ -431,6 +449,99 @@ class ClassroomHeroesSession {
   final List<ClassroomHeroesQuestion> questions;
 }
 
+/// One painted cut-out laid over a [SirahStoryPage]'s scene — the glowing
+/// thing the page asks the learner to tap, or a piece of set dressing beside
+/// it. [x]/[y] are its *centre* and [w]/[h] its size, all as fractions of the
+/// scene, so it scales with the art instead of being pinned to device pixels
+/// (the same scheme as [CreationHuntSpot]).
+///
+/// The prototype authored these as CSS `left/top/width/height` percentages
+/// against a 16/9 frame; ported here to the scene art's wider frame with each
+/// sprite's own aspect ratio preserved, so nothing stretches.
+class SirahStoryLayer {
+  const SirahStoryLayer({
+    required this.asset,
+    required this.x,
+    required this.y,
+    required this.w,
+    required this.h,
+  });
+
+  final String asset;
+  final double x;
+  final double y;
+  final double w;
+  final double h;
+}
+
+/// One page of a Sirah Story session: the scene, the line narrated over it,
+/// the cut-out that lights up once the narration ends, and the question asked
+/// when it is tapped.
+///
+/// Always exactly two answers — one right, one decoy — matching the source
+/// prototype's "this or that" question card.
+class SirahStoryPage {
+  const SirahStoryPage({
+    required this.background,
+    required this.narration,
+    required this.narrationMs,
+    required this.glow,
+    required this.prompt,
+    required this.correct,
+    required this.decoy,
+    this.deco = const [],
+    this.celebrate = false,
+  });
+
+  final String background;
+  final String narration;
+
+  /// How long the narration bar takes to fill — authored per line in the
+  /// prototype rather than derived, since it was timed against the read.
+  final int narrationMs;
+
+  /// The cut-out that glows and takes the tap.
+  final SirahStoryLayer glow;
+
+  /// Scene layers that sit in the picture but are not the answer — the
+  /// shepherd boy beside his sheep. Dim with the background when the glow
+  /// lights up, exactly as the prototype's own `deco` array does.
+  final List<SirahStoryLayer> deco;
+
+  final String prompt;
+  final String correct;
+  final String decoy;
+
+  /// The prototype's Session 4 finale: turning light rays and a pulsing halo
+  /// behind the glow, for the page that is *about* light.
+  final bool celebrate;
+}
+
+/// One session of Sirah Story — two illustrated pages from the Prophet ﷺ's
+/// early life.
+///
+/// The four sessions are authored in `curriculum_data.dart` and distributed
+/// one per stage (Destinations 4-7). Every session opens on the same start
+/// screen, so a learner meets the identical opening whichever one they are
+/// on — see [ClassroomHeroesSession] for the same arrangement.
+class SirahStorySession {
+  const SirahStorySession({
+    required this.number,
+    required this.title,
+    required this.blurb,
+    required this.pages,
+  });
+
+  /// 1-4 — shown in the start screen's badge.
+  final int number;
+  final String title;
+
+  /// The start card's one-line summary of the session.
+  final String blurb;
+
+  final List<SirahStoryPage> pages;
+}
+
 class Activity {
   const Activity({
     required this.id,
@@ -445,9 +556,10 @@ class Activity {
     this.quranLine,
     this.fiqhItems,
     this.fiqhZones,
-    this.ayahLevels,
+    this.ayahSession,
     this.huntStage,
     this.heroesSession,
+    this.sirahSession,
   });
 
   final String id;
@@ -467,14 +579,17 @@ class Activity {
   final List<FiqhDragItem>? fiqhItems;
   final List<FiqhDropZone>? fiqhZones;
 
-  /// Used by `ayahBuilder` (see [AyahBuilderLevel] doc).
-  final List<AyahBuilderLevel>? ayahLevels;
+  /// Used by `ayahBuilder` — the session this lesson opens on.
+  final AyahBuilderSession? ayahSession;
 
   /// Used by `creationHunt` — the one scene this session hunts through.
   final CreationHuntStage? huntStage;
 
   /// Used by `classroomHeroes` — the one session this lesson plays.
   final ClassroomHeroesSession? heroesSession;
+
+  /// Used by `sirahStory` — the one session this lesson reads through.
+  final SirahStorySession? sirahSession;
 }
 
 class Lesson {

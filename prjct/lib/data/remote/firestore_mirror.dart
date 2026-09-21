@@ -39,10 +39,12 @@ class RemoteTeacherRef {
     this.school,
     this.mobileNumber,
     this.firebaseUid,
+    this.verificationStatus,
   });
 
   final String id;
   final String fullName;
+  final String? verificationStatus;
   final String? school;
   final String? mobileNumber;
   final String? firebaseUid;
@@ -133,15 +135,26 @@ class FirestoreMirror {
     });
   }
 
-  Future<void> pushTeacher(TeacherAccount account) {
-    return _db.collection(HiveBoxes.teachers).doc(account.id).set({
+  /// `verificationStatus` is admin-owned (firestore.rules): the first push
+  /// creates the doc as 'pending'; later pushes must never send the field,
+  /// or a stale local value would be rejected (or, if it were allowed,
+  /// would overwrite the admin's decision).
+  Future<void> pushTeacher(TeacherAccount account) async {
+    final ref = _db.collection(HiveBoxes.teachers).doc(account.id);
+    final fields = {
       'fullName': account.fullName,
       'school': account.school,
       'email': account.email,
       'firebaseUid': account.firebaseUid,
       'mobileNumber': account.mobileNumber,
       'createdAt': account.createdAt.toIso8601String(),
-    });
+    };
+    final existing = await ref.get();
+    if (existing.exists) {
+      await ref.update(fields);
+    } else {
+      await ref.set({...fields, 'verificationStatus': 'pending'});
+    }
   }
 
   Future<void> pushLearner(LearnerProfile learner) {
@@ -340,6 +353,7 @@ class FirestoreMirror {
         school: data['school'] as String?,
         mobileNumber: data['mobileNumber'] as String?,
         firebaseUid: data['firebaseUid'] as String?,
+        verificationStatus: data['verificationStatus'] as String?,
       );
     } catch (_) {
       return null; // fail-closed — caller falls back to local-only sign-in

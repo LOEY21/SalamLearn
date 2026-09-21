@@ -253,7 +253,10 @@ class _PhoneLayoutState extends ConsumerState<_PhoneLayout>
                         shape: BoxShape.circle,
                         border: Border.all(color: AppColors.teal, width: 1.5),
                       ),
-                      child: LearnerAvatar(avatar: learner?.avatar ?? '🧒', size: 34),
+                      child: LearnerAvatar(
+                        avatar: learner?.avatar ?? '🧒',
+                        size: 34,
+                      ),
                     ),
                   ),
                   eyebrow: _parentGreeting(ref, caps: true),
@@ -348,7 +351,6 @@ class _PhoneLayoutState extends ConsumerState<_PhoneLayout>
     );
   }
 }
-
 
 /// Lets a parent with more than one child switch which one's dashboard
 /// (KPIs, streak, suggestions below, plus the "Edit Child Profile" form)
@@ -609,10 +611,17 @@ class _ClassSectionState extends ConsumerState<_ClassSection> {
 
     // Pull assignments for the joined class section from Firestore immediately
     try {
-      final remoteClassAssignments = await FirestoreMirror().fetchAssignmentsForClass(section.id);
-      final remotePersonalAssignments = await FirestoreMirror().fetchAssignmentsForLearner(learnerId);
-      final assignmentsBox = Hive.box<AssignedModule>(HiveBoxes.assignedModules);
-      for (final remote in [...remoteClassAssignments, ...remotePersonalAssignments]) {
+      final remoteClassAssignments = await FirestoreMirror()
+          .fetchAssignmentsForClass(section.id);
+      final remotePersonalAssignments = await FirestoreMirror()
+          .fetchAssignmentsForLearner(learnerId);
+      final assignmentsBox = Hive.box<AssignedModule>(
+        HiveBoxes.assignedModules,
+      );
+      for (final remote in [
+        ...remoteClassAssignments,
+        ...remotePersonalAssignments,
+      ]) {
         await assignmentsBox.put(remote.id, remote);
       }
     } catch (e) {
@@ -697,7 +706,10 @@ class _ClassSectionState extends ConsumerState<_ClassSection> {
                   ? 'This class is no longer active. Enter a new invitation '
                         'code below to join a different class.'
                   : 'Enter a new invitation code below to join a different class.',
-              style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: AppColors.textMuted,
+              ),
             ),
           ] else ...[
             const Text(
@@ -711,10 +723,7 @@ class _ClassSectionState extends ConsumerState<_ClassSection> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: _Input(
-                  controller: _codeC,
-                  label: 'Invitation code',
-                ),
+                child: _Input(controller: _codeC, label: 'Invitation code'),
               ),
               const SizedBox(width: 10),
               SizedBox(
@@ -1069,7 +1078,11 @@ class _KpiFocusRowState extends ConsumerState<_KpiFocusRow>
           Center(
             child: TextButton.icon(
               onPressed: () => _showProgressDetailsDialog(context, ref),
-              icon: const Icon(Icons.analytics_outlined, size: 16, color: AppColors.teal),
+              icon: const Icon(
+                Icons.analytics_outlined,
+                size: 16,
+                color: AppColors.teal,
+              ),
               label: const Text(
                 'View Detailed Progress Report',
                 style: TextStyle(
@@ -1080,7 +1093,10 @@ class _KpiFocusRowState extends ConsumerState<_KpiFocusRow>
               ),
               style: TextButton.styleFrom(
                 visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -1223,7 +1239,10 @@ class _AdventureBreakdownCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Adventures this week', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'Adventures this week',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 2),
           const Text(
             'Progress by adventure, weakest first.',
@@ -1311,11 +1330,17 @@ class _AdventureRingCard extends StatelessWidget {
                   progress.destination.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 Text(
                   '${progress.errorCount} error${progress.errorCount == 1 ? '' : 's'}',
-                  style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    color: AppColors.textMuted,
+                  ),
                 ),
                 const SizedBox(height: 5),
                 ClipRRect(
@@ -1451,8 +1476,12 @@ class _AdventureDetailScreen extends ConsumerWidget {
     final destination = progress.destination;
     final levels = _splitIntoLevels(destination.lessons);
     final totalLessons = destination.lessons.length;
-    final doneLessons = destination.lessons.where((l) => completedLessons.contains(l.id)).length;
-    final completionPct = totalLessons == 0 ? 0 : (doneLessons / totalLessons * 100).round();
+    final doneLessons = destination.lessons
+        .where((l) => completedLessons.contains(l.id))
+        .length;
+    final completionPct = totalLessons == 0
+        ? 0
+        : (doneLessons / totalLessons * 100).round();
 
     return Scaffold(
       backgroundColor: AppColors.cream,
@@ -1478,7 +1507,10 @@ class _AdventureDetailScreen extends ConsumerWidget {
                       color: AppColors.coralTint,
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: Text(destination.icon, style: const TextStyle(fontSize: 22)),
+                    child: Text(
+                      destination.icon,
+                      style: const TextStyle(fontSize: 22),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1532,7 +1564,12 @@ class _AdventureDetailScreen extends ConsumerWidget {
                       alignment: Alignment.center,
                       children: [
                         TweenAnimationBuilder<double>(
-                          tween: Tween(begin: 0, end: totalLessons == 0 ? 0 : doneLessons / totalLessons),
+                          tween: Tween(
+                            begin: 0,
+                            end: totalLessons == 0
+                                ? 0
+                                : doneLessons / totalLessons,
+                          ),
                           duration: const Duration(milliseconds: 700),
                           curve: Curves.easeOutCubic,
                           builder: (context, t, _) => SizedBox(
@@ -1542,7 +1579,9 @@ class _AdventureDetailScreen extends ConsumerWidget {
                               value: t,
                               strokeWidth: 6,
                               backgroundColor: AppColors.mint,
-                              valueColor: const AlwaysStoppedAnimation(AppColors.teal),
+                              valueColor: const AlwaysStoppedAnimation(
+                                AppColors.teal,
+                              ),
                             ),
                           ),
                         ),
@@ -1564,11 +1603,20 @@ class _AdventureDetailScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _DetailStatRow(value: '$doneLessons/$totalLessons', label: 'lessons done'),
+                        _DetailStatRow(
+                          value: '$doneLessons/$totalLessons',
+                          label: 'lessons done',
+                        ),
                         const SizedBox(height: 8),
-                        _DetailStatRow(value: '${progress.accuracyPct.round()}%', label: 'accuracy'),
+                        _DetailStatRow(
+                          value: '${progress.accuracyPct.round()}%',
+                          label: 'accuracy',
+                        ),
                         const SizedBox(height: 8),
-                        _DetailStatRow(value: '${progress.errorCount}', label: 'errors logged'),
+                        _DetailStatRow(
+                          value: '${progress.errorCount}',
+                          label: 'errors logged',
+                        ),
                       ],
                     ),
                   ),
@@ -1581,7 +1629,9 @@ class _AdventureDetailScreen extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: AppColors.goldTint,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.goldSoft.withValues(alpha: 0.25)),
+                border: Border.all(
+                  color: AppColors.goldSoft.withValues(alpha: 0.25),
+                ),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: const Row(
@@ -1593,7 +1643,11 @@ class _AdventureDetailScreen extends ConsumerWidget {
                     child: Text(
                       "Tracked per lesson, not per game — every game a lesson "
                       "contains is listed for reference.",
-                      style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.4),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textMuted,
+                        height: 1.4,
+                      ),
                     ),
                   ),
                 ],
@@ -1611,7 +1665,12 @@ class _AdventureDetailScreen extends ConsumerWidget {
                         meta: _adventureLevelMeta[li < 2 ? li : 2],
                         lessons: levels[li],
                         completedLessons: completedLessons,
-                        unlocked: _isLevelUnlocked(destination, levels, li, completedLessons),
+                        unlocked: _isLevelUnlocked(
+                          destination,
+                          levels,
+                          li,
+                          completedLessons,
+                        ),
                       ),
                     ],
                   ],
@@ -1682,7 +1741,9 @@ class _AdventureLevelSectionState extends State<_AdventureLevelSection> {
 
   @override
   Widget build(BuildContext context) {
-    final done = widget.lessons.where((l) => widget.completedLessons.contains(l.id)).length;
+    final done = widget.lessons
+        .where((l) => widget.completedLessons.contains(l.id))
+        .length;
     return Opacity(
       opacity: widget.unlocked ? 1 : 0.55,
       child: Container(
@@ -1707,7 +1768,10 @@ class _AdventureLevelSectionState extends State<_AdventureLevelSection> {
                   children: [
                     Row(
                       children: [
-                        Text(widget.meta.stars, style: const TextStyle(fontSize: 12)),
+                        Text(
+                          widget.meta.stars,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -1721,7 +1785,11 @@ class _AdventureLevelSectionState extends State<_AdventureLevelSection> {
                           ),
                         ),
                         if (!widget.unlocked)
-                          const Icon(Icons.lock, size: 13, color: AppColors.textMuted)
+                          const Icon(
+                            Icons.lock,
+                            size: 13,
+                            color: AppColors.textMuted,
+                          )
                         else ...[
                           Text(
                             '$done/${widget.lessons.length}',
@@ -1750,7 +1818,9 @@ class _AdventureLevelSectionState extends State<_AdventureLevelSection> {
                       child: TweenAnimationBuilder<double>(
                         tween: Tween(
                           begin: 0,
-                          end: !widget.unlocked || widget.lessons.isEmpty ? 0 : done / widget.lessons.length,
+                          end: !widget.unlocked || widget.lessons.isEmpty
+                              ? 0
+                              : done / widget.lessons.length,
                         ),
                         duration: const Duration(milliseconds: 600),
                         curve: Curves.easeOutCubic,
@@ -1776,7 +1846,10 @@ class _AdventureLevelSectionState extends State<_AdventureLevelSection> {
                     Expanded(
                       child: Text(
                         'Locked — finish the level above to unlock this one.',
-                        style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textMuted,
+                        ),
                       ),
                     ),
                   ],
@@ -1801,15 +1874,18 @@ class _AdventureLevelSectionState extends State<_AdventureLevelSection> {
 /// (`quranSync`, `fiqhDrag`) is camelCase code, not something to show a
 /// parent.
 String _activityTypeLabel(ActivityType type) => switch (type) {
-      ActivityType.trace => 'Letter Tracing',
-      ActivityType.pronounce => 'Pronunciation',
-      ActivityType.quranSync => "Qur'an Sync",
-      ActivityType.story => 'Story',
-      ActivityType.fiqhDrag => 'Fiqh Match',
-      ActivityType.quiz => 'Quiz',
-      ActivityType.harakatPop => 'Harakat Pop',
-      ActivityType.ayahBuilder => 'Ayah Builder',
-    };
+  ActivityType.trace => 'Letter Tracing',
+  ActivityType.pronounce => 'Pronunciation',
+  ActivityType.quranSync => "Qur'an Sync",
+  ActivityType.story => 'Story',
+  ActivityType.fiqhDrag => 'Fiqh Match',
+  ActivityType.quiz => 'Quiz',
+  ActivityType.harakatPop => 'Harakat Pop',
+  ActivityType.ayahBuilder => 'Ayah Builder',
+  ActivityType.creationHunt => "Allah's Creation Hunt",
+  ActivityType.classroomHeroes => 'Classroom Heroes',
+  ActivityType.sirahStory => 'Sirah Story',
+};
 
 class _AdventureGameRow extends StatelessWidget {
   const _AdventureGameRow({
@@ -1851,11 +1927,17 @@ class _AdventureGameRow extends StatelessWidget {
                   activity.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 Text(
                   '${_activityTypeLabel(activity.type)} · +${activity.xp}xp',
-                  style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ],
             ),
@@ -1874,7 +1956,11 @@ class _AdventureGameRow extends StatelessWidget {
                   SizedBox(width: 3),
                   Text(
                     'Done',
-                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.white),
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
                   ),
                 ],
               ),
@@ -1888,7 +1974,11 @@ class _AdventureGameRow extends StatelessWidget {
               ),
               child: const Text(
                 'Not started',
-                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textMuted,
+                ),
               ),
             ),
         ],
@@ -1933,7 +2023,11 @@ class _MediationCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             prompt.routine,
-            style: const TextStyle(fontSize: 12, color: AppColors.tealDark, height: 1.35),
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.tealDark,
+              height: 1.35,
+            ),
           ),
         ],
       ),
@@ -2114,7 +2208,9 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
 
   @override
   Widget build(BuildContext context) {
-    final chartData = ref.watch(parentWeeklyChartProvider(_rangeWindowDays[_range]));
+    final chartData = ref.watch(
+      parentWeeklyChartProvider(_rangeWindowDays[_range]),
+    );
     final entries = chartData;
 
     return SoftCard(
@@ -2256,7 +2352,11 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
 }
 
 class _RangePill extends StatelessWidget {
-  const _RangePill({required this.label, required this.active, required this.onTap});
+  const _RangePill({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
 
   final String label;
   final bool active;
@@ -2285,7 +2385,6 @@ class _RangePill extends StatelessWidget {
     );
   }
 }
-
 
 /// Grid + gradient area fill + drawn line — matches the approved top-tab
 /// mock's chart exactly (`.chart-grid` / `.chart-area` / `.chart-line`).
@@ -2357,7 +2456,6 @@ class _TrendPainter extends CustomPainter {
       oldDelegate.progress != progress || oldDelegate.points != points;
 }
 
-
 class _SettingsTab extends ConsumerWidget {
   const _SettingsTab();
 
@@ -2370,90 +2468,90 @@ class _SettingsTab extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
       children: [
         Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _StaggerFadeIn(
-                  delay: const Duration(milliseconds: 25),
-                  child: SoftCard(
-                    padding: const EdgeInsets.all(18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _StaggerFadeIn(
+              delay: const Duration(milliseconds: 25),
+              child: SoftCard(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: AppColors.mint,
-                                borderRadius: BorderRadius.circular(11),
-                              ),
-                              alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.volume_up_rounded,
-                                size: 17,
-                                color: AppColors.teal,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              'Sound & Voice',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                          ],
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: AppColors.mint,
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.volume_up_rounded,
+                            size: 17,
+                            color: AppColors.teal,
+                          ),
                         ),
-                        const SizedBox(height: 16),
-                        _VolumeSlider(
-                          icon: Icons.music_note_outlined,
-                          label: 'Background Music',
-                          value: volumes.background,
-                          onChanged: volumeNotifier.setBackground,
-                        ),
-                        const SizedBox(height: 14),
-                        _VolumeSlider(
-                          icon: Icons.notifications_none,
-                          label: 'UI Sound Effects',
-                          value: volumes.effects,
-                          onChanged: volumeNotifier.setEffects,
-                        ),
-                        const SizedBox(height: 14),
-                        _VolumeSlider(
-                          icon: Icons.mic_none,
-                          label: 'Pronunciation Voice',
-                          value: volumes.voice,
-                          onChanged: volumeNotifier.setVoice,
+                        const SizedBox(width: 10),
+                        Text(
+                          'Sound & Voice',
+                          style: Theme.of(context).textTheme.titleLarge,
                         ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                    _VolumeSlider(
+                      icon: Icons.music_note_outlined,
+                      label: 'Background Music',
+                      value: volumes.background,
+                      onChanged: volumeNotifier.setBackground,
+                    ),
+                    const SizedBox(height: 14),
+                    _VolumeSlider(
+                      icon: Icons.notifications_none,
+                      label: 'UI Sound Effects',
+                      value: volumes.effects,
+                      onChanged: volumeNotifier.setEffects,
+                    ),
+                    const SizedBox(height: 14),
+                    _VolumeSlider(
+                      icon: Icons.mic_none,
+                      label: 'Pronunciation Voice',
+                      value: volumes.voice,
+                      onChanged: volumeNotifier.setVoice,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 20),
-                const _StaggerFadeIn(
-                  delay: Duration(milliseconds: 65),
-                  child: _SyncCard(),
-                ),
-                const SizedBox(height: 20),
-                const _StaggerFadeIn(
-                  delay: Duration(milliseconds: 80),
-                  child: EmailVerificationCard(),
-                ),
-                const SizedBox(height: 20),
-                const _StaggerFadeIn(
-                  delay: Duration(milliseconds: 95),
-                  child: _LinkFirebaseCard(),
-                ),
-                const SizedBox(height: 20),
-                const _StaggerFadeIn(
-                  delay: Duration(milliseconds: 125),
-                  child: _EraseCard(),
-                ),
-                const SizedBox(height: 20),
-                const _StaggerFadeIn(
-                  delay: Duration(milliseconds: 155),
-                  child: _ExitSettingsCard(),
-                ),
-              ],
+              ),
             ),
+            const SizedBox(height: 20),
+            const _StaggerFadeIn(
+              delay: Duration(milliseconds: 65),
+              child: _SyncCard(),
+            ),
+            const SizedBox(height: 20),
+            const _StaggerFadeIn(
+              delay: Duration(milliseconds: 80),
+              child: EmailVerificationCard(),
+            ),
+            const SizedBox(height: 20),
+            const _StaggerFadeIn(
+              delay: Duration(milliseconds: 95),
+              child: _LinkFirebaseCard(),
+            ),
+            const SizedBox(height: 20),
+            const _StaggerFadeIn(
+              delay: Duration(milliseconds: 125),
+              child: _EraseCard(),
+            ),
+            const SizedBox(height: 20),
+            const _StaggerFadeIn(
+              delay: Duration(milliseconds: 155),
+              child: _ExitSettingsCard(),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -2775,7 +2873,11 @@ class _SyncCardState extends ConsumerState<_SyncCard> {
               borderRadius: BorderRadius.circular(12),
             ),
             alignment: Alignment.center,
-            child: const Icon(Icons.sync_rounded, size: 18, color: AppColors.teal),
+            child: const Icon(
+              Icons.sync_rounded,
+              size: 18,
+              color: AppColors.teal,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -3072,7 +3174,9 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         child: const Padding(
           padding: EdgeInsets.all(20),
-          child: Text('No active profile found. Please select a child profile.'),
+          child: Text(
+            'No active profile found. Please select a child profile.',
+          ),
         ),
       );
     }
@@ -3082,7 +3186,20 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
     final moduleSummaries = repo.summaryByModule(learnerId);
 
     String formatDate(DateTime dt) {
-      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
       final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
       final ampm = dt.hour >= 12 ? 'PM' : 'AM';
       final minute = dt.minute.toString().padLeft(2, '0');
@@ -3121,10 +3238,7 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                 ),
                 child: Row(
                   children: [
-                    LearnerAvatar(
-                      avatar: learnerAvatar,
-                      size: 40,
-                    ),
+                    LearnerAvatar(avatar: learnerAvatar, size: 40),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -3237,7 +3351,10 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                           ),
                           child: const Text(
                             'No adventure history yet.',
-                            style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.textMuted,
+                            ),
                           ),
                         )
                       else
@@ -3251,12 +3368,16 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Expanded(
                                         child: Text(
@@ -3283,25 +3404,35 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                                     children: [
                                       Expanded(
                                         child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(99),
+                                          borderRadius: BorderRadius.circular(
+                                            99,
+                                          ),
                                           child: TweenAnimationBuilder<double>(
                                             tween: Tween<double>(
                                               begin: 0.0,
                                               end: mod.accuracyPct / 100.0,
                                             ),
-                                            duration: const Duration(milliseconds: 900),
+                                            duration: const Duration(
+                                              milliseconds: 900,
+                                            ),
                                             curve: Curves.easeOutCubic,
                                             builder: (context, val, child) {
                                               return LinearProgressIndicator(
                                                 value: val,
-                                                backgroundColor: Colors.grey.shade200,
-                                                valueColor: AlwaysStoppedAnimation<Color>(
-                                                  mod.accuracyPct >= 80
-                                                      ? AppColors.teal
-                                                      : (mod.accuracyPct >= 60
-                                                          ? AppColors.gold
-                                                          : AppColors.coral),
-                                                ),
+                                                backgroundColor:
+                                                    Colors.grey.shade200,
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<
+                                                      Color
+                                                    >(
+                                                      mod.accuracyPct >= 80
+                                                          ? AppColors.teal
+                                                          : (mod.accuracyPct >=
+                                                                    60
+                                                                ? AppColors.gold
+                                                                : AppColors
+                                                                      .coral),
+                                                    ),
                                                 minHeight: 6,
                                               );
                                             },
@@ -3317,8 +3448,8 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                                           color: mod.accuracyPct >= 80
                                               ? AppColors.tealDark
                                               : (mod.accuracyPct >= 60
-                                                  ? AppColors.gold
-                                                  : AppColors.coral),
+                                                    ? AppColors.gold
+                                                    : AppColors.coral),
                                         ),
                                       ),
                                     ],
@@ -3361,17 +3492,24 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                           ),
                           child: const Text(
                             'No activities logged yet.',
-                            style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.textMuted,
+                            ),
                           ),
                         )
                       else
                         ...records.take(15).map((rec) {
                           final title = getModuleTitle(rec.moduleId);
                           final timeStr = formatDate(rec.completedAt);
-                          final durationMin = (rec.timeOnTaskSeconds / 60.0).toStringAsFixed(1);
+                          final durationMin = (rec.timeOnTaskSeconds / 60.0)
+                              .toStringAsFixed(1);
                           return Container(
                             margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.neutralTint,
                               borderRadius: BorderRadius.circular(12),
@@ -3383,7 +3521,8 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Expanded(
                                       child: Text(
@@ -3397,10 +3536,17 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                                     ),
                                     if (rec.assignedByTeacher)
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
                                         decoration: BoxDecoration(
-                                          color: AppColors.teal.withOpacity(0.12),
-                                          borderRadius: BorderRadius.circular(4),
+                                          color: AppColors.teal.withOpacity(
+                                            0.12,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
                                         ),
                                         child: const Text(
                                           'HOMEWORK',
@@ -3416,7 +3562,8 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                                 ),
                                 const SizedBox(height: 4),
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
                                       timeStr,
@@ -3436,7 +3583,8 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                                 ),
                                 const Divider(height: 12, thickness: 0.5),
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Row(
                                       children: [
@@ -3446,8 +3594,8 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                                           color: rec.strokeAccuracyPct >= 80
                                               ? AppColors.teal
                                               : (rec.strokeAccuracyPct >= 60
-                                                  ? AppColors.gold
-                                                  : AppColors.coral),
+                                                    ? AppColors.gold
+                                                    : AppColors.coral),
                                         ),
                                         const SizedBox(width: 4),
                                         Text(
@@ -3458,8 +3606,8 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                                             color: rec.strokeAccuracyPct >= 80
                                                 ? AppColors.tealDark
                                                 : (rec.strokeAccuracyPct >= 60
-                                                    ? AppColors.gold
-                                                    : AppColors.coral),
+                                                      ? AppColors.gold
+                                                      : AppColors.coral),
                                           ),
                                         ),
                                       ],

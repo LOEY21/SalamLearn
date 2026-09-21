@@ -20,6 +20,7 @@ import {
   where,
   writeBatch,
   setDoc,
+  updateDoc,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 // Same public web config as prjct/lib/firebase_options.dart's `web` block —
@@ -855,10 +856,14 @@ async function loadAllData() {
         { label: "Name", value: (r) => r.fullName },
         { label: "School", value: (r) => r.school },
         { label: "Email", value: (r) => r.email },
+        { label: "Status", value: (r) => r.verificationStatus ?? "approved" },
         { label: "Registered", value: (r) => formatDate(r.createdAt) },
       ],
       teachers,
       [
+        { label: "Approve", className: "btn-view", onClick: (row, btn) => setTeacherStatus(row, "approved", btn) },
+        { label: "Reject", onClick: (row, btn) => setTeacherStatus(row, "rejected", btn) },
+        { label: "Set pending", className: "btn-view", onClick: (row, btn) => setTeacherStatus(row, "pending", btn) },
         { label: "Reset Password", className: "btn-view", onClick: (row) => resetAccountPassword(row.email) },
         { label: "Remove", onClick: (row, btn) => confirmDeleteTeacher(row, btn) },
       ]
@@ -1120,6 +1125,27 @@ document.getElementById("form-parent").addEventListener("submit", async (event) 
   }
 });
 
+// Teacher verification (SL-TEA/ADM-02): only admins may change this field —
+// firestore.rules rejects it from the teacher's own app session. "pending"
+// is how an admin lets a rejected teacher re-apply.
+async function setTeacherStatus(row, status, btn) {
+  if ((row.verificationStatus ?? "approved") === status) return;
+  btn.disabled = true;
+  showLoading("Updating teacher status...");
+  try {
+    await updateDoc(doc(db, "teachers", row.id), { verificationStatus: status });
+    await loadAllData();
+    hideLoading();
+    showToast(`Teacher marked ${status}`, "success");
+  } catch (err) {
+    console.error(err);
+    hideLoading();
+    showToast("Failed to update teacher status", "error");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 document.getElementById("form-teacher").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1141,6 +1167,7 @@ document.getElementById("form-teacher").addEventListener("submit", async (event)
       mobileNumber: data.get("mobileNumber").trim() || null,
       createdAt: new Date().toISOString(),
       firebaseUid,
+      verificationStatus: "approved",
     });
     await batch.commit();
     form.hidden = true;

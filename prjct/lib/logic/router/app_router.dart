@@ -11,6 +11,7 @@ import '../../ui/auth/pin_setup_screen.dart';
 import '../../ui/auth/pin_verify_screen.dart';
 import '../../ui/auth/role_flow_shell.dart';
 import '../../ui/auth/role_picker_screen.dart';
+import '../../ui/auth/teacher_pending_screen.dart';
 import '../../ui/core_modules/custom_lesson_detail_screen.dart';
 import '../../ui/debug/database_inspector_screen.dart';
 import '../../ui/onboarding/get_started_screen.dart';
@@ -117,6 +118,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '$gate?redirect=${Uri.encodeComponent(fullPath)}';
       }
 
+      // Teacher verification (SL-TEA-03): an unapproved teacher only ever
+      // sees the pending screen; an approved one never needs it. Settings
+      // stay reachable so a pending teacher isn't stuck without them.
+      if (session.activeRole == UserRole.asatidz && session.pinVerified) {
+        final approved = ref.read(sessionProvider.notifier).activeTeacherApproved;
+        final teacherArea = path.startsWith('/teacher') || path.startsWith('/cast');
+        if (!approved && teacherArea && path != '/teacher/pending') {
+          return '/teacher/pending';
+        }
+        if (approved && path == '/teacher/pending') return '/teacher';
+      }
+
       return null;
     },
     routes: [
@@ -216,6 +229,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/teacher',
         builder: (_, _) => const TeacherDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/teacher/pending',
+        builder: (_, _) => const TeacherPendingScreen(),
       ),
       GoRoute(
         path: '/teacher/classes',

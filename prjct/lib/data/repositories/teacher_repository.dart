@@ -71,6 +71,7 @@ class TeacherRepository {
       pinSalt: pinSalt,
       createdAt: DateTime.now(),
       firebaseUid: firebaseUid,
+      verificationStatus: 'pending',
     );
     await _box.put(account.id, account);
     return account;
@@ -89,6 +90,7 @@ class TeacherRepository {
       pinHash: CredentialHasher.hash(pin, pinSalt),
       pinSalt: pinSalt,
       createdAt: DateTime.now(),
+      verificationStatus: 'pending',
     );
     await _box.put(account.id, account);
     return account;
@@ -105,6 +107,7 @@ class TeacherRepository {
     String? school,
     String? mobileNumber,
     String? firebaseUid,
+    String? verificationStatus,
   }) async {
     final passwordSalt = CredentialHasher.generateSalt();
     final pinSalt = CredentialHasher.generateSalt();
@@ -120,6 +123,7 @@ class TeacherRepository {
       pinSalt: pinSalt,
       createdAt: DateTime.now(),
       firebaseUid: firebaseUid,
+      verificationStatus: verificationStatus,
     );
     await _box.put(account.id, account);
     return account;
@@ -178,6 +182,7 @@ class TeacherRepository {
       pinSalt: account.pinSalt,
       createdAt: account.createdAt,
       firebaseUid: firebaseUid,
+      verificationStatus: account.verificationStatus,
     );
     await _box.put(account.id, updated);
     return updated;
@@ -217,6 +222,31 @@ class TeacherRepository {
       pinSalt: account.pinSalt,
       createdAt: account.createdAt,
       firebaseUid: account.firebaseUid,
+      verificationStatus: account.verificationStatus,
+    );
+    await _box.put(account.id, updated);
+    return updated;
+  }
+
+  /// Local cache of the admin's verification decision (the admin panel is
+  /// the only writer — see firestore.rules).
+  Future<TeacherAccount> updateVerificationStatus({
+    required TeacherAccount account,
+    required String status,
+  }) async {
+    final updated = TeacherAccount(
+      id: account.id,
+      fullName: account.fullName,
+      school: account.school,
+      email: account.email,
+      mobileNumber: account.mobileNumber,
+      passwordHash: account.passwordHash,
+      passwordSalt: account.passwordSalt,
+      pinHash: account.pinHash,
+      pinSalt: account.pinSalt,
+      createdAt: account.createdAt,
+      firebaseUid: account.firebaseUid,
+      verificationStatus: status,
     );
     await _box.put(account.id, updated);
     return updated;

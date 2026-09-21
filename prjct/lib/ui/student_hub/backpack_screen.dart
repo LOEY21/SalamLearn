@@ -64,14 +64,14 @@ typedef _Sticker = ({
 const _stickers = <_Sticker>[
   (emoji: '🌙', name: 'Moon', unlocked: true, unlockDesc: 'Complete any lesson'),
   (emoji: '⭐', name: 'Star', unlocked: true, unlockDesc: 'Complete any lesson'),
-  (emoji: '🕌', name: 'Masjid', unlocked: true, unlockDesc: 'Reach Masjid of Salah'),
-  (emoji: '🌸', name: 'Flower', unlocked: true, unlockDesc: 'Reach Garden of Words'),
+  (emoji: '🕌', name: 'Masjid', unlocked: true, unlockDesc: 'Reach Cleanliness & Character'),
+  (emoji: '🌸', name: 'Flower', unlocked: true, unlockDesc: 'Reach A Growing Muslim'),
   (emoji: '🐢', name: 'Turtle', unlocked: true, unlockDesc: 'Start your journey'),
-  (emoji: '🌴', name: 'Palm', unlocked: false, unlockDesc: 'Complete Desert of Letters'),
-  (emoji: '🦋', name: 'Butterfly', unlocked: false, unlockDesc: 'Finish Garden of Words'),
-  (emoji: '🌊', name: 'Wave', unlocked: false, unlockDesc: 'Finish River of Sirah'),
-  (emoji: '🏔️', name: 'Mountain', unlocked: false, unlockDesc: 'Reach Mountain of Iman'),
-  (emoji: '📖', name: 'Book', unlocked: false, unlockDesc: 'Finish Qur\'an Corner'),
+  (emoji: '🌴', name: 'Palm', unlocked: false, unlockDesc: 'Complete Exploring Our World'),
+  (emoji: '🦋', name: 'Butterfly', unlocked: false, unlockDesc: 'Finish A Growing Muslim'),
+  (emoji: '🌊', name: 'Wave', unlocked: false, unlockDesc: 'Finish Stories & Letters'),
+  (emoji: '🏔️', name: 'Mountain', unlocked: false, unlockDesc: 'Reach The Path of the Prophet'),
+  (emoji: '📖', name: 'Book', unlocked: false, unlockDesc: 'Finish The Good Deed Hero'),
 ];
 
 typedef _GearItem = ({

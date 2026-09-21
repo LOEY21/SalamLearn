@@ -7,6 +7,7 @@ import '../localization/app_translations.dart';
 import '../../data/local/hive_boxes.dart';
 import '../../data/models/consent_record.dart';
 import '../../data/models/learner_profile.dart';
+import '../../data/models/teacher_account.dart';
 import '../../data/repositories/consent_repository.dart';
 import '../../data/repositories/learner_repository.dart';
 import '../../data/repositories/class_repository.dart';
@@ -149,6 +150,7 @@ class _PendingTeacherRegistration {
     this.mobileNumber,
     this.remoteId,
     this.remoteFirebaseUid,
+    this.remoteVerificationStatus,
   });
 
   final String fullName;
@@ -160,6 +162,10 @@ class _PendingTeacherRegistration {
   /// See `_PendingParentRegistration.remoteId` doc.
   final String? remoteId;
   final String? remoteFirebaseUid;
+
+  /// The cloud doc's admin-set verification status, carried onto the
+  /// re-created local account on a new device.
+  final String? remoteVerificationStatus;
 }
 
 class SessionNotifier extends Notifier<SessionState> {
@@ -443,6 +449,7 @@ class SessionNotifier extends Notifier<SessionState> {
                 mobileNumber: pending.mobileNumber,
                 pin: pin,
                 firebaseUid: pending.remoteFirebaseUid,
+                verificationStatus: pending.remoteVerificationStatus,
               )
             : await _teachers.register(
                 fullName: pending.fullName,
@@ -669,6 +676,7 @@ class SessionNotifier extends Notifier<SessionState> {
           activeTeacherId: account.id,
           pinVerified: false,
         );
+        await refreshTeacherStatus();
         return SignInResult.success;
       }
       return _tryRemoteTeacherSignIn(
@@ -886,6 +894,7 @@ class SessionNotifier extends Notifier<SessionState> {
         mobileNumber: remote.mobileNumber,
         remoteId: remote.id,
         remoteFirebaseUid: remote.firebaseUid,
+        remoteVerificationStatus: remote.verificationStatus,
       );
       state = state.copyWith(activeRole: UserRole.asatidz, pinVerified: false);
       return SignInResult.needsLocalPinSetup;
@@ -893,6 +902,46 @@ class SessionNotifier extends Notifier<SessionState> {
       debugPrint('SessionNotifier: remote teacher sign-in failed: $e');
       return SignInResult.invalidCredentials;
     }
+  }
+
+  /// Teacher verification (SL-TEA-01..03). The status lives in Hive (not in
+  /// [SessionState]) so no state rebuild can silently reset it to approved;
+  /// null = an account from before verification existed, treated as approved.
+  String get activeTeacherStatus {
+    final id = state.activeTeacherId;
+    final account = id == null ? null : _teachers.findById(id);
+    return account?.verificationStatus ?? 'approved';
+  }
+
+  bool get activeTeacherApproved => activeTeacherStatus == 'approved';
+
+  /// Pulls the admin's decision from Firestore. Best-effort: offline or any
+  /// error keeps the last known local status (a pending teacher can never
+  /// self-approve offline — only the server value can change it).
+  Future<String> refreshTeacherStatus() async {
+    final id = state.activeTeacherId;
+    final account = id == null ? null : _teachers.findById(id);
+    final uid = account?.firebaseUid;
+    if (account != null && uid != null) {
+      final remote = await FirestoreMirror().fetchTeacherByFirebaseUid(uid);
+      await _applyRemoteTeacherStatus(account, remote?.verificationStatus);
+    }
+    return activeTeacherStatus;
+  }
+
+  Future<void> _applyRemoteTeacherStatus(
+    TeacherAccount account,
+    String? remoteStatus,
+  ) async {
+    if (remoteStatus == null || remoteStatus == account.verificationStatus) {
+      return;
+    }
+    await _teachers.updateVerificationStatus(
+      account: account,
+      status: remoteStatus,
+    );
+    // New instance so the router re-runs its redirect.
+    state = state.copyWith();
   }
 
   /// FR-2.1 dual-state PIN check — real hash compare against whichever
@@ -1229,7 +1278,10 @@ class SessionNotifier extends Notifier<SessionState> {
         final remote = await FirestoreMirror().fetchTeacherByFirebaseUid(
           firebaseUid,
         );
-        if (remote != null) return true;
+        if (remote != null) {
+          await _applyRemoteTeacherStatus(account!, remote.verificationStatus);
+          return true;
+        }
       } else {
         final id = state.activeParentId;
         final account = id == null ? null : _parents.findById(id);

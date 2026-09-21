@@ -59,7 +59,7 @@ void main() {
     final progress = Hive.box<ProgressRecord>(HiveBoxes.progress);
     final now = DateTime.now();
     // Real home-mode (isClassroomMode: false) records against destination
-    // id 1 ("Village of Salaam" in curriculum_data.dart) so
+    // id 1 ("Welcome to Madrasah" in curriculum_data.dart) so
     // homeModeModuleSummaryProvider/homeModeAggregateProvider have
     // non-empty rows to render.
     await progress.put(
@@ -109,7 +109,7 @@ void main() {
 
     expect(find.text('Amira'), findsWidgets);
     expect(find.text('90%'), findsWidgets); // accuracy ring average
-    expect(find.textContaining('Village of Salaam'), findsWidgets);
+    expect(find.textContaining('Welcome to Madrasah'), findsWidgets);
     expect(find.byType(CircularProgressIndicator), findsWidgets);
   });
 
@@ -133,7 +133,7 @@ void main() {
 
     expect(find.text('PLAY RATE'), findsOneWidget);
     expect(find.text('AVG ACCURACY'), findsOneWidget);
-    expect(find.textContaining('Village of Salaam'), findsWidgets);
+    expect(find.textContaining('Welcome to Madrasah'), findsWidgets);
     expect(find.textContaining('avg accuracy'), findsWidgets);
   });
 }
