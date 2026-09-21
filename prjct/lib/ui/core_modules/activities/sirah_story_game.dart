@@ -571,6 +571,11 @@ class _SirahStoryGameState extends State<SirahStoryGame>
           // Fills the letterbox bands beside the stage with the same scene,
           // so the frame never shows bare black at odd aspect ratios.
           Image.asset(backdrop, fit: BoxFit.cover),
+          // ...and darkens them exactly as the stage darkens its own scene,
+          // so a dim or a scrim reaches the screen edge instead of stopping
+          // at the stage's. The stage paints over these, so its own area is
+          // never darkened twice.
+          if (_screen == _Screen.play) ..._bandOverlays(),
           Center(
             child: AspectRatio(
               aspectRatio: _kW / _kH,
@@ -600,6 +605,30 @@ class _SirahStoryGameState extends State<SirahStoryGame>
       ),
     );
   }
+
+  /// The full-bleed layers the play screen lays over its scene, repeated at
+  /// screen size for the letterbox bands. Same colours, same timings.
+  List<Widget> _bandOverlays() => [
+    // The dim once the narration ends.
+    AnimatedOpacity(
+      opacity: _glowOn ? 1 : 0,
+      duration: const Duration(milliseconds: 600),
+      child: const ColoredBox(color: Color(0x73000000)),
+    ),
+    // The question card's darkness.
+    AnimatedOpacity(
+      opacity: _dark ? 1 : 0,
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeInOut,
+      child: const ColoredBox(color: _scrim),
+    ),
+    if (_confirmExit) const ColoredBox(color: _scrimDeep),
+    if (_finished)
+      FadeTransition(
+        opacity: _inVeil,
+        child: const ColoredBox(color: _endVeil),
+      ),
+  ];
 
   /// Rebuilds just the wrapped leaf on every clock tick, handing it the
   /// current time.
@@ -786,11 +815,11 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   // =========================================================================
 
   Widget _buildPlay() {
-    final glowOn = _glowReady && !_showModal && !_finished;
+    final glowOn = _glowOn;
     // The question's own darkness. It starts filling the moment the glowing
     // layer is tapped and is already all the way in by the time the card
     // pops, so the two read as one move.
-    final dark = _opening || _showModal;
+    final dark = _dark;
     const fade = Duration(milliseconds: 600);
     return Stack(
       children: [
@@ -1045,6 +1074,12 @@ class _SirahStoryGameState extends State<SirahStoryGame>
       ),
     );
   }
+
+  /// The scene is dimmed and its layer lit — narration done, nothing over it.
+  bool get _glowOn => _glowReady && !_showModal && !_finished;
+
+  /// The question's darkness: from the tap until the card closes.
+  bool get _dark => _opening || _showModal;
 
   Rect _rectOf(SirahStoryLayer l) => Rect.fromCenter(
     center: Offset(l.x * _kW, l.y * _kH),

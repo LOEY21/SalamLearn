@@ -445,6 +445,41 @@ void main() {
     }
   });
 
+  testWidgets('the dims reach the screen edges on a letterboxed screen', (
+    tester,
+  ) async {
+    final view =
+        TestWidgetsFlutterBinding.instance.platformDispatcher.implicitView!;
+    // Taller than the stage, so there are bands above and below it.
+    const size = Size(1600, 1200);
+    view.physicalSize = size;
+    const session = sirahBirthSession;
+    await tester.pumpWidget(host(session));
+    await start(tester);
+    await hearOut(tester, session.pages.first);
+    await tester.pump(const Duration(milliseconds: 700));
+
+    Rect? fullScreen(Color c) {
+      for (final e
+          in find
+              .byWidgetPredicate((w) => w is ColoredBox && w.color == c)
+              .evaluate()) {
+        final r = tester.getRect(find.byWidget(e.widget));
+        if (r.width >= size.width - 0.5 && r.height >= size.height - 0.5) {
+          return r;
+        }
+      }
+      return null;
+    }
+
+    // Narration done: the scene's dim covers the whole screen, bands and all.
+    expect(fullScreen(const Color(0x73000000)), isNotNull);
+
+    // The question card's darkness does too.
+    await openQuestion(tester);
+    expect(fullScreen(const Color(0x9E181006)), isNotNull);
+  });
+
   testWidgets('the decoy never advances the story', (tester) async {
     const session = sirahHalimahSession;
     await tester.pumpWidget(host(session));
