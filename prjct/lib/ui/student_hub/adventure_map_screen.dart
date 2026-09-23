@@ -480,8 +480,10 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
                   child: Stack(
                     children: [
                       Positioned.fill(
-                        child: _MapVideoBackground(
-                          onAspectRatio: _onVideoAspectRatio,
+                        child: RepaintBoundary(
+                          child: _MapVideoBackground(
+                            onAspectRatio: _onVideoAspectRatio,
+                          ),
                         ),
                       ),
                       const Positioned.fill(child: _AmbientBreathing()),
@@ -642,28 +644,29 @@ class _AmbientBreathingState extends State<_AmbientBreathing>
 
   @override
   Widget build(BuildContext context) {
+    // The alpha is baked straight into the gradient instead of wrapping a
+    // full-screen `Opacity` — an animated Opacity over the whole map forces
+    // a saveLayer every frame, which is pure cost for a 5-10% white wash.
     return IgnorePointer(
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          final t = Curves.easeInOut.transform(_controller.value);
-          final opacity = 0.5 + 0.5 * t;
-          return Opacity(
-            opacity: opacity,
-            child: DecoratedBox(
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            final t = Curves.easeInOut.transform(_controller.value);
+            return DecoratedBox(
               decoration: BoxDecoration(
                 gradient: RadialGradient(
                   center: const Alignment(0, -0.4),
                   radius: 0.6,
                   colors: [
-                    Colors.white.withValues(alpha: 0.10),
+                    Colors.white.withValues(alpha: 0.05 + 0.05 * t),
                     Colors.white.withValues(alpha: 0.0),
                   ],
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -820,12 +823,10 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     duration: const Duration(milliseconds: 320),
   );
   Timer? _entranceTimer;
-  late final _animations = Listenable.merge([
-    _entrance,
-    _pulse,
-    _shine,
-    _wobble,
-  ]);
+  // Only the one-shot entrance/wobble rebuild the node's widget tree; the
+  // looping glow and twinkles animate inside their own cached subtrees so
+  // an idle node costs nothing to rebuild.
+  late final _transformAnimations = Listenable.merge([_entrance, _wobble]);
 
   /// Checkpoint art per destination (1-6). Destination 7 has no icon yet —
   /// only its tile shows until that asset exists.
@@ -916,6 +917,145 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     final width = tileW + 24;
     final height = tileH / 2 + iconBox + 12;
     final iconAsset = _iconAsset;
+    final tileTop = height - tileH;
+    final iconBottom = tileH / 2 - 2;
+
+    Widget? iconImage;
+    if (iconAsset != null) {
+      iconImage = Image.asset(iconAsset, fit: BoxFit.contain);
+      if (locked) {
+        iconImage = ColorFiltered(
+          colorFilter: _grayscale,
+          child: Opacity(opacity: 0.7, child: iconImage),
+        );
+      }
+    }
+
+    // Built once per `build`, not once per frame: everything that loops
+    // (glow, twinkles) animates inside its own repaint boundary, so the
+    // blurs and the checkpoint art are rasterized once and reused.
+    final art = Semantics(
+      button: true,
+      label: locked
+          ? '${widget.module.title} module, locked by teacher'
+          : '${widget.module.title} module',
+      child: GestureDetector(
+        key: ValueKey('node-badge-${widget.module.id}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: _handleTap,
+        child: SizedBox(
+          width: width,
+          height: height,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.topCenter,
+            children: [
+              // Golden glow that hugs the checkpoint's own
+              // outline (tile + icon): a gold silhouette,
+              // blurred wide and then tight, behind the art.
+              if (!locked && iconAsset != null)
+                Positioned.fill(
+                  child: _NodeGlow(
+                    pulse: _pulse,
+                    shine: _shine,
+                    isCurrent: isCurrent,
+                    tileTop: tileTop,
+                    tileW: tileW,
+                    tileH: tileH,
+                    iconBottom: iconBottom,
+                    iconBox: iconBox,
+                    iconAsset: iconAsset,
+                  ),
+                ),
+              Positioned(
+                top: tileTop,
+                width: tileW,
+                height: tileH,
+                child: locked
+                    ? ColorFiltered(
+                        colorFilter: _grayscale,
+                        child: Image.asset(
+                          'assets/images/adventure_map/checkpoint_tile.png',
+                        ),
+                      )
+                    : Image.asset(
+                        'assets/images/adventure_map/checkpoint_tile.png',
+                      ),
+              ),
+              // Contact shadow under the icon on the tile.
+              if (iconImage != null)
+                Positioned(
+                  top: tileTop + tileH / 2 - 5,
+                  child: IgnorePointer(
+                    child: Container(
+                      width: iconBox * 0.62,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(99),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.38),
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              if (iconImage != null)
+                Positioned(
+                  bottom: iconBottom,
+                  width: iconBox,
+                  height: iconBox,
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: iconImage,
+                  ),
+                ),
+              if (!locked)
+                for (final (i, (dx, dy)) in const [
+                  (-0.42, 0.12),
+                  (0.40, 0.28),
+                  (0.22, -0.02),
+                ].indexed)
+                  Positioned(
+                    left: width / 2 + dx * iconBox - 5,
+                    top: dy * iconBox + 8,
+                    child: _Twinkle(shine: _shine, phase: i / 3),
+                  ),
+              if (locked)
+                Positioned(top: tileTop - 6, child: const _LockChip()),
+              if (widget.state == _NodeState.completed)
+                Positioned(
+                  bottom: tileH / 2 + iconBox * 0.7,
+                  right: 6,
+                  child: const _DoneChip(),
+                ),
+              if (widget.overdue && !locked)
+                Positioned(
+                  bottom: tileH / 2 + iconBox * 0.7,
+                  left: 6,
+                  child: const _OverdueBadge(),
+                ),
+              Positioned(
+                top: height + 2,
+                left: -40,
+                right: -40,
+                child: IgnorePointer(
+                  child: Center(
+                    child: _NodeLabel(
+                      title: widget.module.title,
+                      locked: locked,
+                      isCurrent: isCurrent,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
 
     return Positioned(
       // The tile's center sits exactly on the destination's map point.
@@ -924,39 +1064,17 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
       child: KeyedSubtree(
         key: widget.anchorKey,
         child: AnimatedBuilder(
-          animation: _animations,
+          animation: _transformAnimations,
+          child: art,
           builder: (context, child) {
             final entranceT = _overshoot.transform(_entrance.value);
-            final pulseT = Curves.easeInOut.transform(_pulse.value);
             final wobbleT = Curves.easeInOut.transform(_wobble.value);
-            final shineT = _shine.value;
 
             final scale = 0.5 + 0.5 * entranceT;
             final opacity = entranceT.clamp(0.0, 1.0);
             final wobbleDx = locked
                 ? (wobbleT < 0.5 ? -4.0 : 4.0) * (1 - (wobbleT - 0.5).abs() * 2)
                 : 0.0;
-            // Soft breathing on every lit checkpoint; the current one burns
-            // brighter and swells with its pulse.
-            final breathe = 0.5 + 0.5 * math.sin(shineT * 2 * math.pi);
-            final glowOpacity = locked || iconAsset == null
-                ? 0.0
-                : isCurrent
-                ? 0.9 + 0.1 * pulseT
-                : 0.8 + 0.2 * breathe;
-            final tileTop = height - tileH;
-            final iconBottom = tileH / 2 - 2;
-
-            Widget? iconImage;
-            if (iconAsset != null) {
-              iconImage = Image.asset(iconAsset, fit: BoxFit.contain);
-              if (locked) {
-                iconImage = ColorFiltered(
-                  colorFilter: _grayscale,
-                  child: Opacity(opacity: 0.7, child: iconImage),
-                );
-              }
-            }
 
             return Opacity(
               opacity: opacity,
@@ -965,173 +1083,7 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
                 child: Transform.scale(
                   scale: scale,
                   alignment: Alignment(0, 1 - tileH / height),
-                  child: Semantics(
-                    button: true,
-                    label: locked
-                        ? '${widget.module.title} module, locked by teacher'
-                        : '${widget.module.title} module',
-                    child: GestureDetector(
-                      key: ValueKey('node-badge-${widget.module.id}'),
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _handleTap,
-                      child: SizedBox(
-                        width: width,
-                        height: height,
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          alignment: Alignment.topCenter,
-                          children: [
-                            // Golden glow that hugs the checkpoint's own
-                            // outline (tile + icon): a gold silhouette,
-                            // blurred wide and then tight, behind the art.
-                            if (glowOpacity > 0)
-                              for (final (sigma, strength) in const [
-                                (24.0, 1.0),
-                                (12.0, 1.0),
-                                (5.0, 1.0),
-                                (2.0, 0.8),
-                              ])
-                                Positioned.fill(
-                                  child: IgnorePointer(
-                                    child: Opacity(
-                                      opacity: glowOpacity * strength,
-                                      child: ImageFiltered(
-                                        imageFilter: ui.ImageFilter.blur(
-                                          sigmaX: sigma,
-                                          sigmaY: sigma,
-                                          tileMode: TileMode.decal,
-                                        ),
-                                        child: ColorFiltered(
-                                          colorFilter: const ColorFilter.mode(
-                                            Color(0xFFFFD54A),
-                                            BlendMode.srcIn,
-                                          ),
-                                          child: Stack(
-                                            clipBehavior: Clip.none,
-                                            alignment: Alignment.topCenter,
-                                            children: [
-                                              Positioned(
-                                                top: tileTop,
-                                                width: tileW,
-                                                height: tileH,
-                                                child: Image.asset(
-                                                  'assets/images/adventure_map/checkpoint_tile.png',
-                                                ),
-                                              ),
-                                              Positioned(
-                                                bottom: iconBottom,
-                                                width: iconBox,
-                                                height: iconBox,
-                                                child: Align(
-                                                  alignment:
-                                                      Alignment.bottomCenter,
-                                                  child: Image.asset(
-                                                    iconAsset!,
-                                                    fit: BoxFit.contain,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            Positioned(
-                              top: tileTop,
-                              width: tileW,
-                              height: tileH,
-                              child: locked
-                                  ? ColorFiltered(
-                                      colorFilter: _grayscale,
-                                      child: Image.asset(
-                                        'assets/images/adventure_map/checkpoint_tile.png',
-                                      ),
-                                    )
-                                  : Image.asset(
-                                      'assets/images/adventure_map/checkpoint_tile.png',
-                                    ),
-                            ),
-                            // Contact shadow under the icon on the tile.
-                            if (iconImage != null)
-                              Positioned(
-                                top: tileTop + tileH / 2 - 5,
-                                child: IgnorePointer(
-                                  child: Container(
-                                    width: iconBox * 0.62,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(99),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(
-                                            alpha: 0.38,
-                                          ),
-                                          blurRadius: 6,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            if (iconImage != null)
-                              Positioned(
-                                bottom: iconBottom,
-                                width: iconBox,
-                                height: iconBox,
-                                child: Align(
-                                  alignment: Alignment.bottomCenter,
-                                  child: iconImage,
-                                ),
-                              ),
-                            if (!locked)
-                              for (final (i, (dx, dy)) in const [
-                                (-0.42, 0.12),
-                                (0.40, 0.28),
-                                (0.22, -0.02),
-                              ].indexed)
-                                Positioned(
-                                  left: width / 2 + dx * iconBox - 5,
-                                  top: dy * iconBox + 8,
-                                  child: _Twinkle(t: (shineT + i / 3) % 1),
-                                ),
-                            if (locked)
-                              Positioned(
-                                top: tileTop - 6,
-                                child: const _LockChip(),
-                              ),
-                            if (widget.state == _NodeState.completed)
-                              Positioned(
-                                bottom: tileH / 2 + iconBox * 0.7,
-                                right: 6,
-                                child: const _DoneChip(),
-                              ),
-                            if (widget.overdue && !locked)
-                              Positioned(
-                                bottom: tileH / 2 + iconBox * 0.7,
-                                left: 6,
-                                child: const _OverdueBadge(),
-                              ),
-                            Positioned(
-                              top: height + 2,
-                              left: -40,
-                              right: -40,
-                              child: IgnorePointer(
-                                child: Center(
-                                  child: _NodeLabel(
-                                    title: widget.module.title,
-                                    locked: locked,
-                                    isCurrent: isCurrent,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                  child: child,
                 ),
               ),
             );
@@ -1142,26 +1094,130 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
   }
 }
 
-/// Four-point sparkle that fades/scales in and out over one [t] cycle.
-class _Twinkle extends StatelessWidget {
-  const _Twinkle({required this.t});
+/// Golden halo behind a lit checkpoint. The blurred gold silhouette is
+/// rasterized once behind a [RepaintBoundary] and only its opacity breathes,
+/// so the four gaussian passes don't re-run on every frame.
+class _NodeGlow extends StatelessWidget {
+  const _NodeGlow({
+    required this.pulse,
+    required this.shine,
+    required this.isCurrent,
+    required this.tileTop,
+    required this.tileW,
+    required this.tileH,
+    required this.iconBottom,
+    required this.iconBox,
+    required this.iconAsset,
+  });
 
-  final double t;
+  final Animation<double> pulse;
+  final Animation<double> shine;
+  final bool isCurrent;
+  final double tileTop;
+  final double tileW;
+  final double tileH;
+  final double iconBottom;
+  final double iconBox;
+  final String iconAsset;
 
   @override
   Widget build(BuildContext context) {
-    final v = math.sin(t * math.pi);
+    final silhouette = ColorFiltered(
+      colorFilter: const ColorFilter.mode(Color(0xFFFFD54A), BlendMode.srcIn),
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
+        children: [
+          Positioned(
+            top: tileTop,
+            width: tileW,
+            height: tileH,
+            child: Image.asset(
+              'assets/images/adventure_map/checkpoint_tile.png',
+            ),
+          ),
+          Positioned(
+            bottom: iconBottom,
+            width: iconBox,
+            height: iconBox,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Image.asset(iconAsset, fit: BoxFit.contain),
+            ),
+          ),
+        ],
+      ),
+    );
+
     return IgnorePointer(
-      child: Opacity(
-        opacity: v * v,
-        child: Transform.scale(
-          scale: 0.4 + 0.6 * v,
+      child: AnimatedBuilder(
+        animation: Listenable.merge([pulse, shine]),
+        child: RepaintBoundary(
+          child: Stack(
+            children: [
+              for (final (sigma, strength) in const [
+                (24.0, 1.0),
+                (12.0, 1.0),
+                (5.0, 1.0),
+                (2.0, 0.8),
+              ])
+                Positioned.fill(
+                  child: Opacity(
+                    opacity: strength,
+                    child: ImageFiltered(
+                      imageFilter: ui.ImageFilter.blur(
+                        sigmaX: sigma,
+                        sigmaY: sigma,
+                        tileMode: TileMode.decal,
+                      ),
+                      child: silhouette,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        builder: (context, child) {
+          // Soft breathing on every lit checkpoint; the current one burns
+          // brighter and swells with its pulse.
+          final breathe = 0.5 + 0.5 * math.sin(shine.value * 2 * math.pi);
+          final opacity = isCurrent
+              ? 0.9 + 0.1 * Curves.easeInOut.transform(pulse.value)
+              : 0.8 + 0.2 * breathe;
+          return Opacity(opacity: opacity, child: child);
+        },
+      ),
+    );
+  }
+}
+
+/// Four-point sparkle that fades/scales in and out over one cycle of
+/// [shine], offset by [phase] (0-1).
+class _Twinkle extends StatelessWidget {
+  const _Twinkle({required this.shine, required this.phase});
+
+  final Animation<double> shine;
+  final double phase;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: shine,
           child: const Icon(
             Icons.auto_awesome,
             size: 10,
             color: Color(0xFFFFF3C4),
             shadows: [Shadow(color: Color(0xFFFFD36B), blurRadius: 6)],
           ),
+          builder: (context, child) {
+            final v = math.sin(((shine.value + phase) % 1) * math.pi);
+            return Opacity(
+              opacity: v * v,
+              child: Transform.scale(scale: 0.4 + 0.6 * v, child: child),
+            );
+          },
         ),
       ),
     );
