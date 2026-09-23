@@ -49,15 +49,16 @@ class AyahBuilderGame extends StatefulWidget {
 
 const double _kW = 402;
 const double _kH = 874;
+
+/// Word card width: four cards fit one row of the 402-wide frame.
+const double _kCardW = 84;
 const String _kBg = 'assets/images/ayah_builder/bg_night_mosque.png';
 const String _kA = 'assets/images/ayah_builder';
 const String _kStartBg = '$_kA/start_bg.jpg';
-const String _kMascotReward = 'assets/images/mascot/girl/cheer.png';
 
 const _cream = Color(0xFFFFF8E7);
 const _gold = Color(0xFFFFD35C);
 const _sky = Color(0xFF9FD6E8);
-const _teal = Color(0xFF17879E);
 const _navyInk = Color(0xFF0F2147);
 const _stepInk = Color(0xFF122A55);
 const _amberEdge = Color(0xFFE9A73C);
@@ -158,32 +159,18 @@ TextStyle _arabic(double size, Color color, double height) => TextStyle(
 );
 
 // The prototype's inline SVG icons, verbatim.
-const _svgBack =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="#FFF8E7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 8 12l7 7"/></svg>';
-const _svgClose =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="#FFF8E7" stroke-width="2.5" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>';
 const _svgArrowDark =
     '<svg viewBox="0 0 24 24" fill="none" stroke="#3A2306" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13m-5-6 6 6-6 6"/></svg>';
 const _svgSpeakerWide =
     '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M11 5 6 9H3v6h3l5 4z" fill="#fff"/><path d="M15.5 9.2c1.3 1.4 1.3 4.2 0 5.6"/><path d="M18.3 6.5c2.6 2.8 2.6 8.2 0 11"/></svg>';
 const _svgSpeaker =
     '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M11 5 6 9H3v6h3l5 4z" fill="#fff"/><path d="M15.5 9.2c1.3 1.4 1.3 4.2 0 5.6"/></svg>';
-const _svgSoundOn =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="#FFF8E7" stroke-width="2" stroke-linecap="round"><path d="M11 5 6 9H3v6h3l5 4z" fill="#FFF8E7"/><path d="M15.5 9.2c1.3 1.4 1.3 4.2 0 5.6"/></svg>';
-const _svgSoundOff =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="#FFF8E7" stroke-width="2" stroke-linecap="round"><path d="M11 5 6 9H3v6h3l5 4z" fill="#FFF8E7"/><path d="m16 10 5 5m0-5-5 5"/></svg>';
-const _svgPlaySmall =
-    '<svg viewBox="0 0 12 14"><path d="M1.5 1 11 7l-9.5 6z" fill="#062038"/></svg>';
 const _svgStar =
     '<svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.1 6.6.9-4.8 4.7 1.2 6.6L12 17.6l-5.9 3.2 1.2-6.6L2.5 9.5l6.6-.9z" fill="#FFD35C"/></svg>';
-const _svgStarBig =
-    '<svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.1 6.6.9-4.8 4.7 1.2 6.6L12 17.6l-5.9 3.2 1.2-6.6L2.5 9.5l6.6-.9z" fill="#FFD35C" stroke="#B87B22" stroke-width="1"/></svg>';
 const _svgCheck =
     '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4 10-10"/></svg>';
 const _svgCross =
     '<svg viewBox="0 0 24 24" fill="none" stroke="#C93B3B" stroke-width="3.5" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>';
-const _svgReplay =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="#FFF8E7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>';
 
 Widget _svg(String s, double w, [double? h]) =>
     SvgPicture.string(s, width: w, height: h ?? w);
@@ -221,6 +208,11 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
   bool _oops = false;
   bool _ayahPlaying = false;
   int _litIndex = -1;
+  // When the listen screen's ayah finished playing; Start building appears
+  // only then.
+  double? _listenDoneT;
+  // When the reward screen started fading out for a replay.
+  double? _exitT0;
   int _stars = 0;
   bool _soundOn = true;
   bool _completed = false;
@@ -344,19 +336,36 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
   }
 
   void _onStart() => setState(() => _go(_Screen.instructions));
-  void _onBack() => setState(() => _go(_Screen.start));
+
+  /// The back button on every screen past the start — returns to the start
+  /// screen, abandoning the round in progress.
+  void _onBack() {
+    _clearTimers();
+    setState(() {
+      _resetRound();
+      _go(_Screen.start);
+    });
+  }
 
   void _onBeginListen() {
-    setState(() => _go(_Screen.listen));
-    _later(500, () {
-      _playAyah(() {
-        if (_screen == _Screen.listen) {
-          setState(() {
-            _trayOrder = _shuffleOrder(_n);
-            _go(_Screen.puzzle);
-          });
-        }
-      });
+    setState(() {
+      _listenDoneT = null;
+      _go(_Screen.listen);
+    });
+    _later(
+      500,
+      () => _playAyah(() {
+        if (_screen == _Screen.listen) setState(() => _listenDoneT = _now);
+      }),
+    );
+  }
+
+  /// Plays the ayah again on the listen screen; the buttons step aside until
+  /// it finishes.
+  void _onReplayListen() {
+    setState(() => _listenDoneT = null);
+    _playAyah(() {
+      if (_screen == _Screen.listen) setState(() => _listenDoneT = _now);
     });
   }
 
@@ -437,11 +446,18 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     });
   }
 
+  /// Fades the reward screen out, then brings a fresh round of the puzzle in
+  /// (the puzzle's own fade-in comes from [_screenTransition]).
   void _onReplay() {
+    if (_exitT0 != null) return;
     _clearTimers();
-    setState(() {
-      _resetRound();
-      _go(_Screen.puzzle);
+    setState(() => _exitT0 = _now);
+    _later(450, () {
+      setState(() {
+        _exitT0 = null;
+        _resetRound();
+        _go(_Screen.puzzle);
+      });
     });
   }
 
@@ -619,7 +635,9 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                               child: CustomPaint(painter: _AmbientPainter(t)),
                             ),
                           ),
-                        Positioned.fill(child: _buildScreen(t)),
+                        Positioned.fill(
+                          child: _screenTransition(t, _buildScreen(t)),
+                        ),
                         ?_buildFloatingCard(t),
                       ],
                     ),
@@ -633,13 +651,61 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     );
   }
 
+  /// The fade between screens: the reward screen shrinks and fades out when
+  /// Replay is tapped, and the puzzle fades and settles in when it opens.
+  Widget _screenTransition(double t, Widget screen) {
+    var opacity = 1.0;
+    var scale = 1.0;
+    if (_exitT0 != null) {
+      final e = Curves.easeInCubic.transform(_once(t - _exitT0!, .45));
+      opacity = 1 - e;
+      scale = 1 - .06 * e;
+    } else if (_screen == _Screen.puzzle) {
+      final u = Curves.easeOutCubic.transform(_once(t - _screenT0, .5));
+      opacity = u;
+      scale = .96 + .04 * u;
+    }
+    if (opacity >= 1 && scale >= 1) return screen;
+    return Opacity(
+      opacity: opacity,
+      child: Transform.scale(scale: scale, child: screen),
+    );
+  }
+
   Widget _buildScreen(double t) => switch (_screen) {
     _Screen.start => _buildStart(t),
-    _Screen.instructions => _buildInstructions(t),
-    _Screen.listen => _buildListen(t),
+    // The puzzle carries its back button in its own top bar.
     _Screen.puzzle => _buildPuzzle(t),
-    _Screen.reward => _buildReward(t),
+    _Screen.instructions => _withBack(_buildInstructions(t)),
+    _Screen.listen => _withBack(_buildListen(t)),
+    _Screen.reward => _withBack(_buildReward(t)),
   };
+
+  Widget _withBack(Widget screen) => Stack(
+    children: [
+      Positioned.fill(child: screen),
+      Positioned(left: 16, top: 48, child: _backButton(44)),
+    ],
+  );
+
+  /// A round image button that swaps to its pressed art while held.
+  Widget _imgButton(String name, double size, VoidCallback onTap, {Key? key}) =>
+      SizedBox(
+        width: size,
+        height: size,
+        child: _Press(
+          key: key,
+          onTap: onTap,
+          builder: (pressed) => Image.asset(
+            '$_kA/btn_${name}_${pressed ? 'down' : 'up'}.png',
+            fit: BoxFit.contain,
+            gaplessPlayback: true,
+          ),
+        ),
+      );
+
+  Widget _backButton(double size) =>
+      _imgButton('back', size, _onBack, key: const ValueKey('ab-back'));
 
   /// `ab-rise` — slide up 14px and fade in.
   Widget _rise(double p, Widget child) {
@@ -760,34 +826,6 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     );
   }
 
-  Widget _ghostButton({
-    required VoidCallback onTap,
-    required double height,
-    double? width,
-    required double radius,
-    double borderAlpha = .32,
-    double borderWidth = 1.5,
-    required Widget child,
-  }) {
-    return _Press(
-      onTap: onTap,
-      builder: (pressed) => Transform.translate(
-        offset: Offset(0, pressed ? 2 : 0),
-        child: Container(
-          width: width,
-          height: height,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: pressed ? .2 : .12),
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: _cr(borderAlpha), width: borderWidth),
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
-
   /// The gold "I'm ready" / "Next Session" button.
   Widget _goldButton(String label, VoidCallback onTap) {
     return _Press(
@@ -860,60 +898,59 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
 
   /// The title screen, built from the supplied start-screen artwork: the
   /// painted courtyard scene (the two children included), the Ayah Builder
-  /// crest, the hanging "Session N" ribbon, the session's name plate, the Play
-  /// button (which opens the how-to card, as in the prototype), and one empty
-  /// word tile per word of this session's ayah on the floor below the Qur'an
-  /// stand.
+  /// crest, the hanging "Session N" ribbon, the session's name plate, the
+  /// subtitle banner, and the Play button, which opens the how-to board.
   ///
-  /// Every piece sits where the reference image puts it, in the 402x874
+  /// Every piece sits where the reference screen puts it, in the 402x874
   /// frame the scene art is drawn to.
   ///
   /// Each time the screen opens the pieces arrive in a staged entrance: the
   /// scene settles out of a slight zoom, the crest drops in, the ribbon falls
-  /// and swings on its ropes, the name plate pops in, Play bounces up, and
-  /// the word tiles land one by one.
+  /// and swings on its ropes, the name plate and subtitle pop in, Play
+  /// bounces in and then stays put.
   Widget _buildStart(double t) {
     final s = _session;
     final st = t - _screenT0;
-    // Play only starts its idle bob once its entrance has finished.
-    final bob =
-        _kf(_loop(t, 2.8), const [0, .5, 1], const [0, -4, 0], _easeInOut) *
-        _c01((st - 1.6) / .4);
-    // The ribbon hangs from its ropes, so it swings about its top edge as it
-    // lands — a damped sway that dies out over ~1s.
+    // The ribbon hangs from its ropes behind the crest, so it swings about
+    // its top edge as it lands — a damped sway — then keeps gently rocking
+    // like a hanging sign.
     final rp = _once(st, 1.1, .6);
     final ribbonDrop = -46 * (1 - Curves.easeOutCubic.transform(_c01(rp / .4)));
     final ribbonSwing = rp <= 0
         ? 0.0
-        : 7 * math.exp(-5 * rp) * math.cos(rp * 11);
+        : 7 * math.exp(-5 * rp) * math.cos(rp * 11) +
+              1.6 * math.sin(t * 1.7) * _c01((st - 1.4) / .6);
+    // Idle motion eases in once everything has arrived.
+    final idle = _c01((st - 1.8) / .8);
     return Stack(
       children: [
         Positioned.fill(
           child: _enter(
             _once(st, 1.0),
-            Image.asset(_kStartBg, fit: BoxFit.fill),
+            Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset(_kStartBg, fit: BoxFit.fill),
+                IgnorePointer(
+                  child: CustomPaint(painter: _StartScenePainter(t)),
+                ),
+              ],
+            ),
             fromScale: 1.08,
             curve: Curves.easeOutCubic,
             fade: .5,
           ),
         ),
-        Positioned(
-          left: 60.5,
-          top: 130,
-          width: 280,
-          height: 209.8,
-          child: _enter(
-            _once(st, .75, .2),
-            Image.asset('$_kA/start_logo.png', fit: BoxFit.fill),
-            dy: -24,
-            fromScale: .7,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(painter: _StartFxPainter(t, st, behind: true)),
           ),
         ),
         Positioned(
-          left: 94.5,
-          top: 314,
-          width: 214,
-          height: 71.4,
+          left: 92.2,
+          top: 292,
+          width: 216.6,
+          height: 72.2,
           child: Opacity(
             opacity: Curves.easeOut.transform(_c01(rp / .25)),
             child: Transform.translate(
@@ -943,10 +980,30 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
           ),
         ),
         Positioned(
-          left: 97,
-          top: 360,
-          width: 208,
-          height: 69.4,
+          left: 47.9,
+          top: 76.4,
+          width: 308,
+          height: 231,
+          child: _enter(
+            _once(st, .75, .2),
+            Transform.scale(
+              scale: 1 + .018 * math.sin(t * 1.5) * idle,
+              child: _shine(
+                t,
+                4.5,
+                1.2,
+                Image.asset('$_kA/start_logo.png', fit: BoxFit.fill),
+              ),
+            ),
+            dy: -24,
+            fromScale: .7,
+          ),
+        ),
+        Positioned(
+          left: 95.4,
+          top: 331,
+          width: 210,
+          height: 58,
           child: _enter(
             _once(st, .5, .85),
             fromScale: .6,
@@ -958,7 +1015,9 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                     fit: BoxFit.fill,
                   ),
                 ),
-                // The plate's cream panel spans 21%-79% of the art's width.
+                // The plate's cream panel spans 21%-79% of the art's width. It is
+                // laid out a little flatter than its art, as the reference
+                // screen draws it.
                 Positioned(
                   left: 46,
                   right: 46,
@@ -979,42 +1038,83 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
           ),
         ),
         Positioned(
-          left: 106,
-          top: 556 + bob,
-          width: 190,
-          height: 63.3,
+          left: 99,
+          top: 356,
+          width: 208,
+          height: 69.3,
           child: _enter(
-            _once(st, .6, 1.0),
+            _once(st, .45, 1.0),
+            Image.asset('$_kA/start_subtitle.png', fit: BoxFit.fill),
+            dy: 10,
+            fromScale: .95,
+            curve: Curves.easeOutCubic,
+          ),
+        ),
+        Positioned(
+          left: 87.1,
+          top: 570.6,
+          width: 226.8,
+          height: 75.6,
+          child: _enter(
+            _once(st, .6, 1.2),
             fromScale: .4,
             _Press(
               key: const ValueKey('ab-play'),
               onTap: _onStart,
-              builder: (pressed) => Image.asset(
-                '$_kA/${pressed ? 'start_play_down' : 'start_play_up'}.png',
-                fit: BoxFit.fill,
-                gaplessPlayback: true,
+              builder: (pressed) => _shine(
+                t,
+                3.2,
+                2.0,
+                Image.asset(
+                  '$_kA/${pressed ? 'start_play_down' : 'start_play_up'}.png',
+                  fit: BoxFit.fill,
+                  gaplessPlayback: true,
+                ),
               ),
             ),
           ),
         ),
-        Positioned(left: 75.5, right: 76.5, top: 796, child: _startTiles(st)),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(painter: _StartFxPainter(t, st, behind: false)),
+          ),
+        ),
         if (widget.onExit != null)
           Positioned(
             left: 20,
             top: 48,
             child: _enter(
               _once(st, .4, 1.7),
-              _ghostButton(
-                onTap: widget.onExit!,
-                width: 40,
-                height: 40,
-                radius: 20,
-                child: _svg(_svgClose, 18),
+              _imgButton(
+                'home',
+                46,
+                widget.onExit!,
+                key: const ValueKey('ab-home'),
               ),
               curve: Curves.easeOut,
             ),
           ),
       ],
+    );
+  }
+
+  /// A glossy light band that sweeps across [child]'s opaque pixels every
+  /// [period] seconds, starting [delay] seconds after the screen opens.
+  Widget _shine(double t, double period, double delay, Widget child) {
+    final st = t - _screenT0;
+    if (st < delay) return child;
+    final p = _loop(st - delay, period) * period / .9;
+    if (p >= 1) return child;
+    final x = -1.6 + 3.2 * Curves.easeInOut.transform(p);
+    return ShaderMask(
+      blendMode: BlendMode.srcATop,
+      shaderCallback: (r) => LinearGradient(
+        begin: Alignment(x - .5, -1),
+        end: Alignment(x + .5, 1),
+        colors: const [Color(0x00FFFFFF), Color(0x8CFFFFFF), Color(0x00FFFFFF)],
+        stops: const [.35, .5, .65],
+      ).createShader(r),
+      child: child,
     );
   }
 
@@ -1042,198 +1142,134 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     );
   }
 
-  /// One empty word tile per word of the ayah — the board the learner is
-  /// about to fill.
-  Widget _startTiles(double st) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        const gap = 5.7;
-        final w = math.min(58.0, (c.maxWidth - gap * (_n - 1)) / _n);
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            for (var i = 0; i < _n; i++) ...[
-              if (i > 0) const SizedBox(width: gap),
-              _enter(
-                _once(st, .4, 1.55 + i * .08),
-                dy: 18,
-                fromScale: .85,
-                Container(
-                  width: w,
-                  height: 52,
-                  padding: const EdgeInsets.all(3.5),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    gradient: const LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Color(0xFFFBEFD6), Color(0xFFEFDDB8)],
-                    ),
-                    border: Border.all(
-                      color: const Color(0xFFD2B27A),
-                      width: 1.5,
-                    ),
-                    boxShadow: const [
-                      BoxShadow(color: Color(0x5978551E), offset: Offset(0, 3)),
-                      BoxShadow(
-                        color: Color(0x40000000),
-                        blurRadius: 8,
-                        offset: Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: const CustomPaint(
-                    painter: _DashedRRect(
-                      radius: 7,
-                      color: Color(0xFFCDB283),
-                      width: 1.4,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        );
-      },
-    );
-  }
-
   // ---- Instructions --------------------------------------------------------
 
+  /// The how-to screen, built from the supplied "How to Play" board (its
+  /// three illustrated steps are part of the art) with "Let's build ...
+  /// together!" written into the board's empty bottom bar, and the I'm ready
+  /// button beneath it.
   Widget _buildInstructions(double t) {
-    Widget step(int n, String text) => Row(
+    final st = t - _screenT0;
+    const panelLeft = 21.0;
+    const panelTop = 150.0;
+    const panelW = 360.0;
+    const panelH = 460.8;
+    return Stack(
       children: [
-        Container(
-          width: 34,
-          height: 34,
-          alignment: Alignment.center,
-          decoration: const BoxDecoration(color: _teal, shape: BoxShape.circle),
-          child: Text('$n', style: _baloo(18, 800, Colors.white)),
+        Positioned(
+          left: panelLeft,
+          top: panelTop,
+          width: panelW,
+          height: panelH,
+          child: _enter(
+            _once(st, .6),
+            dy: 24,
+            fromScale: .92,
+            Stack(
+              children: [
+                Positioned.fill(
+                  child: Image.asset('$_kA/howto_panel.png', fit: BoxFit.fill),
+                ),
+                // The board's empty teal bar spans 11%-92% across and
+                // 91%-98.6% down the art.
+                Positioned(
+                  left: panelW * .109,
+                  width: panelW * (.922 - .109),
+                  top: panelH * .910,
+                  height: panelH * (.986 - .910),
+                  child: Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        "Let's build ${_session.short} together!",
+                        style: _baloo(
+                          15,
+                          800,
+                          const Color(0xFFFFF1C9),
+                          shadows: const [
+                            Shadow(
+                              color: Color(0x80000000),
+                              offset: Offset(0, 1.5),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(text, style: _nunito(15, 700, _stepInk, height: 1.3)),
+        Positioned(
+          left: 51,
+          top: panelTop + panelH + 22,
+          width: 300,
+          height: 66.8,
+          child: _enter(
+            _once(st, .5, .35),
+            fromScale: .6,
+            _Press(
+              onTap: _onBeginListen,
+              builder: (pressed) => Image.asset(
+                '$_kA/btn_ready_${pressed ? 'down' : 'up'}.png',
+                fit: BoxFit.fill,
+                gaplessPlayback: true,
+                semanticLabel: "I'm ready",
+              ),
+            ),
+          ),
         ),
       ],
-    );
-    const divider = SizedBox(
-      height: 1,
-      child: ColoredBox(color: Color(0x1F122A55)),
-    );
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 96, 24, 44),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _eyebrow('How to play', size: 14, ls: 2),
-          const SizedBox(height: 16),
-          _rise(
-            _once(t - _screenT0, .45),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(26),
-                gradient: const LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xF7FFF8E7), Color(0xF2FFF0CD)],
-                ),
-                border: Border.all(color: _amberEdge, width: 2),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x6B000000),
-                    blurRadius: 44,
-                    offset: Offset(0, 20),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  step(1, 'Listen to the full ayah first.'),
-                  const SizedBox(height: 14),
-                  divider,
-                  const SizedBox(height: 14),
-                  step(2, 'Tap a card to hear its word.'),
-                  const SizedBox(height: 14),
-                  divider,
-                  const SizedBox(height: 14),
-                  step(3, 'Drag the words into the correct order.'),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0x336EC9FF),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(18),
-                  topRight: Radius.circular(18),
-                  bottomRight: Radius.circular(4),
-                  bottomLeft: Radius.circular(18),
-                ),
-                border: Border.all(
-                  color: _sky.withValues(alpha: .7),
-                  width: 1.5,
-                ),
-              ),
-              child: Text(
-                "Let's build ${_session.short} together!",
-                textAlign: TextAlign.center,
-                style: _baloo(16, 700, _cream),
-              ),
-            ),
-          ),
-          const Spacer(),
-          Row(
-            children: [
-              _ghostButton(
-                onTap: _onBack,
-                width: 64,
-                height: 58,
-                radius: 20,
-                child: _svg(_svgBack, 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: _goldButton("I'm ready", _onBeginListen)),
-            ],
-          ),
-        ],
-      ),
     );
   }
 
   // ---- Listen --------------------------------------------------------------
 
+  /// The listen screen, built on the supplied arched panel: the ayah and
+  /// speaker sit above the panel's gold divider, the auto-play note below
+  /// it, and the Start building button art beneath the panel.
   Widget _buildListen(double t) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 96, 22, 44),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _eyebrow('Listen first'),
-          const SizedBox(height: 14),
-          _rise(
-            _once(t - _screenT0, .5),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(26),
-                gradient: _panelGradient,
-                border: Border.all(color: const Color(0x806EC9FF), width: 2),
-                boxShadow: const [
-                  BoxShadow(color: Color(0x386EC9FF), blurRadius: 34),
-                  BoxShadow(
-                    color: Color(0x73000000),
-                    blurRadius: 44,
-                    offset: Offset(0, 20),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
+    final st = t - _screenT0;
+    // The speaker and equaliser only move while the ayah is playing.
+    final wt = _ayahPlaying ? t : 0.0;
+    const panelLeft = 19.0;
+    const panelTop = 118.0;
+    const panelW = 364.0;
+    const panelH = 370.0;
+    const innerW = panelW * .8;
+
+    // Places [child] in the panel's inner column between two fractions of
+    // its height, shrinking it only if it would not fit.
+    Widget band(double top, double bottom, Widget child) => Positioned(
+      left: (panelW - innerW) / 2,
+      width: innerW,
+      top: panelH * top,
+      height: panelH * (bottom - top),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: SizedBox(width: innerW, child: child),
+      ),
+    );
+
+    return Stack(
+      children: [
+        Positioned(left: 0, right: 0, top: 94, child: _eyebrow('Listen first')),
+        Positioned(
+          left: panelLeft,
+          top: panelTop,
+          width: panelW,
+          height: panelH,
+          child: _rise(
+            _once(st, .5),
+            Stack(
+              children: [
+                Positioned.fill(
+                  child: Image.asset('$_kA/listen_panel.png', fit: BoxFit.fill),
+                ),
+                band(
+                  .19,
+                  .47,
                   Wrap(
                     spacing: 10,
                     alignment: WrapAlignment.center,
@@ -1242,13 +1278,16 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                         _listenWord(_words[i].text, _litIndex == i),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                ),
+                band(
+                  .47,
+                  .60,
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _speakerDisc(t, 42, 20, 1.6, _svgSpeakerWide),
+                      _speakerDisc(wt, 42, 20, 1.6, _svgSpeakerWide),
                       const SizedBox(width: 12),
-                      _waveBars(t, 4, 34, .9, .08, const [
+                      _waveBars(wt, 4, 34, .9, .08, const [
                         Color(0xFF6EC9FF),
                         Color(0xFF8FD8FF),
                         Color(0xFF6EC9FF),
@@ -1260,31 +1299,70 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                       ], 4),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                ),
+                band(
+                  .60,
+                  .70,
                   Text(
                     _session.englishTranslation,
                     textAlign: TextAlign.center,
-                    style: _nunito(14, 400, _cr(.85), height: 1.5),
+                    style: _nunito(14, 600, _cream, height: 1.4),
                   ),
-                ],
+                ),
+                band(
+                  .75,
+                  .90,
+                  Text(
+                    'The full ayah plays automatically\nwhen the level opens.',
+                    textAlign: TextAlign.center,
+                    style: _nunito(13, 400, _cr(.7), height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_listenDoneT != null)
+          Positioned(
+            left: 26,
+            top: 761,
+            width: 62,
+            height: 61,
+            child: _enter(
+              _once(t - _listenDoneT!, .5),
+              fromScale: .6,
+              _Press(
+                onTap: _onReplayListen,
+                builder: (pressed) => Image.asset(
+                  '$_kA/btn_replay_${pressed ? 'down' : 'up'}.png',
+                  fit: BoxFit.fill,
+                  gaplessPlayback: true,
+                  semanticLabel: 'Listen again',
+                ),
               ),
             ),
           ),
-          const SizedBox(height: 18),
-          Text(
-            'The full ayah plays automatically\nwhen the level opens.',
-            textAlign: TextAlign.center,
-            style: _nunito(13, 400, _cr(.7)),
+        if (_listenDoneT != null)
+          Positioned(
+            left: 96,
+            top: 760,
+            width: 282,
+            height: 63.4,
+            child: _enter(
+              _once(t - _listenDoneT!, .5),
+              fromScale: .6,
+              _Press(
+                onTap: _onSkipToPuzzle,
+                builder: (pressed) => Image.asset(
+                  '$_kA/btn_start_building_${pressed ? 'down' : 'up'}.png',
+                  fit: BoxFit.fill,
+                  gaplessPlayback: true,
+                  semanticLabel: 'Start building',
+                ),
+              ),
+            ),
           ),
-          const Spacer(),
-          _ghostButton(
-            onTap: _onSkipToPuzzle,
-            height: 56,
-            radius: 20,
-            child: Text('Start building', style: _baloo(18, 700, _cream)),
-          ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -1389,6 +1467,8 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
   Widget _puzzleTopBar() {
     return Row(
       children: [
+        _backButton(38),
+        const SizedBox(width: 6),
         Container(
           height: 36,
           padding: const EdgeInsets.symmetric(horizontal: 11),
@@ -1408,83 +1488,72 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: _Press(
-            onTap: _playAyah,
-            builder: (pressed) => Transform.translate(
-              offset: Offset(0, pressed ? 2 : 0),
-              child: Container(
-                height: 36,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(999),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0xF26EC9FF), Color(0xF22B7FD4)],
-                  ),
-                  border: Border.all(color: _cr(.45), width: 1.5),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x4D000000),
-                      blurRadius: 12,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _svg(_svgPlaySmall, 11, 13),
-                    const SizedBox(width: 7),
-                    Text(
-                      'Play Full Ayah',
-                      style: _baloo(14, 800, const Color(0xFF062038), ls: .2),
-                    ),
-                  ],
-                ),
+          child: SizedBox(
+            height: 44,
+            child: _Press(
+              onTap: _playAyah,
+              builder: (pressed) => Image.asset(
+                '$_kA/btn_play_ayah_${pressed ? 'down' : 'up'}.png',
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+                semanticLabel: 'Play Full Ayah',
               ),
             ),
           ),
         ),
         const SizedBox(width: 8),
-        GestureDetector(
-          onTap: () => setState(() => _soundOn = !_soundOn),
-          child: Container(
-            width: 36,
-            height: 36,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: const Color(0x990A1440),
-              shape: BoxShape.circle,
-              border: Border.all(color: _cr(.3)),
+        // Sound off shows the pressed-in art, dimmed.
+        SizedBox(
+          width: 42,
+          height: 42,
+          child: _Press(
+            onTap: () => setState(() => _soundOn = !_soundOn),
+            builder: (pressed) => Opacity(
+              opacity: _soundOn ? 1 : .55,
+              child: Image.asset(
+                '$_kA/btn_sound_${pressed || !_soundOn ? 'down' : 'up'}.png',
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+              ),
             ),
-            child: _svg(_soundOn ? _svgSoundOn : _svgSoundOff, 17),
           ),
         ),
       ],
     );
   }
 
-  Widget _slotsRow(double t) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        final w = math.min(84.0, (c.maxWidth - 6 * (_n - 1)) / _n);
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            for (var i = 0; i < _n; i++) ...[
-              if (i > 0) const SizedBox(width: 6),
-              SizedBox(
-                key: _slotKeys[i],
-                width: w,
-                height: 96,
-                child: _slot(t, i),
-              ),
+  /// Lays [count] cards out at the 4-word card size, splitting 5+ words
+  /// into two centered rows (3 over 2) instead of squeezing one row.
+  Widget _cardGrid(int count, double gap, Widget Function(int) item) {
+    final perRow = count <= 4 ? count : (count / 2).ceil();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var r = 0; r * perRow < count; r++) ...[
+          if (r > 0) const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (
+                var k = r * perRow;
+                k < math.min(count, (r + 1) * perRow);
+                k++
+              ) ...[
+                if (k > r * perRow) SizedBox(width: gap),
+                SizedBox(width: _kCardW, height: 96, child: item(k)),
+              ],
             ],
-          ],
-        );
-      },
+          ),
+        ],
+      ],
     );
   }
+
+  Widget _slotsRow(double t) => _cardGrid(
+    _n,
+    6,
+    (i) => KeyedSubtree(key: _slotKeys[i], child: _slot(t, i)),
+  );
 
   Widget _slot(double t, int i) {
     final filled = _placed[i];
@@ -1513,29 +1582,10 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
               Stack(
                 clipBehavior: Clip.none,
                 children: [
+                  Positioned.fill(child: _cardArt()),
                   Positioned.fill(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 3,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        gradient: const LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Color(0xFFFFFDF6), Color(0xFFFFF3D8)],
-                        ),
-                        border: Border.all(color: _green, width: 3),
-                        boxShadow: const [
-                          BoxShadow(color: Color(0x733ED598), blurRadius: 16),
-                          BoxShadow(
-                            color: Color(0x4D000000),
-                            blurRadius: 16,
-                            offset: Offset(0, 8),
-                          ),
-                        ],
-                      ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(7, 8, 7, 12),
                       child: _wordFace(
                         word,
                         21,
@@ -1567,22 +1617,21 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
               ),
             ),
           ),
+        // Traces the word card art's rounded rim while its word plays.
         if (_litIndex == i && filled)
-          Positioned(
-            left: -5,
-            right: -5,
-            top: -5,
-            bottom: -5,
+          Positioned.fill(
             child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: const BorderRadius.all(
+                    Radius.elliptical(18, 22),
+                  ),
                   border: Border.all(color: _gold, width: 3),
                   boxShadow: [
                     BoxShadow(
                       color: _gold.withValues(alpha: .7),
-                      blurRadius: 26,
-                      spreadRadius: 6,
+                      blurRadius: 18,
+                      spreadRadius: 2,
                     ),
                   ],
                 ),
@@ -1619,6 +1668,13 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
   }
 
   /// The Arabic word over its transliteration — shared by slots and cards.
+  /// The stitched word card art.
+  Widget _cardArt() => Image.asset(
+    '$_kA/word_card.png',
+    fit: BoxFit.fill,
+    gaplessPlayback: true,
+  );
+
   Widget _wordFace(
     AyahBuilderWord w,
     double arSize,
@@ -1641,10 +1697,13 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
           ),
         ),
         const SizedBox(height: 2),
-        Text(
-          w.transliteration,
-          textAlign: TextAlign.center,
-          style: _nunito(trSize, 700, trColor, height: 1.1),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            w.transliteration,
+            maxLines: 1,
+            style: _nunito(trSize, 700, trColor, height: 1.1),
+          ),
         ),
       ],
     );
@@ -1793,20 +1852,8 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     );
   }
 
-  Widget _trayRow(double t) {
-    return SizedBox(
-      height: 96,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var k = 0; k < _trayOrder.length; k++) ...[
-            if (k > 0) const SizedBox(width: 7),
-            Expanded(child: _trayCard(t, _trayOrder[k])),
-          ],
-        ],
-      ),
-    );
-  }
+  Widget _trayRow(double t) =>
+      _cardGrid(_trayOrder.length, 7, (k) => _trayCard(t, _trayOrder[k]));
 
   Widget _trayCard(double t, int id) {
     if (_placed[id]) {
@@ -1830,26 +1877,10 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     return Stack(
       clipBehavior: Clip.none,
       children: [
+        Positioned.fill(child: _cardArt()),
         Positioned.fill(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 6),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFFFFFDF6), Color(0xFFFFEFCF)],
-              ),
-              border: Border.all(color: _amberEdge, width: 3),
-              boxShadow: const [
-                BoxShadow(color: Color(0x8096631A), offset: Offset(0, 7)),
-                BoxShadow(
-                  color: Color(0x66000000),
-                  blurRadius: 26,
-                  offset: Offset(0, 14),
-                ),
-              ],
-            ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(7, 8, 7, 12),
             child: _wordFace(_words[id], 24, 1.35, 10, const Color(0xFF0F5F72)),
           ),
         ),
@@ -1932,198 +1963,496 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
 
   // ---- Reward --------------------------------------------------------------
 
+  /// The end screen, laid out after the supplied "Masha'Allah!" reference:
+  /// three stars over the ribbon banner, the built ayah panel, the two
+  /// cheering kids around the cheer bubble, and replay / Next Session
+  /// buttons, all over the same night backdrop as the game.
+  /// The end screen, laid out after the supplied "Masha'Allah!" reference:
+  /// three stars over the ribbon banner, the built ayah panel, the two
+  /// cheering kids around the cheer bubble, and replay / Next Session
+  /// buttons, all over the same night backdrop as the game.
+  ///
+  /// Entrance, in order: a warm glow and slow light rays open behind the
+  /// banner as it drops in; the stars punch in one by one, each landing with
+  /// a white flash and a sparkle burst; the star count, ayah panel and its
+  /// word chips rise in; the kids slide in from the sides; the bubble pops;
+  /// the buttons arrive last. Afterwards everything keeps a gentle idle:
+  /// stars breathe their glow, the banner floats, the kids bounce and sway,
+  /// Next Session softly pulses.
   Widget _buildReward(double t) {
     final st = t - _screenT0;
-    Widget star(double size, double delay, double glow) {
-      final p = _once(st, .5, delay);
-      final s = _kf(p, const [0, .65, 1], const [0, 1.25, 1], _easeOut);
-      final r = _kf(p, const [0, .65, 1], const [-40, 8, 0], _easeOut);
+    // Idle motion eases in once the entrance is done, so nothing jumps.
+    final idle = _c01((st - 2.2) / .8);
+
+    Widget star(double size, double delay, double phase) {
+      final p = _once(st, .55, delay);
+      final s = _kf(p, const [0, .6, 1], const [0, 1.3, 1], _easeOut);
+      final r = _kf(p, const [0, .6, 1], const [-50, 10, 0], _easeOut);
+      final landed = _c01((st - delay - .33) / .45);
+      // White flash as it lands, then a soft glint every few seconds.
+      final glint = _kf(
+        _loop(t, 3.2, phase),
+        const [0, .08, .2, 1],
+        const [0, .45, 0, 0],
+      );
+      final flash = (1 - landed) * (landed > 0 ? 1 : 0) + glint * idle;
+      final breathe = .5 + .5 * math.sin(t * 2.4 + phase * 6);
+      final img = Image.asset(
+        '$_kA/reward_star.png',
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+      );
       return Transform.rotate(
         angle: r * math.pi / 180,
         child: Transform.scale(
-          scale: s,
+          scale: s * (1 + .05 * breathe * idle),
           child: Stack(
             clipBehavior: Clip.none,
+            alignment: Alignment.center,
             children: [
-              ImageFiltered(
-                imageFilter: ui.ImageFilter.blur(sigmaX: glow, sigmaY: glow),
-                child: Opacity(opacity: .85, child: _svg(_svgStar, size)),
+              Transform.scale(
+                scale: 1.35,
+                child: Opacity(
+                  opacity: _c01(landed * (.35 + .45 * breathe)),
+                  child: ImageFiltered(
+                    imageFilter: ui.ImageFilter.blur(sigmaX: 9, sigmaY: 9),
+                    child: img,
+                  ),
+                ),
               ),
-              _svg(_svgStarBig, size),
+              img,
+              if (flash > 0)
+                Opacity(
+                  opacity: _c01(flash),
+                  child: ColorFiltered(
+                    colorFilter: const ColorFilter.mode(
+                      Color(0xFFFFFFFF),
+                      BlendMode.srcATop,
+                    ),
+                    child: img,
+                  ),
+                ),
             ],
           ),
         ),
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 70, 20, 42),
-      child: Column(
-        children: [
-          _pop(
-            _once(st, .5),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(999),
-                gradient: const LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xFFFFE79A), _amberEdge],
-                ),
-                border: Border.all(color: _goldEdge, width: 2.5),
-                boxShadow: const [
-                  BoxShadow(color: _goldShade, offset: Offset(0, 8)),
-                  BoxShadow(
-                    color: Color(0x66000000),
-                    blurRadius: 30,
-                    offset: Offset(0, 16),
+    Widget slideIn(double p, double dx, Widget child) {
+      final u = Curves.easeOutBack.transform(p);
+      return Opacity(
+        opacity: Curves.easeOut.transform(_c01(p / .5)),
+        child: Transform.translate(
+          offset: Offset(dx * (1 - u), 0),
+          child: child,
+        ),
+      );
+    }
+
+    final last = _sessionIdx + 1 >= widget.sessions.length;
+    final bannerFloat = 2.5 * math.sin(t * 1.6) * idle;
+    final girlHop = -6 * math.sin(t * 3.4).abs() * idle;
+    final boySway = 2.2 * math.sin(t * 1.9) * idle;
+    final nextPulse = 1 + .025 * math.sin(t * 3) * idle;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(painter: _RewardFxPainter(t, st, behind: true)),
+          ),
+        ),
+        // The banner's cream panel keeps a band below its lettering for the
+        // star count.
+        Positioned(
+          left: 31,
+          top: 124 + bannerFloat,
+          width: 340,
+          height: 113,
+          child: _enter(
+            _once(st, .7, .05),
+            dy: -70,
+            fromScale: .55,
+            fade: .35,
+            Stack(
+              children: [
+                Positioned.fill(
+                  child: Image.asset(
+                    '$_kA/reward_banner.png',
+                    fit: BoxFit.fill,
+                    semanticLabel: "Masha'Allah!",
                   ),
-                ],
-              ),
-              child: Text(
-                "Masha'Allah!",
-                style: _baloo(30, 800, _brownInk, ls: .4),
-              ),
+                ),
+                Positioned(
+                  left: 90,
+                  right: 90,
+                  top: 113 * .70,
+                  height: 113 * .16,
+                  child: _rise(
+                    _once(st, .5, 1.1),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'You earned 1 star · $_stars total',
+                        style: _baloo(14, 800, const Color(0xFF1B2F7E)),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 16),
-          Row(
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 76 + bannerFloat,
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              star(46, .15, 6),
-              const SizedBox(width: 12),
-              star(58, .3, 8),
-              const SizedBox(width: 12),
-              star(46, .45, 6),
+              star(50, .45, 0),
+              const SizedBox(width: 4),
+              star(66, .62, .33),
+              const SizedBox(width: 4),
+              star(50, .79, .66),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            'You earned 1 star · $_stars total',
-            style: _nunito(13, 700, _gold),
-          ),
-          const SizedBox(height: 18),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              gradient: _panelGradient,
-              border: Border.all(color: _gold.withValues(alpha: .5), width: 2),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x73000000),
-                  blurRadius: 44,
-                  offset: Offset(0, 20),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Text(
-                  _words.map((w) => w.text).join(' '),
-                  textAlign: TextAlign.center,
-                  textDirection: TextDirection.rtl,
-                  style: _arabic(30, _cream, 1.7),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    for (final w in _words)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 9,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0x382BB673),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: const Color(0x993ED598)),
-                        ),
-                        child: Text(
-                          w.transliteration,
-                          style: _nunito(11, 700, const Color(0xFF8FEFC2)),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  _session.englishTranslation,
-                  textAlign: TextAlign.center,
-                  style: _nunito(13.5, 400, _cr(.86), height: 1.5),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: _bubble(
-                    Text(
-                      _session.cheer,
-                      style: _nunito(
-                        12.5,
-                        700,
-                        const Color(0xFF112233),
-                        height: 1.35,
-                      ),
+        ),
+        Positioned(
+          left: 36,
+          right: 36,
+          top: 252,
+          child: _enter(
+            _once(st, .6, .9),
+            dy: 28,
+            fromScale: .94,
+            curve: Curves.easeOutCubic,
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: _panelGradient,
+                border: Border.all(color: _gold, width: 2.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: _gold.withValues(
+                      alpha: .18 + .14 * math.sin(t * 2) * idle,
                     ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 11,
-                    ),
-                    radius: const BorderRadius.only(
-                      topLeft: Radius.circular(18),
-                      topRight: Radius.circular(18),
-                      bottomRight: Radius.circular(4),
-                      bottomLeft: Radius.circular(18),
+                    blurRadius: 22,
+                  ),
+                  const BoxShadow(
+                    color: Color(0x73000000),
+                    blurRadius: 30,
+                    offset: Offset(0, 14),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      _words.map((w) => w.text).join(' '),
+                      textAlign: TextAlign.center,
+                      textDirection: TextDirection.rtl,
+                      style: _arabic(28, _cream, 1.6),
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      for (var i = 0; i < _n; i++)
+                        _pop(
+                          _once(st, .4, 1.25 + .09 * i),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0x382BB673),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: const Color(0x993ED598),
+                              ),
+                            ),
+                            child: Text(
+                              _words[i].transliteration,
+                              style: _nunito(11.5, 700, _cream),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  _rise(
+                    _once(st, .5, 1.5),
+                    Text(
+                      _session.englishTranslation,
+                      textAlign: TextAlign.center,
+                      style: _nunito(13, 600, _cr(.9), height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 10,
+          top: 470 + girlHop,
+          width: 160,
+          height: 232,
+          child: slideIn(
+            _once(st, .7, 1.35),
+            -90,
+            Image.asset('$_kA/reward_girl.png', fit: BoxFit.contain),
+          ),
+        ),
+        Positioned(
+          right: 10,
+          top: 448,
+          width: 160,
+          height: 254,
+          child: slideIn(
+            _once(st, .7, 1.5),
+            90,
+            Transform.rotate(
+              angle: boySway * math.pi / 180,
+              alignment: Alignment.bottomCenter,
+              child: Image.asset('$_kA/reward_boy.png', fit: BoxFit.contain),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 136,
+          width: 130,
+          top: 548 + 3 * math.sin(t * 1.4 + 1) * idle,
+          child: _pop(
+            _once(st, .45, 1.9),
+            _bubble(
+              Text(
+                _session.cheer,
+                textAlign: TextAlign.center,
+                style: _nunito(11.5, 700, const Color(0xFF112233), height: 1.3),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              radius: BorderRadius.circular(16),
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(painter: _RewardFxPainter(t, st, behind: false)),
+          ),
+        ),
+        // Transition in from the finished puzzle: a warm flash that clears.
+        if (st < .7)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: ColoredBox(
+                color: Color.fromRGBO(
+                  255,
+                  240,
+                  200,
+                  .6 * (1 - Curves.easeOutCubic.transform(_once(st, .7))),
                 ),
               ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 104,
-                height: 124,
-                child: Image.asset(_kMascotReward, fit: BoxFit.contain),
-              ),
-            ],
+            ),
           ),
-          const Spacer(),
-          Row(
-            children: [
-              _ghostButton(
-                onTap: _onReplay,
-                width: 68,
-                height: 58,
-                radius: 20,
-                child: _svg(_svgReplay, 21),
+        Positioned(
+          left: 34,
+          top: 744,
+          width: 62,
+          height: 61,
+          child: _enter(
+            _once(st, .55, 2.05),
+            dy: 40,
+            fromScale: .6,
+            _Press(
+              onTap: _onReplay,
+              builder: (pressed) => Image.asset(
+                '$_kA/btn_replay_${pressed ? 'down' : 'up'}.png',
+                fit: BoxFit.fill,
+                gaplessPlayback: true,
+                semanticLabel: 'Replay',
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _goldButton(
-                  _sessionIdx + 1 < widget.sessions.length
-                      ? 'Next Session'
-                      : 'Finish',
-                  _onNextSession,
-                ),
-              ),
-            ],
+            ),
           ),
-        ],
-      ),
+        ),
+        Positioned(
+          left: 106,
+          top: 741,
+          width: 262,
+          height: 70,
+          child: _enter(
+            _once(st, .55, 2.15),
+            dy: 40,
+            fromScale: .6,
+            Transform.scale(
+              scale: nextPulse,
+              child: last
+                  ? Center(child: _goldButton('Finish', _onNextSession))
+                  : _Press(
+                      onTap: _onNextSession,
+                      builder: (pressed) => Image.asset(
+                        '$_kA/btn_next_${pressed ? 'down' : 'up'}.png',
+                        fit: BoxFit.fill,
+                        gaplessPlayback: true,
+                        semanticLabel: 'Next Session',
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ],
     );
   }
+}
+
+/// The end screen's light effects. Behind the banner ([behind]): a warm glow
+/// and slowly turning light rays around the stars. In front: a sparkle burst
+/// as each star lands, then scattered twinkles. [t] is the game clock and
+/// [st] the time since the screen opened, both in seconds.
+class _RewardFxPainter extends CustomPainter {
+  _RewardFxPainter(this.t, this.st, {required this.behind});
+
+  final double t;
+  final double st;
+  final bool behind;
+
+  static const _center = Offset(201, 118);
+  // Each star's centre and landing time, matching _buildReward's star row.
+  static const _stars = [
+    (Offset(139, 121), .78),
+    (Offset(201, 109), .95),
+    (Offset(263, 121), 1.12),
+  ];
+  static const _twinkles = [
+    Offset(40, 96),
+    Offset(84, 60),
+    Offset(330, 70),
+    Offset(372, 118),
+    Offset(22, 200),
+    Offset(386, 230),
+    Offset(60, 420),
+    Offset(350, 410),
+    Offset(120, 250),
+    Offset(290, 256),
+    Offset(30, 640),
+    Offset(376, 600),
+    Offset(200, 700),
+  ];
+
+  static Path _sparkle(Offset c, double r) {
+    final w = r * .28;
+    return Path()
+      ..moveTo(c.dx, c.dy - r)
+      ..quadraticBezierTo(c.dx + w, c.dy - w, c.dx + r, c.dy)
+      ..quadraticBezierTo(c.dx + w, c.dy + w, c.dx, c.dy + r)
+      ..quadraticBezierTo(c.dx - w, c.dy + w, c.dx - r, c.dy)
+      ..quadraticBezierTo(c.dx - w, c.dy - w, c.dx, c.dy - r)
+      ..close();
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (behind) {
+      final open = Curves.easeOutCubic.transform(_c01((st - .2) / .9));
+      if (open <= 0) return;
+      final breathe = .85 + .15 * math.sin(t * 1.8);
+      canvas.drawCircle(
+        _center,
+        190,
+        Paint()
+          ..shader = ui.Gradient.radial(_center, 190, [
+            Color.fromRGBO(255, 214, 110, .42 * open * breathe),
+            const Color(0x00FFD66E),
+          ]),
+      );
+      // Light rays: 14 soft wedges, slowly turning.
+      canvas.save();
+      canvas.translate(_center.dx, _center.dy);
+      canvas.rotate(t * .12);
+      final len = 230 * open;
+      final ray = Paint()
+        ..shader = ui.Gradient.radial(Offset.zero, len, [
+          Color.fromRGBO(255, 232, 160, .30 * open * breathe),
+          const Color(0x00FFE8A0),
+        ]);
+      for (var i = 0; i < 14; i++) {
+        final a = i * 2 * math.pi / 14;
+        const half = .085;
+        canvas.drawPath(
+          Path()
+            ..moveTo(0, 0)
+            ..lineTo(len * math.cos(a - half), len * math.sin(a - half))
+            ..lineTo(len * math.cos(a + half), len * math.sin(a + half))
+            ..close(),
+          ray,
+        );
+      }
+      canvas.restore();
+      return;
+    }
+
+    // Landing bursts: 10 sparkles fly out from each star and fade.
+    for (final (c, at) in _stars) {
+      final p = _c01((st - at) / .9);
+      if (p <= 0 || p >= 1) continue;
+      final u = Curves.easeOutCubic.transform(p);
+      final fade = 1 - Curves.easeIn.transform(p);
+      canvas.drawCircle(
+        c,
+        14 + 46 * u,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3 * fade
+          ..color = Color.fromRGBO(255, 236, 170, .7 * fade),
+      );
+      for (var i = 0; i < 10; i++) {
+        final a = i * 2 * math.pi / 10 + at;
+        final d = 18 + 58 * u * (i.isEven ? 1 : .75);
+        canvas.drawPath(
+          _sparkle(c + Offset(math.cos(a), math.sin(a)) * d, 5.5 * fade + 1),
+          Paint()..color = Color.fromRGBO(255, 244, 200, fade),
+        );
+      }
+    }
+
+    // Twinkles: small four-point stars that fade in and out, each on its
+    // own beat, once the stars have landed.
+    final on = _c01((st - 1.2) / .8);
+    if (on <= 0) return;
+    for (var i = 0; i < _twinkles.length; i++) {
+      final ph = _loop(t, 2.6 + (i % 4) * .5, i * .37);
+      final a = math.pow(math.sin(ph * math.pi), 3).toDouble() * on;
+      if (a <= .02) continue;
+      final c = _twinkles[i];
+      final r = 3.5 + (i % 3) * 1.6;
+      canvas.drawCircle(
+        c,
+        r * 1.8,
+        Paint()
+          ..color = Color.fromRGBO(255, 226, 140, .35 * a)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+      );
+      canvas.drawPath(
+        _sparkle(c, r * (.7 + .3 * a)),
+        Paint()..color = Color.fromRGBO(255, 248, 220, a),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RewardFxPainter old) =>
+      old.t != t || old.st != st || old.behind != behind;
 }
 
 /// A tappable surface that reports its pressed state — the prototype's
@@ -2449,4 +2778,312 @@ class _AmbientPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_AmbientPainter old) => old.t != t;
+}
+
+/// The start screen's living night: the painted scene's own stars twinkle,
+/// its two hanging lanterns breathe brighter and dimmer with a faint flame
+/// flicker, and fireflies drift and blink through the garden. Positions are
+/// read off `start_bg.jpg` in the 402x874 frame; [t] is the game clock in
+/// seconds.
+class _StartScenePainter extends CustomPainter {
+  _StartScenePainter(this.t);
+
+  final double t;
+
+  // The art's stars — (x, y, size): sparkle-sized ones get a four-point
+  // glint, the rest a soft glow.
+  static const _stars = [
+    (188.0, 41.6, 1.0),
+    (147.0, 46.3, .5),
+    (221.1, 37.3, .4),
+    (246.1, 54.8, .8),
+    (105.8, 96.4, 1.0),
+    (162.5, 89.3, .5),
+    (257.0, 95.9, .5),
+    (131.3, 122.8, .5),
+    (247.5, 130.8, 1.0),
+    (208.3, 130.8, .4),
+    (324.0, 146.0, .9),
+    (190.8, 155.4, .6),
+    (286.7, 166.7, .5),
+    (150.7, 185.2, .5),
+    (233.8, 185.6, .4),
+    (273.0, 203.6, .7),
+    (240.9, 215.4, .4),
+    (180.9, 246.6, .8),
+    (222.0, 245.2, .5),
+    (182.8, 321.7, .5),
+  ];
+
+  // Glow centres of the two hanging lanterns.
+  static const _lanterns = [(56.7, 123.8, 0.0), (374.6, 137.0, 1.7)];
+
+  // Fireflies — each wanders around a home spot on its own slow loop.
+  static final _flies = () {
+    final rnd = math.Random(7);
+    const homes = [
+      (70.0, 420.0),
+      (330.0, 410.0),
+      (150.0, 455.0),
+      (255.0, 470.0),
+      (200.0, 520.0),
+      (40.0, 560.0),
+      (365.0, 575.0),
+      (60.0, 730.0),
+      (345.0, 745.0),
+      (110.0, 800.0),
+      (300.0, 815.0),
+      (200.0, 690.0),
+    ];
+    return [
+      for (final h in homes)
+        (
+          x: h.$1,
+          y: h.$2,
+          ax: 14 + rnd.nextDouble() * 16,
+          ay: 10 + rnd.nextDouble() * 14,
+          wx: .25 + rnd.nextDouble() * .3,
+          wy: .3 + rnd.nextDouble() * .35,
+          wb: 1.1 + rnd.nextDouble() * 1.4,
+          ph: rnd.nextDouble() * math.pi * 2,
+        ),
+    ];
+  }();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.scale(size.width / _kW, size.height / _kH);
+
+    // Stars — each on its own twinkle rhythm.
+    for (var i = 0; i < _stars.length; i++) {
+      final (x, y, s) = _stars[i];
+      final dur = 2.2 + (i * 0.37) % 1.8;
+      final p = _loop(t, dur, i * 0.61);
+      final k = _kf(p, const [0, .5, 1], const [.15, 1, .15], _easeInOut);
+      final c = Offset(x, y);
+      canvas.drawCircle(
+        c,
+        2.5 + 4 * s,
+        Paint()
+          ..color = const Color(0xFFFFF3C4).withValues(alpha: .55 * k)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2 + 3 * s),
+      );
+      if (s >= .7) {
+        final len = (5 + 6 * s) * (.6 + .4 * k);
+        final glint = Paint()
+          ..color = Colors.white.withValues(alpha: .9 * k)
+          ..strokeWidth = 1
+          ..strokeCap = StrokeCap.round;
+        canvas.drawLine(c.translate(-len, 0), c.translate(len, 0), glint);
+        canvas.drawLine(c.translate(0, -len), c.translate(0, len), glint);
+      }
+      canvas.drawCircle(
+        c,
+        .6 + .7 * s,
+        Paint()..color = Colors.white.withValues(alpha: .6 + .4 * k),
+      );
+    }
+
+    // Lanterns — a slow breath with a small flame flicker on top.
+    for (final (x, y, ph) in _lanterns) {
+      final breath = .5 + .5 * math.sin(t * 1.6 + ph);
+      final flicker = .08 * math.sin(t * 13 + ph * 3) * math.sin(t * 7.3 + ph);
+      final k = (.45 + .5 * breath + flicker).clamp(0.0, 1.0);
+      final c = Offset(x, y);
+      canvas.drawCircle(
+        c,
+        46,
+        Paint()
+          ..shader = ui.Gradient.radial(c, 46, [
+            const Color(0xFFFFC862).withValues(alpha: .42 * k),
+            const Color(0xFFFFC862).withValues(alpha: 0),
+          ])
+          ..blendMode = BlendMode.plus,
+      );
+      canvas.drawCircle(
+        c,
+        14,
+        Paint()
+          ..color = const Color(0xFFFFF1C2).withValues(alpha: .5 * k)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6)
+          ..blendMode = BlendMode.plus,
+      );
+    }
+
+    // Fireflies — drifting, blinking points of warm green-gold light.
+    for (final f in _flies) {
+      final x =
+          f.x +
+          f.ax * math.sin(t * f.wx + f.ph) +
+          5 * math.sin(t * f.wx * 2.7 + f.ph * 1.3);
+      final y =
+          f.y +
+          f.ay * math.cos(t * f.wy + f.ph * .7) +
+          4 * math.sin(t * f.wy * 3.1 + f.ph);
+      final b = math.pow(math.max(0.0, math.sin(t * f.wb + f.ph)), 2);
+      final k = .15 + .85 * b;
+      final c = Offset(x, y);
+      canvas.drawCircle(
+        c,
+        7,
+        Paint()
+          ..color = const Color(0xFFE8FF8A).withValues(alpha: .45 * k)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+      );
+      canvas.drawCircle(
+        c,
+        1.6,
+        Paint()..color = const Color(0xFFFFFDE0).withValues(alpha: k),
+      );
+    }
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_StartScenePainter old) => old.t != t;
+}
+
+/// The start screen's extra light. Behind the pieces ([behind]): a warm halo
+/// with slowly turning rays around the crest, a soft glow under Play, and an
+/// occasional shooting star. In front: a sparkle burst as the crest lands
+/// and as Play arrives. [t] is the game clock and [st] the time since the
+/// screen opened, in seconds; positions are in the 402x874 frame.
+class _StartFxPainter extends CustomPainter {
+  _StartFxPainter(this.t, this.st, {required this.behind});
+
+  final double t;
+  final double st;
+  final bool behind;
+
+  static const _crest = Offset(202, 190);
+  static const _play = Offset(200.5, 608);
+
+  static Path _sparkle(Offset c, double r) {
+    final w = r * .28;
+    return Path()
+      ..moveTo(c.dx, c.dy - r)
+      ..quadraticBezierTo(c.dx + w, c.dy - w, c.dx + r, c.dy)
+      ..quadraticBezierTo(c.dx + w, c.dy + w, c.dx, c.dy + r)
+      ..quadraticBezierTo(c.dx - w, c.dy + w, c.dx - r, c.dy)
+      ..quadraticBezierTo(c.dx - w, c.dy - w, c.dx, c.dy - r)
+      ..close();
+  }
+
+  void _burst(Canvas canvas, Offset c, double at, double reach, int n) {
+    final p = _c01((st - at) / 1.0);
+    if (p <= 0 || p >= 1) return;
+    final u = Curves.easeOutCubic.transform(p);
+    final fade = 1 - Curves.easeIn.transform(p);
+    for (var i = 0; i < n; i++) {
+      final a = i * 2 * math.pi / n + .3;
+      final d = reach * (.35 + .65 * u) * (i.isEven ? 1 : .8);
+      canvas.drawPath(
+        _sparkle(c + Offset(math.cos(a), math.sin(a) * .7) * d, 6 * fade + 1),
+        Paint()..color = Color.fromRGBO(255, 244, 200, fade),
+      );
+    }
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.scale(size.width / _kW, size.height / _kH);
+    if (behind) {
+      final open = Curves.easeOutCubic.transform(_c01((st - .5) / 1.0));
+      if (open > 0) {
+        final breathe = .8 + .2 * math.sin(t * 1.5);
+        canvas.drawCircle(
+          _crest,
+          200,
+          Paint()
+            ..shader = ui.Gradient.radial(_crest, 200, [
+              Color.fromRGBO(255, 210, 110, .38 * open * breathe),
+              const Color(0x00FFD26E),
+            ]),
+        );
+        canvas.save();
+        canvas.translate(_crest.dx, _crest.dy);
+        canvas.rotate(t * .1);
+        final len = 240 * open;
+        final ray = Paint()
+          ..shader = ui.Gradient.radial(Offset.zero, len, [
+            Color.fromRGBO(255, 232, 160, .22 * open * breathe),
+            const Color(0x00FFE8A0),
+          ]);
+        for (var i = 0; i < 16; i++) {
+          final a = i * 2 * math.pi / 16;
+          const half = .07;
+          canvas.drawPath(
+            Path()
+              ..moveTo(0, 0)
+              ..lineTo(len * math.cos(a - half), len * math.sin(a - half))
+              ..lineTo(len * math.cos(a + half), len * math.sin(a + half))
+              ..close(),
+            ray,
+          );
+        }
+        canvas.restore();
+      }
+
+      // Soft pulsing glow under Play once it has arrived.
+      final pg = _c01((st - 1.8) / .6) * (.6 + .4 * math.sin(t * 2.6));
+      if (pg > 0) {
+        final m = Matrix4.identity()
+          ..translateByDouble(_play.dx, _play.dy, 0, 1)
+          ..scaleByDouble(1, .45, 1, 1)
+          ..translateByDouble(-_play.dx, -_play.dy, 0, 1);
+        canvas.drawRect(
+          Rect.fromCenter(center: _play, width: 360, height: 140),
+          Paint()
+            ..shader = ui.Gradient.radial(
+              _play,
+              170,
+              [Color.fromRGBO(255, 214, 100, .5 * pg), const Color(0x00FFD664)],
+              null,
+              TileMode.clamp,
+              m.storage,
+            ),
+        );
+      }
+
+      // A shooting star crosses the sky every 7 seconds.
+      final sp = _loop(t, 7, 2.5) * 7 / 1.1;
+      if (st > 2 && sp < 1) {
+        final u = Curves.easeInOut.transform(sp);
+        const from = Offset(70, 40);
+        const to = Offset(300, 135);
+        final head = Offset.lerp(from, to, u)!;
+        final tail = Offset.lerp(from, to, math.max(0, u - .22))!;
+        final a = math.sin(sp * math.pi);
+        canvas.drawLine(
+          tail,
+          head,
+          Paint()
+            ..strokeWidth = 2.2
+            ..strokeCap = StrokeCap.round
+            ..shader = ui.Gradient.linear(tail, head, [
+              const Color(0x00FFFFFF),
+              Color.fromRGBO(255, 250, 225, a),
+            ]),
+        );
+        canvas.drawCircle(
+          head,
+          3,
+          Paint()
+            ..color = Color.fromRGBO(255, 250, 225, a)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+        );
+      }
+    } else {
+      _burst(canvas, _crest, .75, 170, 14);
+      _burst(canvas, _play, 1.55, 140, 10);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_StartFxPainter old) =>
+      old.t != t || old.st != st || old.behind != behind;
 }

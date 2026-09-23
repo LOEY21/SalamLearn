@@ -36,9 +36,14 @@ void main() {
   Future<void> toPuzzle(WidgetTester tester) async {
     await tester.tap(find.byKey(const ValueKey('ab-play')));
     await tester.pump(const Duration(milliseconds: 600));
-    await tester.tap(find.text("I'm ready"));
+    await tester.tap(find.bySemanticsLabel("I'm ready"));
     await tester.pump(const Duration(milliseconds: 600));
-    await tester.tap(find.text('Start building'));
+    // Start building only appears once the ayah has finished playing.
+    expect(find.bySemanticsLabel('Start building'), findsNothing);
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    await tester.tap(find.bySemanticsLabel('Start building'));
     await tester.pump(const Duration(milliseconds: 600));
   }
 
@@ -62,7 +67,7 @@ void main() {
     ]);
   });
 
-  testWidgets('start screen shows the session; Play opens the how-to card', (
+  testWidgets('start screen shows the session; Play opens the how-to board', (
     tester,
   ) async {
     await tester.pumpWidget(host(6));
@@ -72,8 +77,24 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('ab-play')));
     await tester.pump(const Duration(milliseconds: 600));
-    expect(find.text('Drag the words into the correct order.'), findsOneWidget);
+    expect(find.bySemanticsLabel("I'm ready"), findsOneWidget);
     expect(find.text("Let's build Al-Kawthar together!"), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('ab-back')));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byKey(const ValueKey('ab-play')), findsOneWidget);
+  });
+
+  testWidgets('five-word puzzle keeps 4-word card size in two rows', (
+    tester,
+  ) async {
+    await tester.pumpWidget(host(2));
+    await tester.pump(const Duration(milliseconds: 600));
+    await toPuzzle(tester);
+    final one = tester.getRect(find.text('1'));
+    final four = tester.getRect(find.text('4'));
+    expect(four.top, greaterThan(one.bottom));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('wrong drop says oops; building the ayah reaches the reward', (
@@ -95,7 +116,7 @@ void main() {
       await drag(tester, words[i].text, i + 1);
     }
     await tester.pump(const Duration(seconds: 3));
-    expect(find.text("Masha'Allah!"), findsOneWidget);
+    expect(find.bySemanticsLabel("Masha'Allah!"), findsOneWidget);
     expect(find.text('You earned 1 star · 1 total'), findsOneWidget);
 
     await tester.tap(find.text('Finish'));
