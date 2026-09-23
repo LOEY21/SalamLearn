@@ -20,6 +20,7 @@ enum ActivityType {
   creationHunt,
   classroomHeroes,
   sirahStory,
+  quranEtiquette,
 }
 
 enum DestinationState { completed, current, locked }
@@ -542,6 +543,66 @@ class SirahStorySession {
   final List<SirahStoryPage> pages;
 }
 
+/// One scene of The Qur'an Etiquette: the question and feedback artwork, the
+/// prompt read over it, the two choices, and the line said back when the
+/// respectful one is picked.
+///
+/// [badgeX]/[badgeY] place the MUMTAZ! badge burst as fractions of the stage,
+/// exactly as the prototype's per-question `badge` pair does.
+class QuranEtiquetteQuestion {
+  const QuranEtiquetteQuestion({
+    required this.image,
+    required this.feedbackImage,
+    required this.badgeX,
+    required this.badgeY,
+    required this.prompt,
+    required this.correct,
+    required this.decoy,
+    required this.feedback,
+  });
+
+  final String image;
+  final String feedbackImage;
+  final double badgeX;
+  final double badgeY;
+  final String prompt;
+  final String correct;
+  final String decoy;
+  final String feedback;
+}
+
+/// One session of The Qur'an Etiquette (At the Masjid / At Home) — five
+/// scenes ported 1:1 from the supplied prototype.
+///
+/// Distributed one per stage where the curriculum lists the lesson (Session 1
+/// in Destination 1, Session 2 in Destination 3). Every session opens on the
+/// same title screen with both session cards on it.
+class QuranEtiquetteSession {
+  const QuranEtiquetteSession({
+    required this.number,
+    required this.tag,
+    required this.title,
+    required this.blurb,
+    required this.retry,
+    required this.finish,
+    required this.lessons,
+    required this.questions,
+  });
+
+  final int number;
+
+  /// e.g. "SESSION 1 · AT THE MASJID" — the curtain's eyebrow line.
+  final String tag;
+  final String title;
+  final String blurb;
+  final String retry;
+  final String finish;
+
+  /// The checklist on the Qur'an Hero card.
+  final List<String> lessons;
+  final List<QuranEtiquetteQuestion> questions;
+}
+
 class Activity {
   const Activity({
     required this.id,
@@ -560,6 +621,7 @@ class Activity {
     this.huntStage,
     this.heroesSession,
     this.sirahSession,
+    this.etiquetteSession,
   });
 
   final String id;
@@ -590,6 +652,9 @@ class Activity {
 
   /// Used by `sirahStory` — the one session this lesson reads through.
   final SirahStorySession? sirahSession;
+
+  /// Used by `quranEtiquette` — the session this lesson plays.
+  final QuranEtiquetteSession? etiquetteSession;
 }
 
 class Lesson {

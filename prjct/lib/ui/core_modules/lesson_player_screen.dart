@@ -20,6 +20,7 @@ import 'activities/ayah_builder_game.dart';
 import 'activities/classroom_heroes_game.dart';
 import 'activities/creation_hunt_game.dart';
 import 'activities/harakat_pop_activity.dart';
+import 'activities/quran_etiquette_game.dart';
 import 'activities/sirah_story_game.dart';
 import 'lesson_complete_screen.dart';
 
@@ -206,12 +207,14 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       _activity.type == ActivityType.ayahBuilder ||
       _activity.type == ActivityType.creationHunt ||
       _activity.type == ActivityType.classroomHeroes ||
-      _activity.type == ActivityType.sirahStory;
+      _activity.type == ActivityType.sirahStory ||
+      _activity.type == ActivityType.quranEtiquette;
 
   bool get _isFullBleedActivity =>
       _activity.type == ActivityType.creationHunt ||
       _activity.type == ActivityType.classroomHeroes ||
       _activity.type == ActivityType.sirahStory ||
+      _activity.type == ActivityType.quranEtiquette ||
       _isWudhuActivity;
 
   bool get _isWudhuActivity =>
@@ -262,6 +265,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
           ActivityType.creationHunt ||
           ActivityType.classroomHeroes ||
           ActivityType.sirahStory ||
+          ActivityType.quranEtiquette ||
           ActivityType.fiqhDrag when _isFullBleedActivity =>
             _buildActivityContent(lessonColor),
           ActivityType.pronounce => Stack(
@@ -553,6 +557,13 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       ActivityType.sirahStory => SirahStoryGame(
         key: ValueKey(activity.id),
         session: activity.sirahSession!,
+        xp: activity.xp,
+        onComplete: _handleActivityComplete,
+        onExit: _confirmExit,
+      ),
+      ActivityType.quranEtiquette => QuranEtiquetteGame(
+        key: ValueKey(activity.id),
+        session: activity.etiquetteSession!,
         xp: activity.xp,
         onComplete: _handleActivityComplete,
         onExit: _confirmExit,

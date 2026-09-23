@@ -101,6 +101,12 @@ const Map<ActivityType, ActivityTypeStyle> activityTypeStyles = {
     color: AppColors.ink,
     bg: AppColors.neutralTint,
   ),
+  ActivityType.quranEtiquette: ActivityTypeStyle(
+    label: "Qur'an Etiquette",
+    icon: Icons.menu_book_outlined,
+    color: AppColors.teal,
+    bg: AppColors.mint,
+  ),
   ActivityType.story: ActivityTypeStyle(
     label: 'Story',
     icon: Icons.auto_stories_outlined,

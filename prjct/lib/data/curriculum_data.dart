@@ -4292,6 +4292,166 @@ const ClassroomHeroesSession heroesTeamworkSession = ClassroomHeroesSession(
 );
 
 // ─────────────────────────────────────────────────────────────
+// THE QUR'AN ETIQUETTE
+// Ported 1:1 from the supplied "Qur'an Etiquette" prototype (v2): both
+// sessions, their copy, retry lines, lesson checklists and badge spots.
+// Session 1 (At the Masjid) plays in Destination 1, Session 2 (At Home) in
+// Destination 3 -- the two "The Qur'an Etiquette" lessons on the journey.
+// ─────────────────────────────────────────────────────────────
+
+const String _etqBg = 'assets/images/quran_etiquette';
+
+const QuranEtiquetteSession etiquetteMasjidSession = QuranEtiquetteSession(
+  number: 1,
+  tag: 'SESSION 1 · AT THE MASJID',
+  title: 'At the Masjid',
+  blurb: "Listening · Wudhu · Handling the Qur'an",
+  retry:
+      'That choice does not show adab. You don’t earn progress yet — listen once more and pick the respectful choice.',
+  finish: 'You completed 5 respectful choices at the masjid!',
+  lessons: [
+    'Sit quietly and listen.',
+    'Keep listening even if others want to chat.',
+    'Make Wudhu and sit respectfully before reading.',
+    "Place the Qur'an carefully on a clean shelf.",
+    'Say “Sadaqallahul Azim” after recitation.',
+  ],
+  questions: [
+    QuranEtiquetteQuestion(
+      image: '$_etqBg/s1q1.jpg',
+      feedbackImage: '$_etqBg/s1q1f.jpg',
+      badgeX: 0.25,
+      badgeY: 0.36,
+      prompt:
+          "The Imam begins reciting the Qur'an in the Masjid. What should you do?",
+      correct: 'Sit quietly and listen.',
+      decoy: 'Run around and play.',
+      feedback: 'Great job! Sitting quietly and listening is respectful.',
+    ),
+    QuranEtiquetteQuestion(
+      image: '$_etqBg/s1q2.jpg',
+      feedbackImage: '$_etqBg/s1q2f.jpg',
+      badgeX: 0.40,
+      badgeY: 0.18,
+      prompt:
+          "Fatimah hears the Qur'an. Her friend wants to chat. What should she do?",
+      correct: 'Continue listening quietly.',
+      decoy: 'Talk loudly with her friend.',
+      feedback: "Excellent! We keep listening quietly to the Qur'an.",
+    ),
+    QuranEtiquetteQuestion(
+      image: '$_etqBg/s1q3.jpg',
+      feedbackImage: '$_etqBg/s1q3f.jpg',
+      badgeX: 0.57,
+      badgeY: 0.24,
+      prompt: "Before reading the Qur'an, what should Amina do?",
+      correct: 'Make Wudhu and sit respectfully.',
+      decoy: 'Eat candy and play.',
+      feedback:
+          "Good choice! Wudhu and sitting respectfully honour the Qur'an.",
+    ),
+    QuranEtiquetteQuestion(
+      image: '$_etqBg/s1q4.jpg',
+      feedbackImage: '$_etqBg/s1q4f.jpg',
+      badgeX: 0.58,
+      badgeY: 0.09,
+      prompt: "You finished reading the Qur'an. What should you do?",
+      correct: 'Place it carefully on a clean shelf.',
+      decoy: 'Leave it under your toys.',
+      feedback: "Wonderful! We keep the Qur'an in a clean, high place.",
+    ),
+    QuranEtiquetteQuestion(
+      image: '$_etqBg/s1q5.jpg',
+      feedbackImage: '$_etqBg/s1q5f.jpg',
+      badgeX: 0.26,
+      badgeY: 0.37,
+      prompt: 'The recitation has finished. What should you do?',
+      correct: "Say 'Sadaqallahul Azim' respectfully.",
+      decoy: 'Start shouting and jumping.',
+      feedback: 'Mumtaz! We end recitation with respectful words.',
+    ),
+  ],
+);
+
+const QuranEtiquetteSession etiquetteHomeSession = QuranEtiquetteSession(
+  number: 2,
+  tag: 'SESSION 2 · AT HOME',
+  title: 'At Home',
+  blurb: 'Stop playing · Phones down · Kind reminders',
+  retry:
+      'That choice is not respectful. You don’t earn progress yet — think about the Qur\'an being recited and pick again.',
+  finish: 'You completed 5 respectful choices at home!',
+  lessons: [
+    'Stop playing and listen respectfully.',
+    'Put the phone down and listen.',
+    'Kindly ask others to be quiet.',
+    'Do not play loudly during recitation.',
+    'Sit quietly and listen.',
+  ],
+  questions: [
+    QuranEtiquetteQuestion(
+      image: '$_etqBg/s2q1.jpg',
+      feedbackImage: '$_etqBg/s2q1f.jpg',
+      badgeX: 0.40,
+      badgeY: 0.09,
+      prompt:
+          "The Qur'an starts playing while Yusuf is playing with blocks. What should he do?",
+      correct: 'Stop playing and listen respectfully.',
+      decoy: 'Keep playing and ignore it.',
+      feedback: 'Great job! We pause our play to listen.',
+    ),
+    QuranEtiquetteQuestion(
+      image: '$_etqBg/s2q2.jpg',
+      feedbackImage: '$_etqBg/s2q2f.jpg',
+      badgeX: 0.36,
+      badgeY: 0.07,
+      prompt: "The Qur'an is being recited on the phone. What should you do?",
+      correct: 'Put the phone down and listen.',
+      decoy: 'Watch cartoons instead.',
+      feedback: 'Excellent! Listening comes before entertainment.',
+    ),
+    QuranEtiquetteQuestion(
+      image: '$_etqBg/s2q3.jpg',
+      feedbackImage: '$_etqBg/s2q3f.jpg',
+      badgeX: 0.68,
+      badgeY: 0.08,
+      prompt:
+          "Your younger brother is making loud noise while the Qur'an is playing. What should you do?",
+      correct: 'Kindly ask him to be quiet.',
+      decoy: 'Yell at him.',
+      feedback: 'Wonderful! Gentle reminders are the kind way.',
+    ),
+    QuranEtiquetteQuestion(
+      image: '$_etqBg/s2q4.jpg',
+      feedbackImage: '$_etqBg/s2q4f.jpg',
+      badgeX: 0.39,
+      badgeY: 0.15,
+      prompt:
+          "Is it respectful to play loudly while the Qur'an is being recited?",
+      correct: 'No.',
+      decoy: 'Yes.',
+      feedback: 'Correct! Loud play during recitation is not respectful.',
+    ),
+    QuranEtiquetteQuestion(
+      image: '$_etqBg/s2q5.jpg',
+      feedbackImage: '$_etqBg/s2q5f.jpg',
+      badgeX: 0.30,
+      badgeY: 0.08,
+      prompt: "The Qur'an is being recited. What should Ahmad do?",
+      correct: 'Sit quietly and listen.',
+      decoy: 'Cover his ears.',
+      feedback: "Mumtaz! Sitting quietly shows love for the Qur'an.",
+    ),
+  ],
+);
+
+/// Both sessions in prototype order — the title screen lists every one.
+const List<QuranEtiquetteSession> etiquetteSessions = [
+  etiquetteMasjidSession,
+  etiquetteHomeSession,
+];
+
+// ─────────────────────────────────────────────────────────────
 // FULL CURRICULUM ARRAY -- Journey Map (7 stages, 40 sessions)
 // ─────────────────────────────────────────────────────────────
 
@@ -4391,11 +4551,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest1-s5-act',
-            type: ActivityType.quiz,
+            type: ActivityType.quranEtiquette,
             title: "The Qur'an Etiquette",
             icon: '📗',
             xp: 30,
-            questions: duasQuiz,
+            etiquetteSession: etiquetteMasjidSession,
           ),
         ],
       ),
@@ -4580,11 +4740,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest3-s1-act',
-            type: ActivityType.quiz,
+            type: ActivityType.quranEtiquette,
             title: "The Qur'an Etiquette",
             icon: '📗',
             xp: 30,
-            questions: duasQuiz,
+            etiquetteSession: etiquetteHomeSession,
           ),
         ],
       ),
