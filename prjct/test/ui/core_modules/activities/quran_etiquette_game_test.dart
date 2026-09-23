@@ -136,5 +136,15 @@ void main() {
       find.text('Keep practicing — you can do it, in shaa Allah!'),
       findsOneWidget,
     );
+
+    // Play Again: the curtain slides shut over the ending, then the
+    // session restarts behind it with the Question 1 tile.
+    await tester.tap(find.text('Play Again'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Question 1'), findsNothing);
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.text('Question 1'), findsOneWidget);
+    expect(find.text('Nice try! You earned 0 of 5 stars.'), findsNothing);
+    await tester.pump(const Duration(seconds: 4));
   });
 }

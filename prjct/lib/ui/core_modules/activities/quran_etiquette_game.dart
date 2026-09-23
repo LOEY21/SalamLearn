@@ -155,6 +155,7 @@ double _wave(double t, double dur) =>
 
 /// The prototype's own timings, in seconds.
 const double _kCurtain = 3.0;
+const double _kCurtainClose = 0.6;
 const double _kRevealDelay = 2.6; // as the curtain opens
 const double _kReveal = 4.0;
 const double _kShowcase = 4.0; // feedback art alone, then on to the next
@@ -199,6 +200,9 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
   bool _showcase = false;
   bool _replaying = false;
   bool _curtain = false;
+
+  /// The curtain is sliding shut (Play Again) rather than opening.
+  bool _curtainClosing = false;
   bool _narrating = false;
   bool _finished = false;
   String? _prevImage;
@@ -267,11 +271,28 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
     _curtainTimer?.cancel();
     setState(() {
       _curtain = true;
+      _curtainClosing = false;
       _curtainT0 = _now;
     });
     _curtainTimer = Timer(_ms(_kCurtain), () {
       if (!mounted) return;
       setState(() => _curtain = false);
+    });
+  }
+
+  /// Play Again: the curtain slides shut over the ending screen, then the
+  /// session restarts behind it and the usual tile-and-open plays.
+  void _playAgain() {
+    if (_curtain) return;
+    _curtainTimer?.cancel();
+    setState(() {
+      _curtain = true;
+      _curtainClosing = true;
+      _curtainT0 = _now;
+    });
+    _curtainTimer = Timer(_ms(_kCurtainClose), () {
+      if (!mounted) return;
+      _openSession();
     });
   }
 
@@ -1400,9 +1421,18 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
       child: IgnorePointer(
         child: ClipRect(
           child: _fx((_) {
-            final t = _now - _curtainT0;
+            // Play Again closes the curtain first, with no tile yet; the
+            // normal 3s run then starts from shut.
+            final t = _curtainClosing ? -1.0 : _now - _curtainT0;
             // 3s: the tile pops in, holds, bows out, then the curtain opens.
-            final slide = _kf(t, [0, 2.4, 3.0], [0, 0, 1.04], _curtainCurve);
+            final slide = _curtainClosing
+                ? _kf(
+                    _now - _curtainT0,
+                    [0, _kCurtainClose],
+                    [1.04, 0],
+                    _curtainCurve,
+                  )
+                : _kf(t, [0, 2.4, 3.0], [0, 0, 1.04], _curtainCurve);
             return Stack(
               children: [
                 Positioned(
@@ -1641,7 +1671,7 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
       button: true,
       label: 'Play Again',
       child: _Push(
-        onTap: _openSession,
+        onTap: _playAgain,
         dy: 3,
         builder: (down) => SizedBox(
           width: 440,
