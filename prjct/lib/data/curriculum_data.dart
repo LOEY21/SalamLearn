@@ -5220,11 +5220,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest5-s6-act',
-            type: ActivityType.quiz,
+            type: ActivityType.fivePillars,
             title: 'The Five Pillars (Naming)',
             icon: '🕋',
             xp: 30,
-            questions: valuesQuiz,
+            pillarsMode: FivePillarsMode.scenarios,
           ),
         ],
       ),
@@ -5382,49 +5382,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest6-s6-act',
-            type: ActivityType.fiqhDrag,
+            type: ActivityType.fivePillars,
             title: 'The Five Pillars (Ordering)',
             icon: '🕋',
             xp: 40,
-            fiqhItems: [
-              FiqhDragItem(
-                id: 'pil1',
-                emoji: '☝️',
-                label: 'Shahadah',
-                correctZoneId: '1',
-              ),
-              FiqhDragItem(
-                id: 'pil2',
-                emoji: '🕌',
-                label: 'Salah',
-                correctZoneId: '2',
-              ),
-              FiqhDragItem(
-                id: 'pil3',
-                emoji: '💛',
-                label: 'Zakah',
-                correctZoneId: '3',
-              ),
-              FiqhDragItem(
-                id: 'pil4',
-                emoji: '🌙',
-                label: 'Sawm',
-                correctZoneId: '4',
-              ),
-              FiqhDragItem(
-                id: 'pil5',
-                emoji: '🕋',
-                label: 'Hajj',
-                correctZoneId: '5',
-              ),
-            ],
-            fiqhZones: [
-              FiqhDropZone(id: '1', label: '1st Pillar'),
-              FiqhDropZone(id: '2', label: '2nd Pillar'),
-              FiqhDropZone(id: '3', label: '3rd Pillar'),
-              FiqhDropZone(id: '4', label: '4th Pillar'),
-              FiqhDropZone(id: '5', label: '5th Pillar'),
-            ],
+            pillarsMode: FivePillarsMode.ordering,
           ),
         ],
       ),

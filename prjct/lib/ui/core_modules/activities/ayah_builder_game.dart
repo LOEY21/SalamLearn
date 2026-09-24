@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart' hide Text, TextSpan;
@@ -242,17 +243,66 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
   List<AyahBuilderWord> get _words => _session.words;
   int get _n => _words.length;
 
+  // The decoded backdrop plates and lantern sprites; until a scene's are all
+  // in, its plain art stands in.
+  final Map<String, ImageInfo> _art = {};
+
   @override
   void initState() {
     super.initState();
     _resetRound();
+    for (final asset in [..._startScene.images, ..._gameScene.images]) {
+      final stream = AssetImage(asset).resolve(ImageConfiguration.empty);
+      late final ImageStreamListener listener;
+      listener = ImageStreamListener((info, _) {
+        stream.removeListener(listener);
+        if (mounted) {
+          setState(() => _art[asset] = info);
+        } else {
+          info.dispose();
+        }
+      });
+      stream.addListener(listener);
+    }
   }
 
   @override
   void dispose() {
     _clearTimers();
     _clock.dispose();
+    for (final info in _art.values) {
+      info.dispose();
+    }
     super.dispose();
+  }
+
+  /// A scene's art, alive once decoded: [lights] paints its lantern glow and
+  /// star twinkle instead of the art.
+  Widget _scene(
+    _Scene scene,
+    double t, {
+    required BoxFit fit,
+    Alignment alignment = Alignment.center,
+    bool lights = false,
+  }) {
+    if (!scene.images.every(_art.containsKey)) {
+      return lights
+          ? const SizedBox.shrink()
+          : Image.asset(scene.asset, fit: fit, alignment: alignment);
+    }
+    return IgnorePointer(
+      child: CustomPaint(
+        size: Size.infinite,
+        painter: _ScenePainter(
+          {for (final a in scene.images) a: _art[a]!.image},
+          scene,
+          t,
+          fit: fit,
+          alignment: alignment,
+          lights: lights,
+        ),
+      ),
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -588,8 +638,9 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
             if (_screen == _Screen.start)
               Image.asset(_kStartBg, fit: BoxFit.cover)
             else ...[
-              Image.asset(
-                _kBg,
+              _scene(
+                _gameScene,
+                t,
                 fit: BoxFit.cover,
                 alignment: Alignment.bottomCenter,
               ),
@@ -607,6 +658,13 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                     ],
                   ),
                 ),
+              ),
+              _scene(
+                _gameScene,
+                t,
+                fit: BoxFit.cover,
+                alignment: Alignment.bottomCenter,
+                lights: true,
               ),
             ],
             // The start screen's overlays are pinned to its painted scene,
@@ -930,7 +988,8 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
             Stack(
               fit: StackFit.expand,
               children: [
-                Image.asset(_kStartBg, fit: BoxFit.fill),
+                _scene(_startScene, t, fit: BoxFit.fill),
+                _scene(_startScene, t, fit: BoxFit.fill, lights: true),
                 IgnorePointer(
                   child: CustomPaint(painter: _StartScenePainter(t)),
                 ),
@@ -2529,8 +2588,8 @@ class _DashedRRect extends CustomPainter {
 }
 
 /// The night scene's ambient layers, in the prototype's paint order: drifting
-/// clouds, mist, water shimmer, lantern flicker, fireflies, shooting stars
-/// and twinkling stars. [t] is the game clock in seconds.
+/// clouds, mist, water shimmer, fireflies and meteors. [t] is the game clock
+/// in seconds.
 class _AmbientPainter extends CustomPainter {
   _AmbientPainter(this.t);
 
@@ -2659,36 +2718,6 @@ class _AmbientPainter extends CustomPainter {
       }
     }
 
-    // Lantern flicker — `ab-flicker`.
-    for (final f in const [
-      (44.0, 96.0, 26.0, Color(0xBFFFCE6E), 4.6, 0.0),
-      (66.0, 150.0, 22.0, Color(0xB3FFC460), 5.8, 1.6),
-      (330.0, 104.0, 26.0, Color(0xB8FFCE6E), 5.2, 2.9),
-      (26.0, 566.0, 30.0, Color(0x99FFC460), 6.4, .8),
-      (348.0, 574.0, 30.0, Color(0x99FFC460), 5.5, 3.7),
-    ]) {
-      final o = _kf(
-        _loop(t, f.$5, -f.$6),
-        const [0, .25, .42, .68, .84, 1],
-        const [.55, .95, .62, 1, .7, .55],
-        _easeInOut,
-      );
-      final r = f.$3 / 2;
-      final c = Offset(f.$1 + r, f.$2 + r);
-      final col = f.$4.withValues(alpha: f.$4.a * o);
-      canvas.drawCircle(
-        c,
-        r,
-        Paint()
-          ..shader = ui.Gradient.radial(
-            c,
-            r,
-            [col, col.withValues(alpha: 0)],
-            [0, .7],
-          ),
-      );
-    }
-
     // Fireflies — `ab-firefly`.
     for (final f in const [
       (62.0, 640.0, 4.0, 8.0, Color(0x99FFDC82), 11.0, 0.0, Color(0xFFFFE9A8)),
@@ -2719,70 +2748,25 @@ class _AmbientPainter extends CustomPainter {
       );
     }
 
-    // Shooting stars — `ab-shoot`.
-    for (final s in const [
-      (-30.0, 60.0, 70.0, Color(0xE6FFFFFF), 17.0, 0.0),
-      (40.0, 130.0, 54.0, Color(0xCCC8E4FF), 26.0, 11.0),
-    ]) {
-      final p = _loop(t, s.$5, -s.$6);
-      const stops = [0.0, .06, .34, 1.0];
-      final dx = _kf(p, stops, const [0, 33.5, 190, 190]);
-      final dy = _kf(p, stops, const [0, 19.06, 108, 108]);
-      final o = _kf(p, stops, const [0, 1, 0, 0]);
-      if (o <= 0) continue;
-      canvas.save();
-      canvas.translate(s.$1 + s.$3 / 2 + dx, s.$2 + 1 + dy);
-      canvas.rotate(28 * math.pi / 180);
-      final rect = Rect.fromLTWH(-s.$3 / 2, -1, s.$3, 2);
-      final col = s.$4.withValues(alpha: s.$4.a * o);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, const Radius.circular(2)),
-        Paint()
-          ..shader = ui.Gradient.linear(rect.centerLeft, rect.centerRight, [
-            col.withValues(alpha: 0),
-            col,
-          ]),
-      );
-      canvas.restore();
-    }
-
-    // Twinkling stars — `ab-twinkle`.
-    for (final s in const [
-      (28.0, 120.0, 6.0, 10.0, 3.0, Color(0xCCFFE8A0), 3.2, 0.0),
-      (300.0, 196.0, 5.0, 10.0, 3.0, Color(0xB3FFE8A0), 2.6, .7),
-      (186.0, 86.0, 4.0, 8.0, 3.0, Color(0xB3FFE8A0), 4.0, 1.4),
-      (74.0, 250.0, 4.0, 8.0, 3.0, Color(0x99FFE8A0), 3.6, .3),
-      (126.0, 160.0, 3.0, 8.0, 2.0, Color(0x99FFE8A0), 2.9, 1.9),
-      (342.0, 300.0, 5.0, 10.0, 3.0, Color(0x99FFE8A0), 3.4, 1.1),
-    ]) {
-      final p = _loop(t, s.$7, s.$8);
-      final o = _kf(p, const [0, .5, 1], const [.25, 1, .25], _easeInOut);
-      final sc = _kf(p, const [0, .5, 1], const [.8, 1.15, .8], _easeInOut);
-      final r = s.$3 / 2;
-      canvas.save();
-      canvas.translate(s.$1 + r, s.$2 + r);
-      canvas.scale(sc);
-      _dot(
-        canvas,
-        Offset.zero,
-        r,
-        const Color(0xFFFFF3C4),
-        s.$6,
-        s.$4,
-        s.$5,
-        o,
-      );
-      canvas.restore();
-    }
+    // Meteors across the upper sky. The lantern glow and the art's own
+    // stars twinkling are painted with the scene (see [_ScenePainter]).
+    _paintMeteors(
+      canvas,
+      t,
+      const Rect.fromLTWH(30, 20, 340, 150),
+      const Rect.fromLTWH(0, 0, _kW, 340),
+      every: 6,
+      seed: 11,
+    );
   }
 
   @override
   bool shouldRepaint(_AmbientPainter old) => old.t != t;
 }
 
-/// The start screen's living night: the painted scene's own stars twinkle,
-/// its two hanging lanterns breathe brighter and dimmer with a faint flame
-/// flicker, and fireflies drift and blink through the garden. Positions are
+/// The start screen's living night: the painted scene's own stars twinkle
+/// and fireflies drift and blink through the garden (the lanterns' glow is
+/// painted with the scene, see [_ScenePainter]). Positions are
 /// read off `start_bg.jpg` in the 402x874 frame; [t] is the game clock in
 /// seconds.
 class _StartScenePainter extends CustomPainter {
@@ -2814,9 +2798,6 @@ class _StartScenePainter extends CustomPainter {
     (222.0, 245.2, .5),
     (182.8, 321.7, .5),
   ];
-
-  // Glow centres of the two hanging lanterns.
-  static const _lanterns = [(56.7, 123.8, 0.0), (374.6, 137.0, 1.7)];
 
   // Fireflies — each wanders around a home spot on its own slow loop.
   static final _flies = () {
@@ -2855,60 +2836,10 @@ class _StartScenePainter extends CustomPainter {
     canvas.save();
     canvas.scale(size.width / _kW, size.height / _kH);
 
-    // Stars — each on its own twinkle rhythm.
+    // Stars — each scintillating on its own uneven rhythm.
     for (var i = 0; i < _stars.length; i++) {
       final (x, y, s) = _stars[i];
-      final dur = 2.2 + (i * 0.37) % 1.8;
-      final p = _loop(t, dur, i * 0.61);
-      final k = _kf(p, const [0, .5, 1], const [.15, 1, .15], _easeInOut);
-      final c = Offset(x, y);
-      canvas.drawCircle(
-        c,
-        2.5 + 4 * s,
-        Paint()
-          ..color = const Color(0xFFFFF3C4).withValues(alpha: .55 * k)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2 + 3 * s),
-      );
-      if (s >= .7) {
-        final len = (5 + 6 * s) * (.6 + .4 * k);
-        final glint = Paint()
-          ..color = Colors.white.withValues(alpha: .9 * k)
-          ..strokeWidth = 1
-          ..strokeCap = StrokeCap.round;
-        canvas.drawLine(c.translate(-len, 0), c.translate(len, 0), glint);
-        canvas.drawLine(c.translate(0, -len), c.translate(0, len), glint);
-      }
-      canvas.drawCircle(
-        c,
-        .6 + .7 * s,
-        Paint()..color = Colors.white.withValues(alpha: .6 + .4 * k),
-      );
-    }
-
-    // Lanterns — a slow breath with a small flame flicker on top.
-    for (final (x, y, ph) in _lanterns) {
-      final breath = .5 + .5 * math.sin(t * 1.6 + ph);
-      final flicker = .08 * math.sin(t * 13 + ph * 3) * math.sin(t * 7.3 + ph);
-      final k = (.45 + .5 * breath + flicker).clamp(0.0, 1.0);
-      final c = Offset(x, y);
-      canvas.drawCircle(
-        c,
-        46,
-        Paint()
-          ..shader = ui.Gradient.radial(c, 46, [
-            const Color(0xFFFFC862).withValues(alpha: .42 * k),
-            const Color(0xFFFFC862).withValues(alpha: 0),
-          ])
-          ..blendMode = BlendMode.plus,
-      );
-      canvas.drawCircle(
-        c,
-        14,
-        Paint()
-          ..color = const Color(0xFFFFF1C2).withValues(alpha: .5 * k)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6)
-          ..blendMode = BlendMode.plus,
-      );
+      _twinkleStar(canvas, Offset(x, y), s, t, i, 1);
     }
 
     // Fireflies — drifting, blinking points of warm green-gold light.
@@ -2946,8 +2877,8 @@ class _StartScenePainter extends CustomPainter {
 }
 
 /// The start screen's extra light. Behind the pieces ([behind]): a warm halo
-/// with slowly turning rays around the crest, a soft glow under Play, and an
-/// occasional shooting star. In front: a sparkle burst as the crest lands
+/// with slowly turning rays around the crest, a soft glow under Play, and
+/// the odd meteor. In front: a sparkle burst as the crest lands
 /// and as Play arrives. [t] is the game clock and [st] the time since the
 /// screen opened, in seconds; positions are in the 402x874 frame.
 class _StartFxPainter extends CustomPainter {
@@ -3048,32 +2979,15 @@ class _StartFxPainter extends CustomPainter {
         );
       }
 
-      // A shooting star crosses the sky every 7 seconds.
-      final sp = _loop(t, 7, 2.5) * 7 / 1.1;
-      if (st > 2 && sp < 1) {
-        final u = Curves.easeInOut.transform(sp);
-        const from = Offset(70, 40);
-        const to = Offset(300, 135);
-        final head = Offset.lerp(from, to, u)!;
-        final tail = Offset.lerp(from, to, math.max(0, u - .22))!;
-        final a = math.sin(sp * math.pi);
-        canvas.drawLine(
-          tail,
-          head,
-          Paint()
-            ..strokeWidth = 2.2
-            ..strokeCap = StrokeCap.round
-            ..shader = ui.Gradient.linear(tail, head, [
-              const Color(0x00FFFFFF),
-              Color.fromRGBO(255, 250, 225, a),
-            ]),
-        );
-        canvas.drawCircle(
-          head,
-          3,
-          Paint()
-            ..color = Color.fromRGBO(255, 250, 225, a)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+      // Meteors streak through the sky inside the arch now and then.
+      if (st > 2) {
+        _paintMeteors(
+          canvas,
+          t,
+          const Rect.fromLTWH(110, 40, 180, 90),
+          const Rect.fromLTRB(40, 25, 362, 330),
+          every: 5,
+          seed: 3,
         );
       }
     } else {
@@ -3086,4 +3000,755 @@ class _StartFxPainter extends CustomPainter {
   @override
   bool shouldRepaint(_StartFxPainter old) =>
       old.t != t || old.st != st || old.behind != behind;
+}
+
+// ---------------------------------------------------------------------------
+// Living backdrops — the painted lanterns swing and the palms sway in the
+// breeze by bending the background art itself on a mesh, so nothing painted
+// is duplicated or ghosted. All rig positions are in the art's own pixels.
+// ---------------------------------------------------------------------------
+
+double _smooth(double x) {
+  final u = _c01(x);
+  return u * u * (3 - 2 * u);
+}
+
+Offset _rot(Offset v, Offset c, double a) {
+  final d = v - c;
+  final cs = math.cos(a);
+  final sn = math.sin(a);
+  return c + Offset(d.dx * cs - d.dy * sn, d.dx * sn + d.dy * cs);
+}
+
+/// The night breeze at art column [x]: a gusting sway, mostly leaning one
+/// way with a softer swing back, reaching points further right a beat later.
+double _breeze(double t, double x) {
+  final u = t - x * .003;
+  final gust = .6 + .4 * math.sin(u * .19 + 1.1);
+  return gust * (.35 + .4 * math.sin(u * .8) + .25 * math.sin(u * 1.7 + 1.3));
+}
+
+/// A lantern hanging on a chain from [pivot], cut out of the art as its own
+/// [sprite] (drawn at [origin]) with the art behind it painted in, so it
+/// swings clear of the wall and sky. The chain meets the lantern at [joint].
+/// It swings [amp] degrees on its own [period], nudged by the breeze, and
+/// the body trails the chain a little like a real double pendulum.
+class _Lantern {
+  const _Lantern({
+    required this.sprite,
+    required this.origin,
+    required this.pivot,
+    required this.joint,
+    required this.glow,
+    required this.glowR,
+    required this.period,
+    required this.amp,
+    required this.phase,
+  });
+
+  final String sprite;
+  final Offset origin;
+  final Offset pivot;
+  final Offset joint;
+  final Offset glow;
+  final double glowR;
+  final double period;
+  final double amp;
+  final double phase;
+
+  double angle(double t) {
+    final w = 2 * math.pi / period;
+    final swing =
+        math.sin(t * w + phase) * (.7 + .3 * math.sin(t * .23 + phase));
+    return amp * (swing + .3 * _breeze(t, pivot.dx)) * math.pi / 180;
+  }
+
+  double lag(double t) =>
+      -amp *
+      .3 *
+      math.sin(t * 2 * math.pi / period + phase - 1.3) *
+      math.pi /
+      180;
+
+  /// Where the point [v] on the lantern moves to, given the chain angle [a]
+  /// and the body's trailing [lag].
+  Offset move(Offset v, double a, double lag) {
+    final p = _rot(v, pivot, a);
+    return v.dy > joint.dy ? _rot(p, _rot(joint, pivot, a), lag) : p;
+  }
+
+  /// The sprite in two pieces — chain and body — each on its own swing,
+  /// shifted by [carry] when it hangs from a swaying frond.
+  void paint(
+    Canvas canvas,
+    ui.Image image,
+    double a,
+    double lag,
+    Offset carry,
+  ) {
+    final j = _rot(joint, pivot, a);
+    final paint = Paint()..filterQuality = FilterQuality.medium;
+    for (final body in [false, true]) {
+      canvas.save();
+      canvas.translate(carry.dx, carry.dy);
+      if (body) {
+        canvas.translate(j.dx, j.dy);
+        canvas.rotate(lag);
+        canvas.translate(-j.dx, -j.dy);
+      }
+      canvas.translate(pivot.dx, pivot.dy);
+      canvas.rotate(a);
+      canvas.translate(-pivot.dx, -pivot.dy);
+      canvas.clipRect(
+        body
+            ? Rect.fromLTRB(-1e4, joint.dy, 1e4, 1e4)
+            : Rect.fromLTRB(-1e4, -1e4, 1e4, joint.dy + .5),
+      );
+      canvas.drawImage(image, origin, paint);
+      canvas.restore();
+    }
+  }
+}
+
+/// A palm rooted at [base] with its crown at [crown]: the trunk bends more
+/// the higher it goes and the fronds flutter on top. Only the art inside
+/// [box] moves, fading in over [feather] from its edges.
+class _Palm {
+  const _Palm({
+    required this.base,
+    required this.crown,
+    required this.box,
+    required this.amp,
+    required this.flutter,
+    this.feather = 22,
+  });
+
+  final Offset base;
+  final Offset crown;
+  final Rect box;
+  final double amp;
+  final double flutter;
+  final double feather;
+
+  Offset shift(Offset v, double t) {
+    final m =
+        _smooth((v.dx - box.left) / feather) *
+        _smooth((box.right - v.dx) / feather) *
+        _smooth((v.dy - box.top) / feather) *
+        _smooth((box.bottom - v.dy) / feather);
+    if (m <= 0) return Offset.zero;
+    final reach = (crown - base).distance;
+    final h = ((v - base).distance / reach).clamp(0.0, 1.6);
+    final bend = amp * _breeze(t, crown.dx) * h * h;
+    final r = _c01((v - crown).distance / reach);
+    final a = math.atan2(v.dy - crown.dy, v.dx - crown.dx);
+    final f =
+        flutter *
+        r *
+        _smooth((h - .7) / .3) *
+        (math.sin(t * 3.1 + a * 2.3 + r * 2.2) +
+            .4 * math.sin(t * 5.3 + a * 3.7 + crown.dx));
+    return Offset(bend + f * .4, f) * m;
+  }
+}
+
+/// One piece of background art and everything alive in it.
+class _Scene {
+  const _Scene({
+    required this.asset,
+    required this.plate,
+    required this.size,
+    this.lanterns = const [],
+    this.palms = const [],
+    this.lamps = const [],
+    this.stars = const [],
+    this.bigStars = const [],
+  });
+
+  // The art, and the same art with its lanterns painted out.
+  final String asset;
+  final String plate;
+  final Size size;
+  final List<_Lantern> lanterns;
+  final List<_Palm> palms;
+  // Standing lanterns that only flicker: centre and glow radius.
+  final List<(Offset, double)> lamps;
+  // The art's small stars (x, y, brightness 0..1) and its big painted ones.
+  final List<(double, double, double)> stars;
+  final List<Offset> bigStars;
+
+  List<String> get images => [plate, for (final l in lanterns) l.sprite];
+
+  Offset palmShift(Offset v, double t) {
+    var d = Offset.zero;
+    for (final p in palms) {
+      d += p.shift(v, t);
+    }
+    return d;
+  }
+}
+
+const _startScene = _Scene(
+  asset: _kStartBg,
+  plate: '$_kA/start_bg_plate.jpg',
+  size: Size(851, 1847),
+  lanterns: [
+    _Lantern(
+      sprite: '$_kA/lantern_start_left.png',
+      origin: Offset(72, 0),
+      pivot: Offset(122, -10),
+      joint: Offset(122, 150),
+      glow: Offset(121, 262),
+      glowR: 95,
+      period: 3.1,
+      amp: 2.3,
+      phase: 0,
+    ),
+    _Lantern(
+      sprite: '$_kA/lantern_start_right.png',
+      origin: Offset(748, 39),
+      pivot: Offset(792, 40),
+      joint: Offset(792, 178),
+      glow: Offset(793, 290),
+      glowR: 90,
+      period: 3.3,
+      amp: 2.1,
+      phase: 1.9,
+    ),
+  ],
+  palms: [
+    _Palm(
+      base: Offset(62, 800),
+      crown: Offset(78, 530),
+      box: Rect.fromLTRB(54, 390, 205, 790),
+      amp: 6,
+      flutter: 3,
+      feather: 26,
+    ),
+    _Palm(
+      base: Offset(106, 812),
+      crown: Offset(108, 728),
+      box: Rect.fromLTRB(84, 640, 190, 800),
+      amp: 3.5,
+      flutter: 2.5,
+      feather: 20,
+    ),
+    _Palm(
+      base: Offset(782, 800),
+      crown: Offset(765, 605),
+      box: Rect.fromLTRB(635, 440, 827, 790),
+      amp: 7,
+      flutter: 3,
+      feather: 26,
+    ),
+    _Palm(
+      base: Offset(765, 810),
+      crown: Offset(760, 745),
+      box: Rect.fromLTRB(680, 668, 792, 800),
+      amp: 3.5,
+      flutter: 2.5,
+      feather: 18,
+    ),
+    _Palm(
+      base: Offset(665, 905),
+      crown: Offset(665, 852),
+      box: Rect.fromLTRB(600, 795, 728, 888),
+      amp: 2.5,
+      flutter: 1.8,
+      feather: 16,
+    ),
+  ],
+);
+
+const _gameScene = _Scene(
+  asset: _kBg,
+  plate: '$_kA/bg_night_mosque_plate.jpg',
+  size: Size(853, 1844),
+  lanterns: [
+    // The two lanterns on the left share a frond, so they sway together.
+    _Lantern(
+      sprite: '$_kA/lantern_game_left.png',
+      origin: Offset(20, 65),
+      pivot: Offset(62, 68),
+      joint: Offset(62, 152),
+      glow: Offset(60, 250),
+      glowR: 80,
+      period: 2.7,
+      amp: 3,
+      phase: 0,
+    ),
+    _Lantern(
+      sprite: '$_kA/lantern_game_left_small.png',
+      origin: Offset(87, 141),
+      pivot: Offset(112, 145),
+      joint: Offset(112, 310),
+      glow: Offset(112, 368),
+      glowR: 55,
+      period: 2.7,
+      amp: 3,
+      phase: 0.3,
+    ),
+    _Lantern(
+      sprite: '$_kA/lantern_game_right.png',
+      origin: Offset(768, 124),
+      pivot: Offset(801, 128),
+      joint: Offset(801, 232),
+      glow: Offset(801, 310),
+      glowR: 70,
+      period: 2.5,
+      amp: 2.8,
+      phase: 2.2,
+    ),
+  ],
+  palms: [
+    _Palm(
+      base: Offset(-40, 280),
+      crown: Offset(62, 58),
+      box: Rect.fromLTRB(-100, -100, 228, 232),
+      amp: 8,
+      flutter: 4,
+      feather: 28,
+    ),
+    _Palm(
+      base: Offset(900, 260),
+      crown: Offset(850, 38),
+      box: Rect.fromLTRB(695, -100, 953, 212),
+      amp: 7,
+      flutter: 3.5,
+      feather: 24,
+    ),
+    _Palm(
+      base: Offset(-15, 1010),
+      crown: Offset(14, 836),
+      box: Rect.fromLTRB(-100, 752, 112, 1000),
+      amp: 6,
+      flutter: 3,
+    ),
+    _Palm(
+      base: Offset(872, 1100),
+      crown: Offset(842, 812),
+      box: Rect.fromLTRB(742, 752, 953, 1000),
+      amp: 6,
+      flutter: 3,
+    ),
+    _Palm(
+      base: Offset(822, 1065),
+      crown: Offset(815, 973),
+      box: Rect.fromLTRB(770, 938, 953, 1048),
+      amp: 3,
+      flutter: 2,
+      feather: 16,
+    ),
+    _Palm(
+      base: Offset(252, 1075),
+      crown: Offset(257, 1008),
+      box: Rect.fromLTRB(222, 978, 294, 1062),
+      amp: 2.5,
+      flutter: 1.6,
+      feather: 14,
+    ),
+  ],
+  lamps: [(Offset(47, 1190), 60), (Offset(807, 1190), 60)],
+  stars: [
+    (600, 52.5, 1),
+    (813, 598, 1),
+    (213.6, 519.6, 1),
+    (468.5, 71.5, .7),
+    (16.5, 569.5, .7),
+    (676, 636, .7),
+    (654.8, 22.5, .7),
+    (519, 27, .7),
+    (311, 445, .7),
+    (599, 258, .45),
+    (338, 142, .45),
+    (560, 189.5, .45),
+    (555, 215.5, .45),
+    (690, 49.6, .45),
+    (435, 265, .45),
+    (525.7, 361, .45),
+    (642.7, 523, .45),
+    (378, 227, .45),
+    (510, 296.5, .45),
+    (458.5, 332, .45),
+    (331, 23, .45),
+    (359, 78, .45),
+    (239, 102, .45),
+    (640, 286, .45),
+    (163, 435, .45),
+    (408, 19, .3),
+    (581.5, 101.5, .3),
+    (234.5, 150.5, .3),
+    (306.5, 185.5, .3),
+    (324.5, 276.5, .3),
+    (309.8, 325, .3),
+    (342.5, 403.5, .3),
+    (443.5, 434.5, .3),
+    (51.5, 571.5, .3),
+    (570, 145, .3),
+    (475, 189, .3),
+    (667, 261, .3),
+    (365, 333, .3),
+    (478, 398, .3),
+    (347, 560, .3),
+    (103, 580, .3),
+    (416, 659, .3),
+    (541, 699, .3),
+  ],
+  bigStars: [
+    Offset(762, 695),
+    Offset(54, 626),
+    Offset(232, 224),
+    Offset(593, 450),
+    Offset(518, 137),
+    Offset(261, 34),
+    Offset(696, 317),
+  ],
+);
+
+/// A grid over a scene's art, [step] art pixels apart. Only the cells near a
+/// palm are drawn, and only their corners ([live]) are ever moved.
+class _Mesh {
+  _Mesh(_Scene s) {
+    const step = 14.0;
+    final cols = (s.size.width / step).ceil();
+    final rows = (s.size.height / step).ceil();
+    final w = cols + 1;
+    base = Float32List(w * (rows + 1) * 2);
+    for (var j = 0; j <= rows; j++) {
+      for (var i = 0; i <= cols; i++) {
+        final k = (j * w + i) * 2;
+        base[k] = math.min(i * step, s.size.width);
+        base[k + 1] = math.min(j * step, s.size.height);
+      }
+    }
+    final zones = [for (final p in s.palms) p.box];
+    final idx = <int>[];
+    final live = <int>{};
+    for (var j = 0; j < rows; j++) {
+      for (var i = 0; i < cols; i++) {
+        final cell = Rect.fromLTWH(i * step, j * step, step, step);
+        if (!zones.any(cell.overlaps)) continue;
+        final a = j * w + i;
+        idx.addAll([a, a + 1, a + w, a + 1, a + w + 1, a + w]);
+        live.addAll([a, a + 1, a + w, a + w + 1]);
+      }
+    }
+    indices = Uint16List.fromList(idx);
+    this.live = live.toList();
+  }
+
+  late final Float32List base;
+  late final Uint16List indices;
+  late final List<int> live;
+
+  static final _cache = <String, _Mesh>{};
+  static _Mesh of(_Scene s) => _cache[s.asset] ??= _Mesh(s);
+}
+
+/// Paints a scene's art fitted like an [Image] with [fit] and [alignment]:
+/// the art itself with its palms swaying and lanterns swinging, or — with
+/// [lights] — the glow of its lanterns and the twinkle of its stars, to lay
+/// over whatever shading sits on top of the art.
+class _ScenePainter extends CustomPainter {
+  _ScenePainter(
+    this.images,
+    this.scene,
+    this.t, {
+    required this.fit,
+    this.alignment = Alignment.center,
+    this.lights = false,
+  });
+
+  // The scene's plate and lantern sprites, by asset.
+  final Map<String, ui.Image> images;
+  final _Scene scene;
+  final double t;
+  final BoxFit fit;
+  final Alignment alignment;
+  final bool lights;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final art = scene.size;
+    final fs = applyBoxFit(fit, art, size);
+    final src = alignment.inscribe(fs.source, Offset.zero & art);
+    final dst = alignment.inscribe(fs.destination, Offset.zero & size);
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    canvas.translate(dst.left, dst.top);
+    canvas.scale(dst.width / src.width, dst.height / src.height);
+    canvas.translate(-src.left, -src.top);
+    lights ? _paintLights(canvas) : _paintArt(canvas);
+    canvas.restore();
+  }
+
+  /// Each lantern's chain angle, body lag and how far the frond it hangs
+  /// from has carried its pivot.
+  List<(double, double, Offset)> _poses() => [
+    for (final l in scene.lanterns)
+      (l.angle(t), l.lag(t), scene.palmShift(l.pivot, t)),
+  ];
+
+  void _paintArt(Canvas canvas) {
+    final image = images[scene.plate]!;
+    final full = Size(image.width.toDouble(), image.height.toDouble());
+    canvas.drawImageRect(
+      image,
+      Offset.zero & full,
+      Offset.zero & scene.size,
+      Paint()..filterQuality = FilterQuality.medium,
+    );
+    final mesh = _Mesh.of(scene);
+    final pos = Float32List.fromList(mesh.base);
+    for (final k in mesh.live) {
+      final v = Offset(mesh.base[k * 2], mesh.base[k * 2 + 1]);
+      final d = scene.palmShift(v, t);
+      pos[k * 2] += d.dx;
+      pos[k * 2 + 1] += d.dy;
+    }
+    final vertices = ui.Vertices.raw(
+      VertexMode.triangles,
+      pos,
+      textureCoordinates: mesh.base,
+      indices: mesh.indices,
+    );
+    canvas.drawVertices(
+      vertices,
+      BlendMode.srcOver,
+      Paint()
+        ..shader = ImageShader(
+          image,
+          TileMode.clamp,
+          TileMode.clamp,
+          (Matrix4.identity()..scaleByDouble(
+                scene.size.width / full.width,
+                scene.size.height / full.height,
+                1,
+                1,
+              ))
+              .storage,
+          filterQuality: FilterQuality.medium,
+        ),
+    );
+    vertices.dispose();
+    final poses = _poses();
+    for (var i = 0; i < scene.lanterns.length; i++) {
+      final l = scene.lanterns[i];
+      final (a, lag, carry) = poses[i];
+      l.paint(canvas, images[l.sprite]!, a, lag, carry);
+    }
+  }
+
+  void _glow(Canvas canvas, Offset c, double r, double k) {
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..shader = ui.Gradient.radial(c, r, [
+          const Color(0xFFFFC862).withValues(alpha: .38 * k),
+          const Color(0xFFFFC862).withValues(alpha: 0),
+        ])
+        ..blendMode = BlendMode.plus,
+    );
+    canvas.drawCircle(
+      c,
+      r * .28,
+      Paint()
+        ..color = const Color(0xFFFFF1C2).withValues(alpha: .4 * k)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * .14)
+        ..blendMode = BlendMode.plus,
+    );
+  }
+
+  /// A candle's light: a slow breath with an uneven, quick flicker on top.
+  double _flame(double ph) {
+    final breath = .5 + .5 * math.sin(t * 1.3 + ph);
+    final flick =
+        .1 * math.sin(t * 11.7 + ph * 3) * math.sin(t * 6.1 + ph) +
+        .06 * math.sin(t * 23 + ph * 5);
+    return (.55 + .35 * breath + flick).clamp(0.0, 1.0);
+  }
+
+  void _paintLights(Canvas canvas) {
+    final poses = _poses();
+    for (var i = 0; i < scene.lanterns.length; i++) {
+      final l = scene.lanterns[i];
+      final (a, lag, carry) = poses[i];
+      _glow(canvas, l.move(l.glow, a, lag) + carry, l.glowR, _flame(i * 1.9));
+    }
+    for (var i = 0; i < scene.lamps.length; i++) {
+      final (c, r) = scene.lamps[i];
+      _glow(canvas, c, r, _flame(4 + i * 2.3));
+    }
+    for (var i = 0; i < scene.bigStars.length; i++) {
+      final c = scene.bigStars[i];
+      final k = _scintillate(t * .6, i + 40);
+      canvas.drawCircle(
+        c,
+        30,
+        Paint()
+          ..shader = ui.Gradient.radial(c, 30, [
+            const Color(0xFFFFE48A).withValues(alpha: .3 * k),
+            const Color(0x00FFE48A),
+          ])
+          ..blendMode = BlendMode.plus,
+      );
+    }
+    for (var i = 0; i < scene.stars.length; i++) {
+      final (x, y, s) = scene.stars[i];
+      _twinkleStar(canvas, Offset(x, y), s, t, i, 2.1);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ScenePainter old) =>
+      old.t != t || old.images != images || old.lights != lights;
+}
+
+/// How bright star [i] looks at [t], 0..1: starlight through moving air
+/// wanders quickly and unevenly, with a rare brief flare.
+double _scintillate(double t, int i) {
+  final a = i * 1.7;
+  final s =
+      .55 +
+      .2 * math.sin(t * (1.1 + (i % 5) * .23) + a) +
+      .15 * math.sin(t * (4.7 + (i % 3) * .9) + a * 2.3) +
+      .1 * math.sin(t * (9.3 + (i % 4) * 1.3) + a * .7);
+  final flare = math.pow(math.max(0.0, math.sin(t * .29 + a * 3.1)), 40);
+  return _c01(s + .45 * flare);
+}
+
+/// A star at [c] twinkling: a soft halo, thin diffraction spikes on the
+/// brighter ones ([s] is its size 0..1) and a bright core, its colour
+/// flashing faintly between warm and cool. [unit] scales it to the canvas.
+void _twinkleStar(
+  Canvas canvas,
+  Offset c,
+  double s,
+  double t,
+  int i,
+  double unit,
+) {
+  final k = _scintillate(t, i);
+  final col = Color.lerp(
+    const Color(0xFFCFE3FF),
+    const Color(0xFFFFF3C4),
+    .5 + .5 * math.sin(t * 2.3 + i * 2.1),
+  )!;
+  canvas.drawCircle(
+    c,
+    (2 + 5 * s) * (.6 + .6 * k) * unit,
+    Paint()
+      ..color = col.withValues(alpha: .45 * k)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, (1.5 + 3 * s) * unit)
+      ..blendMode = BlendMode.plus,
+  );
+  if (s >= .6) {
+    final len = (4 + 9 * s) * k * k * unit;
+    for (final d in [Offset(len, 0), Offset(0, len)]) {
+      canvas.drawLine(
+        c - d,
+        c + d,
+        Paint()
+          ..strokeWidth = .8 * unit
+          ..shader = ui.Gradient.linear(
+            c - d,
+            c + d,
+            [
+              col.withValues(alpha: 0),
+              col.withValues(alpha: .9 * k),
+              col.withValues(alpha: 0),
+            ],
+            const [0, .5, 1],
+          ),
+      );
+    }
+  }
+  canvas.drawCircle(
+    c,
+    (.5 + .7 * s) * unit,
+    Paint()..color = Colors.white.withValues(alpha: .5 + .5 * k),
+  );
+}
+
+/// Meteors at random moments: every [every] seconds one may streak from
+/// somewhere in [spawn] — fast, bright at the head with a tapering tail,
+/// leaving a faint train that lingers a moment. Drawn inside [clip].
+void _paintMeteors(
+  Canvas canvas,
+  double t,
+  Rect spawn,
+  Rect clip, {
+  required double every,
+  required int seed,
+}) {
+  canvas.save();
+  canvas.clipRect(clip);
+  final slot = (t / every).floor();
+  for (var n = slot - 1; n <= slot; n++) {
+    final rnd = math.Random(n * 7919 + seed);
+    if (rnd.nextDouble() > .6) continue;
+    final start = n * every + rnd.nextDouble() * (every - 1.5);
+    final dur = .45 + rnd.nextDouble() * .45;
+    final e = t - start;
+    if (e < 0 || e > dur + .9) continue;
+    final from = Offset(
+      spawn.left + rnd.nextDouble() * spawn.width,
+      spawn.top + rnd.nextDouble() * spawn.height,
+    );
+    final ang = (18 + rnd.nextDouble() * 24) * math.pi / 180;
+    final dir = Offset(
+      math.cos(ang) * (rnd.nextBool() ? 1 : -1),
+      math.sin(ang),
+    );
+    final dist = 90 + rnd.nextDouble() * 110;
+    final mag = .6 + rnd.nextDouble() * .4;
+    final u = _c01(e / dur);
+    final head = from + dir * (dist * u);
+    // The faint train it leaves along the path, lingering after it's gone.
+    final train = e <= dur ? .16 : .16 * (1 - (e - dur) / .9);
+    if (train > 0 && u > 0) {
+      canvas.drawLine(
+        from,
+        head,
+        Paint()
+          ..strokeWidth = .9
+          ..shader = ui.Gradient.linear(from, head, [
+            const Color(0x00BFD9FF),
+            Color.fromRGBO(191, 217, 255, train * mag),
+          ]),
+      );
+    }
+    if (e > dur) continue;
+    final b = math.sin(math.pi * math.pow(u, .7)) * mag;
+    final tail = head - dir * (dist * .45 * math.min(1, u * 2.5));
+    final perp = Offset(-dir.dy, dir.dx) * (1.1 + .8 * mag);
+    canvas.drawPath(
+      Path()
+        ..moveTo(tail.dx, tail.dy)
+        ..lineTo(head.dx + perp.dx, head.dy + perp.dy)
+        ..lineTo(head.dx - perp.dx, head.dy - perp.dy)
+        ..close(),
+      Paint()
+        ..shader = ui.Gradient.linear(tail, head, [
+          const Color(0x00CFE6FF),
+          Color.fromRGBO(235, 245, 255, .95 * b),
+        ])
+        ..blendMode = BlendMode.plus,
+    );
+    canvas.drawCircle(
+      head,
+      3.2,
+      Paint()
+        ..color = Color.fromRGBO(210, 235, 255, .7 * b)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3)
+        ..blendMode = BlendMode.plus,
+    );
+    canvas.drawCircle(
+      head,
+      1.2,
+      Paint()..color = Color.fromRGBO(255, 255, 255, b),
+    );
+  }
+  canvas.restore();
 }

@@ -21,7 +21,12 @@ enum ActivityType {
   classroomHeroes,
   sirahStory,
   quranEtiquette,
+  fivePillars,
 }
+
+/// The Five Pillars' two sessions: answer five scenarios one pillar at a
+/// time (Session 1), or build all five in order (Session 2).
+enum FivePillarsMode { scenarios, ordering }
 
 enum DestinationState { completed, current, locked }
 
@@ -622,6 +627,7 @@ class Activity {
     this.heroesSession,
     this.sirahSession,
     this.etiquetteSession,
+    this.pillarsMode,
   });
 
   final String id;
@@ -655,6 +661,9 @@ class Activity {
 
   /// Used by `quranEtiquette` — the session this lesson plays.
   final QuranEtiquetteSession? etiquetteSession;
+
+  /// Used by `fivePillars` — which of the two sessions this lesson plays.
+  final FivePillarsMode? pillarsMode;
 }
 
 class Lesson {

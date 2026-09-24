@@ -107,6 +107,12 @@ const Map<ActivityType, ActivityTypeStyle> activityTypeStyles = {
     color: AppColors.teal,
     bg: AppColors.mint,
   ),
+  ActivityType.fivePillars: ActivityTypeStyle(
+    label: 'The Five Pillars',
+    icon: Icons.mosque_outlined,
+    color: AppColors.teal,
+    bg: AppColors.mint,
+  ),
   ActivityType.story: ActivityTypeStyle(
     label: 'Story',
     icon: Icons.auto_stories_outlined,

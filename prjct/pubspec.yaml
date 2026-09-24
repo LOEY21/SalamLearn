@@ -88,6 +88,9 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  shaders:
+    - shaders/five_pillars_bg.frag
+
   assets:
     - assets/images/
     - assets/images/adventure_map/
@@ -95,6 +98,7 @@ flutter:
     - assets/images/classroom_heroes/
     - assets/images/classroom_heroes/bg/
     - assets/images/creation_hunt/
+    - assets/images/five_pillars/
     - assets/images/greeting_match/
     - assets/images/quran_etiquette/
     - assets/images/sirah_story/

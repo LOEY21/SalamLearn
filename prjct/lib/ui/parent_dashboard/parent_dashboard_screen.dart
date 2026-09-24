@@ -1886,6 +1886,7 @@ String _activityTypeLabel(ActivityType type) => switch (type) {
   ActivityType.classroomHeroes => 'Classroom Heroes',
   ActivityType.sirahStory => 'Sirah Story',
   ActivityType.quranEtiquette => "Qur'an Etiquette",
+  ActivityType.fivePillars => 'The Five Pillars',
 };
 
 class _AdventureGameRow extends StatelessWidget {
