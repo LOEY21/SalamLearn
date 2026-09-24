@@ -62,13 +62,25 @@ const _endInk = Color(0xFF0B5A4B);
 const double _kArtW = 1870;
 const double _kArtH = 841;
 
-/// Where the painted lanterns hang, as fractions of the start art.
-const List<Offset> _kLanterns = [
-  Offset(0.374, 0.09),
-  Offset(0.19, 0.2),
-  Offset(0.46, 0.3),
-  Offset(0.683, 0.18),
-  Offset(0.933, 0.09),
+/// A lantern cut out of the start art: its sprite's box in the art's frame
+/// and the x of the hook it hangs from, on the sprite's top edge.
+class _Lantern {
+  const _Lantern(this.asset, this.left, this.top, this.w, this.h, this.pivotX);
+
+  final String asset;
+  final double left;
+  final double top;
+  final double w;
+  final double h;
+  final double pivotX;
+}
+
+const List<_Lantern> _kLanterns = [
+  _Lantern('lantern_0', 675, 28, 49, 112, 699),
+  _Lantern('lantern_1', 330, 105, 52, 129, 357.5),
+  _Lantern('lantern_2', 840, 209, 43, 92, 862),
+  _Lantern('lantern_3', 1250, 80, 57, 141, 1278),
+  _Lantern('lantern_4', 1710, 30, 73, 139, 1747),
 ];
 
 /// Centres of the Star Meter tile's five sockets, as fractions of its width.
@@ -543,7 +555,6 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
             children: [
               Positioned.fill(child: _startBackground()),
               for (var i = 0; i < _kRays.length; i++) _startRay(i),
-              for (final g in _kLanterns) _lanternGlow(g),
               Positioned.fill(
                 child: IgnorePointer(
                   child: _fx((t) => CustomPaint(painter: _MotesPainter(t))),
@@ -573,18 +584,28 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
     );
   }
 
-  /// Focus-pull in (zoom out of a soft blur), then holds still.
+  /// Focus-pull in (zoom out of a soft blur), then holds still. The
+  /// lanterns and the two corner plants are cut out of the art, so they
+  /// ride the same focus-pull while they swing and sway.
   Widget _startBackground() {
-    final img = Image.asset(
-      '$_kA/start_bg.jpg',
-      width: _kArtW,
-      height: _kArtH,
-      fit: BoxFit.cover,
-      gaplessPlayback: true,
+    final scene = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Image.asset(
+          '$_kA/start_bg.jpg',
+          width: _kArtW,
+          height: _kArtH,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+        ),
+        for (var i = 0; i < _kLanterns.length; i++) _lantern(i),
+        _plant(left: true),
+        _plant(left: false),
+      ],
     );
     return _fx((t) {
       final p = _sceneCurve.transform(_once(t, 1.1));
-      if (p >= 1) return img;
+      if (p >= 1) return scene;
       final blur = 6 * (1 - p);
       return ImageFiltered(
         imageFilter: ui.ImageFilter.blur(
@@ -592,9 +613,95 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
           sigmaY: blur,
           tileMode: TileMode.clamp,
         ),
-        child: Transform.scale(scale: 1.1 - 0.1 * p, child: img),
+        child: Transform.scale(scale: 1.1 - 0.1 * p, child: scene),
       );
     });
+  }
+
+  /// A hanging lantern swinging on its hook like a pendulum, at the period
+  /// its length gives it. The swing eases up from rest, with a slow draught
+  /// and a faint overtone layered on so no two swings match.
+  Widget _lantern(int i) {
+    final l = _kLanterns[i];
+    // T = 2*pi*sqrt(L/g), reading the art at ~100px to the metre.
+    final period = 2 * math.pi * math.sqrt(l.h * 0.6 / 100 / 9.81);
+    const amp = 2.6 * _deg;
+    final phase = i * 1.9;
+    final hangX = l.pivotX - l.left;
+    final sprite = Image.asset(
+      '$_kA/${l.asset}.png',
+      width: l.w,
+      height: l.h,
+      fit: BoxFit.fill,
+      gaplessPlayback: true,
+    );
+    return Positioned(
+      left: l.left,
+      top: l.top,
+      width: l.w,
+      height: l.h,
+      child: IgnorePointer(
+        child: _fx((t) {
+          final w = 2 * math.pi / period;
+          final draught = 1 + 0.25 * math.sin(t * 0.37 + phase);
+          final swing =
+              math.sin(w * t + phase) * draught +
+              0.12 * math.sin(w * 2.7 * t + phase * 1.3);
+          final ramp = _easeInOut.transform(_once(t, 2.5, 0.6));
+          final flicker = _loop(t - (l.pivotX * 0.0039) % 1.4, 2.6);
+          const stops = [0.0, 0.4, 0.7, 1.0];
+          final o = _kf(flicker, stops, [0.55, 0.95, 0.7, 0.55], _easeInOut);
+          final s = _kf(flicker, stops, [0.92, 1.05, 0.98, 0.92], _easeInOut);
+          return Transform.rotate(
+            angle: amp * ramp * swing,
+            origin: Offset(hangX - l.w / 2, -l.h / 2),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(child: sprite),
+                Positioned(
+                  left: l.w / 2 - 75,
+                  top: l.h * 0.5 - 75,
+                  width: 150,
+                  height: 150,
+                  child: Opacity(
+                    opacity: o * _once(t, 0.8, 0.3),
+                    child: Transform.scale(scale: s, child: const _Glow()),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  /// A potted plant by the wall, rooted in its pot: an indoor draught sways
+  /// it slowly with the odd stronger breath, the stems bending more toward
+  /// the tips, and each leaf flutters a little out of step with the next.
+  Widget _plant({required bool left}) {
+    final phase = left ? 0.0 : 2.4;
+    return Positioned(
+      left: left ? 0 : 1574,
+      top: left ? 337 : 316,
+      width: left ? 123 : 131,
+      height: left ? 177 : 185,
+      child: IgnorePointer(
+        child: _fx((t) {
+          final gust = math.pow(_wave(t + phase * 3, 9.5), 3).toDouble();
+          final sway =
+              0.6 * math.sin(2 * math.pi * t / 4.6 + phase) +
+              0.3 * math.sin(2 * math.pi * t / 2.1 + phase * 1.7);
+          return _BendSprite(
+            asset: left ? '$_kA/plant_left.png' : '$_kA/plant_right.png',
+            bend: (sway * (1 + gust) + 0.7 * gust) * (left ? 1 : -1) * 0.035,
+            flutter: 0.012 * (0.4 + gust),
+            t: t + phase,
+          );
+        }),
+      ),
+    );
   }
 
   /// A soft sunbeam slanting in through the left windows, fading in and out.
@@ -619,28 +726,6 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
             );
           }),
         ),
-      ),
-    );
-  }
-
-  Widget _lanternGlow(Offset at) {
-    final delay = (at.dx * 7.3) % 1.4;
-    return Positioned(
-      left: at.dx * _kArtW - 75,
-      top: at.dy * _kArtH - 75,
-      width: 150,
-      height: 150,
-      child: IgnorePointer(
-        child: _fx((t) {
-          final p = _loop(t - delay, 2.6);
-          const stops = [0.0, 0.4, 0.7, 1.0];
-          final o = _kf(p, stops, [0.55, 0.95, 0.7, 0.55], _easeInOut);
-          final s = _kf(p, stops, [0.92, 1.05, 0.98, 0.92], _easeInOut);
-          return Opacity(
-            opacity: o * _once(t, 0.8, 0.3),
-            child: Transform.scale(scale: s, child: const _Glow()),
-          );
-        }),
       ),
     );
   }
@@ -2070,6 +2155,122 @@ class _RayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RayPainter old) => false;
+}
+
+/// A sprite drawn on a mesh so it can bend like a plant rooted at its
+/// bottom edge: each point shifts sideways by [bend] times the sprite's
+/// height, weighted toward the tips, dipping a touch as it leans, with a
+/// small per-column [flutter] out of phase across the width.
+class _BendSprite extends StatefulWidget {
+  const _BendSprite({
+    required this.asset,
+    required this.bend,
+    required this.flutter,
+    required this.t,
+  });
+
+  final String asset;
+  final double bend;
+  final double flutter;
+  final double t;
+
+  @override
+  State<_BendSprite> createState() => _BendSpriteState();
+}
+
+class _BendSpriteState extends State<_BendSprite> {
+  ImageStream? _stream;
+  ui.Image? _image;
+  late final _listener = ImageStreamListener(
+    (info, _) => setState(() => _image = info.image),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _stream?.removeListener(_listener);
+    _stream = AssetImage(
+      widget.asset,
+    ).resolve(createLocalImageConfiguration(context))..addListener(_listener);
+  }
+
+  @override
+  void dispose() {
+    _stream?.removeListener(_listener);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final image = _image;
+    if (image == null) return const SizedBox.expand();
+    return CustomPaint(
+      size: Size.infinite,
+      painter: _BendPainter(image, widget.bend, widget.flutter, widget.t),
+    );
+  }
+}
+
+class _BendPainter extends CustomPainter {
+  _BendPainter(this.image, this.bend, this.flutter, this.t);
+
+  final ui.Image image;
+  final double bend;
+  final double flutter;
+  final double t;
+
+  static const int _cols = 6;
+  static const int _rows = 10;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final pos = <Offset>[];
+    final tex = <Offset>[];
+    Offset at(int c, int r) {
+      final u = c / _cols;
+      final v = r / _rows;
+      final lift = math.pow(1 - v, 1.7).toDouble();
+      final wave = math.sin(t * 2 * math.pi / 1.3 + u * 3.1 + v * 1.7);
+      final dx = (bend + flutter * wave * lift) * lift * size.height;
+      return Offset(u * size.width + dx, v * size.height + dx.abs() * 0.15);
+    }
+
+    for (var r = 0; r < _rows; r++) {
+      for (var c = 0; c < _cols; c++) {
+        final quad = [at(c, r), at(c + 1, r), at(c, r + 1), at(c + 1, r + 1)];
+        final uv = [
+          Offset(c / _cols, r / _rows),
+          Offset((c + 1) / _cols, r / _rows),
+          Offset(c / _cols, (r + 1) / _rows),
+          Offset((c + 1) / _cols, (r + 1) / _rows),
+        ];
+        for (final k in const [0, 1, 2, 1, 3, 2]) {
+          pos.add(quad[k]);
+          tex.add(Offset(uv[k].dx * image.width, uv[k].dy * image.height));
+        }
+      }
+    }
+    final paint = Paint()
+      ..filterQuality = FilterQuality.medium
+      ..shader = ImageShader(
+        image,
+        TileMode.clamp,
+        TileMode.clamp,
+        Matrix4.identity().storage,
+      );
+    canvas.drawVertices(
+      ui.Vertices(VertexMode.triangles, pos, textureCoordinates: tex),
+      BlendMode.srcOver,
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_BendPainter old) =>
+      old.image != image ||
+      old.bend != bend ||
+      old.flutter != flutter ||
+      old.t != t;
 }
 
 /// A lantern's warm halo.
