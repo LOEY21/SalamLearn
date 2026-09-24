@@ -67,6 +67,12 @@ const double _kFlashDur = 1.0;
 const Color _kFlash = Color(0xFFFFF8E6);
 const Curve _pushCurve = Cubic(0.5, 0, 0.2, 1);
 
+/// Finale: each placed pillar lights [_kLightGap]s after the last, then
+/// the scene holds lit before the end screen.
+const double _kLightGap = 0.8;
+const double _kLightDur = 0.7;
+const double _kLightHold = 1.3;
+
 class _Lantern {
   const _Lantern(this.asset, this.rect, this.pivot, this.phase);
   final String asset;
@@ -98,14 +104,24 @@ const String _kStartBoy = '$_kA/start_boy.png';
 const String _kStartCaption = '$_kA/start_caption.png';
 const String _kStartPlay = '$_kA/start_play.png';
 const String _kStartPlayDown = '$_kA/start_play_down.png';
-const String _kHowPanel = '$_kA/howto_panel.png';
+const String _kBtnHome = '$_kA/btn_home.png';
+const String _kBtnHomeDown = '$_kA/btn_home_down.png';
+const String _kBtnBack = '$_kA/btn_back.png';
+const String _kBtnBackDown = '$_kA/btn_back_down.png';
+const String _kBtnSound = '$_kA/btn_sound.png';
+const String _kBtnSoundDown = '$_kA/btn_sound_down.png';
+const String _kDoneFrame = '$_kA/done_frame.png';
+const String _kDoneStar = '$_kA/done_star.png';
+const String _kHowPanelS1 = '$_kA/howto_panel_s1.png';
+const String _kHowPanelS2 = '$_kA/howto_panel_s2.png';
 const String _kHowReady = '$_kA/howto_ready.png';
 const String _kHowReadyDown = '$_kA/howto_ready_down.png';
 
-/// How-to-play panel art is 915x1497; drawn 338 wide on the stage.
-const double _kHowPanelW = 338;
-const double _kHowPanelScale = _kHowPanelW / 915;
+/// How-to-play boards fill the stage width, like the reference.
+const double _kHowPanelW = 380;
+const double _kHowPanelTop = 56;
 const Color _howInk = Color(0xFF5A2E0E);
+const Color _howNavy = Color(0xFF14306E);
 const String _kSceneArt = '$_kA/bg_mosque.png';
 
 /// Each slot's glow is cut from its own painted socket in [_kSceneArt], so
@@ -155,6 +171,15 @@ const List<_Pillar> _kPillars = [
 
 _Pillar _pillar(String id) => _kPillars.firstWhere((p) => p.id == id);
 
+/// End-screen recap: what each pillar means, and its art's colour.
+const Map<String, (String, Color)> _kPillarRecap = {
+  'shahadah': ('Believing in Allah and His Messenger', Color(0xFF1E9E3E)),
+  'salah': ('Praying five times every day', Color(0xFF1F6FD8)),
+  'zakah': ('Sharing with people in need', Color(0xFFE9A10C)),
+  'sawm': ('Fasting in the month of Ramadan', Color(0xFF7B3FC8)),
+  'hajj': ('The journey to the Kaaba in Makkah', Color(0xFFD7262E)),
+};
+
 /// Session 1's five scenarios, one per slot.
 const List<(String, String)> _kQuestions = [
   (
@@ -193,13 +218,7 @@ const double _kItemH = _kTrayInnerH * 0.92;
 // Palette.
 const _startBack = Color(0xFF0D2036);
 const _sceneBase = Color(0xFFF3E4C4);
-const _greenTop = Color(0xFF3FC463);
-const _greenBottom = Color(0xFF1F8F42);
-const _greenEdge = Color(0xFF14662F);
-const _blueTop = Color(0xFF4AA3EF);
 const _blueBottom = Color(0xFF1B6DC0);
-const _blueEdge = Color(0xFF12508F);
-const _backInk = Color(0xFF1B4E8A);
 const _pipDone = Color(0xFF2EA34F);
 const _pipNow = Color(0xFFFFC72C);
 const _pipIdle = Color(0x2E1B4E8A);
@@ -209,8 +228,6 @@ const _labelInk = Color(0xFFB07D16);
 const _promptInk = Color(0xFF24324A);
 const _cheerInk = Color(0xFF1F7A3C);
 const _gold = Color(0xFFFFC72C);
-const _doneScrim = Color(0x8C0B284A);
-const _doneCard = Color(0xFAFFFCF3);
 const _doneInk = Color(0xFF3B4A63);
 const _shadowInk = Color(0xFF28200A);
 
@@ -326,6 +343,14 @@ class _FivePillarsGameState extends State<FivePillarsGame>
   int _hover = -1;
   int _errors = 0;
 
+  /// Set once every pillar is in: the finished pillars light up one by
+  /// one before the end screen.
+  double? _finaleT0;
+  final List<Timer> _finaleTs = [];
+
+  /// Wrong drops per pillar, for the end screen's first-try badges.
+  final Map<String, int> _missed = {};
+
   // Mount times, so each CSS animation starts when its element appears.
   double _startT0 = 0;
   double _playT0 = 0;
@@ -374,7 +399,16 @@ class _FivePillarsGameState extends State<FivePillarsGame>
       _kStartCaption,
       _kStartPlay,
       _kStartPlayDown,
-      _kHowPanel,
+      _kHowPanelS1,
+      _kHowPanelS2,
+      _kDoneFrame,
+      _kDoneStar,
+      _kBtnHome,
+      _kBtnHomeDown,
+      _kBtnBack,
+      _kBtnBackDown,
+      _kBtnSound,
+      _kBtnSoundDown,
       _kHowReady,
       _kHowReadyDown,
       _kSceneArt,
@@ -423,6 +457,9 @@ class _FivePillarsGameState extends State<FivePillarsGame>
     _leaveT?.cancel();
     _enterT?.cancel();
     _cheerT?.cancel();
+    for (final t in _finaleTs) {
+      t.cancel();
+    }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _clock.dispose();
     super.dispose();
@@ -507,6 +544,8 @@ class _FivePillarsGameState extends State<FivePillarsGame>
       _leaving = fromStart;
       _wrongIdx = -1;
       _errors = 0;
+      _missed.clear();
+      _finaleT0 = null;
     });
     _leaveT?.cancel();
     if (fromStart) {
@@ -518,6 +557,10 @@ class _FivePillarsGameState extends State<FivePillarsGame>
 
   void _reset() {
     _cheerT?.cancel();
+    for (final t in _finaleTs) {
+      t.cancel();
+    }
+    _finaleT0 = null;
     setState(() {
       _screen = _Screen.start;
       _startT0 = _now;
@@ -616,22 +659,47 @@ class _FivePillarsGameState extends State<FivePillarsGame>
     _cheerT = Timer(_ms(1500), () {
       if (!mounted) return;
       if (next >= _kQuestions.length) {
-        _fanfare();
-        setState(() {
-          _screen = _Screen.done;
-          _doneT0 = _now;
-          _setCheer(null);
-        });
+        _startFinale();
       } else {
         setState(() => _setCheer(null));
       }
     });
   }
 
+  void _startFinale() {
+    setState(() {
+      _finaleT0 = _now;
+      _setCheer(null);
+    });
+    for (final t in _finaleTs) {
+      t.cancel();
+    }
+    _finaleTs
+      ..clear()
+      ..addAll([
+        for (var i = 0; i < 5; i++)
+          Timer(_ms((i * _kLightGap * 1000).round()), _chime),
+        Timer(
+          _ms((((4 * _kLightGap) + _kLightDur + _kLightHold) * 1000).round()),
+          () {
+            if (!mounted) return;
+            _fanfare();
+            setState(() {
+              _screen = _Screen.done;
+              _doneT0 = _now;
+              _finaleT0 = null;
+            });
+          },
+        ),
+      ]);
+  }
+
   void _wrongScenario(bool onSlot) {
     _nope();
     if (!onSlot) return;
     _errors++;
+    final want = _kQuestions[_step].$2;
+    _missed[want] = (_missed[want] ?? 0) + 1;
     final was = _shakingSlot();
     setState(() => _setCheer('Try again'));
     if (_shakingSlot() != was) _shakeT0 = _now;
@@ -653,13 +721,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
     _cheerT?.cancel();
     if (count >= 5) {
       _cheerT = Timer(_ms(1200), () {
-        if (!mounted) return;
-        _fanfare();
-        setState(() {
-          _screen = _Screen.done;
-          _doneT0 = _now;
-          _setCheer(null);
-        });
+        if (mounted) _startFinale();
       });
     } else {
       _cheerT = Timer(_ms(1100), () {
@@ -671,6 +733,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
   void _wrongOrdering(int idx) {
     _nope();
     _errors++;
+    _missed[_kTargets[idx]] = (_missed[_kTargets[idx]] ?? 0) + 1;
     final was = _shakingSlot();
     setState(() {
       _setCheer('Try again');
@@ -754,7 +817,9 @@ class _FivePillarsGameState extends State<FivePillarsGame>
   }
 
   void _onDown(PointerDownEvent e) {
-    if (_dragId != null || _screen != _Screen.play) return;
+    if (_dragId != null || _screen != _Screen.play || _finaleT0 != null) {
+      return;
+    }
     final p = e.localPosition;
     // The tray panel sits above the slots and holds every tray pillar.
     if (p.dy >= _kTrayT) {
@@ -857,7 +922,12 @@ class _FivePillarsGameState extends State<FivePillarsGame>
             : Positioned(
                 left: 16,
                 top: 16 + shift,
-                child: _backButton(widget.onExit!),
+                child: _iconButton(
+                  'fp-home',
+                  _kBtnHome,
+                  _kBtnHomeDown,
+                  widget.onExit!,
+                ),
               ),
       ),
     );
@@ -970,7 +1040,6 @@ class _FivePillarsGameState extends State<FivePillarsGame>
     // down to flank the panel, which rises in with its steps one by one.
     final ho = _howTo ? _now - _howT0 : 0.0;
     final out = _howTo ? Curves.easeOut.transform(_c01(ho / 0.35)) : 0.0;
-    final move = _howTo ? Curves.easeInOutCubic.transform(_c01(ho / 0.7)) : 0.0;
     final ready = _howTo ? _dropCurve.transform(_once(ho, 0.45, 0.85)) : 0.0;
 
     final shader = _bgShader;
@@ -1037,25 +1106,23 @@ class _FivePillarsGameState extends State<FivePillarsGame>
                       ),
                     ),
                     if (_howTo) _howPanel(ho),
-                    Positioned.fromRect(
-                      rect: Rect.lerp(
-                        const Rect.fromLTWH(4, 427, 171, 252),
-                        const Rect.fromLTWH(2, 552, 166, 245),
-                        move,
-                      )!,
+                    Positioned(
+                      left: 4,
+                      top: 427,
+                      width: 171,
+                      height: 252,
                       child: _arrive(
-                        girl,
+                        girl * (1 - out),
                         const _Mascot(_kStartGirl, feetX: 0.4),
                       ),
                     ),
-                    Positioned.fromRect(
-                      rect: Rect.lerp(
-                        const Rect.fromLTWH(243, 423, 148, 250),
-                        const Rect.fromLTWH(254, 578, 132, 222),
-                        move,
-                      )!,
+                    Positioned(
+                      left: 243,
+                      top: 423,
+                      width: 148,
+                      height: 250,
                       child: _arrive(
-                        boy,
+                        boy * (1 - out),
                         const _Mascot(_kStartBoy, feetX: 0.55),
                       ),
                     ),
@@ -1096,10 +1163,10 @@ class _FivePillarsGameState extends State<FivePillarsGame>
                     ),
                     if (_howTo)
                       Positioned(
-                        left: 76,
-                        top: 752,
-                        width: 240,
-                        height: 70,
+                        left: 68,
+                        top: _kHowPanelTop + _howPanelH + 6,
+                        width: 257,
+                        height: 75,
                         child: Opacity(
                           opacity: ready,
                           child: Transform.translate(
@@ -1120,7 +1187,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
                                 up: _kHowReady,
                                 down: _kHowReadyDown,
                                 onTap: _start,
-                                label: "I'm Ready!",
+                                label: "I'm Ready!  \u203A",
                               ),
                             ),
                           ),
@@ -1143,32 +1210,98 @@ class _FivePillarsGameState extends State<FivePillarsGame>
     child: Transform.translate(offset: Offset(0, 16 * (1 - e)), child: child),
   );
 
-  /// The how-to-play card: panel art with its blank title, ribbon and
-  /// step areas filled in. Positions are in the art's own pixels.
+  double get _howPanelH => _kHowPanelW * (_scenarios ? 1610 / 939 : 1631 / 941);
+
+  /// The how-to-play board for this session: its art has the title,
+  /// ribbon, step and prompt areas left blank, filled in here. Positions
+  /// are in the board art's own pixels.
   Widget _howPanel(double ho) {
+    final s1 = _scenarios;
+    final k = _kHowPanelW / (s1 ? 939 : 941);
     final panel = _dropCurve.transform(_once(ho, 0.55, 0.15));
-    Widget at(double ax, double ay, double aw, Widget child, [double d = 0]) {
+    Widget fadeIn(double d, Widget child) {
       final e = Curves.easeOut.transform(_once(ho, 0.4, d));
-      return Positioned(
-        left: ax * _kHowPanelScale,
-        top: ay * _kHowPanelScale,
-        width: aw * _kHowPanelScale,
-        child: Opacity(
-          opacity: e,
-          child: Transform.translate(
-            offset: Offset(10 * (1 - e), 0),
-            child: child,
-          ),
+      return Opacity(
+        opacity: e,
+        child: Transform.translate(
+          offset: Offset(10 * (1 - e), 0),
+          child: child,
         ),
       );
     }
 
-    final step = _baloo(15.5, 700, _howInk, height: 1.12);
+    Widget at(double x, double y, double w, Widget child, [double d = 0]) =>
+        Positioned(
+          left: x * k,
+          top: y * k,
+          width: w * k,
+          child: fadeIn(d, child),
+        );
+    Widget centred(double cx, double cy, Widget child, [double d = 0]) =>
+        Positioned(
+          left: cx * k - 60,
+          top: cy * k - 30,
+          width: 120,
+          height: 60,
+          child: fadeIn(d, Center(child: child)),
+        );
+
+    // A cream halo keeps text legible where it overlaps the scenery art.
+    const halo = [
+      Shadow(color: Color(0xF2FFF8EA), blurRadius: 4),
+      Shadow(color: Color(0xCCFFF8EA), blurRadius: 9),
+    ];
+    final head = _baloo(17.5, 800, _howNavy, height: 1.05);
+    final body = _baloo(
+      12.5,
+      600,
+      _howInk,
+      height: 1.12,
+    ).copyWith(shadows: halo);
+    Widget step(String h, String b) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(h, style: head.copyWith(shadows: halo)),
+        const SizedBox(height: 1),
+        Text(b, style: body),
+      ],
+    );
+    Widget label(_Pillar p) {
+      final parts = p.label.split(' (');
+      return Container(
+        padding: const EdgeInsets.fromLTRB(4, 1, 4, 1.5),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF8E8),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: const Color(0xFFD9A93A), width: 0.8),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(parts[0], style: _baloo(7.5, 800, _howInk, height: 1)),
+            if (parts.length > 1)
+              Text(
+                '(${parts[1]}',
+                style: _baloo(5.2, 700, _howInk, height: 1.1),
+              ),
+          ],
+        ),
+      );
+    }
+
+    final row = s1
+        ? const ['hajj', 'salah', 'zakah', 'sawm', 'shahadah']
+        : const ['shahadah', 'salah', 'zakah', 'sawm', 'hajj'];
+    final rowX = s1
+        ? const [210.0, 340.0, 470.0, 600.0, 730.0]
+        : const [200.0, 335.0, 470.0, 605.0, 740.0];
+
     return Positioned(
       left: (_kW - _kHowPanelW) / 2,
-      top: 30,
+      top: _kHowPanelTop,
       width: _kHowPanelW,
-      height: 1497 * _kHowPanelScale,
+      height: _howPanelH,
       child: Opacity(
         opacity: panel,
         child: Transform.translate(
@@ -1179,53 +1312,143 @@ class _FivePillarsGameState extends State<FivePillarsGame>
               clipBehavior: Clip.none,
               children: [
                 Positioned.fill(
-                  child: Image.asset(_kHowPanel, fit: BoxFit.fill),
+                  child: Image.asset(
+                    s1 ? _kHowPanelS1 : _kHowPanelS2,
+                    fit: BoxFit.fill,
+                  ),
                 ),
                 Positioned(
                   left: 0,
                   right: 0,
-                  top: 178 * _kHowPanelScale,
+                  top: 150 * k,
                   child: const Center(child: _HowTitle()),
                 ),
                 Positioned(
                   left: 0,
                   right: 0,
-                  top: 336 * _kHowPanelScale,
-                  height: 64 * _kHowPanelScale,
+                  top: 292 * k,
+                  height: 66 * k,
                   child: Center(
                     child: Text(
-                      'Build the Five Pillars',
-                      style: _baloo(16.5, 800, _howInk),
+                      s1 ? 'Build the Five Pillars' : 'Order the Five Pillars',
+                      style: _baloo(17, 800, _howInk),
                     ),
                   ),
                 ),
                 at(
-                  215,
-                  478,
-                  330,
-                  Text('Listen to\nthe question.', style: step),
-                  0.35,
+                  205,
+                  406,
+                  690,
+                  step(
+                    s1 ? 'Listen to the question' : 'Listen to the instruction',
+                    'Tap the sound button and\nlisten carefully.',
+                  ),
+                  0.3,
+                ),
+                if (s1)
+                  Positioned(
+                    left: 362 * k,
+                    top: 548 * k,
+                    width: 450 * k,
+                    height: 145 * k,
+                    child: fadeIn(
+                      0.4,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.fromLTRB(6, 1, 6, 1),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFD75E),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                'STEP 1 OF 5',
+                                style: _baloo(8, 800, _howInk, ls: 0.4),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Amina wants to become\na good Muslim. What is\nthe first pillar?',
+                              style: _baloo(12, 700, _howNavy, height: 1.1),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  Positioned(
+                    left: 395 * k,
+                    top: 560 * k,
+                    width: 380 * k,
+                    height: 130 * k,
+                    child: fadeIn(
+                      0.4,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Put the Five Pillars\nin the correct order\nfrom 1 to 5.',
+                          textAlign: TextAlign.center,
+                          style: _baloo(12, 700, _howNavy, height: 1.12),
+                        ),
+                      ),
+                    ),
+                  ),
+                at(
+                  205,
+                  s1 ? 736 : 748,
+                  690,
+                  step(
+                    s1 ? 'Drag the correct pillar' : 'Drag each pillar',
+                    s1
+                        ? 'Drag the pillar that matches\nthe answer to the glowing place.'
+                        : 'Move every pillar to the correct slot.',
+                  ),
+                  0.5,
                 ),
                 at(
-                  215,
-                  672,
-                  400,
-                  Text(
-                    'Drag the correct\npillar to the\nglowing place.',
-                    style: step,
+                  205,
+                  s1 ? 1148 : 1170,
+                  690,
+                  step(
+                    s1 ? 'Build all 5 pillars' : 'Put them in order',
+                    s1
+                        ? 'Answer all the questions and place\nthe five pillars to complete the mosque!'
+                        : 'Arrange the Five Pillars from 1 to 5.',
                   ),
-                  0.47,
+                  0.7,
                 ),
-                at(
-                  215,
-                  1124,
-                  330,
-                  Text(
-                    'Build all 5 pillars\nto complete\nthe mosque.',
-                    style: step,
+                for (var n = 0; n < 5; n++) ...[
+                  if (!s1)
+                    centred(
+                      rowX[n],
+                      1328,
+                      Text(
+                        '${n + 1}',
+                        style: _baloo(15, 800, Colors.white, height: 1)
+                            .copyWith(
+                              shadows: const [
+                                Shadow(
+                                  color: Color(0x80000000),
+                                  offset: Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                      ),
+                      0.8,
+                    ),
+                  centred(
+                    rowX[n],
+                    s1 ? 1492 : 1500,
+                    label(_pillar(row[n])),
+                    0.8 + n * 0.05,
                   ),
-                  0.59,
-                ),
+                ],
               ],
             ),
           ),
@@ -1301,23 +1524,19 @@ class _FivePillarsGameState extends State<FivePillarsGame>
     },
   );
 
-  Widget _backButton(VoidCallback onTap) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      key: const ValueKey('fp-back'),
-      width: 42,
-      height: 42,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: const [
-          BoxShadow(color: Color(0x4D1B4E8A), offset: Offset(0, 4)),
-        ],
-      ),
-      child: Text('‹', style: _baloo(22, 800, _backInk)),
-    ),
-  );
+  /// The game's pill buttons (home, back, sound): 70x42, pressed art
+  /// swapped in while held.
+  Widget _iconButton(String key, String up, String down, VoidCallback onTap) =>
+      SizedBox(
+        width: 70,
+        height: 42,
+        child: _ImageButton(
+          key: ValueKey(key),
+          up: up,
+          down: down,
+          onTap: onTap,
+        ),
+      );
 
   // ---- play ----
 
@@ -1427,7 +1646,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
     final count = _placedCount;
     return Row(
       children: [
-        _backButton(_reset),
+        _iconButton('fp-back', _kBtnBack, _kBtnBackDown, _reset),
         const SizedBox(width: 10),
         Expanded(
           child: Container(
@@ -1464,28 +1683,9 @@ class _FivePillarsGameState extends State<FivePillarsGame>
           ),
         ),
         const SizedBox(width: 10),
-        GestureDetector(
-          // Voice-over is off in the prototype's defaults, so the prompt
-          // button only acknowledges the tap.
-          onTap: _pick,
-          child: Container(
-            width: 54,
-            height: 42,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [_blueTop, _blueBottom],
-              ),
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: const [
-                BoxShadow(color: _blueEdge, offset: Offset(0, 4)),
-              ],
-            ),
-            child: const Text('🔊', style: TextStyle(fontSize: 21)),
-          ),
-        ),
+        // Voice-over is off in the prototype's defaults, so the prompt
+        // button only acknowledges the tap.
+        _iconButton('fp-sound', _kBtnSound, _kBtnSoundDown, _pick),
       ],
     );
   }
@@ -1549,6 +1749,33 @@ class _FivePillarsGameState extends State<FivePillarsGame>
     );
   }
 
+  /// Session 1's single lit slot: a beam of light settling onto the
+  /// socket and a warm pool on the floor ([behind] the glow), then rising
+  /// motes and twinkles in front of it.
+  Widget _slotMagic(int i, {required bool behind, double? from}) {
+    final sock = _kSocketRects[i].shift(-_slotRect(i).topLeft);
+    final area = Rect.fromLTRB(
+      sock.left - 44,
+      sock.top - 150,
+      sock.right + 44,
+      sock.bottom + 26,
+    );
+    return Positioned.fromRect(
+      rect: area,
+      child: IgnorePointer(
+        child: _fx(
+          (now) => CustomPaint(
+            painter: _SlotMagicPainter(
+              now - (from ?? _glowT0[i]),
+              sock.shift(-area.topLeft),
+              behind,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSlot(int i) {
     final id = _placed[i];
     final p = id == null ? null : _pillar(id);
@@ -1562,6 +1789,8 @@ class _FivePillarsGameState extends State<FivePillarsGame>
       key: ValueKey('fp-slot-$i'),
       clipBehavior: Clip.none,
       children: [
+        if (p != null && _finaleT0 != null)
+          _slotMagic(i, behind: true, from: _finaleT0! + i * _kLightGap),
         if (p != null)
           Positioned(
             left: _kSlotW / 2 + p.ml - p.w / 2,
@@ -1572,16 +1801,55 @@ class _FivePillarsGameState extends State<FivePillarsGame>
               final u = _once(now - _popT0[i], 0.45);
               final s = _kf(u, [0, 0.6, 1], [0.4, 1.12, 1], _popCurve);
               final o = _kf(u, [0, 0.6, 1], [0, 1, 1], _popCurve);
+              final f0 = _finaleT0;
+              final tl = f0 == null ? -1.0 : now - f0 - i * _kLightGap;
+              final lit = tl < 0
+                  ? 0.0
+                  : Curves.easeOutCubic.transform(_c01(tl / _kLightDur));
+              final flash = tl < 0 ? 0.0 : 1 - _c01(tl / 0.9);
+              final breathe = 0.5 + 0.5 * math.sin(now * 2.2 + i);
+              Widget tinted(Color c) => Image.asset(
+                p.src,
+                fit: BoxFit.fill,
+                cacheWidth: _kPillarCache,
+                color: c,
+                colorBlendMode: BlendMode.srcIn,
+              );
               return Opacity(
                 opacity: _c01(o),
                 child: Transform.scale(
-                  scale: s,
+                  scale: s * (1 + 0.06 * flash * lit),
                   alignment: Alignment.bottomCenter,
-                  child: _slotArt(p),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    clipBehavior: Clip.none,
+                    children: [
+                      if (lit > 0)
+                        Opacity(
+                          opacity: lit * (0.75 + 0.25 * breathe),
+                          child: ImageFiltered(
+                            imageFilter: ui.ImageFilter.blur(
+                              sigmaX: 12,
+                              sigmaY: 12,
+                              tileMode: TileMode.decal,
+                            ),
+                            child: tinted(const Color(0xFFFFC53A)),
+                          ),
+                        ),
+                      _slotArt(p),
+                      if (flash > 0)
+                        Opacity(
+                          opacity: 0.85 * flash * lit,
+                          child: tinted(const Color(0xFFFFF7D6)),
+                        ),
+                    ],
+                  ),
                 ),
               );
             }),
           ),
+        if (p != null && _finaleT0 != null)
+          _slotMagic(i, behind: false, from: _finaleT0! + i * _kLightGap),
         if (active) ...[
           Positioned(
             left: -_kSlotW * 0.3,
@@ -1605,6 +1873,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
               );
             }),
           ),
+          if (_scenarios) _slotMagic(i, behind: true),
           Positioned.fromRect(
             rect: _kSocketRects[i].shift(-_slotRect(i).topLeft),
             child: _fx((now) {
@@ -1676,6 +1945,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
               );
             }),
           ),
+          if (_scenarios) _slotMagic(i, behind: false),
           if (!_scenarios)
             Positioned(
               left: _kSlotW / 2 - 13,
@@ -1823,129 +2093,710 @@ class _FivePillarsGameState extends State<FivePillarsGame>
 
   // ---- done ----
 
+  int get _stars => _errors == 0
+      ? 3
+      : _errors <= 2
+      ? 2
+      : 1;
+
   Widget _buildDone() {
+    final shader = _bgShader;
     return Stack(
       fit: StackFit.expand,
       children: [
-        Image.asset(_kSceneArt, fit: BoxFit.cover),
-        const ColoredBox(color: _doneScrim),
-        _stage(
-          Padding(
-            padding: const EdgeInsets.all(26),
-            child: Center(
-              child: _fx((now) {
-                final e = _ease.transform(_once(now - _doneT0, 0.5));
-                return Opacity(
-                  opacity: e,
-                  child: Transform.translate(
-                    offset: Offset(0, 14 * (1 - e)),
-                    child: _buildDoneCard(),
+        // The start screen's courtyard, lanterns and all.
+        if (shader != null)
+          _fx(
+            (now) => Stack(
+              fit: StackFit.expand,
+              children: [
+                CustomPaint(
+                  painter: _StartBgPainter(
+                    shader,
+                    _bgImage!,
+                    _bgMask!,
+                    _bgPalms!,
+                    now,
+                    1,
                   ),
-                );
-              }),
+                ),
+                _lanterns(now),
+              ],
             ),
+          )
+        else
+          Image.asset(
+            _kStartBg,
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
+          ),
+        IgnorePointer(
+          child: _fx(
+            (now) => CustomPaint(painter: _ConfettiPainter(now - _doneT0)),
           ),
         ),
+        _stage(_fx((now) => _buildDoneCard(now - _doneT0))),
       ],
     );
   }
 
-  Widget _buildDoneCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 26),
-      decoration: BoxDecoration(
-        color: _doneCard,
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: _gold, width: 4),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x66000000),
-            offset: Offset(0, 20),
-            blurRadius: 50,
+  /// End-screen layout, placed over the reference composition (851x1847)
+  /// scaled onto the 393x852 stage.
+  Widget _buildDoneCard(double t) {
+    double pop(double delay, [double dur = 0.45]) =>
+        _dropCurve.transform(_once(t, dur, delay));
+    Widget rise(double e, Widget child, [double dy = 14]) => Opacity(
+      opacity: _c01(e),
+      child: Transform.translate(offset: Offset(0, dy * (1 - e)), child: child),
+    );
+    Widget at(double l, double tp, double w, double h, Widget child) =>
+        Positioned(left: l, top: tp, width: w, height: h, child: child);
+
+    final card = pop(0, 0.55);
+    final accuracy = (5 / (5 + _errors) * 100).round();
+    final secs = (_doneT0 - _playT0).round();
+    final time = '${secs ~/ 60}:${(secs % 60).toString().padLeft(2, '0')}';
+    final xpShown = (widget.xp * Curves.easeOut.transform(_once(t, 0.9, 1.0)))
+        .round();
+
+    Widget star({double size = 40, bool on = true}) => Image.asset(
+      _kDoneStar,
+      width: size,
+      fit: BoxFit.contain,
+      color: on ? null : const Color(0xFFF1E9D8),
+      colorBlendMode: on ? null : BlendMode.modulate,
+      opacity: on ? null : const AlwaysStoppedAnimation(0.55),
+    );
+
+    Widget stat(Widget icon, String value, String label, Color c, Color bg) =>
+        Container(
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: c.withValues(alpha: 0.55), width: 1.6),
+            boxShadow: [
+              BoxShadow(
+                color: c.withValues(alpha: 0.18),
+                offset: const Offset(0, 3),
+                blurRadius: 6,
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('Mumtāz!', style: _baloo(44, 800, _cheerInk, height: 1)),
-          const SizedBox(height: 14),
-          Text(
-            'You built the mosque. These are the Five Pillars of Islam.',
-            textAlign: TextAlign.center,
-            style: _baloo(19, 600, _doneInk),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Row(
             children: [
-              for (var i = 0; i < _kPillars.length; i++) ...[
-                if (i > 0) const SizedBox(width: 4),
-                Expanded(
-                  child: AspectRatio(
-                    aspectRatio: 1 / _kPillarAspect,
-                    child: _shadowed(
-                      _kPillars[i].src,
-                      dy: 5,
-                      blur: 5,
-                      shadow: _shadowInk.withValues(alpha: 0.3),
-                      cacheWidth: _kPillarCache,
+              SizedBox(width: 26, height: 26, child: icon),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(value, style: _baloo(20, 800, c, height: 1)),
+                    ),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        label,
+                        style: _baloo(10.5, 700, _doneInk, height: 1.15),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+
+    Widget recapRow(int i) {
+      final p = _kPillars[i];
+      final (meaning, colour) = _kPillarRecap[p.id]!;
+      final tries = 1 + (_missed[p.id] ?? 0);
+      final parts = p.label.split(' (');
+      return Container(
+        padding: const EdgeInsets.fromLTRB(7, 2, 8, 2),
+        decoration: BoxDecoration(
+          color: Color.lerp(Colors.white, colour, 0.035),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: colour.withValues(alpha: 0.3), width: 1.3),
+          boxShadow: [
+            BoxShadow(
+              color: colour.withValues(alpha: 0.1),
+              offset: const Offset(0, 2),
+              blurRadius: 5,
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 29,
+              height: 29,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color.lerp(colour, Colors.white, 0.2)!, colour],
+                ),
+                border: Border.all(color: Colors.white, width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: colour.withValues(alpha: 0.4),
+                    offset: const Offset(0, 2),
+                    blurRadius: 3,
+                  ),
+                ],
+              ),
+              child: Text(
+                '${i + 1}',
+                style: _baloo(15, 800, Colors.white, height: 1),
+              ),
+            ),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 28,
+              height: 46,
+              child: Image.asset(p.src, fit: BoxFit.contain, cacheWidth: 120),
+            ),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: parts[0],
+                            style: _baloo(16, 800, colour, height: 1.1),
+                          ),
+                          if (parts.length > 1)
+                            TextSpan(
+                              text: '  (${parts[1]}',
+                              style: _baloo(11.5, 700, _doneInk, height: 1.1),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      meaning,
+                      style: _baloo(10.5, 600, _doneInk, height: 1.2),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: tries == 1
+                    ? const Color(0xFFDDF5E3)
+                    : const Color(0xFFFFEBC6),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                tries == 1 ? '✓ 1st try' : '$tries tries',
+                style: _baloo(
+                  10.5,
+                  800,
+                  tries == 1
+                      ? const Color(0xFF1F7A3C)
+                      : const Color(0xFF9A5A0A),
+                  height: 1.1,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    const navy = Color(0xFF14306E);
+    return Opacity(
+      opacity: _c01(card),
+      child: Transform.translate(
+        offset: Offset(0, 30 * (1 - card)),
+        child: Transform.scale(
+          scale: 0.94 + 0.06 * card,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              at(20, 112, 353, 662, Image.asset(_kDoneFrame, fit: BoxFit.fill)),
+              // Title with its little constellation of stars.
+              for (final (x, y, sz, d) in const [
+                (45.0, 170.0, 20.0, 0.35),
+                (68.0, 152.0, 12.0, 0.45),
+                (322.0, 150.0, 12.0, 0.5),
+                (330.0, 168.0, 21.0, 0.4),
+              ])
+                Positioned(
+                  left: x,
+                  top: y,
+                  child: Transform.scale(
+                    scale: pop(d, 0.5) * (0.9 + 0.1 * math.sin(t * 3 + x)),
+                    child: star(size: sz),
+                  ),
+                ),
+              at(
+                0,
+                136,
+                _kW,
+                54,
+                Center(
+                  child: Transform.scale(
+                    scale: 0.6 + 0.4 * pop(0.2, 0.55),
+                    child: Opacity(
+                      opacity: _c01(pop(0.2)),
+                      child: const _OutlinedText(
+                        'Mumtāz!',
+                        size: 50,
+                        fill: [
+                          Color(0xFFFFF3B0),
+                          Color(0xFFFFC928),
+                          Color(0xFFF29A0E),
+                        ],
+                        stroke: Color(0xFF6B3208),
+                        strokeWidth: 7,
+                      ),
                     ),
                   ),
                 ),
-              ],
+              ),
+              at(
+                40,
+                191,
+                313,
+                40,
+                rise(
+                  pop(0.35),
+                  Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        _scenarios
+                            ? 'You answered all five questions\nand built the mosque!'
+                            : 'You put the Five Pillars in order\nand built the mosque!',
+                        textAlign: TextAlign.center,
+                        style: _baloo(15.5, 800, navy, height: 1.18),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              for (var k = 0; k < 3; k++)
+                at(
+                  124 + k * 50.0,
+                  236,
+                  46,
+                  46,
+                  Transform.scale(
+                    scale: pop(0.55 + k * 0.2, 0.5),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        if (k < _stars)
+                          Positioned.fill(
+                            child: Opacity(
+                              opacity: 0.55 + 0.25 * math.sin(t * 2.6 + k),
+                              child: ImageFiltered(
+                                imageFilter: ui.ImageFilter.blur(
+                                  sigmaX: 7,
+                                  sigmaY: 7,
+                                ),
+                                child: Image.asset(
+                                  _kDoneStar,
+                                  color: const Color(0xFFFFD34D),
+                                  colorBlendMode: BlendMode.srcIn,
+                                ),
+                              ),
+                            ),
+                          ),
+                        Positioned.fill(child: star(on: k < _stars)),
+                      ],
+                    ),
+                  ),
+                ),
+              at(
+                37,
+                291,
+                319,
+                53,
+                rise(
+                  pop(0.95),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: stat(
+                          star(size: 26),
+                          '+$xpShown',
+                          'XP earned',
+                          const Color(0xFFE08A00),
+                          const Color(0xFFFFF4DA),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: stat(
+                          const Icon(
+                            Icons.track_changes_rounded,
+                            size: 26,
+                            color: Color(0xFF1F9A46),
+                          ),
+                          '$accuracy%',
+                          'Accuracy',
+                          const Color(0xFF1F7A3C),
+                          const Color(0xFFE6F7EA),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: stat(
+                          const Icon(
+                            Icons.access_time_filled_rounded,
+                            size: 26,
+                            color: Color(0xFF1F6FD8),
+                          ),
+                          time,
+                          'Time',
+                          const Color(0xFF1F5FC8),
+                          const Color(0xFFE6F0FF),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              at(
+                40,
+                358,
+                313,
+                28,
+                rise(
+                  pop(1.15),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          height: 1.4,
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Color(0x00D9A93A), Color(0xFFD9A93A)],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Text(
+                        ' ◆ ',
+                        style: _baloo(10, 800, const Color(0xFFD9A93A)),
+                      ),
+                      Flexible(
+                        flex: 8,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'The Five Pillars of Islam',
+                            style: _baloo(15.5, 800, const Color(0xFF6B3208)),
+                          ),
+                        ),
+                      ),
+                      Text(
+                        ' ◆ ',
+                        style: _baloo(10, 800, const Color(0xFFD9A93A)),
+                      ),
+                      Expanded(
+                        child: Container(
+                          height: 1.4,
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Color(0xFFD9A93A), Color(0x00D9A93A)],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              for (var i = 0; i < 5; i++)
+                at(
+                  36,
+                  389 + i * 60.0,
+                  321,
+                  53,
+                  rise(pop(1.25 + i * 0.1, 0.4), recapRow(i)),
+                ),
+              at(
+                34,
+                694,
+                325,
+                54,
+                rise(
+                  pop(1.9, 0.5),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _ImageButton(
+                          key: const ValueKey('fp-again'),
+                          up: _kHowReady,
+                          down: _kHowReadyDown,
+                          onTap: _start,
+                          label: 'Play Again',
+                          labelSize: 21,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _ImageButton(
+                          key: const ValueKey('fp-continue'),
+                          up: _kHowReady,
+                          down: _kHowReadyDown,
+                          onTap: _finish,
+                          label: 'Continue \u203A',
+                          labelSize: 21,
+                        ),
+                      ),
+                    ],
+                  ),
+                  20,
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 18),
-          _doneButton(
-            'Play again',
-            const ValueKey('fp-again'),
-            _greenTop,
-            _greenBottom,
-            _greenEdge,
-            _start,
-          ),
-          const SizedBox(height: 14),
-          _doneButton(
-            'Continue',
-            const ValueKey('fp-continue'),
-            _blueTop,
-            _blueBottom,
-            _blueEdge,
-            _finish,
-          ),
-        ],
+        ),
       ),
     );
   }
+}
 
-  Widget _doneButton(
-    String label,
-    Key key,
-    Color top,
-    Color bottom,
-    Color edge,
-    VoidCallback onTap,
-  ) => GestureDetector(
-    key: key,
-    onTap: onTap,
-    child: Container(
-      width: double.infinity,
-      padding: const EdgeInsets.only(top: 15, bottom: 17),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [top, bottom],
+class _SlotMagicPainter extends CustomPainter {
+  _SlotMagicPainter(this.t, this.sock, this.behind);
+
+  /// Seconds since the slot lit up.
+  final double t;
+  final Rect sock;
+  final bool behind;
+
+  static double _h(int i, int k) {
+    final x = math.sin(i * 12.9898 + k * 78.233) * 43758.5453;
+    return x - x.floorToDouble();
+  }
+
+  void _twinkle(Canvas c, Offset o, double r, double a) {
+    if (a <= 0.01 || r <= 0.1) return;
+    final glow = Paint()
+      ..color = const Color(0xFFFFE08A).withValues(alpha: 0.55 * a)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    c.drawCircle(o, r * 0.9, glow);
+    final star = Path();
+    for (var k = 0; k < 8; k++) {
+      final ang = k * math.pi / 4 - math.pi / 2;
+      final rr = k.isEven ? r : r * 0.22;
+      final pt = o + Offset(math.cos(ang) * rr, math.sin(ang) * rr);
+      k == 0 ? star.moveTo(pt.dx, pt.dy) : star.lineTo(pt.dx, pt.dy);
+    }
+    star.close();
+    c.drawPath(
+      star,
+      Paint()..color = const Color(0xFFFFFDF0).withValues(alpha: a),
+    );
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (t < 0) return;
+    final enter = Curves.easeOutCubic.transform(_c01(t / 0.7));
+    final breathe = 0.5 + 0.5 * math.sin(t * 2.4);
+    final cx = sock.center.dx;
+    final base = sock.bottom - 4;
+    final w = sock.width;
+
+    if (behind) {
+      // Beam: narrow at the top, spreading onto the socket, sliding down
+      // into place when the slot lights up.
+      final top = sock.top - 140 * enter;
+      final beam = Path()
+        ..moveTo(cx - w * 0.28, top)
+        ..lineTo(cx + w * 0.28, top)
+        ..lineTo(cx + w * 0.85, base)
+        ..lineTo(cx - w * 0.85, base)
+        ..close();
+      final beamRect = Rect.fromLTRB(cx - w, top, cx + w, base);
+      canvas.drawPath(
+        beam,
+        Paint()
+          ..blendMode = BlendMode.plus
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7)
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              const Color(0x00FFE6A0),
+              Color.fromRGBO(255, 226, 150, (0.22 + 0.1 * breathe) * enter),
+              Color.fromRGBO(255, 214, 110, (0.32 + 0.12 * breathe) * enter),
+            ],
+            stops: const [0, 0.55, 1],
+          ).createShader(beamRect),
+      );
+      // Soft moving streaks inside the beam.
+      for (var k = 0; k < 3; k++) {
+        final phase = t * (0.35 + 0.1 * k) + k * 2.1;
+        final sx = cx + math.sin(phase) * w * 0.35;
+        final a = (0.14 + 0.1 * math.sin(phase * 1.7)).clamp(0.0, 1.0) * enter;
+        final streak = Path()
+          ..moveTo(sx - 2, top + 8)
+          ..lineTo(sx + 2, top + 8)
+          ..lineTo(sx + w * 0.12 + (sx - cx) * 0.6, base)
+          ..lineTo(sx - w * 0.12 + (sx - cx) * 0.6, base)
+          ..close();
+        canvas.drawPath(
+          streak,
+          Paint()
+            ..blendMode = BlendMode.plus
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3)
+            ..shader = LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                const Color(0x00FFF6D8),
+                Color.fromRGBO(255, 246, 216, a),
+              ],
+            ).createShader(beamRect),
+        );
+      }
+      // Warm pool of light on the step.
+      final pool = Rect.fromCenter(
+        center: Offset(cx, base + 4),
+        width: w * (2.0 + 0.2 * breathe),
+        height: w * 0.42,
+      );
+      canvas.drawOval(
+        pool,
+        Paint()
+          ..blendMode = BlendMode.plus
+          ..shader = RadialGradient(
+            colors: [
+              Color.fromRGBO(255, 236, 170, (0.55 + 0.2 * breathe) * enter),
+              Color.fromRGBO(255, 190, 60, 0.25 * enter),
+              const Color(0x00FFB020),
+            ],
+            stops: const [0, 0.45, 1],
+          ).createShader(pool),
+      );
+      return;
+    }
+
+    // Motes drifting up from the base, swaying as they rise.
+    for (var k = 0; k < 16; k++) {
+      final speed = 0.28 + 0.2 * _h(k, 1);
+      final life = (t * speed + _h(k, 2)) % 1.0;
+      final y = base - life * (sock.height + 60);
+      final x =
+          cx +
+          (_h(k, 3) - 0.5) * w * 1.3 +
+          math.sin(t * (1.2 + _h(k, 4)) + k) * 5;
+      final fade = math.sin(life * math.pi) * enter;
+      final r = 0.9 + 1.6 * _h(k, 5);
+      canvas.drawCircle(
+        Offset(x, y),
+        r * 2.6,
+        Paint()
+          ..color = const Color(0xFFFFD86A).withValues(alpha: 0.35 * fade)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+      );
+      canvas.drawCircle(
+        Offset(x, y),
+        r,
+        Paint()..color = const Color(0xFFFFFBEA).withValues(alpha: 0.95 * fade),
+      );
+    }
+
+    // Twinkles around the capital, each on its own beat.
+    const spots = [
+      Offset(-0.62, 0.06),
+      Offset(0.66, 0.16),
+      Offset(-0.5, 0.52),
+      Offset(0.58, 0.7),
+    ];
+    for (var k = 0; k < spots.length; k++) {
+      final beat = (t * 0.9 + k * 0.27) % 1.0;
+      final a = math.pow(math.sin(beat * math.pi), 3).toDouble() * enter;
+      final o = Offset(
+        cx + spots[k].dx * w,
+        sock.top + spots[k].dy * sock.height,
+      );
+      _twinkle(canvas, o, 3.5 + 3.5 * a, a);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SlotMagicPainter old) => old.t != t;
+}
+
+/// Gold, green and blue confetti drifting down over the finished mosque:
+/// a burst in the first seconds, then a light steady fall.
+class _ConfettiPainter extends CustomPainter {
+  _ConfettiPainter(this.t);
+  final double t;
+
+  static const _colours = [
+    Color(0xFFFFC72C),
+    Color(0xFF2FB24C),
+    Color(0xFF3A8DEB),
+    Color(0xFFF26B5B),
+    Color(0xFFFFF1B8),
+  ];
+
+  static double _h(int i, int k) {
+    final x = math.sin(i * 12.9898 + k * 78.233) * 43758.5453;
+    return x - x.floorToDouble();
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint();
+    for (var i = 0; i < 46; i++) {
+      final speed = 0.09 + 0.08 * _h(i, 1);
+      final start = _h(i, 2) * 3.0;
+      final life = (t - start * 0.35) * speed;
+      if (life < 0) continue;
+      final y = (life % 1.25) - 0.1;
+      final x = _h(i, 3) + 0.04 * math.sin(t * (1 + _h(i, 4)) + i);
+      final a = t < 0.3 ? t / 0.3 : 1.0;
+      paint.color = _colours[i % _colours.length].withValues(alpha: 0.9 * a);
+      canvas.save();
+      canvas.translate(x * size.width, y * size.height);
+      canvas.rotate(t * (2 + 3 * _h(i, 5)) + i);
+      final w = 5 + 4 * _h(i, 6);
+      final flip = math.cos(t * (3 + 2 * _h(i, 7)) + i).abs();
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset.zero,
+            width: w,
+            height: w * 0.55 * (0.3 + flip),
+          ),
+          const Radius.circular(1.5),
         ),
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [BoxShadow(color: edge, offset: const Offset(0, 6))],
-      ),
-      child: Text(label, style: _baloo(24, 800, Colors.white)),
-    ),
-  );
+        paint,
+      );
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ConfettiPainter old) => old.t != t;
 }
 
 /// The start screen's Play button: its pressed state only drops the lower
@@ -2077,11 +2928,13 @@ class _ImageButton extends StatefulWidget {
     required this.down,
     required this.onTap,
     this.label,
+    this.labelSize = 31,
   });
   final String up;
   final String down;
   final VoidCallback onTap;
   final String? label;
+  final double labelSize;
 
   @override
   State<_ImageButton> createState() => _ImageButtonState();
@@ -2113,7 +2966,7 @@ class _ImageButtonState extends State<_ImageButton> {
               Center(
                 child: _OutlinedText(
                   label,
-                  size: 31,
+                  size: widget.labelSize,
                   fill: const [Colors.white, Color(0xFFFFF4D6)],
                   stroke: const Color(0xFF14450F),
                   strokeWidth: 6,

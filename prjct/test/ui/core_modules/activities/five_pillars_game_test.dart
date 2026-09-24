@@ -84,7 +84,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1200));
     }
     await tester.pump(const Duration(milliseconds: 600));
-    expect(find.text('Mumtāz!'), findsOneWidget);
+    expect(find.text('Mumtāz!'), findsNothing);
+    await tester.pump(const Duration(milliseconds: 5300));
+    expect(find.text('Mumtāz!'), findsWidgets);
+    await tester.pump(const Duration(milliseconds: 2500));
     await tester.tap(find.byKey(const ValueKey('fp-continue')));
     expect(errors, 1);
   });
@@ -111,7 +114,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1600));
     }
     await tester.pump(const Duration(milliseconds: 600));
-    expect(find.text('Mumtāz!'), findsOneWidget);
+    expect(find.text('Mumtāz!'), findsNothing);
+    await tester.pump(const Duration(milliseconds: 5300));
+    expect(find.text('Mumtāz!'), findsWidgets);
+    await tester.pump(const Duration(milliseconds: 2500));
     await tester.tap(find.byKey(const ValueKey('fp-continue')));
     expect(errors, 1);
   });

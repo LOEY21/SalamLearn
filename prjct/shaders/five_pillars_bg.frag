@@ -3,8 +3,8 @@
 #include <flutter/runtime_effect.glsl>
 
 // Five Pillars start screen: the painted courtyard, brought to life.
-// uMask channels: r = which palm (sway phase), g = open sky (clouds,
-// rays), b = marble floor (sun glints).
+// uMask channels: r = which palm (sway phase), g = open sky (rays),
+// b = marble floor (sun glints).
 // uPalm: rg = offset from the palm's root (px / 800 + 0.5), b = how much
 // the pixel bends (0 at the root, 1 at the frond tips).
 
@@ -85,16 +85,6 @@ void main() {
 
   // Fronds catching light as they turn.
   col *= 1.0 + bend * 0.06 * sin(t * 1.05 + phase + 0.6) * gust;
-
-  // Drifting wisps and their soft shading.
-  vec2 cp = vec2(uv.x * 2.2 - t * 0.010, uv.y * aspect * 2.6);
-  float c = fbm(cp + vec2(0.0, 0.15 * sin(t * 0.05)));
-  float c2 = fbm(cp * 1.7 + vec2(-t * 0.006, 4.0));
-  float wisp = smoothstep(0.52, 0.8, c) * 0.75 + smoothstep(0.6, 0.85, c2) * 0.35;
-  float skyFade = smoothstep(0.52, 0.12, uv.y);
-  wisp *= sky * skyFade;
-  vec3 cloudCol = mix(vec3(0.86, 0.91, 0.98), vec3(1.0, 0.99, 0.96), smoothstep(0.55, 0.8, c));
-  col = mix(col, cloudCol, clamp(wisp * 0.6, 0.0, 0.7));
 
   // Sun just past the top-right corner: glow plus slowly turning rays.
   vec2 sun = vec2(0.95, -0.04);
