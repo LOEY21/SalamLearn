@@ -90,6 +90,7 @@ flutter:
 
   shaders:
     - shaders/five_pillars_bg.frag
+    - shaders/sirah_start_bg.frag
 
   assets:
     - assets/images/

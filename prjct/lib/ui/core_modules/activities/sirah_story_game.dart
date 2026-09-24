@@ -301,6 +301,12 @@ class _SirahStoryGameState extends State<SirahStoryGame>
 
   int _errors = 0;
 
+  // Live start-screen backdrop; null until loaded (static art meanwhile).
+  // The second shader instance renders the open-sky mask the birds fly in.
+  ui.FragmentShader? _bgShader;
+  ui.FragmentShader? _skyShader;
+  List<ui.Image>? _bgLayers;
+
   Timer? _narrateTimer;
   Timer? _advanceTimer;
   Timer? _shakeTimer;
@@ -323,10 +329,47 @@ class _SirahStoryGameState extends State<SirahStoryGame>
       DeviceOrientation.landscapeRight,
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    _loadLiveBg();
+  }
+
+  Future<void> _loadLiveBg() async {
+    try {
+      final program = await ui.FragmentProgram.fromAsset(
+        'shaders/sirah_start_bg.frag',
+      );
+      final images = await Future.wait([
+        for (final l in ['clean', 'palms', 'field', 'aux', 'clouds', 'lamp'])
+          _decodeAsset('assets/images/sirah_story/start_bg_$l.png'),
+      ]);
+      if (!mounted) {
+        for (final i in images) {
+          i.dispose();
+        }
+        return;
+      }
+      setState(() {
+        _bgShader = program.fragmentShader();
+        _skyShader = program.fragmentShader();
+        _bgLayers = images;
+      });
+    } catch (_) {
+      // Shaders unsupported here: the static art stays.
+    }
+  }
+
+  static Future<ui.Image> _decodeAsset(String asset) async {
+    final data = await rootBundle.load(asset);
+    final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+    return (await codec.getNextFrame()).image;
   }
 
   @override
   void dispose() {
+    _bgShader?.dispose();
+    _skyShader?.dispose();
+    for (final i in _bgLayers ?? const <ui.Image>[]) {
+      i.dispose();
+    }
     _narrateTimer?.cancel();
     _advanceTimer?.cancel();
     _shakeTimer?.cancel();
@@ -646,17 +689,46 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   Widget _buildStart() {
     return Stack(
       children: [
-        // The backdrop holds still; the sky above it carries the motion.
-        Positioned.fill(
-          child: Image.asset(
-            'assets/images/sirah_story/start_bg.png',
-            fit: BoxFit.cover,
-          ),
-        ),
-        // Clouds drifting across and a few birds gliding through the sky.
+        // The square in the wind: palms and plants sway, clouds drift behind
+        // them, birds cross the open sky and sand blows over the paving.
         Positioned.fill(
           child: IgnorePointer(
-            child: _fx((t) => CustomPaint(painter: _SkyPainter(t - _screenT0))),
+            child: _fx((t) {
+              final gust = _gust(t);
+              final shader = _bgShader;
+              final sky = _skyShader;
+              final layers = _bgLayers;
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (shader != null && sky != null && layers != null) ...[
+                    CustomPaint(
+                      painter: _LiveBgPainter(shader, layers, t, gust, 0),
+                    ),
+                    CustomPaint(
+                      painter: _SkyPainter(
+                        t - _screenT0,
+                        mask: _LiveBgPainter.configure(
+                          sky,
+                          layers,
+                          const Size(_kW, _kH),
+                          t,
+                          gust,
+                          1,
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    Image.asset(
+                      'assets/images/sirah_story/start_bg.png',
+                      fit: BoxFit.cover,
+                    ),
+                    CustomPaint(painter: _SkyPainter(t - _screenT0)),
+                  ],
+                  CustomPaint(painter: _SandPainter(t)),
+                ],
+              );
+            }),
           ),
         ),
         // Logo eases down and settles — no bounce, it just comes to rest.
@@ -2153,168 +2225,411 @@ class _SirahStoryGameState extends State<SirahStoryGame>
 // Small shared pieces
 // ---------------------------------------------------------------------------
 
-/// The start screen's sky: a few soft clouds drifting across and a handful
-/// of birds gliding through on slow arcs. Painted, not asset-based, so it
-/// sits over any backdrop and costs a few paths a frame.
-class _SkyPainter extends CustomPainter {
-  const _SkyPainter(this.t);
+/// The wind over the square, 0.24–1: a slow swell with a quicker gust on
+/// top. The palms (via the shader), the birds' mask and the sand all read it,
+/// so everything moves with the same weather.
+double _gust(double t) =>
+    0.62 + 0.25 * math.sin(0.23 * t) + 0.13 * math.sin(0.61 * t + 1.7);
 
-  /// Seconds since the screen appeared.
+/// How far the wind has blown by [t] — the integral of [_gust]. Anything the
+/// wind carries travels by this, so it speeds up and slows with the gusts
+/// instead of jumping when they change.
+double _windRun(double t) =>
+    0.62 * t -
+    0.25 / 0.23 * math.cos(0.23 * t) -
+    0.13 / 0.61 * math.cos(0.61 * t + 1.7);
+
+/// The start screen's backdrop, drawn by `shaders/sirah_start_bg.frag` from
+/// the layers in [layers] (clean, palms, field, aux, clouds). [mode] 1 draws
+/// only the open-sky coverage instead, as the birds' mask.
+class _LiveBgPainter extends CustomPainter {
+  _LiveBgPainter(this.shader, this.layers, this.t, this.gust, this.mode);
+
+  final ui.FragmentShader shader;
+  final List<ui.Image> layers;
   final double t;
+  final double gust;
+  final double mode;
 
-  // (y, width, px/s, start offset) — mismatched speeds so they never line up.
-  // Kept high: below this the corners are palms and awnings.
-  static const _clouds = [
-    (46.0, 230.0, 14.0, 0.0),
-    (92.0, 170.0, 22.0, 700.0),
-    (24.0, 150.0, 18.0, 1300.0),
-    (70.0, 200.0, 11.0, 400.0),
-  ];
-
-  // (y, px/s, start offset, flap period, size)
-  static const _birds = [
-    (95.0, 58.0, 0.0, 0.62, 38.0),
-    (122.0, 52.0, 70.0, 0.55, 31.0),
-    (78.0, 64.0, -64.0, 0.70, 26.0),
-  ];
-
-  /// The backdrop's corners are palms and market awnings reaching up into the
-  /// sky. Anything drawn over them would sit *in front* of them, so the sky's
-  /// moving pieces fade out before they get there and live only over the
-  /// open sky in the middle.
-  static double _open(double x, double width) {
-    const edge = 330.0;
-    const ramp = 170.0;
-    return _c01((x - edge) / ramp) * _c01((width - edge - x) / ramp);
+  static ui.FragmentShader configure(
+    ui.FragmentShader shader,
+    List<ui.Image> layers,
+    Size size,
+    double t,
+    double gust,
+    double mode,
+  ) {
+    shader
+      ..setFloat(0, size.width)
+      ..setFloat(1, size.height)
+      ..setFloat(2, t)
+      ..setFloat(3, gust)
+      ..setFloat(4, mode);
+    for (var i = 0; i < layers.length; i++) {
+      shader.setImageSampler(i, layers[i]);
+    }
+    return shader;
   }
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final (y, w, speed, offset) in _clouds) {
-      final span = size.width + w * 2;
-      final x = (offset + t * speed) % span - w;
-      final a = _open(x + w / 2, size.width);
-      if (a <= 0.01) continue;
-      final cloud = Paint()
-        ..color = Color.fromRGBO(255, 255, 255, 0.78 * a)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-      // A cloud is a few overlapping puffs on a flat base.
-      final h = w * 0.34;
-      canvas.drawOval(Rect.fromLTWH(x, y + h * 0.35, w, h * 0.65), cloud);
-      canvas.drawCircle(Offset(x + w * 0.32, y + h * 0.42), h * 0.42, cloud);
-      canvas.drawCircle(Offset(x + w * 0.56, y + h * 0.30), h * 0.52, cloud);
-      canvas.drawCircle(Offset(x + w * 0.76, y + h * 0.48), h * 0.36, cloud);
-    }
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..shader = configure(shader, layers, size, t, gust, mode),
+    );
+  }
 
-    // The flock crosses together, then the sky is clear for a while.
-    const cycle = 34.0;
-    final phase = t % cycle;
-    for (final (y, speed, offset, flap, sz) in _birds) {
-      final x = -80 + offset + phase * speed;
-      final a = _open(x, size.width);
-      if (a <= 0.01) continue;
-      final lift = math.sin(t * 2 * math.pi / flap);
-      final by = y + 8 * math.sin(phase * 0.6 + offset);
-      _paintBird(canvas, Offset(x, by), sz, lift, a);
+  @override
+  bool shouldRepaint(_LiveBgPainter old) => old.t != t;
+}
+
+/// The start screen's birds: a loose skein crossing with the wind and, now
+/// and then, a lone far bird beating back against it. Each flies the way real
+/// birds do — bursts of wingbeats that lift it, then a glide on held wings
+/// that lets it sink — with the wingtips lagging the arm on every stroke.
+/// [mask] (the backdrop shader's sky mode) hides them behind palms and
+/// awnings as those sway.
+class _SkyPainter extends CustomPainter {
+  const _SkyPainter(this.t, {this.mask});
+
+  /// Seconds since the screen appeared.
+  final double t;
+  final Shader? mask;
+
+  // (x behind the leader, y, size, wingbeats/s, seed)
+  static const _skein = [
+    (0.0, 104.0, 34.0, 3.1, 0.0),
+    (-58.0, 86.0, 29.0, 3.4, 1.3),
+    (-66.0, 128.0, 30.0, 3.3, 2.6),
+    (-120.0, 72.0, 25.0, 3.7, 3.9),
+    (-128.0, 148.0, 24.0, 3.8, 5.2),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final birds = <(Offset, double, double, double, bool)>[];
+
+    // The skein crosses, then the sky is clear for a while.
+    const cycle = 36.0;
+    final lead = -100 + (t % cycle) * 62;
+    for (final (dx, y, sz, hz, seed) in _skein) {
+      final x = lead + dx + 6 * math.sin(t * 0.3 + seed);
+      if (x < -60 || x > size.width + 60) continue;
+      final at = Offset(x, y + 4 * math.sin(t * 0.37 + seed * 2));
+      birds.add((at, sz, hz, seed, false));
+    }
+    // A far bird heading the other way, slower against the wind.
+    const lone = 58.0;
+    final lx = size.width + 60 - ((t + 20) % lone) * 36;
+    if (lx > -60 && lx < size.width + 60) {
+      birds.add((Offset(lx, 168), 15.0, 4.4, 7.7, true));
+    }
+    if (birds.isEmpty) return;
+
+    final bounds = Offset.zero & size;
+    final m = mask;
+    if (m != null) canvas.saveLayer(bounds, Paint());
+    for (final (at, sz, hz, seed, left) in birds) {
+      // Flapping comes in bursts; between them the bird glides.
+      final cruise = math.sin(t * 0.45 + seed * 1.7);
+      final flap = _c01((cruise + 0.2) / 0.6);
+      final beat = t * hz * 2 * math.pi + seed * 5;
+      final lift = 0.15 * (1 - flap) + math.sin(beat) * flap;
+      // It climbs while flapping and sinks on the glide; the body rises a
+      // touch on every downstroke.
+      final y =
+          at.dy +
+          10 * math.cos(t * 0.45 + seed * 1.7) +
+          sz * 0.07 * math.cos(beat) * flap;
+      final pitch = -0.1 * cruise - 0.06 * lift;
+      final hand = 0.45 * math.sin(beat - 1.1) * flap - 0.1 * (1 - flap);
+      canvas.save();
+      canvas.translate(at.dx, y);
+      if (left) canvas.scale(-1, 1);
+      _paintBird(canvas, sz, lift, hand, pitch);
+      canvas.restore();
+    }
+    if (m != null) {
+      canvas.drawRect(
+        bounds,
+        Paint()
+          ..shader = m
+          ..blendMode = BlendMode.dstIn,
+      );
+      canvas.restore();
     }
   }
 
-  /// A small cartoon bird in profile, flying right: body, head with an eye and
-  /// beak, a forked tail, and two wings hinged at the shoulder. [lift] (-1..1)
-  /// is the wingbeat — the near wing sweeps from raised to lowered and the far
-  /// wing follows a touch behind, so the flap reads as flight, not a wobble.
+  /// A rock dove flying right, seen side-on and a little from below: a
+  /// tapered grey body shading pale underneath, a dark-banded fan tail, a
+  /// green sheen on the neck, and long wings with fingered primaries.
+  ///
+  /// Wings beat towards and away from the viewer, so they are drawn at full
+  /// span and then foreshortened by the sine of their elevation — tall when
+  /// raised or lowered, a sliver as they pass level — which is what reads as
+  /// real flight rather than a paddle rotating in the picture plane. [lift]
+  /// (-1..1) is the stroke; [hand] (about -0.5..0.5) spreads the primaries on
+  /// the downstroke and tucks them on the way up.
   static void _paintBird(
     Canvas canvas,
-    Offset at,
     double sz,
     double lift,
-    double a,
+    double hand,
+    double pitch,
   ) {
-    final body = Paint()..color = Color.fromRGBO(74, 52, 30, a);
-    final shade = Paint()..color = Color.fromRGBO(52, 36, 20, a);
-    final belly = Paint()..color = Color.fromRGBO(214, 176, 124, a);
-    final beak = Paint()..color = Color.fromRGBO(232, 163, 60, a);
-    final eye = Paint()..color = Color.fromRGBO(255, 248, 230, a);
+    canvas.rotate(pitch);
+    canvas.scale(sz);
 
-    canvas.save();
-    canvas.translate(at.dx, at.dy);
-    // A slight nose-up tilt on the downstroke, as the bird climbs.
-    canvas.rotate(-0.08 * lift);
+    final elev = 0.25 + 0.95 * lift;
+    const tilt = 0.35;
+    final spread = _c01(0.5 + hand * 1.1);
+    final reach = 0.8 + 0.2 * spread;
 
-    Path wing() => Path()
-      ..moveTo(0, 0)
-      ..quadraticBezierTo(-sz * 0.18, -sz * 0.62, -sz * 0.62, -sz * 0.74)
-      ..quadraticBezierTo(-sz * 0.46, -sz * 0.38, -sz * 0.52, -sz * 0.12)
-      ..quadraticBezierTo(-sz * 0.2, -sz * 0.02, sz * 0.16, sz * 0.02)
-      ..close();
-    final shoulder = Offset(sz * 0.06, -sz * 0.08);
+    // Far wing first: its upper side, darker, behind the body.
+    _paintWing(
+      canvas,
+      const Offset(0.1, -0.12),
+      math.sin(elev - tilt) * 0.9 * reach,
+      spread,
+      const Color(0xFF5F5A54),
+      const Color(0xFF34302C),
+    );
 
-    // Far wing first, so the body covers its root.
-    canvas.save();
-    canvas.translate(shoulder.dx + sz * 0.06, shoulder.dy - sz * 0.02);
-    canvas.rotate(_wingAngle(lift * 0.9) - 0.12);
-    canvas.drawPath(wing(), shade);
-    canvas.restore();
-
-    // Tail: a short fork trailing behind.
+    // Tail: a short fan with the dark terminal band.
     canvas.drawPath(
       Path()
-        ..moveTo(-sz * 0.36, -sz * 0.06)
-        ..lineTo(-sz * 0.78, -sz * 0.24)
-        ..lineTo(-sz * 0.64, sz * 0.0)
-        ..lineTo(-sz * 0.78, sz * 0.18)
-        ..lineTo(-sz * 0.36, sz * 0.08)
+        ..moveTo(-0.36, -0.07)
+        ..lineTo(-0.78, -0.11)
+        ..quadraticBezierTo(-0.87, 0, -0.78, 0.1)
+        ..lineTo(-0.36, 0.06)
         ..close(),
-      body,
+      Paint()
+        ..shader = const LinearGradient(
+          colors: [Color(0xFF7D776F), Color(0xFF6A645D), Color(0xFF2E2B28)],
+          stops: [0, 0.7, 0.9],
+        ).createShader(const Rect.fromLTRB(-0.36, -0.12, -0.87, 0.1)),
     );
 
-    // Body and a paler belly.
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset.zero, width: sz * 0.98, height: sz * 0.44),
-      body,
+    // Body: deep breast, flat back, tapering into the tail; a round head.
+    final plumage = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xFF5E5953), Color(0xFF8B857C), Color(0xFFCBC3B6)],
+        stops: [0, 0.45, 1],
+      ).createShader(const Rect.fromLTRB(-0.42, -0.22, 0.54, 0.18));
+    canvas.drawPath(
+      Path()
+        ..moveTo(0.36, -0.17)
+        ..quadraticBezierTo(0, -0.22, -0.3, -0.1)
+        ..lineTo(-0.42, -0.04)
+        ..lineTo(-0.42, 0.05)
+        ..quadraticBezierTo(-0.1, 0.18, 0.25, 0.12)
+        ..quadraticBezierTo(0.4, 0.07, 0.44, -0.02)
+        ..close(),
+      plumage,
     );
+    canvas.drawCircle(const Offset(0.42, -0.1), 0.12, plumage);
+    // Iridescent neck.
     canvas.drawOval(
       Rect.fromCenter(
-        center: Offset(sz * 0.08, sz * 0.08),
-        width: sz * 0.62,
-        height: sz * 0.22,
+        center: const Offset(0.34, -0.06),
+        width: 0.2,
+        height: 0.16,
       ),
-      belly,
+      Paint()..color = const Color(0x4D4E8A6E),
     );
-
-    // Head, beak, eye.
-    final head = Offset(sz * 0.46, -sz * 0.12);
-    canvas.drawCircle(head, sz * 0.2, body);
+    // Beak and eye.
     canvas.drawPath(
       Path()
-        ..moveTo(head.dx + sz * 0.16, head.dy - sz * 0.05)
-        ..lineTo(head.dx + sz * 0.38, head.dy + sz * 0.01)
-        ..lineTo(head.dx + sz * 0.16, head.dy + sz * 0.07)
+        ..moveTo(0.52, -0.12)
+        ..lineTo(0.63, -0.08)
+        ..lineTo(0.52, -0.05)
         ..close(),
-      beak,
+      Paint()..color = const Color(0xFF3A3632),
     );
     canvas.drawCircle(
-      Offset(head.dx + sz * 0.07, head.dy - sz * 0.04),
-      math.max(1.6, sz * 0.055),
-      eye,
+      const Offset(0.46, -0.13),
+      0.03,
+      Paint()..color = const Color(0xFF1C1A18),
     );
 
-    // Near wing last, over the body.
-    canvas.save();
-    canvas.translate(shoulder.dx, shoulder.dy);
-    canvas.rotate(_wingAngle(lift));
-    canvas.drawPath(wing(), body);
-    canvas.restore();
-
-    canvas.restore();
+    // Near wing last: pale underside when raised, as seen from below.
+    _paintWing(
+      canvas,
+      const Offset(0.04, -0.1),
+      math.sin(elev + tilt) * reach,
+      spread,
+      const Color(0xFFBDB5A9),
+      const Color(0xFF3C3833),
+    );
   }
 
-  /// The wing is drawn tip-up and swept back; this hinges it from that raised
-  /// pose (lift = 1) down past the body to a lowered one behind it (lift = -1).
-  static double _wingAngle(double lift) => -0.55 + 0.85 * lift;
+  /// One wing at full span pointing up from [root], then squashed to
+  /// [project] of its height (negative flips it below the body). Coverts in
+  /// [base], shading to [tip] across the primaries; the primaries' fingers
+  /// open with [spread].
+  static void _paintWing(
+    Canvas canvas,
+    Offset root,
+    double project,
+    double spread,
+    Color base,
+    Color tip,
+  ) {
+    canvas.save();
+    canvas.translate(root.dx, root.dy);
+    canvas.scale(1, project);
+
+    final wingTip = Offset(
+      -0.45 - 0.1 * (1 - spread),
+      -1.15 + 0.12 * (1 - spread),
+    );
+    const rear = Offset(-0.5, -0.55);
+    final path = Path()
+      ..moveTo(0.1, 0)
+      ..quadraticBezierTo(0.14, -0.3, 0.02, -0.5)
+      ..quadraticBezierTo(-0.08, -0.85, wingTip.dx, wingTip.dy);
+    // Fingered primaries along the back of the hand.
+    const fingers = 6;
+    final depth = 0.02 + 0.07 * spread;
+    for (var i = 1; i <= fingers; i++) {
+      final prev = Offset.lerp(wingTip, rear, (i - 1) / fingers)!;
+      final next = Offset.lerp(wingTip, rear, i / fingers)!;
+      final mid = Offset.lerp(prev, next, 0.5)!;
+      path.lineTo(mid.dx + depth * 0.9, mid.dy + depth * 0.5);
+      path.lineTo(next.dx, next.dy);
+    }
+    // Secondaries back to the body.
+    path
+      ..quadraticBezierTo(-0.52, -0.3, -0.4, -0.1)
+      ..quadraticBezierTo(-0.32, 0, -0.2, 0.02)
+      ..close();
+
+    canvas.drawPath(
+      path,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [base, base, tip],
+          stops: const [0, 0.5, 0.95],
+        ).createShader(const Rect.fromLTRB(-0.6, -1.15, 0.16, 0.02)),
+    );
+    canvas.restore();
+  }
 
   @override
   bool shouldRepaint(_SkyPainter old) => old.t != t;
+}
+
+/// Sand lifted off the square by the wind: grains hopping low over the
+/// paving (each hop's length tied to how far the wind carries it), fine dust
+/// hanging higher up, and thin sheets of sand skimming the ground in the
+/// gusts. Smaller and fainter towards the far side of the square.
+class _SandPainter extends CustomPainter {
+  const _SandPainter(this.t);
+
+  final double t;
+
+  static const _light = Color(0xFFF6E2B6);
+  static const _dark = Color(0xFFD9B27A);
+
+  /// A fixed pseudo-random 0..1 per particle and property.
+  static double _h(int i, int k) {
+    final v = math.sin(i * 127.1 + k * 311.7) * 43758.5453;
+    return v - v.floorToDouble();
+  }
+
+  /// 0 at the far edge of the paving, 1 at the front of the frame.
+  static double _depth(double y) => _c01((y - 555) / 286);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final run = _windRun(t);
+    final gust = _gust(t);
+    final span = size.width + 120;
+
+    // Sheets of sand skimming the paving, only in the stronger gusts.
+    final sheet = 0.2 * _c01(gust * 1.6 - 0.55);
+    if (sheet > 0.01) {
+      for (var i = 0; i < 7; i++) {
+        final y = 590 + _h(i, 1) * 230;
+        final k = 0.3 + 0.7 * _depth(y);
+        final len = (140 + 200 * _h(i, 2)) * k;
+        final loop = span + len;
+        final x =
+            (_h(i, 4) * loop + run * (150 + 60 * _h(i, 3)) * k) % loop - len;
+        final path = Path();
+        for (var s = 0; s <= 12; s++) {
+          final f = s / 12;
+          final px = x + len * f;
+          final py =
+              y -
+              3 * k * math.sin(px * 0.025 - t * 3 + i) -
+              8 * k * f * (1 - f);
+          s == 0 ? path.moveTo(px, py) : path.lineTo(px, py);
+        }
+        canvas.drawPath(
+          path,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = (2 + 3 * _h(i, 5)) * k
+            ..strokeCap = StrokeCap.round
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3 * k)
+            ..shader = LinearGradient(
+              colors: [
+                _light.withValues(alpha: 0),
+                _light.withValues(alpha: sheet),
+                _light.withValues(alpha: 0),
+              ],
+            ).createShader(Rect.fromLTWH(x, y - 12, len, 24)),
+        );
+      }
+    }
+
+    final dot = Paint();
+
+    // Fine dust hanging in the air, drifting slowly downwind.
+    for (var i = 0; i < 40; i++) {
+      final y0 = 420 + _h(i, 11) * 380;
+      final k = 0.4 + 0.6 * _depth(y0);
+      final d = _h(i, 12) * span + run * (28 + 30 * _h(i, 13)) * k;
+      final x = d % span - 60 + 10 * math.sin(t * 0.9 + i);
+      final y =
+          y0 + 9 * math.sin(t * 0.6 + i * 1.7) + 4 * math.sin(t * 1.9 + i);
+      final a =
+          (0.1 + 0.18 * _h(i, 14)) *
+          (0.55 + 0.45 * math.sin(t * 0.8 + i * 2.3));
+      dot.color = _light.withValues(alpha: a);
+      canvas.drawCircle(Offset(x, y), (0.8 + 1.4 * _h(i, 15)) * k, dot);
+    }
+
+    // Grains hopping along the paving; they're only aloft while the wind
+    // is strong enough to lift them.
+    for (var i = 0; i < 120; i++) {
+      final y0 = 565 + math.pow(_h(i, 1), 0.8).toDouble() * 270;
+      final k = 0.25 + 0.75 * _depth(y0);
+      final d = _h(i, 3) * span + run * (70 + 110 * _h(i, 2)) * k;
+      final x = d % span - 60;
+      final hopLen = (26 + 50 * _h(i, 4)) * k;
+      final u = (d / hopLen) % 1.0;
+      final hop =
+          4 * u * (1 - u) * (5 + 14 * _h(i, 5)) * k * (0.5 + 0.5 * gust);
+      final aloft = _c01((gust - 0.35 - 0.4 * _h(i, 6)) * 4);
+      final a = (0.35 + 0.45 * _h(i, 7)) * aloft * (0.4 + 0.6 * k);
+      if (a < 0.02) continue;
+      dot.color = (i.isEven ? _light : _dark).withValues(alpha: a);
+      canvas.drawCircle(
+        Offset(x, y0 - hop),
+        (0.9 + 1.3 * _h(i, 8)) * (0.5 + 0.8 * k),
+        dot,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SandPainter old) => old.t != t;
 }
 
 /// Star glints twinkling around the title scroll once it has landed — each on
