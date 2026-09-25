@@ -20,9 +20,11 @@ import 'activities/ayah_builder_game.dart';
 import 'activities/classroom_heroes_game.dart';
 import 'activities/creation_hunt_game.dart';
 import 'activities/five_pillars_game.dart';
+import 'activities/good_deed_tree_game.dart';
 import 'activities/harakat_pop_activity.dart';
 import 'activities/quran_etiquette_game.dart';
 import 'activities/sirah_story_game.dart';
+import 'activities/taharah_adventure_game.dart';
 import 'lesson_complete_screen.dart';
 
 /// Parses the model's `#RRGGBB` hex strings into a [Color] — same
@@ -210,7 +212,9 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       _activity.type == ActivityType.classroomHeroes ||
       _activity.type == ActivityType.sirahStory ||
       _activity.type == ActivityType.quranEtiquette ||
-      _activity.type == ActivityType.fivePillars;
+      _activity.type == ActivityType.fivePillars ||
+      _activity.type == ActivityType.goodDeedTree ||
+      _activity.type == ActivityType.taharahAdventure;
 
   bool get _isFullBleedActivity =>
       _activity.type == ActivityType.creationHunt ||
@@ -218,6 +222,8 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       _activity.type == ActivityType.sirahStory ||
       _activity.type == ActivityType.quranEtiquette ||
       _activity.type == ActivityType.fivePillars ||
+      _activity.type == ActivityType.goodDeedTree ||
+      _activity.type == ActivityType.taharahAdventure ||
       _isWudhuActivity;
 
   bool get _isWudhuActivity =>
@@ -226,7 +232,9 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
 
   @override
   Widget build(BuildContext context) {
-    if (_finished) {
+    // Games with their own ending never show the old complete screen — not
+    // even for the frame (or page-out transition) while the lesson closes.
+    if (_finished && !_skipCompleteScreen) {
       return LessonCompleteScreen(
         lesson: widget.lesson,
         xpEarned: _xpEarned,
@@ -270,6 +278,8 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
           ActivityType.sirahStory ||
           ActivityType.quranEtiquette ||
           ActivityType.fivePillars ||
+          ActivityType.goodDeedTree ||
+          ActivityType.taharahAdventure ||
           ActivityType.fiqhDrag when _isFullBleedActivity =>
             _buildActivityContent(lessonColor),
           ActivityType.pronounce => Stack(
@@ -575,6 +585,20 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       ActivityType.fivePillars => FivePillarsGame(
         key: ValueKey(activity.id),
         mode: activity.pillarsMode!,
+        xp: activity.xp,
+        onComplete: _handleActivityComplete,
+        onExit: _confirmExit,
+      ),
+      ActivityType.goodDeedTree => GoodDeedTreeGame(
+        key: ValueKey(activity.id),
+        session: activity.deedTreeSession!,
+        xp: activity.xp,
+        onComplete: _handleActivityComplete,
+        onExit: _confirmExit,
+      ),
+      ActivityType.taharahAdventure => TaharahAdventureGame(
+        key: ValueKey(activity.id),
+        session: activity.taharahSession!,
         xp: activity.xp,
         onComplete: _handleActivityComplete,
         onExit: _confirmExit,

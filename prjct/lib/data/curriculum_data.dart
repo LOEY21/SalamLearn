@@ -4999,39 +4999,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest4-s6-act',
-            type: ActivityType.fiqhDrag,
+            type: ActivityType.taharahAdventure,
             title: 'Taharah Adventure (Hygiene Basics)',
             icon: '🧼',
             xp: 30,
-            fiqhItems: [
-              FiqhDragItem(
-                id: 'h1',
-                emoji: '🦷',
-                label: 'Siwak',
-                correctZoneId: 'mouth',
-              ),
-              FiqhDragItem(
-                id: 'h2',
-                emoji: '💅',
-                label: 'Nail Clipper',
-                correctZoneId: 'nails',
-              ),
-              FiqhDragItem(
-                id: 'h3',
-                emoji: '🪣',
-                label: 'Lota Jug',
-                correctZoneId: 'istinja',
-              ),
-            ],
-            fiqhZones: [
-              FiqhDropZone(id: 'mouth', label: 'Mouth (Siwak)', icon: '👄'),
-              FiqhDropZone(id: 'nails', label: 'Nails (Trimming)', icon: '🖐️'),
-              FiqhDropZone(
-                id: 'istinja',
-                label: 'Istinja (Washing)',
-                icon: '🚽',
-              ),
-            ],
+            taharahSession: TaharahSession.cleanOrDirty,
           ),
         ],
       ),
@@ -5146,49 +5118,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest5-s4-act',
-            type: ActivityType.fiqhDrag,
+            type: ActivityType.taharahAdventure,
             title: 'Taharah Adventure (Wudhu Pt 1)',
             icon: '🚿',
             xp: 40,
-            fiqhItems: [
-              FiqhDragItem(
-                id: 'u1',
-                emoji: '👐',
-                label: 'Wash Hands',
-                correctZoneId: '1',
-              ),
-              FiqhDragItem(
-                id: 'u2',
-                emoji: '👄',
-                label: 'Rinse Mouth',
-                correctZoneId: '2',
-              ),
-              FiqhDragItem(
-                id: 'u3',
-                emoji: '👃',
-                label: 'Rinse Nose',
-                correctZoneId: '3',
-              ),
-              FiqhDragItem(
-                id: 'u4',
-                emoji: '👤',
-                label: 'Wash Face',
-                correctZoneId: '4',
-              ),
-              FiqhDragItem(
-                id: 'u5',
-                emoji: '💪',
-                label: 'Wash Right Arm',
-                correctZoneId: '5',
-              ),
-            ],
-            fiqhZones: [
-              FiqhDropZone(id: '1', label: 'Step 1'),
-              FiqhDropZone(id: '2', label: 'Step 2'),
-              FiqhDropZone(id: '3', label: 'Step 3'),
-              FiqhDropZone(id: '4', label: 'Step 4'),
-              FiqhDropZone(id: '5', label: 'Step 5'),
-            ],
+            taharahSession: TaharahSession.wudhuPart1,
           ),
         ],
       ),
@@ -5290,49 +5224,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest6-s3-act',
-            type: ActivityType.fiqhDrag,
+            type: ActivityType.taharahAdventure,
             title: 'Taharah Adventure (Wudhu Pt 2)',
             icon: '🚿',
             xp: 40,
-            fiqhItems: [
-              FiqhDragItem(
-                id: 'u6',
-                emoji: '💪',
-                label: 'Wash Left Arm',
-                correctZoneId: '6',
-              ),
-              FiqhDragItem(
-                id: 'u7',
-                emoji: '🧕',
-                label: 'Wipe Head',
-                correctZoneId: '7',
-              ),
-              FiqhDragItem(
-                id: 'u8',
-                emoji: '👂',
-                label: 'Wipe Ears',
-                correctZoneId: '8',
-              ),
-              FiqhDragItem(
-                id: 'u9',
-                emoji: '🦶',
-                label: 'Wash Right Foot',
-                correctZoneId: '9',
-              ),
-              FiqhDragItem(
-                id: 'u10',
-                emoji: '🦶',
-                label: 'Wash Left Foot',
-                correctZoneId: '10',
-              ),
-            ],
-            fiqhZones: [
-              FiqhDropZone(id: '6', label: 'Step 6'),
-              FiqhDropZone(id: '7', label: 'Step 7'),
-              FiqhDropZone(id: '8', label: 'Step 8'),
-              FiqhDropZone(id: '9', label: 'Step 9'),
-              FiqhDropZone(id: '10', label: 'Step 10'),
-            ],
+            taharahSession: TaharahSession.wudhuPart2,
           ),
         ],
       ),
@@ -5470,46 +5366,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest7-s4-act',
-            type: ActivityType.fiqhDrag,
+            type: ActivityType.goodDeedTree,
             title: 'The Good Deed Tree',
             icon: '🌳',
             xp: 30,
-            fiqhItems: [
-              FiqhDragItem(
-                id: 'gd1',
-                emoji: '🤲',
-                label: 'Helping your mother',
-                correctZoneId: 'good',
-              ),
-              FiqhDragItem(
-                id: 'gd2',
-                emoji: '😊',
-                label: 'Smiling at a friend',
-                correctZoneId: 'good',
-              ),
-              FiqhDragItem(
-                id: 'gd3',
-                emoji: '🙏',
-                label: 'Sharing your food',
-                correctZoneId: 'good',
-              ),
-              FiqhDragItem(
-                id: 'gd4',
-                emoji: '😠',
-                label: 'Shouting at your sibling',
-                correctZoneId: 'bad',
-              ),
-              FiqhDragItem(
-                id: 'gd5',
-                emoji: '🤥',
-                label: 'Telling a lie',
-                correctZoneId: 'bad',
-              ),
-            ],
-            fiqhZones: [
-              FiqhDropZone(id: 'good', label: 'Good Deed 🌳', icon: '🌳'),
-              FiqhDropZone(id: 'bad', label: 'Not a Good Deed', icon: '🚫'),
-            ],
+            deedTreeSession: GoodDeedTreeSession.rootsAndBranches,
           ),
         ],
       ),
@@ -5523,11 +5384,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest7-s5-act',
-            type: ActivityType.quiz,
+            type: ActivityType.goodDeedTree,
             title: 'The Good Deed Tree (Final Synthesis)',
             icon: '🌟',
             xp: 50,
-            questions: masteryQuiz,
+            deedTreeSession: GoodDeedTreeSession.flowersAndFruits,
           ),
         ],
       ),

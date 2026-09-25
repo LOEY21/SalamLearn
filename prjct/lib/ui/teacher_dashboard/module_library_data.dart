@@ -113,6 +113,18 @@ const Map<ActivityType, ActivityTypeStyle> activityTypeStyles = {
     color: AppColors.teal,
     bg: AppColors.mint,
   ),
+  ActivityType.goodDeedTree: ActivityTypeStyle(
+    label: 'The Good Deed Tree',
+    icon: Icons.park_outlined,
+    color: AppColors.mintGreen,
+    bg: AppColors.mint,
+  ),
+  ActivityType.taharahAdventure: ActivityTypeStyle(
+    label: 'Taharah Adventure',
+    icon: Icons.clean_hands_outlined,
+    color: AppColors.coral,
+    bg: AppColors.coralTint,
+  ),
   ActivityType.story: ActivityTypeStyle(
     label: 'Story',
     icon: Icons.auto_stories_outlined,

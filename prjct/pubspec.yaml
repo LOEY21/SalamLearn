@@ -91,6 +91,8 @@ flutter:
   shaders:
     - shaders/five_pillars_bg.frag
     - shaders/sirah_start_bg.frag
+    - shaders/good_deed_tree_sway.frag
+    - shaders/good_deed_start_bg.frag
 
   assets:
     - assets/images/
@@ -100,9 +102,11 @@ flutter:
     - assets/images/classroom_heroes/bg/
     - assets/images/creation_hunt/
     - assets/images/five_pillars/
+    - assets/images/good_deed_tree/
     - assets/images/greeting_match/
     - assets/images/quran_etiquette/
     - assets/images/sirah_story/
+    - assets/images/taharah/
     - assets/images/mascot/boy/
     - assets/images/mascot/girl/
     - assets/images/tracing/

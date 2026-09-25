@@ -22,11 +22,21 @@ enum ActivityType {
   sirahStory,
   quranEtiquette,
   fivePillars,
+  goodDeedTree,
+  taharahAdventure,
 }
 
 /// The Five Pillars' two sessions: answer five scenarios one pillar at a
 /// time (Session 1), or build all five in order (Session 2).
 enum FivePillarsMode { scenarios, ordering }
+
+/// The Good Deed Tree's two sessions: Roots & Branches (Session 1) and
+/// Flowers & Fruits (Session 2).
+enum GoodDeedTreeSession { rootsAndBranches, flowersAndFruits }
+
+/// Taharah Adventure's three sessions: Clean or Dirty? (Session 1), Wudhu
+/// Part 1 (Session 2, steps 1-5) and Wudhu Part 2 (Session 3, steps 6-10).
+enum TaharahSession { cleanOrDirty, wudhuPart1, wudhuPart2 }
 
 enum DestinationState { completed, current, locked }
 
@@ -628,6 +638,8 @@ class Activity {
     this.sirahSession,
     this.etiquetteSession,
     this.pillarsMode,
+    this.deedTreeSession,
+    this.taharahSession,
   });
 
   final String id;
@@ -664,6 +676,12 @@ class Activity {
 
   /// Used by `fivePillars` — which of the two sessions this lesson plays.
   final FivePillarsMode? pillarsMode;
+
+  /// Used by `goodDeedTree` — which of the two sessions this lesson plays.
+  final GoodDeedTreeSession? deedTreeSession;
+
+  /// Used by `taharahAdventure` — which of the three sessions this lesson plays.
+  final TaharahSession? taharahSession;
 }
 
 class Lesson {
