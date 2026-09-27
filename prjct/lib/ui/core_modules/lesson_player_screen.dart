@@ -215,7 +215,8 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       _activity.type == ActivityType.quranEtiquette ||
       _activity.type == ActivityType.fivePillars ||
       _activity.type == ActivityType.goodDeedTree ||
-      _activity.type == ActivityType.taharahAdventure;
+      _activity.type == ActivityType.taharahAdventure ||
+      _activity.type == ActivityType.labelMaker;
 
   bool get _isFullBleedActivity =>
       _activity.type == ActivityType.creationHunt ||
@@ -225,16 +226,12 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       _activity.type == ActivityType.fivePillars ||
       _activity.type == ActivityType.goodDeedTree ||
       _activity.type == ActivityType.taharahAdventure ||
-      _isWudhuActivity ||
-      _isLabelMakerActivity;
+      _activity.type == ActivityType.labelMaker ||
+      _isWudhuActivity;
 
   bool get _isWudhuActivity =>
       _activity.type == ActivityType.fiqhDrag &&
       FiqhDragActivity.modeFor(_activity.id) == FiqhMode.wudhu;
-
-  bool get _isLabelMakerActivity =>
-      _activity.type == ActivityType.fiqhDrag &&
-      _activity.title.startsWith('Label Maker');
 
   @override
   Widget build(BuildContext context) {
@@ -286,6 +283,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
           ActivityType.fivePillars ||
           ActivityType.goodDeedTree ||
           ActivityType.taharahAdventure ||
+          ActivityType.labelMaker ||
           ActivityType.fiqhDrag when _isFullBleedActivity =>
             _buildActivityContent(lessonColor),
           ActivityType.pronounce => Stack(
@@ -543,16 +541,6 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         xp: activity.xp,
         onComplete: _handleActivityComplete,
       ),
-      ActivityType.fiqhDrag when _isLabelMakerActivity => LabelMakerGame(
-        key: ValueKey(activity.id),
-        activityId: activity.id,
-        items: activity.fiqhItems!,
-        zones: activity.fiqhZones!,
-        xp: activity.xp,
-        color: lessonColor,
-        onComplete: _handleActivityComplete,
-        onExit: _confirmExit,
-      ),
       ActivityType.fiqhDrag => FiqhDragActivity(
         key: ValueKey(activity.id),
         activityId: activity.id,
@@ -615,6 +603,13 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       ActivityType.taharahAdventure => TaharahAdventureGame(
         key: ValueKey(activity.id),
         session: activity.taharahSession!,
+        xp: activity.xp,
+        onComplete: _handleActivityComplete,
+        onExit: _confirmExit,
+      ),
+      ActivityType.labelMaker => LabelMakerGame(
+        key: ValueKey(activity.id),
+        session: activity.labelSession!,
         xp: activity.xp,
         onComplete: _handleActivityComplete,
         onExit: _confirmExit,

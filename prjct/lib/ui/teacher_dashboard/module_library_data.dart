@@ -125,6 +125,12 @@ const Map<ActivityType, ActivityTypeStyle> activityTypeStyles = {
     color: AppColors.coral,
     bg: AppColors.coralTint,
   ),
+  ActivityType.labelMaker: ActivityTypeStyle(
+    label: 'Label Maker',
+    icon: Icons.label_outline,
+    color: AppColors.coral,
+    bg: AppColors.coralTint,
+  ),
   ActivityType.story: ActivityTypeStyle(
     label: 'Story',
     icon: Icons.auto_stories_outlined,

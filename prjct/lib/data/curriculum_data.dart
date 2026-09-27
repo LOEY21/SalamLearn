@@ -4621,42 +4621,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest2-s3-act',
-            type: ActivityType.fiqhDrag,
+            type: ActivityType.labelMaker,
             title: 'Label Maker (Home)',
             icon: '🏷️',
             xp: 30,
-            fiqhItems: [
-              FiqhDragItem(
-                id: 'home1',
-                emoji: '🛏️',
-                label: 'Bed',
-                correctZoneId: 'bedroom',
-              ),
-              FiqhDragItem(
-                id: 'home2',
-                emoji: '🍽️',
-                label: 'Dining Table',
-                correctZoneId: 'kitchen',
-              ),
-              FiqhDragItem(
-                id: 'home3',
-                emoji: '🛁',
-                label: 'Bathtub',
-                correctZoneId: 'bathroom',
-              ),
-              FiqhDragItem(
-                id: 'home4',
-                emoji: '🛋️',
-                label: 'Sofa',
-                correctZoneId: 'living',
-              ),
-            ],
-            fiqhZones: [
-              FiqhDropZone(id: 'bedroom', label: 'Bedroom', icon: '🛏️'),
-              FiqhDropZone(id: 'kitchen', label: 'Kitchen', icon: '🍽️'),
-              FiqhDropZone(id: 'bathroom', label: 'Bathroom', icon: '🛁'),
-              FiqhDropZone(id: 'living', label: 'Living Room', icon: '🛋️'),
-            ],
+            labelSession: LabelMakerSession.home,
           ),
         ],
       ),
@@ -4776,56 +4745,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest3-s3-act',
-            type: ActivityType.fiqhDrag,
+            type: ActivityType.labelMaker,
             title: 'Label Maker (Body Parts)',
             icon: '🏷️',
             xp: 30,
-            fiqhItems: [
-              FiqhDragItem(
-                id: 'body1',
-                emoji: '👤',
-                label: "Ra's / رَأْس",
-                correctZoneId: 'head',
-              ),
-              FiqhDragItem(
-                id: 'body2',
-                emoji: '👀',
-                label: "'Ayn / عَيْن",
-                correctZoneId: 'eye',
-              ),
-              FiqhDragItem(
-                id: 'body3',
-                emoji: '👂',
-                label: 'Udhun / أُذُن',
-                correctZoneId: 'ear',
-              ),
-              FiqhDragItem(
-                id: 'body4',
-                emoji: '👃',
-                label: 'Anf / أَنْف',
-                correctZoneId: 'nose',
-              ),
-              FiqhDragItem(
-                id: 'body5',
-                emoji: '👄',
-                label: 'Fam / فَم',
-                correctZoneId: 'mouth',
-              ),
-              FiqhDragItem(
-                id: 'body6',
-                emoji: '✋',
-                label: 'Yad / يَد',
-                correctZoneId: 'hand',
-              ),
-            ],
-            fiqhZones: [
-              FiqhDropZone(id: 'head', label: 'Head'),
-              FiqhDropZone(id: 'eye', label: 'Eye'),
-              FiqhDropZone(id: 'ear', label: 'Ear'),
-              FiqhDropZone(id: 'nose', label: 'Nose'),
-              FiqhDropZone(id: 'mouth', label: 'Mouth'),
-              FiqhDropZone(id: 'hand', label: 'Hand'),
-            ],
+            labelSession: LabelMakerSession.body,
           ),
         ],
       ),
@@ -5033,42 +4957,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest5-s1-act',
-            type: ActivityType.fiqhDrag,
+            type: ActivityType.labelMaker,
             title: 'Label Maker (Classroom)',
             icon: '🏷️',
             xp: 30,
-            fiqhItems: [
-              FiqhDragItem(
-                id: 'class1',
-                emoji: '📖',
-                label: 'Book',
-                correctZoneId: 'shelf',
-              ),
-              FiqhDragItem(
-                id: 'class2',
-                emoji: '✏️',
-                label: 'Pencil',
-                correctZoneId: 'desk',
-              ),
-              FiqhDragItem(
-                id: 'class3',
-                emoji: '🖍️',
-                label: 'Whiteboard',
-                correctZoneId: 'front',
-              ),
-              FiqhDragItem(
-                id: 'class4',
-                emoji: '🎒',
-                label: 'Bag',
-                correctZoneId: 'hook',
-              ),
-            ],
-            fiqhZones: [
-              FiqhDropZone(id: 'shelf', label: 'Bookshelf', icon: '📚'),
-              FiqhDropZone(id: 'desk', label: 'Desk', icon: '🪑'),
-              FiqhDropZone(id: 'front', label: 'Front of Class', icon: '🖍️'),
-              FiqhDropZone(id: 'hook', label: 'Bag Hook', icon: '🪝'),
-            ],
+            labelSession: LabelMakerSession.classroom,
           ),
         ],
       ),

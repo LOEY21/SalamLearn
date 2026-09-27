@@ -24,6 +24,7 @@ enum ActivityType {
   fivePillars,
   goodDeedTree,
   taharahAdventure,
+  labelMaker,
 }
 
 /// The Five Pillars' two sessions: answer five scenarios one pillar at a
@@ -37,6 +38,10 @@ enum GoodDeedTreeSession { rootsAndBranches, flowersAndFruits }
 /// Taharah Adventure's three sessions: Clean or Dirty? (Session 1), Wudhu
 /// Part 1 (Session 2, steps 1-5) and Wudhu Part 2 (Session 3, steps 6-10).
 enum TaharahSession { cleanOrDirty, wudhuPart1, wudhuPart2 }
+
+/// Label Maker's three sessions: My Home (Stage 2), My Body (Stage 3) and
+/// My Madrasah (Stage 5), ten Arabic words each.
+enum LabelMakerSession { home, body, classroom }
 
 enum DestinationState { completed, current, locked }
 
@@ -640,6 +645,7 @@ class Activity {
     this.pillarsMode,
     this.deedTreeSession,
     this.taharahSession,
+    this.labelSession,
   });
 
   final String id;
@@ -682,6 +688,9 @@ class Activity {
 
   /// Used by `taharahAdventure` — which of the three sessions this lesson plays.
   final TaharahSession? taharahSession;
+
+  /// Used by `labelMaker` — which of the three sessions this lesson plays.
+  final LabelMakerSession? labelSession;
 }
 
 class Lesson {
