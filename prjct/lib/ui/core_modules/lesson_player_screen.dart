@@ -23,6 +23,7 @@ import 'activities/five_pillars_game.dart';
 import 'activities/good_deed_tree_game.dart';
 import 'activities/harakat_pop_activity.dart';
 import 'activities/label_maker_game.dart';
+import 'activities/sound_detective_game.dart';
 import 'activities/quran_etiquette_game.dart';
 import 'activities/sirah_story_game.dart';
 import 'activities/taharah_adventure_game.dart';
@@ -216,7 +217,8 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       _activity.type == ActivityType.fivePillars ||
       _activity.type == ActivityType.goodDeedTree ||
       _activity.type == ActivityType.taharahAdventure ||
-      _activity.type == ActivityType.labelMaker;
+      _activity.type == ActivityType.labelMaker ||
+      _activity.type == ActivityType.soundDetective;
 
   bool get _isFullBleedActivity =>
       _activity.type == ActivityType.creationHunt ||
@@ -227,6 +229,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       _activity.type == ActivityType.goodDeedTree ||
       _activity.type == ActivityType.taharahAdventure ||
       _activity.type == ActivityType.labelMaker ||
+      _activity.type == ActivityType.soundDetective ||
       _isWudhuActivity;
 
   bool get _isWudhuActivity =>
@@ -284,6 +287,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
           ActivityType.goodDeedTree ||
           ActivityType.taharahAdventure ||
           ActivityType.labelMaker ||
+          ActivityType.soundDetective ||
           ActivityType.fiqhDrag when _isFullBleedActivity =>
             _buildActivityContent(lessonColor),
           ActivityType.pronounce => Stack(
@@ -610,6 +614,13 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       ActivityType.labelMaker => LabelMakerGame(
         key: ValueKey(activity.id),
         session: activity.labelSession!,
+        xp: activity.xp,
+        onComplete: _handleActivityComplete,
+        onExit: _confirmExit,
+      ),
+      ActivityType.soundDetective => SoundDetectiveGame(
+        key: ValueKey(activity.id),
+        session: activity.soundSession!,
         xp: activity.xp,
         onComplete: _handleActivityComplete,
         onExit: _confirmExit,

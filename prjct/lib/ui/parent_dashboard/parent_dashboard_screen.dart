@@ -2001,6 +2001,7 @@ String _activityTypeLabel(ActivityType type) => switch (type) {
   ActivityType.goodDeedTree => 'The Good Deed Tree',
   ActivityType.taharahAdventure => 'Taharah Adventure',
   ActivityType.labelMaker => 'Label Maker',
+  ActivityType.soundDetective => 'Sound Detective',
 };
 
 class _AdventureGameRow extends StatelessWidget {

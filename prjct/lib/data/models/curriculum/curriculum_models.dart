@@ -25,6 +25,7 @@ enum ActivityType {
   goodDeedTree,
   taharahAdventure,
   labelMaker,
+  soundDetective,
 }
 
 /// The Five Pillars' two sessions: answer five scenarios one pillar at a
@@ -42,6 +43,10 @@ enum TaharahSession { cleanOrDirty, wudhuPart1, wudhuPart2 }
 /// Label Maker's three sessions: My Home (Stage 2), My Body (Stage 3) and
 /// My Madrasah (Stage 5), ten Arabic words each.
 enum LabelMakerSession { home, body, classroom }
+
+/// Arabic Sound Detective's four sessions, following Magic Sand Tracer's
+/// letter groups: Alif-Kha, Dal-Dad, Ta-Qaf and Kaf-Ya.
+enum SoundDetectiveSession { alifToKha, dalToDad, taToQaf, kafToYa }
 
 enum DestinationState { completed, current, locked }
 
@@ -646,6 +651,7 @@ class Activity {
     this.deedTreeSession,
     this.taharahSession,
     this.labelSession,
+    this.soundSession,
   });
 
   final String id;
@@ -691,6 +697,9 @@ class Activity {
 
   /// Used by `labelMaker` — which of the three sessions this lesson plays.
   final LabelMakerSession? labelSession;
+
+  /// Used by `soundDetective` — which of the four sessions this lesson plays.
+  final SoundDetectiveSession? soundSession;
 }
 
 class Lesson {

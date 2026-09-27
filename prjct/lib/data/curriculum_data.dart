@@ -4533,11 +4533,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest1-s4-act',
-            type: ActivityType.harakatPop,
+            type: ActivityType.soundDetective,
             title: 'Arabic Sound Detective',
             icon: '🎈',
             xp: 30,
-            cards: harakatCards,
+            soundSession: SoundDetectiveSession.alifToKha,
           ),
         ],
       ),
@@ -4657,11 +4657,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest2-s5-act',
-            type: ActivityType.harakatPop,
+            type: ActivityType.soundDetective,
             title: 'Arabic Sound Detective',
             icon: '🎈',
             xp: 30,
-            cards: harakatCards,
+            soundSession: SoundDetectiveSession.dalToDad,
           ),
         ],
       ),
@@ -4781,11 +4781,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest3-s5-act',
-            type: ActivityType.harakatPop,
+            type: ActivityType.soundDetective,
             title: 'Arabic Sound Detective',
             icon: '🎈',
             xp: 30,
-            cards: harakatCards,
+            soundSession: SoundDetectiveSession.taToQaf,
           ),
         ],
       ),
@@ -4887,11 +4887,11 @@ const List<Destination> curriculum = [
         activities: [
           Activity(
             id: 'dest4-s4-act',
-            type: ActivityType.harakatPop,
+            type: ActivityType.soundDetective,
             title: 'Arabic Sound Detective',
             icon: '🎈',
             xp: 30,
-            cards: harakatCards,
+            soundSession: SoundDetectiveSession.kafToYa,
           ),
         ],
       ),
