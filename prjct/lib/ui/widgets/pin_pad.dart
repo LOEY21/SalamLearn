@@ -174,35 +174,59 @@ class _PinBox extends StatelessWidget {
   }
 }
 
-class _PinKey extends StatelessWidget {
+class _PinKey extends StatefulWidget {
   const _PinKey({required this.label, required this.onTap});
 
   final String label;
   final VoidCallback onTap;
 
   @override
+  State<_PinKey> createState() => _PinKeyState();
+}
+
+class _PinKeyState extends State<_PinKey> {
+  bool _handledOnPointerDown = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      shape: const CircleBorder(),
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: SizedBox(
-          width: 76,
-          height: 76,
-          child: Center(
-            child: label == '<'
-                ? const Icon(Icons.backspace_outlined,
-                    color: AppColors.textMuted, size: 26)
-                : Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ink,
+    return Listener(
+      onPointerDown: (_) {
+        _handledOnPointerDown = true;
+        widget.onTap();
+      },
+      onPointerCancel: (_) => _handledOnPointerDown = false,
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          onTap: () {
+            if (_handledOnPointerDown) {
+              _handledOnPointerDown = false;
+            } else {
+              widget.onTap();
+            }
+          },
+          onTapCancel: () => _handledOnPointerDown = false,
+          customBorder: const CircleBorder(),
+          child: SizedBox(
+            width: 76,
+            height: 76,
+            child: Center(
+              child: widget.label == '<'
+                  ? const Icon(
+                      Icons.backspace_outlined,
+                      color: AppColors.textMuted,
+                      size: 26,
+                    )
+                  : Text(
+                      widget.label,
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.ink,
+                      ),
                     ),
-                  ),
+            ),
           ),
         ),
       ),

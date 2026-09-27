@@ -412,6 +412,34 @@ void main() {
   });
 
   group('PinPad', () {
+    testWidgets('records a digit on press before release', (tester) async {
+      String? submitted;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PinPad(
+              onSubmit: (pin) {
+                submitted = pin;
+                return true;
+              },
+            ),
+          ),
+        ),
+      );
+
+      for (final digit in ['1', '2', '3', '4']) {
+        final press = await tester.startGesture(
+          tester.getCenter(find.text(digit)),
+        );
+        await tester.pump();
+        expect(find.text('\u2022'), findsNWidgets(int.parse(digit)));
+        if (digit == '4') expect(submitted, '1234');
+        await press.up();
+        await tester.pump();
+      }
+      expect(submitted, '1234');
+    });
+
     testWidgets('submits after 4 digits', (tester) async {
       String? submitted;
       await tester.pumpWidget(
