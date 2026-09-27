@@ -68,11 +68,53 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('lm-play')));
     await tester.pump();
     expect(find.text('How to Play'), findsOneWidget);
-    expect(find.text("Let's Go!"), findsWidgets);
 
-    await tester.tap(find.byKey(const ValueKey('lm-go')));
-    await tester.pumpAndSettle();
+    // Back on How to Play returns to the start screen, then in again.
+    await tester.tap(find.byKey(const ValueKey('lm-back')));
+    await tester.pump();
     expect(find.text('How to Play'), findsNothing);
+    expect(find.text('Learn Arabic Words'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('lm-play')));
+    await tester.pump();
+    expect(find.text('How to Play'), findsOneWidget);
+
+    // Let's Go waits 5s behind a filling "Get ready" bar.
+    expect(find.byKey(const ValueKey('lm-go')), findsNothing);
+    expect(find.text('Get ready...'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byKey(const ValueKey('lm-go')), findsOneWidget);
+    expect(find.text('Get ready...'), findsNothing);
+
+    // 3-2-1-Go! countdown, with the badge locked until it ends.
+    await tester.tap(find.byKey(const ValueKey('lm-go')));
+    await tester.pump();
+    expect(find.text('How to Play'), findsNothing);
+    expect(find.text('3'), findsWidgets);
+    expect(find.text('Get Ready!'), findsWidgets);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Go!'), findsWidgets);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Get Ready!'), findsNothing);
+
+    // Replay swaps to its pressed art while held.
+    final replay = find.byKey(const ValueKey('lm-replay'));
+    final hold = await tester.startGesture(tester.getCenter(replay));
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: replay,
+        matching: find.image(
+          const AssetImage('assets/images/label_maker/btn_replay_down.png'),
+        ),
+      ),
+      findsOneWidget,
+    );
+    await hold.up();
+    await tester.pumpAndSettle();
 
     String current() {
       final key =
@@ -109,15 +151,21 @@ void main() {
     final wrong = _home.keys.firstWhere((k) => k != first);
     await dragTo(_home[wrong]!);
     expect(current(), first);
-    expect(find.text('0/10'), findsOneWidget);
+    expect(find.text('1/10'), findsOneWidget);
 
     for (var i = 1; i <= 10; i++) {
       await dragTo(_home[current()]!);
-      expect(find.text('$i/10'), findsOneWidget);
+      // The counter shows the word being asked for, capped at the last.
+      expect(find.text('${i < 10 ? i + 1 : 10}/10'), findsOneWidget);
     }
     // Every word now sits on its object as a white label.
     expect(find.text('بَابٌ'), findsOneWidget);
     expect(find.text('مِفْتَاحٌ'), findsOneWidget);
+    // ...and every object has lit up with its star sparkle.
+    expect(
+      find.image(const AssetImage('assets/images/label_maker/star.png')),
+      findsNWidgets(10),
+    );
 
     // Congrats burst, then tap through to the summary with the mascots.
     await tester.pump(const Duration(milliseconds: 1500));
@@ -130,6 +178,25 @@ void main() {
     expect(find.text('91%'), findsOneWidget);
     expect(find.text('+30'), findsOneWidget);
     expect(find.text('بَابٌ'), findsOneWidget);
+
+    // One slip: two stars, and the girl says so.
+    expect(find.text('Great job!\nOnly 1 little slip.'), findsOneWidget);
+    expect(find.text('You learned 10 home words!'), findsOneWidget);
+    // Two stars is a good round: the mascots cheer, not encourage.
+    expect(
+      find.image(const AssetImage('assets/images/label_maker/girl_cheer.png')),
+      findsOneWidget,
+    );
+    expect(
+      find.image(
+        const AssetImage('assets/images/label_maker/girl_encourage.png'),
+      ),
+      findsNothing,
+    );
+
+    // Words on the wall can be tapped to hear them again.
+    await tester.tap(find.byKey(const ValueKey('lm-wall-0')));
+    await tester.pump(const Duration(milliseconds: 500));
 
     await tester.tap(find.byKey(const ValueKey('lm-home')));
     expect(result?.$1, 30);

@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:flutter/services.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
+import 'bend_sprite.dart';
 
 const _kA = 'assets/images/label_maker';
 
@@ -20,6 +22,13 @@ const _kTolerance = 26.0;
 
 /// Drops further than this from every object snap back without a penalty.
 const _kReach = 60.0;
+
+/// How long the How to Play steps stay up before Let's Go appears.
+const _kHowToWaitMs = 5000;
+
+/// The all-found finale: every object lights up in the order it was
+/// labelled, then they pulse together until the congrats screen.
+const _kFinaleMs = 3200;
 
 const _kNavy = Color(0xFF1B2A6B);
 const _kCream = Color(0xFFFFF8E6);
@@ -199,7 +208,7 @@ const _kSessions = {
       'Foot',
       'audio/vocab/qadam.mp3',
       Offset(870, 712),
-      Offset(670, 700),
+      Offset(705, 700),
       [Rect.fromLTWH(818, 680, 95, 58), Rect.fromLTWH(930, 680, 100, 58)],
     ),
     _Word(
@@ -285,7 +294,7 @@ const _kSessions = {
         'Paper',
         'audio/vocab/waraqa.mp3',
         Offset(748, 758),
-        Offset(560, 680),
+        Offset(560, 610),
         [Rect.fromLTWH(612, 698, 272, 122)],
       ),
       _Word(
@@ -361,10 +370,17 @@ class LabelMakerGame extends StatefulWidget {
 enum _Screen { start, howTo, play, congrats, summary }
 
 class _LabelMakerGameState extends State<LabelMakerGame>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 4),
+  )..repeat();
+
+  /// The start screen's indoor breeze: one 12s loop, and every wave in it
+  /// divides 12s evenly, so the plants never visibly restart.
+  late final AnimationController _light = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 12),
   )..repeat();
 
   _Session get _s => _kSessions[widget.session]!;
@@ -386,11 +402,29 @@ class _LabelMakerGameState extends State<LabelMakerGame>
   /// Bumped on Play Again so a stale congrats timer can't skip ahead.
   int _round = 0;
 
+  /// How to Play holds its Let's Go button back until the child has had
+  /// time to read the steps.
+  bool _howReady = false;
+
+  /// Bumped on every visit to How to Play, so a wait timer from an earlier
+  /// visit can't reveal Let's Go early.
+  int _howN = 0;
+
+  /// Pre-game countdown step: 0-2 show 3, 2, 1; 3 shows Go!; null once the
+  /// round is live. Dragging is locked while it runs.
+  int? _count;
+
   String? _toast;
   bool _toastGood = true;
   int _toastN = 0;
   int _shakeN = 0;
   int _pulseN = 0;
+  bool _badgeDown = false;
+
+  /// Word-wall word last tapped on the summary, and a counter that replays
+  /// its hop on every tap.
+  int? _heardI;
+  int _heardN = 0;
   final List<Timer> _timers = [];
 
   final _stageKey = GlobalKey();
@@ -428,6 +462,20 @@ class _LabelMakerGameState extends State<LabelMakerGame>
       'btn_home_down',
       'btn_blank',
       'btn_blank_down',
+      'board_title',
+      'board_dock',
+      'board_label',
+      'btn_replay',
+      'btn_replay_down',
+      'btn_speaker',
+      'btn_speaker_down',
+      'star',
+      'bg_plate',
+      for (final pl in _kPlants) pl.asset,
+      'girl_cheer',
+      'boy_cheer',
+      'girl_encourage',
+      'boy_encourage',
       _s.bg,
     ]) {
       precacheImage(AssetImage('$_kA/$n.png'), context);
@@ -445,6 +493,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
       DeviceOrientation.portraitDown,
     ]);
     _c.dispose();
+    _light.dispose();
     super.dispose();
   }
 
@@ -467,6 +516,10 @@ class _LabelMakerGameState extends State<LabelMakerGame>
   void _click() {
     // AUDIO PLUG POINT: background music would follow _sound too.
     if (_sound) SystemSound.play(SystemSoundType.click);
+  }
+
+  void _setBadgeDown(bool v) {
+    if (_badgeDown != v) setState(() => _badgeDown = v);
   }
 
   void _showToast(String text, bool good) {
@@ -523,7 +576,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
         _showToast('Mumtaz!', true);
         if (_placed.length == _s.words.length) {
           _finished = true;
-          _after(1400, _toCongrats);
+          _after(_kFinaleMs + 400, _toCongrats);
         } else {
           _pos++;
           _after(450, _sayNow);
@@ -548,6 +601,16 @@ class _LabelMakerGameState extends State<LabelMakerGame>
     );
   }
 
+  /// How to Play's Back: return to the start screen (not out of the lesson).
+  void _toStart() {
+    setState(() {
+      _howN++;
+      _howReady = false;
+      _screen = _Screen.start;
+    });
+    _light.repeat();
+  }
+
   void _toSummary() {
     if (_screen == _Screen.congrats) setState(() => _screen = _Screen.summary);
   }
@@ -563,10 +626,28 @@ class _LabelMakerGameState extends State<LabelMakerGame>
       _hover = null;
       _toast = null;
       _finished = false;
-      _screen = _Screen.play;
     });
     _c.stop();
-    _after(500, _sayNow);
+    _startPlay();
+  }
+
+  /// Into the room behind a 3-2-1-Go! countdown, then the first word.
+  void _startPlay() {
+    final round = _round;
+    setState(() {
+      _screen = _Screen.play;
+      _count = 0;
+    });
+    for (var i = 1; i <= 3; i++) {
+      _after(1000 * i, () {
+        if (_round == round) _count = i;
+      });
+    }
+    _after(4000, () {
+      if (_round != round) return;
+      _count = null;
+      _sayNow();
+    });
   }
 
   int get _stars => _errors == 0 ? 3 : (_errors <= 3 ? 2 : 1);
@@ -585,7 +666,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
 
   @override
   Widget build(BuildContext context) {
-    final bg = _screen == _Screen.start ? 'bg' : _s.bg;
+    final bg = _screen == _Screen.start ? 'bg_plate' : _s.bg;
     return LayoutBuilder(
       builder: (context, box) {
         final scale = math.min(box.maxWidth / _kW, box.maxHeight / _kH);
@@ -600,9 +681,13 @@ class _LabelMakerGameState extends State<LabelMakerGame>
                 height: _kH,
                 child: switch (_screen) {
                   _Screen.start => AnimatedBuilder(
-                    animation: _c,
-                    builder: (context, _) =>
-                        _buildStart(_c.value * 2 * math.pi),
+                    animation: Listenable.merge([_c, _light]),
+                    builder: (context, _) => _buildStart(
+                      _c.value * 2 * math.pi,
+                      MediaQuery.of(context).disableAnimations
+                          ? .2
+                          : _light.value,
+                    ),
                   ),
                   _Screen.howTo => AnimatedBuilder(
                     animation: _c,
@@ -632,25 +717,125 @@ class _LabelMakerGameState extends State<LabelMakerGame>
 
   Widget _img(String n) => Image.asset('$_kA/$n.png', fit: BoxFit.fill);
 
-  Widget _buildStart(double t) {
+  /// One potted plant in the start room, bending in a slow indoor draught
+  /// with the odd stronger breath; tips move most, leaves flutter out of
+  /// step. [light] runs 0..1 over the 12s loop.
+  Widget _plant(_Plant pl, double light) {
+    final t = light * 12;
+    double wave(double period, double ph) =>
+        math.sin(2 * math.pi * t / period + ph);
+    final gust = math.pow(.5 + .5 * wave(12, pl.phase * 2), 3).toDouble();
+    final sway = .6 * wave(6, pl.phase) + .3 * wave(2.4, pl.phase * 1.7);
+    return _at(
+      pl.rect.left,
+      pl.rect.top,
+      pl.rect.width,
+      pl.rect.height,
+      IgnorePointer(
+        child: BendSprite(
+          asset: '$_kA/${pl.asset}.png',
+          bend: (sway * (1 + gust) + .7 * gust) * pl.dir * pl.amount,
+          flutter: .012 * (.4 + gust),
+          t: t + pl.phase,
+          hang: pl.hang,
+        ),
+      ),
+    );
+  }
+
+  /// Grounds a standing mascot on the rug: its own silhouette laid flat and
+  /// thrown down-right (away from the window sun), plus a dark contact
+  /// shadow right under the feet.
+  List<Widget> _groundShadow(
+    double l,
+    double t,
+    double w,
+    double h,
+    String img,
+  ) => [
+    _at(
+      l,
+      t,
+      w,
+      h,
+      IgnorePointer(
+        child: Transform(
+          alignment: Alignment.bottomCenter,
+          // Flip and flatten onto the floor, then lean it with the light.
+          transform: Matrix4.identity()
+            ..setEntry(0, 1, 1.15)
+            ..multiply(Matrix4.diagonal3Values(1, -.22, 1)),
+          child: ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(sigmaX: 7, sigmaY: 5),
+            child: ColorFiltered(
+              colorFilter: const ColorFilter.mode(
+                Color(0x780B1230),
+                BlendMode.srcIn,
+              ),
+              child: _img(img),
+            ),
+          ),
+        ),
+      ),
+    ),
+    // Contact shadow: a soft pool, then a darker core right under the feet.
+    Positioned(
+      left: l + w * .14,
+      top: t + h - 22,
+      width: w * .72,
+      height: 36,
+      child: IgnorePointer(
+        child: ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(sigmaX: 7, sigmaY: 4),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0x8C0B1230),
+              borderRadius: BorderRadius.all(Radius.elliptical(w * .36, 18)),
+            ),
+          ),
+        ),
+      ),
+    ),
+    Positioned(
+      left: l + w * .24,
+      top: t + h - 14,
+      width: w * .52,
+      height: 20,
+      child: IgnorePointer(
+        child: ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(sigmaX: 4, sigmaY: 2.5),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xA60B1230),
+              borderRadius: BorderRadius.all(Radius.elliptical(w * .26, 10)),
+            ),
+          ),
+        ),
+      ),
+    ),
+  ];
+
+  Widget _buildStart(double t, double light) {
     Widget bob(double phase, double amp, Widget c) => Transform.translate(
       offset: Offset(0, amp * math.sin(t + phase)),
-      child: c,
-    );
-    Widget sway(double phase, Widget c) => Transform.rotate(
-      angle: .02 * math.sin(t + phase),
-      alignment: Alignment.bottomCenter,
       child: c,
     );
     void down(bool v) => setState(() => _playDown = v);
 
     return Stack(
       children: [
+        // The room with its plants painted out; the plants are drawn back
+        // on top as sprites that sway. Inside the stage so they line up.
+        Positioned.fill(child: _img('bg_plate')),
+        for (final pl in _kPlants.where((p) => !p.front)) _plant(pl, light),
         _at(118, 128, 262, 142, bob(0, 6, _img('label_house'))),
         _at(1430, 96, 232, 112, bob(2, 6, _img('label_head'))),
         _at(1590, 356, 236, 114, bob(4, 6, _img('label_book'))),
-        _at(290, 255, 358, 480, sway(0, _img('girl'))),
-        _at(1250, 240, 297, 500, sway(math.pi, _img('boy'))),
+        ..._groundShadow(290, 255, 358, 480, 'girl'),
+        ..._groundShadow(1250, 240, 297, 500, 'boy'),
+        _at(290, 255, 358, 480, _img('girl')),
+        _at(1250, 240, 297, 500, _img('boy')),
+        for (final pl in _kPlants.where((p) => p.front)) _plant(pl, light),
         _at(
           615,
           88,
@@ -689,7 +874,17 @@ class _LabelMakerGameState extends State<LabelMakerGame>
               onTapDown: (_) => down(true),
               onTapUp: (_) => down(false),
               onTapCancel: () => down(false),
-              onTap: () => setState(() => _screen = _Screen.howTo),
+              onTap: () {
+                _light.stop();
+                setState(() {
+                  _screen = _Screen.howTo;
+                  _howReady = false;
+                });
+                final n = ++_howN;
+                _after(_kHowToWaitMs, () {
+                  if (_howN == n) _howReady = true;
+                });
+              },
               child: _img(_playDown ? 'play_down' : 'play'),
             ),
           ),
@@ -804,23 +999,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: 78,
-                        height: 78,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [Color(0xFF4F8DF5), Color(0xFF2456C8)],
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.replay_rounded,
-                          color: Colors.white,
-                          size: 44,
-                        ),
-                      ),
+                      Image.asset('$_kA/btn_replay.png', width: 84, height: 84),
                       const SizedBox(width: 14),
                       Transform.scale(
                         scale: 1 + .06 * wave.abs(),
@@ -896,42 +1075,88 @@ class _LabelMakerGameState extends State<LabelMakerGame>
           668,
           400,
           138,
-          Transform.scale(
-            scale: 1 + .03 * wave,
-            child: _ImgBtn(
-              key: const ValueKey('lm-go'),
-              up: 'btn_blank',
-              down: 'btn_blank_down',
-              onTap: () {
-                _c.stop();
-                setState(() => _screen = _Screen.play);
-                _after(500, _sayNow);
-              },
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(40, 0, 40, 8),
-                child: Center(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: _outlined(
-                      "Let's Go!",
-                      _fredoka(60, Colors.white),
-                      const Color(0xFF0E4A10),
-                      10,
+          _howReady
+              ? TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeOutQuart,
+                  builder: (context, v, c) => Opacity(
+                    opacity: v,
+                    child: Transform.scale(
+                      scale: (.7 + .3 * v) * (1 + .03 * wave),
+                      child: c,
+                    ),
+                  ),
+                  child: _ImgBtn(
+                    key: const ValueKey('lm-go'),
+                    up: 'btn_blank',
+                    down: 'btn_blank_down',
+                    onTap: () {
+                      _c.stop();
+                      _startPlay();
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(40, 0, 40, 8),
+                      child: Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: _outlined(
+                            "Let's Go!",
+                            _fredoka(60, Colors.white),
+                            const Color(0xFF0E4A10),
+                            10,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              : Center(
+                  child: SizedBox(
+                    width: 380,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Get ready...', style: _fredoka(30, Colors.white)),
+                        const SizedBox(height: 12),
+                        Container(
+                          height: 22,
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            color: _kCream,
+                            borderRadius: BorderRadius.circular(11),
+                            border: Border.all(color: _kGold, width: 3),
+                          ),
+                          child: TweenAnimationBuilder<double>(
+                            tween: Tween(begin: 0, end: 1),
+                            duration: const Duration(
+                              milliseconds: _kHowToWaitMs,
+                            ),
+                            builder: (context, v, _) => FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: v,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF4CB82A),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ),
-            ),
-          ),
         ),
-        ..._topButtons(),
+        ..._topButtons(onBack: _toStart),
       ],
     );
   }
 
   /// Back (top-left) and Music (top-right), shared by every screen.
-  List<Widget> _topButtons({bool back = true}) => [
-    if (back && widget.onExit != null)
+  List<Widget> _topButtons({bool back = true, VoidCallback? onBack}) => [
+    if (back && (onBack != null || widget.onExit != null))
       _at(
         24,
         20,
@@ -941,7 +1166,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
           key: const ValueKey('lm-back'),
           up: 'btn_back',
           down: 'btn_back_down',
-          onTap: widget.onExit!,
+          onTap: onBack ?? widget.onExit!,
         ),
       ),
     _at(
@@ -980,6 +1205,26 @@ class _LabelMakerGameState extends State<LabelMakerGame>
             builder: (context, _, _) => const SizedBox.expand(),
           ),
         ),
+        if (_finished)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: TweenAnimationBuilder<double>(
+                key: ValueKey('finale$_round'),
+                tween: Tween(begin: 0, end: 1),
+                duration: const Duration(milliseconds: _kFinaleMs),
+                builder: (context, v, _) {
+                  final ms = v * _kFinaleMs;
+                  return Stack(
+                    children: [
+                      for (var k = 0; k < _placed.length; k++)
+                        for (final r in words[_placed[k]].rects)
+                          ..._glow(r, ms - 250 - 160.0 * k, ms),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
         if (_hover != null)
           for (final r in words[_hover!].rects)
             Positioned.fromRect(
@@ -1018,33 +1263,36 @@ class _LabelMakerGameState extends State<LabelMakerGame>
                 duration: const Duration(milliseconds: 550),
                 curve: Curves.elasticOut,
                 builder: (context, v, c) => Transform.scale(scale: v, child: c),
-                child: _Label(words[i]),
+                child: Center(child: _Label(words[i])),
               ),
             ),
           ),
         _at(
-          _kBtnW + 44,
-          27,
-          470,
-          62,
+          _kBtnW + 40,
+          10,
+          480,
+          96,
           IgnorePointer(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 26),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: _kCream,
-                borderRadius: BorderRadius.circular(31),
-                border: Border.all(color: _kGold, width: 4),
-              ),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(_s.title, style: _fredoka(30, _kNavy)),
-              ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _img('board_title'),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(40, 12, 40, 16),
+                  child: Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(_s.title, style: _fredoka(36, _kNavy)),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
         ..._topButtons(),
         _buildDock(scale),
+        if (_count != null) _buildCountdown(),
         if (_toast != null)
           Positioned(
             top: 24,
@@ -1088,104 +1336,195 @@ class _LabelMakerGameState extends State<LabelMakerGame>
     );
   }
 
+  /// One object's finale light: a warm halo that fades up [since] ms
+  /// after its turn, then breathes with the others, plus a star sparkle.
+  List<Widget> _glow(Rect r, double since, double ms) {
+    if (since <= 0) return const [];
+    final appear = Curves.easeOutQuart.transform((since / 350).clamp(0.0, 1.0));
+    final pulse = .72 + .28 * math.sin(ms / 1000 * 2 * math.pi * 1.2);
+    return [
+      Positioned.fromRect(
+        rect: r.inflate(8 + 8 * appear),
+        child: Opacity(
+          opacity: appear * pulse,
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0x33FFF3B0),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: const Color(0xFFFFF3B0), width: 5),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0xDDFFD23F),
+                  blurRadius: 34,
+                  spreadRadius: 8,
+                ),
+                BoxShadow(color: Color(0x99FFFFFF), blurRadius: 12),
+              ],
+            ),
+          ),
+        ),
+      ),
+      Positioned(
+        left: r.right - 26,
+        top: r.top - 30,
+        width: 52,
+        height: 52,
+        child: Transform.rotate(
+          angle: .4 * (1 - appear) + .12 * math.sin(ms / 400),
+          child: Transform.scale(
+            scale: appear,
+            child: Image.asset('$_kA/star.png', fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  /// 3, 2, 1, Go! over the dimmed room before the first word.
+  Widget _buildCountdown() {
+    final go = _count == 3;
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          color: const Color(0x800E1A40),
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Opacity(
+                opacity: go ? 0 : 1,
+                child: _outlined(
+                  'Get Ready!',
+                  _fredoka(64, Colors.white),
+                  _kNavy,
+                  12,
+                ),
+              ),
+              TweenAnimationBuilder<double>(
+                key: ValueKey('count$_count'),
+                tween: Tween(begin: 0, end: 1),
+                duration: const Duration(milliseconds: 650),
+                curve: Curves.easeOutQuart,
+                builder: (context, v, c) => Opacity(
+                  opacity: v,
+                  child: Transform.scale(scale: 1.7 - .7 * v, child: c),
+                ),
+                child: _outlined(
+                  const ['3', '2', '1', 'Go!'][_count!],
+                  _fredoka(
+                    230,
+                    go ? const Color(0xFF7BE04A) : const Color(0xFFFFD23F),
+                  ),
+                  go ? const Color(0xFF0E4A10) : const Color(0xFF8A3B00),
+                  22,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDock(double scale) {
     final n = _s.words.length;
     final done = _placed.length == n;
     final word = _s.words[_cur];
-    final badge = _Badge(word: word);
+    final badge = _Badge(word: word, down: _badgeDown);
 
     return _at(
-      24,
-      704,
-      470,
-      120,
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          color: _kCream,
-          borderRadius: BorderRadius.circular(34),
-          border: Border.all(color: _kGold, width: 5),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x55000000),
-              blurRadius: 14,
-              offset: Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            GestureDetector(
-              key: const ValueKey('lm-replay'),
-              onTap: done ? null : _say,
-              child: Container(
-                width: 78,
-                height: 78,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0xFF4F8DF5), Color(0xFF2456C8)],
+      20,
+      690,
+      590,
+      145,
+      Stack(
+        fit: StackFit.expand,
+        children: [
+          _img('board_dock'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(30, 16, 26, 22),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 84,
+                  height: 84,
+                  child: _ImgBtn(
+                    key: const ValueKey('lm-replay'),
+                    up: 'btn_replay',
+                    down: 'btn_replay_down',
+                    onTap: done || _count != null ? () {} : _say,
                   ),
-                  boxShadow: [
-                    BoxShadow(color: Color(0xFF173C8F), offset: Offset(0, 5)),
-                  ],
                 ),
-                child: const Icon(
-                  Icons.replay_rounded,
-                  color: Colors.white,
-                  size: 44,
-                ),
-              ),
-            ),
-            const SizedBox(width: 14),
-            SizedBox(
-              width: _Badge.w,
-              height: _Badge.h,
-              child: done
-                  ? null
-                  : _Shake(
-                      key: ValueKey('shake$_shakeN'),
-                      child: _Pulse(
-                        key: ValueKey('pulse$_pulseN'),
-                        child: Draggable<int>(
-                          key: ValueKey('lm-badge-${word.en}'),
-                          data: _cur,
-                          maxSimultaneousDrags: 1,
-                          dragAnchorStrategy: pointerDragAnchorStrategy,
-                          feedback: Material(
-                            type: MaterialType.transparency,
-                            child: FractionalTranslation(
-                              translation: const Offset(-.5, -.5),
-                              child: SizedBox(
-                                width: _Badge.w * scale * 1.08,
-                                height: _Badge.h * scale * 1.08,
-                                child: FittedBox(child: badge),
+                const SizedBox(width: 14),
+                SizedBox(
+                  width: _Badge.w,
+                  height: _Badge.h,
+                  child: done
+                      ? null
+                      : _Shake(
+                          key: ValueKey('shake$_shakeN'),
+                          child: _Pulse(
+                            key: ValueKey('pulse$_pulseN'),
+                            child: Draggable<int>(
+                              key: ValueKey('lm-badge-${word.en}'),
+                              data: _cur,
+                              maxSimultaneousDrags: _count == null ? 1 : 0,
+                              dragAnchorStrategy: pointerDragAnchorStrategy,
+                              feedback: Material(
+                                type: MaterialType.transparency,
+                                child: FractionalTranslation(
+                                  translation: const Offset(-.5, -.5),
+                                  child: SizedBox(
+                                    width: _Badge.w * scale * 1.08,
+                                    height: _Badge.h * scale * 1.08,
+                                    child: FittedBox(
+                                      child: _Badge(word: word, down: true),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              childWhenDragging: Opacity(
+                                opacity: .3,
+                                child: badge,
+                              ),
+                              onDragEnd: (_) {
+                                if (_hover != null) {
+                                  setState(() => _hover = null);
+                                }
+                              },
+                              child: Listener(
+                                onPointerDown: (_) => _setBadgeDown(true),
+                                onPointerUp: (_) => _setBadgeDown(false),
+                                onPointerCancel: (_) => _setBadgeDown(false),
+                                child: badge,
                               ),
                             ),
                           ),
-                          childWhenDragging: Opacity(opacity: .3, child: badge),
-                          onDragEnd: (_) {
-                            if (_hover != null) setState(() => _hover = null);
-                          },
-                          child: badge,
                         ),
-                      ),
-                    ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  '${_placed.length}/$n',
-                  style: _fredoka(34, _kNavy),
                 ),
-              ),
+                const SizedBox(width: 14),
+                Container(
+                  width: 4,
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3D27A),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      '${math.min(_placed.length + 1, n)}/$n',
+                      style: _fredoka(40, _kNavy),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1274,162 +1613,455 @@ class _LabelMakerGameState extends State<LabelMakerGame>
     );
   }
 
-  /// The ending screen: both mascots cheering either side of a board with
-  /// every word learned this round, the score, and Play Again / Home.
+  String get _topic => switch (widget.session) {
+    LabelMakerSession.home => 'home',
+    LabelMakerSession.body => 'body',
+    LabelMakerSession.classroom => 'classroom',
+  };
+
+  /// What the girl says, from how the round went.
+  String get _cheer => switch (_stars) {
+    3 => 'Perfect!\nNot a single mistake!',
+    2 => 'Great job!\nOnly $_errors little ${_errors == 1 ? 'slip' : 'slips'}.',
+    _ => 'Good try!\nPlay again for more stars!',
+  };
+
+  void _hear(int i) {
+    // AUDIO PLUG POINT: play _s.words[i].audio here.
+    _click();
+    setState(() {
+      _heardI = i;
+      _heardN++;
+    });
+  }
+
+  /// The ending screen: a star arc over the session's title plaque, the
+  /// round's words pinned to a word wall (tap one to hear it again), the
+  /// girl cheering the result from a speech bubble, the boy waving, and
+  /// Play Again / Home.
   Widget _buildSummary(double t) {
     final words = _s.words;
-    Widget sway(double phase, Widget c) => Transform.rotate(
-      angle: .03 * math.sin(t + phase),
-      alignment: Alignment.bottomCenter,
-      child: Transform.translate(
-        offset: Offset(0, -10 * math.sin(t * 2 + phase).abs()),
-        child: c,
-      ),
-    );
+    final still = MediaQuery.of(context).disableAnimations;
+    if (still) t = 0;
 
-    Widget stat(String label, Widget value) => Container(
-      width: 290,
-      height: 118,
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: const Color(0xFFF3DFA8), width: 4),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(height: 56, child: FittedBox(child: value)),
-          Text(label, style: _fredoka(24, const Color(0xFF8A7650))),
-        ],
-      ),
-    );
+    // Mascots cheer a good round (2-3 stars) and encourage a hard one.
+    final high = _stars >= 2;
+    final mood = high ? 'cheer' : 'encourage';
+    const mh = 460.0;
+    final gw = mh * (high ? .644 : .504);
+    final bw = mh * (high ? .628 : .514);
 
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: Image.asset('$_kA/${_s.bg}.png', fit: BoxFit.fill),
-        ),
-        Positioned.fill(child: Container(color: const Color(0x990E1A40))),
-        Positioned.fill(
-          child: CustomPaint(
-            painter: _ConfettiPainter(t / (2 * math.pi), sparse: true),
-          ),
-        ),
-        _at(34, 300, 340, 456, sway(0, _img('girl'))),
-        _at(1566, 290, 280, 472, sway(math.pi, _img('boy'))),
-        _at(
-          395,
-          40,
-          1080,
-          650,
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: .7, end: 1),
-            duration: const Duration(milliseconds: 700),
-            curve: Curves.elasticOut,
-            builder: (context, v, c) => Transform.scale(scale: v, child: c),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(36, 22, 36, 28),
-              decoration: BoxDecoration(
-                color: _kCream,
-                borderRadius: BorderRadius.circular(48),
-                border: Border.all(color: _kGold, width: 9),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x77000000),
-                    blurRadius: 24,
-                    offset: Offset(0, 10),
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: still ? 0 : 1900),
+      builder: (context, e, _) {
+        // Entrance stages, each easing out on its own slice of the timeline.
+        double at(double a, double b) =>
+            Curves.easeOutQuart.transform(((e - a) / (b - a)).clamp(0.0, 1.0));
+        Widget rise(double a, double b, Widget c, {double dy = 40}) {
+          final v = at(a, b);
+          return Opacity(
+            opacity: v,
+            child: Transform.translate(
+              offset: Offset(0, dy * (1 - v)),
+              child: c,
+            ),
+          );
+        }
+
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: Image.asset('$_kA/${_s.bg}.png', fit: BoxFit.fill),
+            ),
+            // Vignette: the room stays readable at the edges, darkest behind
+            // the wall so the labels carry the screen.
+            Positioned.fill(
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: RadialGradient(
+                    center: Alignment(0, -.1),
+                    radius: 1.1,
+                    colors: [Color(0xCC0E1A40), Color(0x990E1A40)],
                   ),
-                ],
+                ),
               ),
-              child: Column(
-                children: [
-                  Text('Words You Learned', style: _fredoka(56, _kNavy)),
-                  Text(_s.title, style: _fredoka(26, const Color(0xFFF08A24))),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: GridView.count(
-                      crossAxisCount: 5,
-                      mainAxisSpacing: 14,
-                      crossAxisSpacing: 14,
-                      childAspectRatio: 1.7,
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [
-                        for (var i = 0; i < words.length; i++)
-                          TweenAnimationBuilder<double>(
-                            tween: Tween(begin: 0, end: 1),
-                            duration: Duration(milliseconds: 500 + 70 * i),
-                            curve: Interval(
-                              (70 * i) / (500 + 70 * i),
-                              1,
-                              curve: Curves.easeOutBack,
-                            ),
-                            builder: (context, v, c) =>
-                                Transform.scale(scale: v, child: c),
-                            child: _Label(words[i]),
+            ),
+            Positioned.fill(
+              child: Opacity(
+                opacity: .6,
+                child: CustomPaint(
+                  painter: _RaysPainter(t / (2 * math.pi), centre: .12),
+                ),
+              ),
+            ),
+            if (!still)
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _ConfettiPainter(t / (2 * math.pi), sparse: true),
+                ),
+              ),
+
+            // Mascots, stepping in from the sides.
+            _at(
+              high ? 60 : 90,
+              320,
+              gw,
+              mh,
+              Opacity(opacity: at(.15, .45), child: _img('girl_$mood')),
+            ),
+            _at(
+              (high ? 1810 : 1780) - bw,
+              320,
+              bw,
+              mh,
+              Opacity(opacity: at(.2, .5), child: _img('boy_$mood')),
+            ),
+
+            // The girl's speech bubble.
+            _at(
+              28,
+              118,
+              404,
+              176,
+              Opacity(
+                opacity: at(.45, .65),
+                child: Transform.scale(
+                  scale: .85 + .15 * at(.45, .65),
+                  alignment: const Alignment(-.3, 1),
+                  child: CustomPaint(
+                    painter: _BubblePainter(),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(26, 16, 26, 46),
+                      child: Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _cheer,
+                            textAlign: TextAlign.center,
+                            style: _fredoka(34, _kNavy),
                           ),
-                      ],
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                ),
+              ),
+            ),
+
+            // Star arc: centre star raised and bigger.
+            for (var i = 0; i < 3; i++)
+              _at(
+                i == 1 ? 865 : (i == 0 ? 735 : 1025),
+                i == 1 ? 8 : 40,
+                i == 1 ? 140 : 110,
+                i == 1 ? 140 : 110,
+                Transform.rotate(
+                  angle:
+                      (i - 1) * .22 +
+                      (i < _stars ? .05 * math.sin(t * 2 + i) : 0),
+                  child: Transform.scale(
+                    scale: at(.3 + .1 * i, .55 + .1 * i),
+                    child: _Star(on: i < _stars, size: i == 1 ? 140 : 110),
+                  ),
+                ),
+              ),
+
+            // Title plaque.
+            _at(
+              655,
+              146,
+              560,
+              112,
+              rise(
+                .2,
+                .45,
+                Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _img('board_title'),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(44, 14, 44, 20),
+                      child: Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'You learned ${words.length} $_topic words!',
+                            style: _fredoka(40, _kNavy),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Word wall.
+            _at(
+              440,
+              272,
+              990,
+              350,
+              rise(
+                .3,
+                .6,
+                Container(
+                  padding: const EdgeInsets.fromLTRB(30, 18, 30, 22),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF6DE),
+                    borderRadius: BorderRadius.circular(40),
+                    border: Border.all(color: _kGold, width: 8),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x88000000),
+                        blurRadius: 26,
+                        offset: Offset(0, 12),
+                      ),
+                    ],
+                  ),
+                  child: Column(
                     children: [
-                      stat(
-                        'Stars',
-                        Row(
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            for (var i = 0; i < 3; i++)
-                              _Star(on: i < _stars, size: 56),
+                            Text(
+                              'Words You Learned',
+                              style: _fredoka(36, const Color(0xFF8A4B08)),
+                            ),
+                            const SizedBox(width: 16),
+                            const Icon(
+                              Icons.touch_app_rounded,
+                              color: Color(0xFFB07A2A),
+                              size: 30,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Tap to hear',
+                              style: _fredoka(24, const Color(0xFF9A6A1E)),
+                            ),
                           ],
                         ),
                       ),
-                      stat(
-                        'Accuracy',
-                        Text('$_accuracy%', style: _fredoka(50, _kNavy)),
-                      ),
-                      stat(
-                        'XP Earned',
-                        Text(
-                          '+${widget.xp}',
-                          style: _fredoka(50, const Color(0xFF2F9A1E)),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          runAlignment: WrapAlignment.center,
+                          spacing: 18,
+                          runSpacing: 20,
+                          children: [
+                            for (var i = 0; i < words.length; i++)
+                              _pinned(
+                                i,
+                                words[i],
+                                at(.45 + .04 * i, .7 + .04 * i),
+                              ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ],
+                ),
+              ),
+            ),
+
+            // Score strip: one line, three facts.
+            _at(
+              585,
+              636,
+              700,
+              64,
+              rise(
+                .55,
+                .8,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                  decoration: BoxDecoration(
+                    color: const Color(0xE60E1A40),
+                    borderRadius: BorderRadius.circular(32),
+                    border: Border.all(
+                      color: const Color(0x66FFD23F),
+                      width: 3,
+                    ),
+                  ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _fact(
+                          Icons.sell_rounded,
+                          const Color(0xFFFFB35C),
+                          '${words.length}',
+                          'words',
+                        ),
+                        _factDivider(),
+                        _fact(
+                          Icons.check_circle_rounded,
+                          const Color(0xFF6BD23A),
+                          '$_accuracy%',
+                          'correct',
+                        ),
+                        _factDivider(),
+                        _fact(
+                          Icons.bolt_rounded,
+                          const Color(0xFFFFD23F),
+                          '+${widget.xp}',
+                          'XP',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // Play Again / Home.
+            _at(
+              580,
+              712,
+              340,
+              116,
+              rise(
+                .65,
+                .9,
+                _ImgBtn(
+                  key: const ValueKey('lm-again'),
+                  up: 'btn_blank',
+                  down: 'btn_blank_down',
+                  onTap: _replay,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(34, 0, 34, 8),
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: _outlined(
+                          'Play Again',
+                          _fredoka(56, Colors.white),
+                          const Color(0xFF0E4A10),
+                          10,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                dy: 24,
+              ),
+            ),
+            _at(
+              950,
+              712,
+              340,
+              116,
+              rise(
+                .7,
+                .95,
+                _ImgBtn(
+                  key: const ValueKey('lm-home'),
+                  up: 'btn_home',
+                  down: 'btn_home_down',
+                  onTap: _finish,
+                ),
+                dy: 24,
+              ),
+            ),
+            ..._topButtons(back: false),
+          ],
+        );
+      },
+    );
+  }
+
+  /// One word on the wall: tilted a little either way like a pinned sticker,
+  /// with a pin on top. Tapping it says the word and gives it a hop.
+  Widget _pinned(int i, _Word w, double v) {
+    final tilt = (i.isEven ? -1 : 1) * (.025 + .015 * (i % 3));
+    return Opacity(
+      opacity: v,
+      child: Transform.scale(
+        scale: .7 + .3 * v,
+        child: GestureDetector(
+          key: ValueKey('lm-wall-$i'),
+          onTap: () => _hear(i),
+          child: TweenAnimationBuilder<double>(
+            key: ValueKey(_heardI == i ? 'heard$_heardN' : 'rest$i'),
+            tween: Tween(begin: _heardI == i ? 0 : 1, end: 1),
+            duration: const Duration(milliseconds: 450),
+            curve: Curves.easeOutQuart,
+            builder: (context, h, c) => Transform.translate(
+              offset: Offset(0, -16 * math.sin(h * math.pi)),
+              child: c,
+            ),
+            child: Transform.rotate(
+              angle: tilt,
+              child: SizedBox(
+                width: 164,
+                height: 90,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      height: 78,
+                      child: _Label(w),
+                    ),
+                    Positioned(
+                      left: 72,
+                      top: 0,
+                      width: 20,
+                      height: 20,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const RadialGradient(
+                            center: Alignment(-.3, -.4),
+                            colors: [Color(0xFFFF8A7A), Color(0xFFC62E24)],
+                          ),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x66000000),
+                              blurRadius: 3,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
-        _at(
-          600,
-          712,
-          300,
-          107,
-          _ImgBtn(
-            key: const ValueKey('lm-again'),
-            up: 'play',
-            down: 'play_down',
-            onTap: _replay,
-          ),
-        ),
-        _at(
-          970,
-          712,
-          300,
-          107,
-          _ImgBtn(
-            key: const ValueKey('lm-home'),
-            up: 'btn_home',
-            down: 'btn_home_down',
-            onTap: _finish,
-          ),
-        ),
-        ..._topButtons(back: false),
-      ],
+      ),
     );
   }
+
+  Widget _fact(IconData icon, Color color, String value, String label) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, color: color, size: 36),
+      const SizedBox(width: 10),
+      Text(value, style: _fredoka(36, Colors.white)),
+      const SizedBox(width: 8),
+      Text(label, style: _fredoka(26, const Color(0xFFD6DDF5))),
+    ],
+  );
+
+  Widget _factDivider() => Container(
+    margin: const EdgeInsets.symmetric(horizontal: 28),
+    width: 3,
+    height: 34,
+    decoration: BoxDecoration(
+      color: const Color(0x55FFFFFF),
+      borderRadius: BorderRadius.circular(2),
+    ),
+  );
 }
 
 /// Text with a thick rounded outline, the game-title look.
@@ -1461,33 +2093,90 @@ class _Star extends StatelessWidget {
   final bool on;
   final double size;
 
+  /// Greyscale, for a star not earned.
+  static const _grey = ColorFilter.matrix([
+    .2126, .7152, .0722, 0, 0, //
+    .2126, .7152, .0722, 0, 0,
+    .2126, .7152, .0722, 0, 0,
+    0, 0, 0, .45, 0,
+  ]);
+
   @override
-  Widget build(BuildContext context) => Stack(
-    alignment: Alignment.center,
-    children: [
-      Icon(
-        Icons.star_rounded,
-        size: size,
-        color: on ? const Color(0xFFD98A00) : const Color(0xFFB8AE98),
-      ),
-      Icon(
-        Icons.star_rounded,
-        size: size * .8,
-        color: on ? const Color(0xFFFFD23F) : const Color(0xFFE6DECB),
-      ),
-    ],
-  );
+  Widget build(BuildContext context) {
+    final star = Image.asset(
+      '$_kA/star.png',
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+    );
+    return on ? star : ColorFiltered(colorFilter: _grey, child: star);
+  }
 }
+
+/// A plant cut out of the start room (see `bg_plate.png`).
+class _Plant {
+  const _Plant(
+    this.asset,
+    this.rect,
+    this.phase, {
+    this.amount = .035,
+    this.dir = 1,
+    this.hang = false,
+    this.front = false,
+  });
+
+  final String asset;
+
+  /// Where the sprite sits in the 1870x841 stage.
+  final Rect rect;
+  final double phase;
+
+  /// Lean at the tips, as a share of the sprite's height.
+  final double amount;
+
+  /// Which way the draught pushes it (+1 right, -1 left).
+  final double dir;
+  final bool hang;
+
+  /// Nearest the viewer: drawn over the mascots.
+  final bool front;
+}
+
+const _kPlants = [
+  _Plant('plant_table', Rect.fromLTWH(176, 338, 116, 90), 0, amount: .05),
+  _Plant('plant_floor', Rect.fromLTWH(1360, 334, 184, 166), 1.1, dir: -1),
+  _Plant('plant_top', Rect.fromLTWH(1535, 6, 134, 96), 2.3, amount: .045),
+  _Plant(
+    'plant_vine',
+    Rect.fromLTWH(1464, 58, 84, 186),
+    .6,
+    amount: .06,
+    hang: true,
+  ),
+  _Plant('plant_shelf', Rect.fromLTWH(1583, 106, 88, 54), 3.4, amount: .05),
+  _Plant('plant_cabinet', Rect.fromLTWH(1740, 206, 130, 118), 4.2, dir: -1),
+  _Plant('plant_corner', Rect.fromLTWH(1726, 418, 144, 120), 5.1, dir: -1),
+  _Plant(
+    'plant_front',
+    Rect.fromLTWH(0, 550, 298, 291),
+    2.8,
+    amount: .03,
+    front: true,
+  ),
+];
 
 /// Slowly turning light rays behind the congrats title.
 class _RaysPainter extends CustomPainter {
-  _RaysPainter(this.u);
+  _RaysPainter(this.u, {this.centre = .42});
 
   final double u;
 
+  /// Vertical centre of the burst, as a fraction of the height.
+  final double centre;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width / 2, size.height * .42);
+    final c = Offset(size.width / 2, size.height * centre);
     final r = size.width * .7;
     final paint = Paint()..color = const Color(0x22FFE27A);
     const n = 18;
@@ -1515,6 +2204,40 @@ class _RaysPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RaysPainter old) => old.u != u;
+}
+
+/// White speech bubble with its tail pointing down-left at the girl.
+class _BubblePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    const tail = 34.0;
+    final body = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, size.width, size.height - tail),
+      const Radius.circular(40),
+    );
+    final path = Path.combine(
+      PathOperation.union,
+      Path()..addRRect(body),
+      Path()
+        ..moveTo(size.width * .30, size.height - tail - 20)
+        ..lineTo(size.width * .22, size.height)
+        ..lineTo(size.width * .46, size.height - tail - 20)
+        ..close(),
+    );
+    canvas.drawShadow(path, const Color(0xFF000000), 10, false);
+    canvas.drawPath(path, Paint()..color = Colors.white);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5
+        ..strokeJoin = StrokeJoin.round
+        ..color = _kGold,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_BubblePainter old) => false;
 }
 
 /// Falling paper confetti; [u] runs 0..1 per loop.
@@ -1640,55 +2363,48 @@ class _ImgBtnState extends State<_ImgBtn> {
   );
 }
 
-/// The draggable speaker badge in the dock.
+/// The draggable speaker badge in the dock: the orange speaker and the
+/// word it says, dragged together.
 class _Badge extends StatelessWidget {
-  const _Badge({required this.word});
+  const _Badge({required this.word, this.down = false});
 
-  static const w = 250.0;
+  static const w = 300.0;
   static const h = 88.0;
 
   final _Word word;
 
+  /// Shows the speaker's pressed art (held or mid-drag).
+  final bool down;
+
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => SizedBox(
     width: w,
     height: h,
-    padding: const EdgeInsets.fromLTRB(8, 6, 16, 6),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(h / 2),
-      border: Border.all(color: const Color(0xFFF08A24), width: 5),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x44000000),
-          blurRadius: 8,
-          offset: Offset(0, 4),
-        ),
-      ],
-    ),
     child: Row(
       children: [
-        Container(
-          width: 66,
-          height: 66,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            color: Color(0xFFF08A24),
-          ),
-          child: const Icon(
-            Icons.volume_up_rounded,
-            color: Colors.white,
-            size: 40,
-          ),
+        Image.asset(
+          '$_kA/${down ? 'btn_speaker_down' : 'btn_speaker'}.png',
+          width: 84,
+          height: 84,
+          fit: BoxFit.contain,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         Expanded(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              word.ar,
-              textDirection: TextDirection.rtl,
-              style: _arabic(44),
+          child: Container(
+            height: 80,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBF0),
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(color: _kGold, width: 5),
+            ),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                word.ar,
+                textDirection: TextDirection.rtl,
+                style: _arabic(46),
+              ),
             ),
           ),
         ),
@@ -1738,29 +2454,31 @@ class _Label extends StatelessWidget {
   final _Word word;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: _kGold, width: 4),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x55000000),
-          blurRadius: 10,
-          offset: Offset(0, 5),
+  Widget build(BuildContext context) => AspectRatio(
+    aspectRatio: 2.12,
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        Image.asset('$_kA/board_label.png', fit: BoxFit.fill),
+        FractionallySizedBox(
+          widthFactor: .8,
+          heightFactor: .74,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  word.ar,
+                  textDirection: TextDirection.rtl,
+                  style: _arabic(40),
+                ),
+                Text(word.en, style: _fredoka(22, const Color(0xFF5E4630))),
+              ],
+            ),
+          ),
         ),
       ],
-    ),
-    child: FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(word.ar, textDirection: TextDirection.rtl, style: _arabic(38)),
-          Text(word.en, style: _fredoka(20, const Color(0xFF6B5A3A))),
-        ],
-      ),
     ),
   );
 }
