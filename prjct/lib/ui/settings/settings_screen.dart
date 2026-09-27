@@ -68,7 +68,7 @@ class SettingsScreen extends ConsumerWidget {
           elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            tooltip: backLabel,
+            tooltip: backLabel.tr,
             onPressed: goBack,
           ),
           title: const Text('Settings'),
@@ -85,6 +85,14 @@ class SettingsScreen extends ConsumerWidget {
                     fromHub: fromHub,
                     activeRole: activeRole,
                     learner: session.learner,
+                  ),
+                ),
+                _SectionLabel('Language'),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: SoftCard(
+                    padding: EdgeInsets.symmetric(vertical: 4),
+                    child: LanguageSettingRow(),
                   ),
                 ),
                 _SectionLabel('Sound & Voice'),
@@ -423,6 +431,41 @@ class _SettingsRow extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Settings row that switches the app language (EN / FIL) live.
+class LanguageSettingRow extends ConsumerWidget {
+  const LanguageSettingRow({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final code = ref.watch(sessionProvider).languageCode ?? 'en';
+    return _SettingsRow(
+      icon: Icons.language,
+      title: 'App language',
+      subtitle: code == 'fil' ? 'Filipino' : 'English',
+      trailing: SegmentedButton<String>(
+        showSelectedIcon: false,
+        style: SegmentedButton.styleFrom(
+          selectedBackgroundColor: AppColors.teal,
+          selectedForegroundColor: Colors.white,
+          foregroundColor: AppColors.teal,
+          side: const BorderSide(color: AppColors.teal),
+          visualDensity: VisualDensity.compact,
+          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+        ),
+        segments: const [
+          ButtonSegment(value: 'en', label: Text('EN')),
+          ButtonSegment(value: 'fil', label: Text('FIL')),
+        ],
+        selected: {code},
+        onSelectionChanged: (s) {
+          ref.read(sessionProvider.notifier).setLanguage(s.first);
+          AppTranslations.refreshAll();
+        },
       ),
     );
   }

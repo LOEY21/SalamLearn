@@ -1,167 +1,88 @@
 import 'package:flutter/material.dart' as m;
 import 'package:hive/hive.dart';
 import '../../data/local/hive_boxes.dart';
+import 'filipino_strings.dart';
 
 class AppTranslations {
-  static const Map<String, String> _filipino = {
-    // Onboarding / Get Started
-    'WELCOME': 'MALIGAYANG PAGDATING',
-    "Let's get started": 'Magsimula na tayo',
-    'Choose your language': 'Piliin ang iyong wika',
-    'You can change this anytime in Settings': 'Maaari mo itong baguhin anumang oras sa Mga Setting',
-    'INSTRUCTIONAL LANGUAGE': 'WIKANG PAMPAGTUTURO',
-    'English': 'Ingles',
-    'Lessons narrated in English': 'Mga aralin sa Ingles',
-    'Filipino': 'Filipino',
-    'Mga aralin sa Filipino': 'Mga aralin sa Filipino',
-    'Continue': 'Magpatuloy',
-    'Not sure which to choose?': 'Hindi sigurado kung ano ang pipiliin?',
-    'You can always switch languages later in your profile settings.': 'Maaari mo ring palitan ang wika pagkatapos sa mga setting ng iyong profile.',
-    'Skip': 'Laktawan',
-    'Assets verified': 'Na-verify na ang mga asset',
-    'Checking assets…': 'Sinusuri ang mga asset…',
-    'Checking assets': 'Sinusuri ang mga asset',
-    'You have met the allowable storage requirements': 'Natugunan mo na ang kinakailangang storage',
-    
-    // Privacy & Consent
-    'Data Privacy Consent': 'Pahintulot sa Privacy ng Data',
-    'A full look at what we collect, why, and your rights, before your child starts learning.': 'Isang buong pagtingin sa aming kinokolekta, bakit, at ang iyong mga karapatan, bago magsimulang mag-aral ang iyong anak.',
-    'Last updated: June 2026': 'Huling na-update: Hunyo 2026',
-    'REQUIRED FOR OFFLINE & CLASSROOM FEATURES': 'KAILANGAN PARA SA OFFLINE AT CLASSROOM FEATURES',
-    'I agree to the privacy policy and consent to the collection of learning data': 'Sumasang-ayon ako sa patakaran sa privacy at pahintulot sa pangongolekta ng data sa pag-aaral',
-    'Please agree to the privacy consent to continue.': 'Mangyaring sumang-ayon sa pahintulot sa privacy upang magpatuloy.',
-    'Please review the data policy above. Your agreement is required to create a student profile and sync learning progress.': 'Mangyaring suriin ang patakaran sa data sa itaas. Ang iyong kasunduan ay kinakailangan upang lumikha ng isang profile ng mag-aaral at i-sync ang pag-unlad sa pag-aaral.',
-    'I Agree': 'Sumasang-ayon Ako',
-    'Back': 'Bumalik',
-    
-    // Role Selection
-    'Who is using this device?': 'Sino ang gagamit ng device na ito?',
-    'Choose your role to customize your learning journey': 'Piliin ang iyong papel upang i-customize ang iyong paglalakbay sa pag-aaral',
-    'Learner': 'Mag-aaral',
-    'Parent': 'Magulang',
-    'Teacher': 'Guro',
-    'Asatidz': 'Asatidz',
-    
-    // Authentication / PIN Screen
-    'Enter 4-digit PIN': 'Ilagay ang 4-digit na PIN',
-    'Verify PIN': 'I-verify ang PIN',
-    'Setup 4-digit PIN': 'Mag-setup ng 4-digit na PIN',
-    'Confirm 4-digit PIN': 'Kumpirmahin ang 4-digit na PIN',
-    'Incorrect PIN': 'Maling PIN',
-    'PIN Verified': 'Na-verify na ang PIN',
-    'Enter your PIN to access admin settings': 'Ilagay ang iyong PIN upang ma-access ang mga setting ng admin',
-    'Create a PIN to secure parental settings': 'Gumawa ng PIN upang ma-secure ang mga setting ng magulang',
-    'Confirm your new PIN': 'Kumpirmahin ang iyong bagong PIN',
-    'Enter PIN': 'Ilagay ang PIN',
-    'SETUP PIN': 'MAG-SETUP NG PIN',
-    'VERIFY PIN': 'I-VERIFY ANG PIN',
-    'PINs do not match. Try again.': 'Hindi nagtutugma ang mga PIN. Subukan muli.',
-    
-    // Parent/Teacher Setup
-    'Create Parent Profile': 'Gumawa ng Profile ng Magulang',
-    'Parent Profile': 'Profile ng Magulang',
-    'Email Address': 'Email Address',
-    'Password': 'Password',
-    'Confirm Password': 'Kumpirmahin ang Password',
-    'Full Name': 'Buong Pangalan',
-    'Sign Up': 'Mag-sign Up',
-    'Sign In': 'Mag-sign In',
-    'Already have an account?': 'Mayroon ka na bang account?',
-    'Create an account': 'Gumawa ng account',
-    'Teacher Profile': 'Profile ng Guro',
-    'Create Teacher Profile': 'Gumawa ng Profile ng Guro',
-    
-    // Learner Setup
-    'Create Student Profile': 'Gumawa ng Profile ng Mag-aaral',
-    'Learner Setup': 'Setup ng Mag-aaral',
-    'First Name': 'Pangalan',
-    'Gender': 'Kasarian',
-    'Boy': 'Lalaki',
-    'Girl': 'Babae',
-    'Age': 'Edad',
-    'Select Avatar': 'Pumili ng Avatar',
-    'Save Profile': 'I-save ang Profile',
-    'Add Child': 'Magdagdag ng Anak',
-    
-    // Student Hub
-    'ADVENTURE MAP': 'MAPA NG PAKIKIPAGSAPALARAN',
-    'BACKPACK': 'BACKPACK',
-    'PROFILE': 'PROFILE',
-    'Welcome to Madrasah': 'Maligayang Pagdating sa Madrasah',
-    'Exploring Our World': 'Paggalugad sa Aming Daigdig',
-    'A Growing Muslim': 'Isang Lumalaking Muslim',
-    'Stories & Letters': 'Mga Kwento at Titik',
-    'Cleanliness & Character': 'Kalinisan at Ugali',
-    'The Path of the Prophet': 'Ang Landas ng Propeta',
-    'The Good Deed Hero': 'Ang Bayani ng Mabuting Gawa',
-    'Noor Energy': 'Lakas ng Noor',
-    'Level': 'Antas',
-    'Lessons': 'Mga Aralin',
-    'Daily Quest': 'Pang-araw-araw na Pakikipagsapalaran',
-    'Homework': 'Takdang-Aralin',
-    'Badges': 'Mga Badge',
-    'Streaks': 'Mga Streak',
-    'Start Learning': 'Simulan ang Pag-aaral',
-    'Assigned Homework': 'Itinalagang Takdang-Aralin',
-    'No assigned homework': 'Walang itinalagang takdang-aralin',
-    'Recent Badges': 'Mga Kamakailang Badge',
-    'View All': 'Tingnan Lahat',
-    'Active Streak': 'Aktibong Streak',
-    'days': 'mga araw',
-    'No energy left! Let\'s rest.': 'Wala nang lakas! Magpahinga muna tayo.',
-    'Rest': 'Magpahinga',
-    
-    // Settings
-    'Settings': 'Mga Setting',
-    'General': 'Pangkalahatan',
-    'Language': 'Wika',
-    'Volume': 'Lakas ng Tunog',
-    'Background Music': 'Tugtog sa Background',
-    'Sound Effects': 'Mga Epekto ng Tunog',
-    'Voiceover': 'Boses',
-    'App Version': 'Bersyon ng App',
-    'Developer Options': 'Mga Pagpipilian sa Developer',
-    'Erase All Data': 'Burahin Lahat ng Data',
-    'Logout': 'Mag-logout',
-    'Confirm Erase': 'Kumpirmahin ang Pagbura',
-    'Are you sure you want to erase all data? This cannot be undone.': 'Sigurado ka bang gusto mong burahin ang lahat ng data? Hindi ito mababawi.',
-    'Cancel': 'Kanselahin',
-    'Erase': 'Burahin',
-    'Switch Account': 'Lumipat ng Account',
-    'Parent Dashboard': 'Dashboard ng Magulang',
-    'Teacher Dashboard': 'Dashboard ng Guro',
-  };
-
   static String translate(String text, [String? languageCode]) {
     final code = languageCode ?? currentLanguageCode;
-    if (code == 'fil') {
-      final translated = _filipino[text] ?? _filipino[text.trim()];
-      if (translated != null) return translated;
-      
-      // Fallback searches for case insensitivity or minor variations
-      // (like trailing colon/spaces/dots)
-      var cleaned = text.trim();
-      var suffix = '';
-      if (cleaned.endsWith(':')) {
+    if (code != 'fil' || text.isEmpty) return text;
+    return _cache[text] ??= _translateFil(text);
+  }
+
+  // ponytail: unbounded memo of every string rendered in Filipino; fine for
+  // this app's finite UI copy, cap it if dynamic text ever grows unbounded.
+  static final Map<String, String> _cache = {};
+
+  static String _lookup(String text) {
+    final translated = filipinoStrings[text] ?? filipinoStrings[text.trim()];
+    if (translated != null) return translated;
+
+    // Fallback for minor variations (trailing punctuation, casing).
+    var cleaned = text.trim();
+    var suffix = '';
+    for (final p in const [':', '?', '!', '.']) {
+      if (cleaned.endsWith(p)) {
         cleaned = cleaned.substring(0, cleaned.length - 1).trim();
-        suffix = ':';
-      } else if (cleaned.endsWith('?')) {
-        cleaned = cleaned.substring(0, cleaned.length - 1).trim();
-        suffix = '?';
-      } else if (cleaned.endsWith('!')) {
-        cleaned = cleaned.substring(0, cleaned.length - 1).trim();
-        suffix = '!';
-      } else if (cleaned.endsWith('.')) {
-        cleaned = cleaned.substring(0, cleaned.length - 1).trim();
-        suffix = '.';
-      }
-      
-      final transCleaned = _filipino[cleaned] ?? _filipino[cleaned.toLowerCase()] ?? _filipino[cleaned.toUpperCase()];
-      if (transCleaned != null) {
-        return '$transCleaned$suffix';
+        suffix = p;
+        break;
       }
     }
+    final transCleaned = filipinoStrings[cleaned] ??
+        filipinoStrings[cleaned.toLowerCase()] ??
+        filipinoStrings[cleaned.toUpperCase()] ??
+        _upper[cleaned];
+    return transCleaned != null ? '$transCleaned$suffix' : text;
+  }
+
+  // Headers often render `title.toUpperCase()`, so index keys by their
+  // uppercased form too.
+  static final Map<String, String> _upper = {
+    for (final e in filipinoStrings.entries)
+      e.key.toUpperCase(): e.value.toUpperCase(),
+  };
+
+  static String _translateFil(String text) {
+    final direct = _lookup(text);
+    if (!identical(direct, text)) return direct;
+    for (final (pattern, replacement) in _templates) {
+      final m = pattern.firstMatch(text);
+      if (m == null) continue;
+      return replacement.replaceAllMapped(
+        RegExp(r'\{(\d+)\}'),
+        (r) => _lookup(m.group(int.parse(r.group(1)!) + 1) ?? ''),
+      );
+    }
     return text;
+  }
+
+  // Interpolated strings: "Level {0}" -> ^Level (.*?)$, most literal text first
+  // so a specific template wins over a looser one.
+  static final List<(RegExp, String)> _templates = () {
+    final entries = filipinoTemplates.entries.toList()
+      ..sort((a, b) => b.key.replaceAll(RegExp(r'\{\d+\}'), '').length
+          .compareTo(a.key.replaceAll(RegExp(r'\{\d+\}'), '').length));
+    return [
+      for (final e in entries)
+        (
+          RegExp(
+            '^${e.key.split(RegExp(r'\{\d+\}')).map(RegExp.escape).join('(.*?)')}\$',
+            dotAll: true,
+          ),
+          e.value,
+        ),
+    ];
+  }();
+
+  /// Re-runs build on every mounted widget so const Texts pick up a language
+  /// change (setState alone skips const subtrees). Element state is kept.
+  static void refreshAll() {
+    void rebuild(m.Element e) {
+      e.markNeedsBuild();
+      e.visitChildren(rebuild);
+    }
+
+    m.WidgetsBinding.instance.rootElement?.visitChildren(rebuild);
   }
 
   static String? currentLanguageCodeOverride;

@@ -843,7 +843,7 @@ class _TextFieldState extends State<_TextField> {
         inputFormatters: widget.inputFormatters,
         decoration: InputDecoration(
           label: widget.label == null ? null : Text(widget.label!),
-          hintText: widget.hint,
+          hintText: widget.hint?.tr,
           labelStyle: const TextStyle(
             color: AppColors.textMuted,
             fontWeight: FontWeight.w700,
@@ -907,7 +907,7 @@ class _GradeDropdown extends StatelessWidget {
       isExpanded: true,
       icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textMuted),
       decoration: InputDecoration(
-        hintText: 'Select grade',
+        hintText: 'Select grade'.tr,
         filled: true,
         fillColor: AppColors.neutralTint,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),

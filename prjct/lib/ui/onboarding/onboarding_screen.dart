@@ -23,6 +23,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     with SingleTickerProviderStateMixin {  @override
   void initState() {
     super.initState();
+    _language = AppTranslations.currentLanguageCode;
     AppTranslations.currentLanguageCodeOverride = _language;
   }
 
@@ -34,6 +35,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
   }
 
   String _language = 'en';
+
+  void _pickLanguage(String code) {
+    AppTranslations.currentLanguageCodeOverride = code;
+    setState(() => _language = code);
+    AppTranslations.refreshAll();
+  }
 
   late final AnimationController _c = AnimationController(
     vsync: this,
@@ -175,10 +182,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
                       name: 'English',
                       subtitle: 'Lessons narrated in English',
                       selected: _language == 'en',
-                      onTap: () => setState(() {
-                        _language = 'en';
-                        AppTranslations.currentLanguageCodeOverride = 'en';
-                      }),
+                      onTap: () => _pickLanguage('en'),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -189,10 +193,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
                       name: 'Filipino',
                       subtitle: 'Mga aralin sa Filipino',
                       selected: _language == 'fil',
-                      onTap: () => setState(() {
-                        _language = 'fil';
-                        AppTranslations.currentLanguageCodeOverride = 'fil';
-                      }),
+                      onTap: () => _pickLanguage('fil'),
                     ),
                   ),
                   const SizedBox(height: 20),

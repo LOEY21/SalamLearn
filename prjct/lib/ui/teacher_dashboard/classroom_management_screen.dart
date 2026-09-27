@@ -293,13 +293,13 @@ class _SelectionAppBar extends StatelessWidget {
           ),
           _SelectionActionButton(
             icon: Icons.archive_outlined,
-            tooltip: 'Archive',
+            tooltip: 'Archive'.tr,
             onTap: onArchive,
           ),
           const SizedBox(width: 6),
           _SelectionActionButton(
             icon: Icons.delete_outline,
-            tooltip: 'Delete',
+            tooltip: 'Delete'.tr,
             color: AppColors.danger,
             onTap: onDelete,
           ),

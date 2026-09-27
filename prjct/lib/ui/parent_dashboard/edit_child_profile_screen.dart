@@ -335,7 +335,7 @@ class _Input extends StatelessWidget {
     return TextField(
       controller: controller,
       decoration: InputDecoration(
-        hintText: hint,
+        hintText: hint.tr,
         filled: true,
         fillColor: AppColors.neutralTint,
         contentPadding: const EdgeInsets.symmetric(

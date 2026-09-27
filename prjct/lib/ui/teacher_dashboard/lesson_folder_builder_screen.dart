@@ -133,7 +133,7 @@ class _LessonFolderBuilderScreenState
                   TextField(
                     controller: _nameC,
                     decoration: InputDecoration(
-                      hintText: 'e.g. Week 4: Wudhu',
+                      hintText: 'e.g. Week 4: Wudhu'.tr,
                       filled: true,
                       fillColor: AppColors.neutralTint,
                       border: OutlineInputBorder(

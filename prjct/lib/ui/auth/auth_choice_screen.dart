@@ -962,7 +962,7 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
           controller: _emailC,
           label: 'Email address',
           keyboardType: TextInputType.emailAddress,
-          errorText: _emailError,
+          errorText: _emailError?.tr,
           onChanged: (_) {
             if (_emailError != null) setState(() => _emailError = null);
           },
@@ -1459,12 +1459,13 @@ class _ActivateViewState extends State<_ActivateView> {
                 if (_alreadyActivated) setState(() => _alreadyActivated = false);
               },
               decoration: InputDecoration(
-                labelText: 'Email',
+                labelText: 'Email'.tr,
                 border: const OutlineInputBorder(),
-                errorText: _error,
+                errorText: _error?.tr,
                 errorMaxLines: 3,
                 helperText: _alreadyActivated
                     ? 'This account is already verified. Go back and sign in instead.'
+                        .tr
                     : null,
                 helperMaxLines: 2,
                 helperStyle: const TextStyle(
@@ -1822,9 +1823,9 @@ class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
             keyboardType: TextInputType.emailAddress,
             autofocus: true,
             decoration: InputDecoration(
-              labelText: 'Email',
+              labelText: 'Email'.tr,
               border: const OutlineInputBorder(),
-              errorText: _error,
+              errorText: _error?.tr,
             ),
             onSubmitted: (_) => _sending ? null : _send(),
           ),
@@ -1970,7 +1971,7 @@ class _TextFieldState extends State<_TextField> {
         inputFormatters: widget.inputFormatters,
         decoration: InputDecoration(
           label: Text(widget.label),
-          errorText: widget.errorText,
+          errorText: widget.errorText?.tr,
           errorMaxLines: 2,
           prefixText: widget.prefixText,
           prefixStyle: const TextStyle(

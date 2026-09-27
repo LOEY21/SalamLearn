@@ -332,7 +332,7 @@ class _PhoneLayoutState extends ConsumerState<_PhoneLayout>
                   actions: [
                     HeaderIconButton(
                       iconPath: MockIcons.swap,
-                      tooltip: 'Switch user',
+                      tooltip: 'Switch user'.tr,
                       onTap: () => _switchUser(context, ref),
                     ),
                   ],
@@ -445,7 +445,7 @@ class _CastFab extends StatelessWidget {
     return FloatingActionButton(
       heroTag: 'teacher_cast_fab',
       backgroundColor: AppColors.teal,
-      tooltip: 'Cast to class',
+      tooltip: 'Cast to class'.tr,
       onPressed: onTap,
       child: const Icon(Icons.cast_rounded, color: Colors.white),
     );
@@ -2331,8 +2331,8 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
                             const SizedBox(height: 10),
                             DropdownButtonFormField<String>(
                               initialValue: _selectedModule,
-                              decoration: const InputDecoration(
-                                labelText: 'Select Module',
+                              decoration: InputDecoration(
+                                labelText: 'Select Module'.tr,
                                 isDense: true,
                                 border: OutlineInputBorder(),
                               ),
@@ -2504,9 +2504,9 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
                             TextField(
                               controller: _feedbackC,
                               maxLines: 2,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 hintText:
-                                    'Leave custom feedback or study notes for parents...',
+                                    'Leave custom feedback or study notes for parents...'.tr,
                                 filled: true,
                                 fillColor: AppColors.surface,
                                 border: OutlineInputBorder(),
@@ -3306,9 +3306,9 @@ class _CreateClassSheetState extends ConsumerState<_CreateClassSheet> {
                 Expanded(
                   child: TextField(
                     controller: _gradeLevelC,
-                    decoration: const InputDecoration(
-                      hintText: 'Grade 1',
-                      labelText: 'Grade Level',
+                    decoration: InputDecoration(
+                      hintText: 'Grade 1'.tr,
+                      labelText: 'Grade Level'.tr,
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -3318,9 +3318,9 @@ class _CreateClassSheetState extends ConsumerState<_CreateClassSheet> {
                 Expanded(
                   child: TextField(
                     controller: _sectionC,
-                    decoration: const InputDecoration(
-                      hintText: 'Section B',
-                      labelText: 'Section',
+                    decoration: InputDecoration(
+                      hintText: 'Section B'.tr,
+                      labelText: 'Section'.tr,
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -4549,8 +4549,8 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
       children: [
         DropdownButtonFormField<String>(
           value: _selectedModule,
-          decoration: const InputDecoration(
-            labelText: 'Select Learning Module',
+          decoration: InputDecoration(
+            labelText: 'Select Learning Module'.tr,
             border: OutlineInputBorder(),
           ),
           items: _modules
@@ -4598,8 +4598,8 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             value: _selectedStudent,
-            decoration: const InputDecoration(
-              labelText: 'Select Student',
+            decoration: InputDecoration(
+              labelText: 'Select Student'.tr,
               border: OutlineInputBorder(),
             ),
             items: students
@@ -5372,8 +5372,8 @@ class _TeacherLinkFirebaseCardState
           TextField(
             controller: _passwordC,
             obscureText: true,
-            decoration: const InputDecoration(
-              hintText: 'Account password',
+            decoration: InputDecoration(
+              hintText: 'Account password'.tr,
               border: OutlineInputBorder(),
             ),
           ),

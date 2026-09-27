@@ -266,7 +266,7 @@ class _PhoneLayoutState extends ConsumerState<_PhoneLayout>
                   actions: [
                     HeaderIconButton(
                       iconPath: MockIcons.swap,
-                      tooltip: 'Switch user',
+                      tooltip: 'Switch user'.tr,
                       onTap: () => _switchUser(context, ref),
                     ),
                   ],
@@ -2876,8 +2876,8 @@ class _LinkFirebaseCardState extends ConsumerState<_LinkFirebaseCard> {
           TextField(
             controller: _passwordC,
             obscureText: true,
-            decoration: const InputDecoration(
-              hintText: 'Account password',
+            decoration: InputDecoration(
+              hintText: 'Account password'.tr,
               border: OutlineInputBorder(),
             ),
           ),

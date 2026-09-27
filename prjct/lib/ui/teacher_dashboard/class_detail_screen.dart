@@ -843,9 +843,9 @@ class _EnrollCard extends StatelessWidget {
               Expanded(
                 child: TextField(
                   controller: firstNameController,
-                  decoration: const InputDecoration(
-                    hintText: 'e.g. Amir',
-                    labelText: 'First Name',
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Amir'.tr,
+                    labelText: 'First Name'.tr,
                     isDense: true,
                     border: OutlineInputBorder(),
                   ),
@@ -855,9 +855,9 @@ class _EnrollCard extends StatelessWidget {
               Expanded(
                 child: TextField(
                   controller: middleNameController,
-                  decoration: const InputDecoration(
-                    hintText: 'Optional',
-                    labelText: 'Middle Name',
+                  decoration: InputDecoration(
+                    hintText: 'Optional'.tr,
+                    labelText: 'Middle Name'.tr,
                     isDense: true,
                     border: OutlineInputBorder(),
                   ),
@@ -867,9 +867,9 @@ class _EnrollCard extends StatelessWidget {
               Expanded(
                 child: TextField(
                   controller: lastNameController,
-                  decoration: const InputDecoration(
-                    hintText: 'e.g. Ali',
-                    labelText: 'Last Name',
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Ali'.tr,
+                    labelText: 'Last Name'.tr,
                     isDense: true,
                     border: OutlineInputBorder(),
                   ),
