@@ -80,7 +80,7 @@ class _AuthChoiceScreenState extends ConsumerState<AuthChoiceScreen>
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider);
-    final role = session.activeRole ?? UserRole.learner;
+    final role = session.activeRole ?? UserRole.parent;
     final isLearner = role == UserRole.learner;
     final copy = _RoleCopy.of(role);
 
@@ -538,6 +538,7 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
   int _age = 7;
   String _avatar = '🦁';
   String? _emailError;
+  bool _checkingInternet = false;
   _PasswordStrength _passwordStrength = _PasswordStrength.none;
 
   static const _avatars = ['🦁', '🐼', '🐯', '🦊', '🐨', '🐰'];
@@ -790,6 +791,12 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
                   )
                   .then((_) {
                     if (context.mounted) context.go('/hub');
+                  }).catchError((Object error) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('$error')),
+                      );
+                    }
                   });
             },
             child: const Text(
@@ -877,7 +884,7 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
                 borderRadius: BorderRadius.circular(15),
               ),
             ),
-            onPressed: () {
+            onPressed: _checkingInternet ? null : () async {
               final firstName = _parentFirstNameC.text.trim();
               final middleName = _parentMiddleNameC.text.trim();
               final lastName = _parentLastNameC.text.trim();
@@ -945,6 +952,21 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
                 );
                 return;
               }
+
+              setState(() => _checkingInternet = true);
+              try {
+                await notifier.requireInternetForAccountCreation();
+              } catch (error) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('$error')),
+                  );
+                }
+                return;
+              } finally {
+                if (mounted) setState(() => _checkingInternet = false);
+              }
+              if (!context.mounted) return;
 
               final target = isTeacher ? '/teacher' : '/parent';
               // `ParentAccount`/`TeacherAccount.fullName` is still one
@@ -2012,7 +2034,7 @@ class _RoleCopy {
           subtext:
               "Track your child's progress and manage their profile & privacy.",
           signUpTitle: 'Create an account',
-          signUpDesc: "First time here? Set up your child's profile",
+          signUpDesc: 'Create your account, then add your child',
           signInTitle: 'Sign in',
           signInDesc: 'Use your PIN to access your dashboard',
           shortName: 'Parent/Guardian',

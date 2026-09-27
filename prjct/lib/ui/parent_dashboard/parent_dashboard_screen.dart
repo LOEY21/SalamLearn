@@ -321,6 +321,7 @@ class _PhoneLayoutState extends ConsumerState<_PhoneLayout>
                               delay: Duration(milliseconds: 60),
                               child: _ManageProfileCard(),
                             ),
+                            const _UnlinkedLearnersCard(),
                             const SizedBox(height: 14),
                             const _StaggerFadeIn(
                               delay: Duration(milliseconds: 95),
@@ -489,41 +490,150 @@ class _ManageProfileCard extends ConsumerWidget {
     }
     return SoftCard(
       padding: const EdgeInsets.all(18),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          LearnerAvatar(avatar: learner.avatar, size: 48),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Edit Child Profile',
-                  style: Theme.of(context).textTheme.titleMedium,
+          Row(
+            children: [
+              LearnerAvatar(avatar: learner.avatar, size: 48),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Child Profile',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${learner.name} · Age ${learner.age} · ${learner.gradeLevel}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${learner.name} · Age ${learner.age} · ${learner.gradeLevel}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textMuted,
+              ),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.teal,
+                  side: const BorderSide(color: AppColors.creamBorder),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-              ],
-            ),
-          ),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.teal,
-              side: const BorderSide(color: AppColors.creamBorder),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                onPressed: () => context.go('/parent/edit-child'),
+                child: const Text('Edit'),
               ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.gold,
+              foregroundColor: AppColors.ink,
             ),
-            onPressed: () => context.go('/parent/edit-child'),
-            child: const Text('Edit'),
+            icon: const Icon(Icons.play_arrow_rounded),
+            label: const Text('Open Learner Hub'),
+            onPressed: () {
+              ref.read(sessionProvider.notifier).selectRole(UserRole.learner);
+              context.go('/hub');
+            },
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Lets a parent explicitly attach profiles saved by the old standalone
+/// Learner signup flow on this device.
+class _UnlinkedLearnersCard extends ConsumerWidget {
+  const _UnlinkedLearnersCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profiles = ref.watch(unlinkedLearnersProvider);
+    if (profiles.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: SoftCard(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Existing child profiles',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Add a child profile saved on this device to your account.',
+              style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 12),
+            for (final profile in profiles)
+              if (profile.id != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      LearnerAvatar(avatar: profile.avatar, size: 36),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          profile.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      OutlinedButton(
+                        onPressed: () async {
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (dialogContext) => AlertDialog(
+                              title: const Text('Add child to your account?'),
+                              content: Text(
+                                '${profile.name} and their learning progress '
+                                'will be linked to your parent account.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(dialogContext, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                FilledButton(
+                                  onPressed: () =>
+                                      Navigator.pop(dialogContext, true),
+                                  child: const Text('Add child'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirmed != true || !context.mounted) return;
+                          try {
+                            await ref
+                                .read(sessionProvider.notifier)
+                                .attachUnlinkedLearner(profile.id!);
+                          } catch (error) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('$error')),
+                              );
+                            }
+                          }
+                        },
+                        child: const Text('Add'),
+                      ),
+                    ],
+                  ),
+                ),
+          ],
+        ),
       ),
     );
   }

@@ -48,8 +48,9 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
   String? _gradeLevel;
   int _age = 7;
   bool _isCustomAge = false;
+  bool _submitting = false;
   String _avatar = 'boy_mascot'; // Default to boy mascot
-  int _step = 0; // 0: Basic Info, 1: Security, 2: Avatar selection
+  int _step = 0; // 0: Basic Info, 1: Profile details, 2: Avatar selection
 
   late final AnimationController _mascotFloatController;
 
@@ -110,7 +111,7 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
 
     if (username.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter username')),
+        const SnackBar(content: Text('Please enter a profile nickname')),
       );
       return;
     }
@@ -132,7 +133,8 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
     setState(() => _step = 2);
   }
 
-  void _submitProfile() {
+  Future<void> _submitProfile() async {
+    if (_submitting) return;
     final firstName = _firstNameC.text.trim();
     final lastName = _lastNameC.text.trim();
     final gradeLevel = _gradeLevel ?? '';
@@ -144,19 +146,25 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
 
     final router = GoRouter.of(context);
     final from = GoRouterState.of(context).uri.queryParameters['from'];
-    ref
-        .read(sessionProvider.notifier)
-        .createLearner(
+    setState(() => _submitting = true);
+    try {
+      await ref.read(sessionProvider.notifier).createLearner(
           name: fullName,
           age: _age,
           avatar: _avatar,
           gradeLevel: gradeLevel,
           username: username,
-        )
-        .then((_) {
-          if (!mounted) return;
-          router.go(from == 'parent' ? '/parent?tab=1' : '/hub');
-        });
+        );
+      if (mounted) router.go(from == 'parent' ? '/parent?tab=1' : '/hub');
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -181,7 +189,7 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
           title: Text(
             _step == 0
                 ? 'Basic Info'
-                : (_step == 1 ? 'Account Setup' : 'Choose Your Companion'),
+                : (_step == 1 ? 'Profile Details' : 'Choose Your Companion'),
           ),
           backgroundColor: Colors.white,
           foregroundColor: AppColors.ink,
@@ -506,7 +514,7 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      'Next: Account Setup',
+                      'Next: Profile Details',
                       style: TextStyle(
                         fontSize: 15.5,
                         fontWeight: FontWeight.w800,
@@ -526,12 +534,12 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const _StepHeader(
-              title: 'Account Security',
-              subtitle: 'Define a child username and verify parent credentials.',
+              title: 'Child Profile',
+              subtitle: 'Choose a nickname and confirm your parent password.',
             ),
             _TextField(
               controller: _usernameC,
-              label: 'Username',
+              label: 'Profile nickname',
             ),
             const SizedBox(height: 24),
             const _FieldLabel('Confirm Parent Password'),
@@ -688,7 +696,7 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                           borderRadius: BorderRadius.circular(15),
                         ),
                       ),
-                      onPressed: _submitProfile,
+                      onPressed: _submitting ? null : _submitProfile,
                       child: const Text(
                         'Create Profile',
                         style: TextStyle(

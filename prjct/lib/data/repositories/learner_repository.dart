@@ -6,21 +6,14 @@ import '../local/hive_boxes.dart';
 import '../models/learner_profile.dart';
 import '../remote/firestore_mirror.dart';
 
-/// Hive-backed CRUD for [LearnerProfile], including the learner's own
-/// username/password created by the parent during setup (Diagrams Figure 7).
+/// Hive-backed CRUD for child profiles owned by a parent account. Legacy
+/// standalone profiles may still carry their old username/password fields.
 class LearnerRepository {
   Box<LearnerProfile> get _box => Hive.box<LearnerProfile>(HiveBoxes.learners);
 
-  /// [password] is optional — the Student Hub's own sign-in
-  /// (`_learnerSignIn` on the auth hub) is tap-an-avatar only, never a
-  /// typed credential, so a learner created via the Parent Dashboard's
-  /// "Add Child Profile" flow has no real use for one; that flow instead
-  /// asks the parent to re-enter *their own* password as a confirmation
-  /// step (see `SessionNotifier.verifyActiveParentPassword`) and passes
-  /// `password: null` here. The standalone "Learner" self-registration
-  /// path on the role picker's sign-up form still collects and passes a
-  /// real one, since no parent is authenticated in that flow to confirm
-  /// against instead.
+  /// New child profiles do not need a password: the parent confirms with
+  /// their own credentials, then launches the child's Learner Hub. The
+  /// optional field remains for profiles created by the old standalone flow.
   Future<LearnerProfile> register({
     required String parentId,
     required String name,
@@ -76,6 +69,35 @@ class LearnerRepository {
 
   List<LearnerProfile> byParentId(String parentId) =>
       _box.values.where((l) => l.parentId == parentId).toList();
+
+  /// Profiles created through the retired standalone Learner signup path.
+  List<LearnerProfile> unlinked() => _box.values
+      .where((learner) => learner.parentId == null || learner.parentId!.isEmpty)
+      .toList();
+
+  Future<LearnerProfile> attachToParent(
+    String learnerId,
+    String parentId,
+  ) async {
+    final existing = findById(learnerId);
+    if (existing == null || (existing.parentId?.isNotEmpty ?? false)) {
+      throw StateError('Only an unlinked child profile can be attached');
+    }
+    final updated = LearnerProfile(
+      id: existing.id,
+      parentId: parentId,
+      name: existing.name,
+      age: existing.age,
+      avatar: existing.avatar,
+      gradeLevel: existing.gradeLevel,
+      username: existing.username,
+      passwordHash: existing.passwordHash,
+      passwordSalt: existing.passwordSalt,
+      createdAt: existing.createdAt,
+    );
+    await _box.put(learnerId, updated);
+    return updated;
+  }
 
   /// Parent Dashboard's "Delete Child Profile" — removes the local record
   /// only; the caller (`SessionNotifier.deleteLearner`) is responsible for

@@ -12,6 +12,7 @@ import 'package:salamlearn/data/repositories/learner_repository.dart';
 import 'package:salamlearn/data/repositories/progress_repository.dart';
 import 'package:salamlearn/data/repositories/teacher_repository.dart';
 import 'package:salamlearn/logic/auth/session.dart';
+import 'package:salamlearn/logic/connectivity/internet_access.dart';
 
 import '../test_helpers/hive_test_setup.dart';
 
@@ -31,7 +32,11 @@ void main() {
   });
 
   ProviderContainer newContainer() {
-    final container = ProviderContainer();
+    final container = ProviderContainer(
+      overrides: [
+        internetAccessProvider.overrideWithValue(() async => true),
+      ],
+    );
     addTearDown(container.dispose);
     return container;
   }

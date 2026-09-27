@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:salamlearn/logic/auth/session.dart';
+import 'package:salamlearn/logic/connectivity/internet_access.dart';
 import 'package:salamlearn/ui/auth/consent_screen.dart';
+import 'package:salamlearn/ui/auth/role_picker_screen.dart';
 import 'package:salamlearn/ui/onboarding/get_started_screen.dart';
 import 'package:salamlearn/ui/parent_dashboard/parent_dashboard_screen.dart';
 import 'package:salamlearn/ui/student_hub/backpack_screen.dart';
@@ -41,9 +43,119 @@ void main() {
     await tearDownTestHive(tempDir);
   });
 
+  ProviderContainer onlineContainer() => ProviderContainer(
+    overrides: [
+      internetAccessProvider.overrideWithValue(() async => true),
+    ],
+  );
+
   group('SessionNotifier', () {
+    for (final role in [UserRole.parent, UserRole.asatidz]) {
+      test('$role cannot create an account offline and can retry online',
+          () async {
+        var online = false;
+        final container = ProviderContainer(
+          overrides: [
+            internetAccessProvider.overrideWithValue(() async => online),
+          ],
+        );
+        addTearDown(container.dispose);
+        final notifier = container.read(sessionProvider.notifier);
+        if (role == UserRole.parent) {
+          notifier.stageParentRegistration(
+            fullName: 'Parent Test',
+            email: 'parent@example.com',
+            password: 'Password123',
+          );
+        } else {
+          notifier.stageTeacherRegistration(
+            fullName: 'Teacher Test',
+            school: 'School',
+            email: 'teacher@example.com',
+            password: 'Password123',
+          );
+        }
+
+        await expectLater(
+          notifier.createPin('1234'),
+          throwsA(isA<AccountCreationOfflineException>()),
+        );
+        expect(container.read(sessionProvider).hasPin, isFalse);
+        online = true;
+        await notifier.createPin('1234');
+        expect(container.read(sessionProvider).hasPin, isTrue);
+      });
+    }
+
+    test('child profile is not saved offline and can be created online',
+        () async {
+      var online = true;
+      final container = ProviderContainer(
+        overrides: [
+          internetAccessProvider.overrideWithValue(() async => online),
+        ],
+      );
+      addTearDown(container.dispose);
+      final notifier = container.read(sessionProvider.notifier);
+      notifier.selectRole(UserRole.parent);
+      await notifier.createPin('1234');
+
+      online = false;
+      await expectLater(
+        notifier.createLearner(name: 'Amina', age: 8, username: 'amina'),
+        throwsA(isA<AccountCreationOfflineException>()),
+      );
+      expect(LearnerRepository().findByUsername('amina'), isNull);
+      online = true;
+      final child = await notifier.createLearner(
+        name: 'Amina',
+        age: 8,
+        username: 'amina',
+      );
+      expect(child.parentId, container.read(sessionProvider).activeParentId);
+    });
+
+    test('learner profiles require an active parent account', () async {
+      final container = onlineContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(sessionProvider.notifier);
+
+      await expectLater(
+        notifier.createLearner(name: 'Amir', age: 7, username: 'amir'),
+        throwsStateError,
+      );
+      expect(LearnerRepository().findByUsername('amir'), isNull);
+    });
+
+    test('parent can attach an existing unlinked learner without losing its id',
+        () async {
+      final orphan = await LearnerRepository().register(
+        parentId: '',
+        name: 'Amina',
+        age: 8,
+        username: 'amina_old',
+      );
+      final container = onlineContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(sessionProvider.notifier);
+      notifier.selectRole(UserRole.parent);
+      await expectLater(
+        notifier.attachUnlinkedLearner(orphan.id!),
+        throwsStateError,
+      );
+      await notifier.createPin('1234');
+      final parentId = container.read(sessionProvider).activeParentId!;
+
+      await notifier.attachUnlinkedLearner(orphan.id!);
+
+      final linked = LearnerRepository().findById(orphan.id!);
+      expect(linked?.id, orphan.id);
+      expect(linked?.parentId, parentId);
+      expect(container.read(sessionProvider).learner?.id, orphan.id);
+    });
+
     test('role guard state: learner never gains pin verification', () async {
-      final container = ProviderContainer();
+      final container = onlineContainer();
       addTearDown(container.dispose);
       final notifier = container.read(sessionProvider.notifier);
 
@@ -57,7 +169,7 @@ void main() {
     });
 
     test('selecting a role resets pin verification', () async {
-      final container = ProviderContainer();
+      final container = onlineContainer();
       addTearDown(container.dispose);
       final notifier = container.read(sessionProvider.notifier);
       notifier.selectRole(UserRole.parent);
@@ -70,7 +182,7 @@ void main() {
     });
 
     test('verifyPin rejects when no account exists yet', () async {
-      final container = ProviderContainer();
+      final container = onlineContainer();
       addTearDown(container.dispose);
       final notifier = container.read(sessionProvider.notifier);
 
@@ -79,7 +191,7 @@ void main() {
     });
 
     test('eraseAll clears learner, consent, and pin (FR-7.3)', () async {
-      final container = ProviderContainer();
+      final container = onlineContainer();
       addTearDown(container.dispose);
       final notifier = container.read(sessionProvider.notifier);
 
@@ -103,7 +215,7 @@ void main() {
     });
 
     test('added child is preserved and restored after logout and login', () async {
-      final container = ProviderContainer();
+      final container = onlineContainer();
       addTearDown(container.dispose);
       final notifier = container.read(sessionProvider.notifier);
 
@@ -158,7 +270,7 @@ void main() {
     });
 
     test('previously selected child is preserved and restored after logout and login', () async {
-      final container = ProviderContainer();
+      final container = onlineContainer();
       addTearDown(container.dispose);
       final notifier = container.read(sessionProvider.notifier);
 
@@ -218,7 +330,7 @@ void main() {
     });
 
     test('teacher sync pulls new remote enrollments and learner profiles', () async {
-      final container = ProviderContainer();
+      final container = onlineContainer();
       addTearDown(container.dispose);
       final sessionNotifier = container.read(sessionProvider.notifier);
 
@@ -295,7 +407,7 @@ void main() {
     });
 
     test('new teacher starts pending and only becomes approved via status update', () async {
-      final container = ProviderContainer();
+      final container = onlineContainer();
       addTearDown(container.dispose);
       final notifier = container.read(sessionProvider.notifier);
 
@@ -319,7 +431,7 @@ void main() {
     });
 
     test('teacher account without a status (pre-verification) counts as approved', () async {
-      final container = ProviderContainer();
+      final container = onlineContainer();
       addTearDown(container.dispose);
       final notifier = container.read(sessionProvider.notifier);
 
@@ -342,7 +454,7 @@ void main() {
     });
 
     test('teacher can unenroll/remove student from class', () async {
-      final container = ProviderContainer();
+      final container = onlineContainer();
       addTearDown(container.dispose);
       final sessionNotifier = container.read(sessionProvider.notifier);
 
@@ -409,6 +521,20 @@ void main() {
       roster = container.read(classRosterProvider(classId));
       expect(roster, isEmpty);
     });
+  });
+
+  testWidgets('role picker offers parent and teacher accounts only',
+      (tester) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(home: Scaffold(body: RolePickerScreen())),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.text('Parent / Guardian'), findsOneWidget);
+    expect(find.text('Asatidz (Teacher)'), findsOneWidget);
+    expect(find.text('Learner'), findsNothing);
   });
 
   group('PinPad', () {

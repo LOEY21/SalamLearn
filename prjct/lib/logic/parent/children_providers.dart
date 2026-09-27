@@ -33,6 +33,14 @@ final parentLearnersProvider = Provider<List<LearnerProfile>>((ref) {
   return LearnerRepository().byParentId(parentId);
 });
 
+/// Legacy standalone profiles on this device that a parent can explicitly
+/// bring into their account. Recomputes after an attachment changes the
+/// active learner in the session.
+final unlinkedLearnersProvider = Provider<List<LearnerProfile>>((ref) {
+  ref.watch(sessionProvider);
+  return LearnerRepository().unlinked();
+});
+
 /// Bumped by [refreshLearnerClass] after a successful class-code join —
 /// see [parentLearnersProvider]'s doc for why a manual "something changed"
 /// signal is needed at all: `ClassRepository`'s Hive reads aren't natively

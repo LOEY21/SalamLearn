@@ -1046,6 +1046,32 @@ function showFormError(form, message) {
   errorEl.hidden = false;
 }
 
+async function hasInternetForAccountCreation() {
+  if (!navigator.onLine) return false;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    // Check the service that stores these accounts. A local network or an
+    // offline Firestore cache alone must not authorize a new account.
+    await fetch(`https://firestore.googleapis.com/?t=${Date.now()}`, {
+      mode: "no-cors",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    return true;
+  } catch (_) {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function requireInternetForAccountCreation(form) {
+  if (await hasInternetForAccountCreation()) return true;
+  showFormError(form, "Connect to the internet before creating an account or learner profile.");
+  return false;
+}
+
 // A normal `createUserWithEmailAndPassword(auth, ...)` call would sign the
 // admin's own session out and into the new account — the client SDK has no
 // "create another user without switching sessions" mode. Working around it
@@ -1095,6 +1121,12 @@ document.getElementById("form-parent").addEventListener("submit", async (event) 
   const submitBtn = form.querySelector("button[type=submit]");
   const data = new FormData(form);
   submitBtn.disabled = true;
+  showLoading("Checking connection...");
+  if (!await requireInternetForAccountCreation(form)) {
+    hideLoading();
+    submitBtn.disabled = false;
+    return;
+  }
   showLoading("Creating parent account...");
   try {
     const firebaseUid = await createAuthAccountWithoutSignOut(
@@ -1153,6 +1185,12 @@ document.getElementById("form-teacher").addEventListener("submit", async (event)
   const submitBtn = form.querySelector("button[type=submit]");
   const data = new FormData(form);
   submitBtn.disabled = true;
+  showLoading("Checking connection...");
+  if (!await requireInternetForAccountCreation(form)) {
+    hideLoading();
+    submitBtn.disabled = false;
+    return;
+  }
   showLoading("Creating teacher account...");
   try {
     const firebaseUid = await createAuthAccountWithoutSignOut(
@@ -1252,6 +1290,12 @@ document.getElementById("form-learner").addEventListener("submit", async (event)
     return;
   }
   submitBtn.disabled = true;
+  showLoading("Checking connection...");
+  if (!await requireInternetForAccountCreation(form)) {
+    hideLoading();
+    submitBtn.disabled = false;
+    return;
+  }
   showLoading("Creating learner profile...");
   try {
     await writeBatch(db)

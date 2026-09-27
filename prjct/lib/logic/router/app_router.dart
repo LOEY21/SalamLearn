@@ -66,6 +66,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   const adminPaths = [
     '/parent',
     '/teacher',
+    '/learner-setup',
     '/settings',
     '/cast',
     '/debug/database',
@@ -92,6 +93,12 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final needsAdmin = adminPaths.any(path.startsWith);
       final inGateFlow = gatePaths.contains(path) || path.startsWith('/pin');
+
+      // Child profiles are created inside the parent's dashboard, never
+      // through a standalone account flow.
+      if (path == '/auth' && session.activeRole == UserRole.learner) {
+        return '/roles';
+      }
 
       // Force onboarding order: language → consent → roles.
       if (!session.onboarded && !gatePaths.contains(path)) return '/';

@@ -7,8 +7,9 @@ import '../../logic/auth/session.dart';
 import '../theme/app_colors.dart';
 import '../widgets/role_icons.dart';
 
-/// Entry gate: learner goes straight to the hub; grown-ups pass through
-/// the shared Parent/Teacher PIN gate (mockup Figure 4.2), redesigned per
+/// Entry gate for parent and teacher accounts. Children enter the Learner Hub
+/// through a profile created inside the parent's dashboard. The shared
+/// Parent/Teacher PIN gate (mockup Figure 4.2) was redesigned per
 /// the approved motion-design/ui-ux-pro-max HTML preview: the real app
 /// logo as the hero mark, role-specific icons (backpack / family /
 /// graduation cap), and a Corporate-personality staggered card entrance.
@@ -49,10 +50,6 @@ class _RolePickerScreenState extends ConsumerState<RolePickerScreen>
 
     void pick(UserRole role) {
       notifier.selectRole(role);
-      if (role == UserRole.learner) {
-        context.go('/auth');
-        return;
-      }
       // An account for this role already exists on this device (created
       // here before, or pulled down via cross-device sign-in) — go
       // straight to its dashboard path and let the router's admin gate
@@ -72,7 +69,6 @@ class _RolePickerScreenState extends ConsumerState<RolePickerScreen>
     final subhead = _in(0.22, 0.46);
     final card1 = _in(0.30, 0.55);
     final card2 = _in(0.36, 0.62);
-    final card3 = _in(0.42, 0.68);
 
     // Without this, hardware/system back had no handling here at all —
     // this app navigates exclusively via `context.go()` (never `.push()`),
@@ -146,7 +142,7 @@ class _RolePickerScreenState extends ConsumerState<RolePickerScreen>
             _FadeUp(
               animation: subhead,
               child: const Text(
-                'Choose a profile to continue',
+                'Choose an account to continue',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 15, color: AppColors.textMuted),
               ),
@@ -155,27 +151,11 @@ class _RolePickerScreenState extends ConsumerState<RolePickerScreen>
             _FadeUp(
               animation: card1,
               child: _RoleCard(
-                badgeColor: AppColors.gold,
-                icon: backpackIcon,
-                iconColor: Colors.white,
-                title: 'Learner',
-                subtitle: 'Play and learn at home',
-                tagIcon: Icons.face_retouching_natural_outlined,
-                tagText: 'Ages 5–11',
-                tagGold: true,
-                learnerAccent: true,
-                onTap: () => pick(UserRole.learner),
-              ),
-            ),
-            const SizedBox(height: 14),
-            _FadeUp(
-              animation: card2,
-              child: _RoleCard(
                 badgeColor: AppColors.mint,
                 icon: familyIcon,
                 iconColor: AppColors.teal,
                 title: 'Parent / Guardian',
-                subtitle: 'Progress, profile & privacy',
+                subtitle: 'Add children and track their progress',
                 tagIcon: Icons.lock_outline_rounded,
                 tagText: 'Requires PIN',
                 onTap: () => pick(UserRole.parent),
@@ -183,7 +163,7 @@ class _RolePickerScreenState extends ConsumerState<RolePickerScreen>
             ),
             const SizedBox(height: 14),
             _FadeUp(
-              animation: card3,
+              animation: card2,
               child: _RoleCard(
                 badgeColor: AppColors.mint,
                 icon: graduationCapIcon,
@@ -238,8 +218,6 @@ class _RoleCard extends StatelessWidget {
     required this.tagIcon,
     required this.tagText,
     required this.onTap,
-    this.tagGold = false,
-    this.learnerAccent = false,
   });
 
   final Color badgeColor;
@@ -250,8 +228,6 @@ class _RoleCard extends StatelessWidget {
   final IconData tagIcon;
   final String tagText;
   final VoidCallback onTap;
-  final bool tagGold;
-  final bool learnerAccent;
 
   @override
   Widget build(BuildContext context) {
@@ -264,18 +240,8 @@ class _RoleCard extends StatelessWidget {
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: Colors.white,
-            gradient: learnerAccent
-                ? LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.white,
-                      AppColors.goldTint.withValues(alpha: 0.5),
-                    ],
-                  )
-                : null,
             border: Border.all(
-              color: learnerAccent ? AppColors.goldSoft : AppColors.creamBorder,
+              color: AppColors.creamBorder,
               width: 1.6,
             ),
             borderRadius: BorderRadius.circular(22),
@@ -321,9 +287,7 @@ class _RoleCard extends StatelessWidget {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: tagGold
-                            ? AppColors.goldTint
-                            : AppColors.creamDark,
+                        color: AppColors.creamDark,
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Row(
@@ -332,9 +296,7 @@ class _RoleCard extends StatelessWidget {
                           Icon(
                             tagIcon,
                             size: 13,
-                            color: tagGold
-                                ? const Color(0xFF8A5A12)
-                                : AppColors.textMuted,
+                            color: AppColors.textMuted,
                           ),
                           const SizedBox(width: 5),
                           Text(
@@ -342,9 +304,7 @@ class _RoleCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w700,
-                              color: tagGold
-                                  ? const Color(0xFF8A5A12)
-                                  : AppColors.textMuted,
+                              color: AppColors.textMuted,
                               letterSpacing: 0.2,
                             ),
                           ),

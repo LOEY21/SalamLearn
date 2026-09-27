@@ -16,6 +16,7 @@ import '../../data/remote/firestore_mirror.dart';
 import '../../data/repositories/parent_repository.dart';
 import '../../data/repositories/teacher_repository.dart';
 import '../sync/sync_manager.dart';
+import '../connectivity/internet_access.dart';
 
 enum UserRole { learner, parent, asatidz }
 
@@ -345,6 +346,18 @@ class SessionNotifier extends Notifier<SessionState> {
   /// chosen and confirmed their own PIN on the next screen (see
   /// [createPin]) — that's the "enter PIN, confirm PIN" step, not a
   /// system-generated one.
+  /// Fail closed if the reachability check cannot confirm internet access.
+  /// Called at form submission for prompt feedback and again at the save
+  /// point, since the connection can disappear between those steps.
+  Future<void> requireInternetForAccountCreation() async {
+    try {
+      if (await ref.read(internetAccessProvider)()) return;
+    } catch (_) {
+      // A failed check cannot authorize account creation.
+    }
+    throw const AccountCreationOfflineException();
+  }
+
   void stageParentRegistration({
     required String fullName,
     required String email,
@@ -443,6 +456,7 @@ class SessionNotifier extends Notifier<SessionState> {
   ///   when a grown-up area is hit before any registration happened, e.g.
   ///   a direct deep link) — bootstrap a bare PIN-only account instead.
   Future<void> createPin(String pin) async {
+    await requireInternetForAccountCreation();
     // Only now — an account is actually about to exist — does the role
     // become durable across restarts. See [selectRole]'s doc for why this
     // can't happen any earlier.
@@ -1073,8 +1087,15 @@ class SessionNotifier extends Notifier<SessionState> {
     String avatar = '🧒',
     String gradeLevel = 'Grade 1',
   }) async {
+    final parentId = state.activeParentId;
+    if (state.activeRole != UserRole.parent ||
+        parentId == null ||
+        !state.pinVerified) {
+      throw StateError('An unlocked parent account is required to add a child');
+    }
+    await requireInternetForAccountCreation();
     final profile = await _learners.register(
-      parentId: state.activeParentId ?? '',
+      parentId: parentId,
       name: name,
       age: age,
       username: username,
@@ -1100,6 +1121,25 @@ class SessionNotifier extends Notifier<SessionState> {
       }
     }
     return profile;
+  }
+
+  Future<void> attachUnlinkedLearner(String learnerId) async {
+    final parentId = state.activeParentId;
+    if (state.activeRole != UserRole.parent ||
+        parentId == null ||
+        !state.pinVerified) {
+      throw StateError('An unlocked parent account is required to add a child');
+    }
+    await requireInternetForAccountCreation();
+    final profile = await _learners.attachToParent(learnerId, parentId);
+    await _settings.put('activeLearnerId', learnerId);
+    await _settings.put('lastSelectedLearner_$parentId', learnerId);
+    state = state.copyWith(learner: profile);
+    try {
+      await FirestoreMirror().pushLearner(profile);
+    } catch (e) {
+      debugPrint('attachUnlinkedLearner: initial push failed: $e');
+    }
   }
 
   /// Parent Dashboard's "Add Child Profile" flow re-checks the *parent's
