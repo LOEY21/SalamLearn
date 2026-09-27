@@ -22,6 +22,7 @@ import 'activities/creation_hunt_game.dart';
 import 'activities/five_pillars_game.dart';
 import 'activities/good_deed_tree_game.dart';
 import 'activities/harakat_pop_activity.dart';
+import 'activities/label_maker_game.dart';
 import 'activities/quran_etiquette_game.dart';
 import 'activities/sirah_story_game.dart';
 import 'activities/taharah_adventure_game.dart';
@@ -224,11 +225,16 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       _activity.type == ActivityType.fivePillars ||
       _activity.type == ActivityType.goodDeedTree ||
       _activity.type == ActivityType.taharahAdventure ||
-      _isWudhuActivity;
+      _isWudhuActivity ||
+      _isLabelMakerActivity;
 
   bool get _isWudhuActivity =>
       _activity.type == ActivityType.fiqhDrag &&
       FiqhDragActivity.modeFor(_activity.id) == FiqhMode.wudhu;
+
+  bool get _isLabelMakerActivity =>
+      _activity.type == ActivityType.fiqhDrag &&
+      _activity.title.startsWith('Label Maker');
 
   @override
   Widget build(BuildContext context) {
@@ -536,6 +542,16 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         panels: activity.panels!,
         xp: activity.xp,
         onComplete: _handleActivityComplete,
+      ),
+      ActivityType.fiqhDrag when _isLabelMakerActivity => LabelMakerGame(
+        key: ValueKey(activity.id),
+        activityId: activity.id,
+        items: activity.fiqhItems!,
+        zones: activity.fiqhZones!,
+        xp: activity.xp,
+        color: lessonColor,
+        onComplete: _handleActivityComplete,
+        onExit: _confirmExit,
       ),
       ActivityType.fiqhDrag => FiqhDragActivity(
         key: ValueKey(activity.id),
