@@ -92,6 +92,7 @@ flutter:
   shaders:
     - shaders/five_pillars_bg.frag
     - shaders/sirah_start_bg.frag
+    - shaders/wudhu_bg.frag
     - shaders/good_deed_tree_sway.frag
     - shaders/good_deed_start_bg.frag
 

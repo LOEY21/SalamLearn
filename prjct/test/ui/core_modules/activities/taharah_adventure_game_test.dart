@@ -54,10 +54,15 @@ void main() {
     await tester.pumpWidget(
       host(TaharahSession.cleanOrDirty, (_, _, e) => errors = e),
     );
-    await tester.tap(find.text('START'));
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.tap(find.byKey(const ValueKey('ta-start')));
     await tester.pump();
-    await tester.tap(find.text('PLAY ▶'));
-    await tester.pump(const Duration(milliseconds: 400));
+    // Let's Play only appears after 5s, then a 4s countdown into the game.
+    await tester.pump(const Duration(milliseconds: 5100));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(find.byKey(const ValueKey('ta-howto-play')));
+    await tester.pump(const Duration(milliseconds: 3500));
+    await tester.pump(const Duration(milliseconds: 700));
 
     Future<void> drag(String card, String bin) async {
       final g = await tester.startGesture(
@@ -85,42 +90,37 @@ void main() {
       await drag(card, bin);
     }
     await tester.pump(const Duration(milliseconds: 1600));
-    expect(find.text('MUMTAZ!'), findsOneWidget);
-
-    await tester.tap(find.text('SEE WHAT YOU LEARNED'));
-    await tester.pump();
-    expect(find.text('What You Learned'), findsOneWidget);
-    await tester.tap(find.text('→ Next Session: Wudhu'));
+    expect(find.text('Mumtaz!'), findsWidgets);
+    await tester.pump(const Duration(milliseconds: 2400));
+    await tester.tap(find.byKey(const ValueKey('ta-continue')));
     expect(errors, 1);
   });
 
   for (final (session, order, wrong) in [
     (
       TaharahSession.wudhuPart1,
-      ['hands-3', 'mouth-5', 'nose-4', 'face-0', 'arms-1'],
+      ['hands-2', 'mouth-5', 'nose-4', 'face-0', 'right_arm-1'],
       'mouth-5',
     ),
     (
       TaharahSession.wudhuPart2,
-      [
-        'left_arm-0',
-        'head-1',
-        'ears-2',
-        'right_foot-4',
-        'left_foot-5',
-      ],
+      ['left_arm-0', 'head-1', 'ears-2', 'right_foot-4', 'left_foot-5'],
       'head-1',
     ),
   ]) {
     testWidgets('${session.name}: tap the steps in order', (tester) async {
       int? errors;
       await tester.pumpWidget(host(session, (_, _, e) => errors = e));
-      await tester.tap(find.text('Play'));
+      await tester.pump(const Duration(milliseconds: 1000));
+      await tester.pump(const Duration(milliseconds: 800));
+      await tester.tap(find.byKey(const ValueKey('ta-w-play')));
       await tester.pump();
-      await tester.tap(find.textContaining('Wudhu').last);
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 400));
+      // Start button appears after the step tour, then a 4s countdown.
+      await tester.pump(const Duration(milliseconds: 5400));
       await tester.pump(const Duration(milliseconds: 600));
+      await tester.tap(find.textContaining('Wudhu').last);
+      await tester.pump(const Duration(milliseconds: 3500));
+      await tester.pump(const Duration(milliseconds: 700));
 
       Future<void> tapZone(String z) async {
         final f = find.byKey(ValueKey('ta-zone-$z'));
@@ -136,8 +136,9 @@ void main() {
         await tapZone(z);
       }
       await tester.pump(const Duration(milliseconds: 5300));
-      expect(find.text('Mumtaz!'), findsOneWidget);
-      await tester.tap(find.text('Next Session →'));
+      expect(find.text('Mumtaz!'), findsWidgets);
+      await tester.pump(const Duration(milliseconds: 2400));
+      await tester.tap(find.byKey(const ValueKey('ta-continue')));
       expect(errors, 1);
     });
   }
