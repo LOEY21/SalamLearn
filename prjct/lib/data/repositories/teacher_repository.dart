@@ -266,6 +266,30 @@ class TeacherRepository {
   bool verifyPin(TeacherAccount account, String candidate) =>
       CredentialHasher.verify(candidate, account.pinSalt, account.pinHash);
 
+  /// Settings "Change PIN". Local only — PINs are never mirrored.
+  Future<TeacherAccount> updatePin({
+    required TeacherAccount account,
+    required String newPin,
+  }) async {
+    final pinSalt = CredentialHasher.generateSalt();
+    final updated = TeacherAccount(
+      id: account.id,
+      fullName: account.fullName,
+      school: account.school,
+      email: account.email,
+      mobileNumber: account.mobileNumber,
+      passwordHash: account.passwordHash,
+      passwordSalt: account.passwordSalt,
+      pinHash: CredentialHasher.hash(newPin, pinSalt),
+      pinSalt: pinSalt,
+      createdAt: account.createdAt,
+      firebaseUid: account.firebaseUid,
+      verificationStatus: account.verificationStatus,
+    );
+    await _box.put(account.id, updated);
+    return updated;
+  }
+
   /// See `ParentRepository.pushAll` doc — same skip-unlinked /
   /// best-effort-per-account contract.
   Future<void> pushAll(FirestoreMirror mirror) async {

@@ -12,8 +12,8 @@ import '../widgets/soft_card.dart';
 /// Parent-only pre-PIN gate (FR-2.1/2.3, Figure 5) — sits between the
 /// sign-up form and PIN setup. `SessionNotifier.beginParentEmailVerification`
 /// already created the Firebase user and sent its verification link by the
-/// time this screen mounts; this just waits for the parent to actually
-/// click it, then hands off to `/pin/setup`. Teacher registration
+/// time this screen mounts; the parent must tap "I've verified" after
+/// clicking it to continue to `/pin/setup` — no auto-advance, no skip. Teacher registration
 /// deliberately skips this screen entirely (goes straight from the sign-up
 /// form to PIN setup, unchanged) — this gate is Parent-only by request.
 class EmailVerificationGateScreen extends ConsumerStatefulWidget {
@@ -29,61 +29,50 @@ class EmailVerificationGateScreen extends ConsumerStatefulWidget {
 class _EmailVerificationGateScreenState
     extends ConsumerState<EmailVerificationGateScreen> {
   bool _sending = true;
-  bool _sendFailed = false;
+  String? _sendError;
   bool _checking = false;
-  Timer? _pollTimer;
   bool _navigated = false;
+  int _cooldown = 0;
+  Timer? _cooldownTimer;
 
   @override
   void initState() {
     super.initState();
-    _send();
+    _send(isResend: false);
   }
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    _cooldownTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _send() async {
+  void _startCooldown() {
+    _cooldownTimer?.cancel();
+    setState(() => _cooldown = 30);
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return t.cancel();
+      setState(() => _cooldown--);
+      if (_cooldown <= 0) t.cancel();
+    });
+  }
+
+  void _goBack() => context.go('/auth?step=signup');
+
+  Future<void> _send({bool isResend = true}) async {
     setState(() {
       _sending = true;
-      _sendFailed = false;
+      _sendError = null;
     });
-    final ok = await ref
+    final error = await ref
         .read(sessionProvider.notifier)
         .beginParentEmailVerification();
     if (!mounted) return;
     setState(() {
       _sending = false;
-      _sendFailed = !ok;
+      _sendError = error;
     });
-    // Once the link has actually been sent, poll in the background so
-    // tapping it in Gmail (often the same device, switching back to this
-    // app) advances the screen on its own — the "I've verified" button
-    // stays as a manual fallback for whenever polling hasn't caught up yet.
-    if (ok) _startPolling();
-  }
-
-  void _startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _pollOnce());
-  }
-
-  /// Silent variant of [_checkVerified] — no snackbar on a "not yet"
-  /// result, since this fires automatically every few seconds and a
-  /// recurring "not verified yet" toast would just be noise.
-  Future<void> _pollOnce() async {
-    if (_navigated || !mounted) return;
-    final verified = await ref
-        .read(sessionProvider.notifier)
-        .refreshParentEmailVerified();
-    if (!mounted || _navigated) return;
-    if (verified) {
-      _pollTimer?.cancel();
-      _continueToPin();
-    }
+    if (error == null && isResend) _startCooldown();
   }
 
   void _continueToPin() {
@@ -121,104 +110,158 @@ class _EmailVerificationGateScreenState
 
     return PopScope(
       canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _goBack();
+      },
       child: Scaffold(
         backgroundColor: AppColors.cream,
         body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Center(
-              child: SoftCard(
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: AppColors.goldTint,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Icon(
-                        Icons.mark_email_read_outlined,
-                        size: 30,
-                        color: AppColors.gold,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'Verify your email',
-                      style: TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _sending
-                          ? 'Sending a verification link to $email...'
-                          : _sendFailed
-                          ? "Couldn't reach the server to send it — you may be offline."
-                          : 'We sent a verification link to $email. Tap it, then come back here.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        color: AppColors.textMuted,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    if (_sending)
-                      const CircularProgressIndicator(color: AppColors.teal)
-                    else ...[
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.teal,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Center(
+                  child: SoftCard(
+                    padding: const EdgeInsets.all(28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: AppColors.goldTint,
+                            borderRadius: BorderRadius.circular(18),
                           ),
-                          onPressed: _checking ? null : _checkVerified,
-                          child: _checking
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.mark_email_read_outlined,
+                            size: 30,
+                            color: AppColors.gold,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        const Text(
+                          'Verify your email',
+                          style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.ink,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.cream,
+                            border: Border.all(color: AppColors.creamBorder),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.email_outlined,
+                                size: 16,
+                                color: AppColors.teal,
+                              ),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  email,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.ink,
                                   ),
-                                )
-                              : const Text(
-                                  "I've verified",
-                                  style: TextStyle(fontWeight: FontWeight.bold),
                                 ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextButton(
-                        onPressed: _send,
-                        child: const Text(
-                          'Resend email',
-                          style: TextStyle(color: AppColors.teal),
-                        ),
-                      ),
-                      if (_sendFailed) ...[
-                        const SizedBox(height: 4),
-                        TextButton(
-                          onPressed: _continueToPin,
-                          child: const Text(
-                            'Continue without verifying',
-                            style: TextStyle(color: AppColors.textMuted),
+                              ),
+                            ],
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _sending
+                              ? 'Sending a verification link to this email...'
+                              : _sendError != null
+                              ? _sendError!
+                              : 'We sent a verification link to this email. Tap it, then come back here.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            color: AppColors.textMuted,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        if (_sending)
+                          const CircularProgressIndicator(color: AppColors.teal)
+                        else ...[
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.teal,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                              ),
+                              onPressed: _checking ? null : _checkVerified,
+                              child: _checking
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Text(
+                                      "I've verified",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextButton(
+                            onPressed: _cooldown > 0 ? null : () => _send(),
+                            child: Text(
+                              _cooldown > 0
+                                  ? 'Resend email in ${_cooldown}s'
+                                  : 'Resend email',
+                              style: TextStyle(
+                                color: _cooldown > 0
+                                    ? AppColors.textMuted
+                                    : AppColors.teal,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
-                  ],
+                    ),
+                  ),
                 ),
               ),
-            ),
+              Positioned(
+                top: 8,
+                left: 12,
+                child: IconButton(
+                  onPressed: _goBack,
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.ink,
+                    side: const BorderSide(color: AppColors.creamBorder),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

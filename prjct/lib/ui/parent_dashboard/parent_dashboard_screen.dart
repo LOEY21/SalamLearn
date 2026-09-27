@@ -22,6 +22,7 @@ import '../../logic/sync/sync_manager.dart';
 import '../../logic/teacher/teacher_providers.dart';
 import '../theme/app_colors.dart';
 import '../widgets/auth_loading_overlay.dart';
+import '../widgets/change_pin_card.dart';
 import '../widgets/email_verification_card.dart';
 import '../widgets/flat_dashboard_header.dart';
 import '../widgets/learner_avatar.dart';
@@ -1999,6 +2000,7 @@ String _activityTypeLabel(ActivityType type) => switch (type) {
   ActivityType.fivePillars => 'The Five Pillars',
   ActivityType.goodDeedTree => 'The Good Deed Tree',
   ActivityType.taharahAdventure => 'Taharah Adventure',
+  ActivityType.labelMaker => 'Label Maker',
 };
 
 class _AdventureGameRow extends StatelessWidget {
@@ -2653,6 +2655,11 @@ class _SettingsTab extends ConsumerWidget {
             const _StaggerFadeIn(
               delay: Duration(milliseconds: 95),
               child: _LinkFirebaseCard(),
+            ),
+            const SizedBox(height: 20),
+            const _StaggerFadeIn(
+              delay: Duration(milliseconds: 110),
+              child: ChangePinCard(),
             ),
             const SizedBox(height: 20),
             const _StaggerFadeIn(

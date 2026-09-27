@@ -662,7 +662,7 @@ void main() {
 
   group('ConsentScreen', () {
     testWidgets(
-      'renders the full 9-section policy and enables "I agree" on consent',
+      'renders the full 8-section policy and enables "I agree" on consent',
       (tester) async {
         await tester.pumpWidget(
           const ProviderScope(child: MaterialApp(home: ConsentScreen())),
@@ -670,20 +670,19 @@ void main() {
         await tester.pump(const Duration(milliseconds: 850));
 
         for (final title in const [
-          'What we collect',
-          'How we use it',
-          "Where it's stored",
+          'Personal data we collect',
+          'Purpose of processing',
+          'Storage and security',
+          'Data sharing',
           'Data retention',
           'Your rights',
-          'Third-party sharing',
           "Children's privacy",
-          'Teacher sync',
-          'Questions or concerns',
+          'Contact us',
         ]) {
           expect(find.text(title), findsOneWidget);
         }
         expect(find.textContaining('privacy@salamlearn.app'), findsOneWidget);
-        expect(find.text('Last updated: June 2026'), findsOneWidget);
+        expect(find.text('Last updated: September 2026'), findsOneWidget);
 
         final agreeButton = find.widgetWithText(FilledButton, 'I agree');
         expect(
@@ -693,8 +692,9 @@ void main() {
         );
 
         final consentText = find.text(
-          "I consent to local telemetry collection for my child's "
-          'learning progress.',
+          'I have read and understood this form, and I consent to '
+          "the collection and processing of my child's personal "
+          'data as described above.',
         );
         await tester.ensureVisible(consentText);
         await tester.pump();

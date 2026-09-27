@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/remote/firebase_auth_gateway.dart';
+import '../../data/remote/firestore_mirror.dart';
 import '../../logic/auth/session.dart';
 import '../../logic/parent/children_providers.dart';
 import '../theme/app_colors.dart';
@@ -25,7 +26,11 @@ enum _Step { hub, signup, signin, activate }
 /// straight into the in-memory [SessionNotifier], same as the flows this
 /// replaces.
 class AuthChoiceScreen extends ConsumerStatefulWidget {
-  const AuthChoiceScreen({super.key});
+  const AuthChoiceScreen({super.key, this.startOnSignUp = false});
+
+  /// Opens straight on the sign-up form — used when backing out of the
+  /// email-verification gate so the (saved) form is right there.
+  final bool startOnSignUp;
 
   @override
   ConsumerState<AuthChoiceScreen> createState() => _AuthChoiceScreenState();
@@ -33,7 +38,7 @@ class AuthChoiceScreen extends ConsumerStatefulWidget {
 
 class _AuthChoiceScreenState extends ConsumerState<AuthChoiceScreen>
     with TickerProviderStateMixin {
-  _Step _step = _Step.hub;
+  late _Step _step = widget.startOnSignUp ? _Step.signup : _Step.hub;
 
   // Drives the hub's own entrance stagger (badge/heading/cards) — plays
   // once on first mount only. Returning to the hub via the back button
@@ -429,11 +434,100 @@ _PasswordStrength _scorePassword(String password) {
   if (RegExp(r'[a-z]').hasMatch(password)) score++;
   if (RegExp(r'[A-Z]').hasMatch(password)) score++;
   if (RegExp(r'[0-9]').hasMatch(password)) score++;
-  if (RegExp(r'[!@#$%^&*(),.?":{}|<>_\-]').hasMatch(password)) score++;
+  if (RegExp(r'[^A-Za-z0-9\s]').hasMatch(password)) score++;
 
   if (score <= 3) return _PasswordStrength.weak;
   if (score <= 4) return _PasswordStrength.medium;
   return _PasswordStrength.strong;
+}
+
+/// Required password rules for grown-up sign-up — shown as a live
+/// checklist under the strength meter and enforced on submit.
+final _passwordRules = <(String, bool Function(String))>[
+  ('At least 8 characters', (p) => p.length >= 8),
+  ('One lowercase letter (a-z)', (p) => RegExp(r'[a-z]').hasMatch(p)),
+  ('One uppercase letter (A-Z)', (p) => RegExp(r'[A-Z]').hasMatch(p)),
+  ('One number (0-9)', (p) => RegExp(r'[0-9]').hasMatch(p)),
+  ('One special character (!@#\$%...)',
+      (p) => RegExp(r'[^A-Za-z0-9\s]').hasMatch(p)),
+];
+
+class _PasswordRequirements extends StatelessWidget {
+  const _PasswordRequirements({required this.password});
+
+  final String password;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (label, test) in _passwordRules)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              children: [
+                Icon(
+                  test(password)
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  size: 15,
+                  color: test(password) ? AppColors.teal : AppColors.textMuted,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: test(password) ? AppColors.teal : AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Live "passwords match" line under a Confirm Password field — hidden
+/// until something is typed in it.
+class _PasswordMatchIndicator extends StatelessWidget {
+  const _PasswordMatchIndicator({
+    required this.password,
+    required this.confirm,
+  });
+
+  final String password;
+  final String confirm;
+
+  @override
+  Widget build(BuildContext context) {
+    if (confirm.isEmpty) return const SizedBox.shrink();
+    final match = password == confirm;
+    final color = match ? AppColors.teal : AppColors.coral;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Icon(
+            match ? Icons.check_circle_rounded : Icons.cancel_rounded,
+            size: 15,
+            color: color,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            match ? 'Passwords match' : 'Passwords do not match',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Three-segment bar + label, shown under the sign-up password field once
@@ -542,6 +636,25 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
   _PasswordStrength _passwordStrength = _PasswordStrength.none;
 
   static const _avatars = ['🦁', '🐼', '🐯', '🦊', '🐨', '🐰'];
+
+  late final Map<String, TextEditingController> _grownupFields = {
+    'firstName': _parentFirstNameC,
+    'middleName': _parentMiddleNameC,
+    'lastName': _parentLastNameC,
+    'school': _schoolC,
+    'email': _emailC,
+    'mobile': _mobileC,
+    'password': _passwordC,
+    'confirmPassword': _confirmPasswordC,
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    final draft = ref.read(sessionProvider.notifier).signUpDraft;
+    _grownupFields.forEach((key, c) => c.text = draft[key] ?? '');
+    _passwordStrength = _scorePassword(_passwordC.text);
+  }
 
   @override
   void dispose() {
@@ -671,12 +784,18 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
           controller: _learnerPasswordC,
           label: 'Password',
           obscureText: true,
+          onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 14),
         _TextField(
           controller: _learnerConfirmPasswordC,
           label: 'Confirm Password',
           obscureText: true,
+          onChanged: (_) => setState(() {}),
+        ),
+        _PasswordMatchIndicator(
+          password: _learnerPasswordC.text,
+          confirm: _learnerConfirmPasswordC.text,
         ),
         const SizedBox(height: 16),
         const Text(
@@ -867,11 +986,18 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
           const SizedBox(height: 8),
           _PasswordStrengthMeter(strength: _passwordStrength),
         ],
+        const SizedBox(height: 8),
+        _PasswordRequirements(password: _passwordC.text),
         const SizedBox(height: 14),
         _TextField(
           controller: _confirmPasswordC,
           label: 'Confirm Password',
           obscureText: true,
+          onChanged: (_) => setState(() {}),
+        ),
+        _PasswordMatchIndicator(
+          password: _passwordC.text,
+          confirm: _confirmPasswordC.text,
         ),
         const SizedBox(height: 24),
         SizedBox(
@@ -923,13 +1049,11 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
                 );
                 return;
               }
-              if (password.length < 8 ||
-                  !RegExp(r'[a-zA-Z]').hasMatch(password) ||
-                  !RegExp(r'[0-9]').hasMatch(password)) {
+              if (!_passwordRules.every((r) => r.$2(password))) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text(
-                      'Password must be at least 8 characters and include both letters and numbers',
+                      'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a special character',
                     ),
                   ),
                 );
@@ -943,6 +1067,9 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
               }
 
               final notifier = ref.read(sessionProvider.notifier);
+              notifier.signUpDraft.addAll({
+                for (final e in _grownupFields.entries) e.key: e.value.text,
+              });
               if (notifier.emailTaken(
                 role: isTeacher ? UserRole.asatidz : UserRole.parent,
                 email: email,
@@ -962,9 +1089,8 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
                     SnackBar(content: Text('$error')),
                   );
                 }
-                return;
-              } finally {
                 if (mounted) setState(() => _checkingInternet = false);
+                return;
               }
               if (!context.mounted) return;
 
@@ -1008,7 +1134,24 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
                   password: password,
                   mobileNumber: mobile,
                 );
+                final error = await notifier.ensureParentFirebaseUser();
+                if (!context.mounted) return;
+                if (error != null) {
+                  setState(() {
+                    _checkingInternet = false;
+                    if (error == SessionNotifier.emailAlreadyRegistered) {
+                      _emailError = error;
+                    }
+                  });
+                  if (error != SessionNotifier.emailAlreadyRegistered) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(error)),
+                    );
+                  }
+                  return;
+                }
               }
+              setState(() => _checkingInternet = false);
 
               // Parent-only pre-PIN email verification gate (by request —
               // teacher registration keeps going straight to PIN setup).
@@ -1213,6 +1356,7 @@ class _ActivateViewState extends State<_ActivateView> {
   bool _sending = false;
   bool _sent = false;
   String? _error;
+  bool _alreadyActivated = false;
 
   @override
   void dispose() {
@@ -1231,8 +1375,18 @@ class _ActivateViewState extends State<_ActivateView> {
     setState(() {
       _sending = true;
       _error = null;
+      _alreadyActivated = false;
     });
     try {
+      if (await FirestoreMirror().isTeacherActivated(email.toLowerCase())) {
+        if (mounted) {
+          setState(() {
+            _sending = false;
+            _alreadyActivated = true;
+          });
+        }
+        return;
+      }
       await FirebaseAuthGateway().sendPasswordResetEmail(email);
       if (mounted) {
         setState(() {
@@ -1301,10 +1455,22 @@ class _ActivateViewState extends State<_ActivateView> {
             TextField(
               controller: _emailC,
               keyboardType: TextInputType.emailAddress,
+              onChanged: (_) {
+                if (_alreadyActivated) setState(() => _alreadyActivated = false);
+              },
               decoration: InputDecoration(
                 labelText: 'Email',
                 border: const OutlineInputBorder(),
                 errorText: _error,
+                errorMaxLines: 3,
+                helperText: _alreadyActivated
+                    ? 'This account is already verified. Go back and sign in instead.'
+                    : null,
+                helperMaxLines: 2,
+                helperStyle: const TextStyle(
+                  color: AppColors.teal,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             const SizedBox(height: 18),

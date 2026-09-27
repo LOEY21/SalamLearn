@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:flutter/services.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -116,7 +117,7 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen>
           _FadeUp(
             animation: heading,
             child: const Text(
-              'Privacy & data consent',
+              'Data Privacy Consent',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 22,
@@ -129,8 +130,9 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen>
           _FadeUp(
             animation: subhead,
             child: const Text(
-              'A full look at what we collect, why, and your rights, '
-              'before your child starts learning.',
+              'Please read this form carefully. As the parent or legal '
+              'guardian, your consent is required before SalamLearn can '
+              "collect and process your child's personal data.",
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12.5,
@@ -143,7 +145,7 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen>
           FadeTransition(
             opacity: subhead,
             child: const Text(
-              'Last updated: June 2026',
+              'Last updated: September 2026',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 10.5,
@@ -160,58 +162,60 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen>
               children: [
                 _PolicySection(
                   number: 1,
-                  title: 'What we collect',
-                  body:
-                      "Gameplay accuracy, time-on-task, streaks, and error "
-                      "patterns from your child's lesson activity. We do "
-                      'not collect names, photos, contacts, or location '
-                      'data.',
-                ),
-                _PolicySection(
-                  number: 2,
-                  title: 'How we use it',
-                  body:
-                      "Solely to power the Parent Dashboard's progress view "
-                      'and adapt lesson difficulty. It is never used for '
-                      'advertising, profiling, or resale of any kind.',
-                ),
-                _PolicySection(
-                  number: 3,
-                  title: "Where it's stored",
-                  body:
-                      'On this device only, in local app storage. Nothing '
-                      'is uploaded to a remote server unless you '
-                      'explicitly enable Teacher sync (section 8).',
-                ),
-                _PolicySection(
-                  number: 4,
-                  title: 'Data retention',
-                  body:
-                      "Progress data is kept only for as long as the "
-                      "child's profile exists on this device. Deleting a "
-                      'learner profile permanently erases its data '
-                      'immediately: nothing lingers in a backup or '
-                      'archive.',
-                ),
-                _PolicySection(
-                  number: 5,
-                  title: 'Your rights',
+                  title: 'Personal data we collect',
                   bullets: [
-                    'Access: view everything collected, anytime, from '
-                        'Settings.',
-                    "Correction: edit your child's profile details "
-                        'yourself.',
-                    'Deletion: erase all data instantly (Settings → '
-                        'Erase All Data).',
+                    'Account details: full name, email address, mobile '
+                        'number, and school (for teachers).',
+                    'Child profile: name, age, grade level, avatar, and '
+                        'username.',
+                    'Learning activity: lesson progress, scores, accuracy, '
+                        'and time spent on activities.',
                   ],
                 ),
                 _PolicySection(
-                  number: 6,
-                  title: 'Third-party sharing',
+                  number: 2,
+                  title: 'Purpose of processing',
                   body:
-                      'None. We do not sell, rent, or share data with '
-                      'advertisers, analytics networks, or any other '
-                      'third party: on-device data stays on-device.',
+                      "To create and manage accounts, show your child's "
+                      'learning progress to you and their assigned teacher, '
+                      'and adapt lessons to their level. Your data is never '
+                      'used for advertising or sold.',
+                ),
+                _PolicySection(
+                  number: 3,
+                  title: 'Storage and security',
+                  body:
+                      'Data is stored on this device and, when an internet '
+                      'connection is available, securely synced to our cloud '
+                      'service (Google Firebase) so you can sign in on other '
+                      'devices. PINs and passwords never leave this device.',
+                ),
+                _PolicySection(
+                  number: 4,
+                  title: 'Data sharing',
+                  body:
+                      "Progress is shared only with your child's teacher "
+                      'once you join their class, and with our hosting '
+                      'provider (Google Firebase). We do not share data with '
+                      'advertisers or any other third party.',
+                ),
+                _PolicySection(
+                  number: 5,
+                  title: 'Data retention',
+                  body:
+                      'Data is kept for as long as the account is active. '
+                      'You may delete a child profile or request deletion of '
+                      'your data at any time.',
+                ),
+                _PolicySection(
+                  number: 6,
+                  title: 'Your rights',
+                  body:
+                      'Under the Data Privacy Act of 2012 (RA 10173), you '
+                      'have the right to be informed, to access, correct, '
+                      'and erase your data, to object to processing, to '
+                      'withdraw consent at any time, and to file a complaint '
+                      'with the National Privacy Commission.',
                 ),
                 _PolicySection(
                   number: 7,
@@ -219,22 +223,11 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen>
                   body:
                       'SalamLearn is built for learners aged 5–11. A '
                       'parent or guardian must complete this consent '
-                      "before a child profile can be created, in line "
-                      "with RA 10173's rules for processing a minor's "
-                      'data.',
+                      'before a child profile can be created.',
                 ),
                 _PolicySection(
                   number: 8,
-                  title: 'Teacher sync',
-                  body:
-                      "Only syncs progress to your child's Teacher "
-                      'account, and only when Wi-Fi is available. '
-                      "Disabled by default. You turn it on from Settings "
-                      "if your child's class uses it.",
-                ),
-                _PolicySection(
-                  number: 9,
-                  title: 'Questions or concerns',
+                  title: 'Contact us',
                   child: _ContactCard(),
                 ),
               ],
@@ -275,7 +268,7 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen>
                         foregroundColor: AppColors.textMuted,
                         side: const BorderSide(color: AppColors.creamBorder),
                       ),
-                      onPressed: () => context.go('/'),
+                      onPressed: SystemNavigator.pop,
                       child: const Text('Decline'),
                     ),
                   ),
@@ -739,8 +732,9 @@ class _ConsentRow extends StatelessWidget {
               const SizedBox(width: 12),
               const Expanded(
                 child: Text(
-                  "I consent to local telemetry collection for my child's "
-                  'learning progress.',
+                  'I have read and understood this form, and I consent to '
+                  "the collection and processing of my child's personal "
+                  'data as described above.',
                   style: TextStyle(
                     fontSize: 13,
                     color: AppColors.ink,

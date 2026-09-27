@@ -21,10 +21,10 @@ class AppTranslations {
     'Assets verified': 'Na-verify na ang mga asset',
     'Checking assets…': 'Sinusuri ang mga asset…',
     'Checking assets': 'Sinusuri ang mga asset',
-    '512MB free · 500MB required': '512MB libre · 500MB kailangan',
+    'You have met the allowable storage requirements': 'Natugunan mo na ang kinakailangang storage',
     
     // Privacy & Consent
-    'Privacy & data consent': 'Pahintulot sa Privacy at Data',
+    'Data Privacy Consent': 'Pahintulot sa Privacy ng Data',
     'A full look at what we collect, why, and your rights, before your child starts learning.': 'Isang buong pagtingin sa aming kinokolekta, bakit, at ang iyong mga karapatan, bago magsimulang mag-aral ang iyong anak.',
     'Last updated: June 2026': 'Huling na-update: Hunyo 2026',
     'REQUIRED FOR OFFLINE & CLASSROOM FEATURES': 'KAILANGAN PARA SA OFFLINE AT CLASSROOM FEATURES',

@@ -9,6 +9,7 @@ import '../../logic/settings/settings_providers.dart';
 import '../../logic/sync/sync_manager.dart';
 import '../theme/app_colors.dart';
 import '../widgets/auth_loading_overlay.dart';
+import '../widgets/change_pin_card.dart';
 import '../widgets/email_verification_card.dart';
 import '../widgets/soft_card.dart';
 
@@ -130,6 +131,10 @@ class SettingsScreen extends ConsumerWidget {
                       children: [_SyncRow(), _SwitchAccountRow()],
                     ),
                   ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 14, 20, 0),
+                  child: ChangePinCard(),
                 ),
                 const Padding(
                   padding: EdgeInsets.fromLTRB(20, 22, 20, 0),

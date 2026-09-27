@@ -562,6 +562,28 @@ class FirestoreMirror {
   /// exists right now. Used by `signIn` to reject accounts an admin
   /// deleted from the web panel, preventing local-Hive-only re-login that
   /// would re-create the doc via sync.
+  /// Public "this teacher has signed in at least once" marker, keyed by
+  /// lowercase email — the only teacher fact readable before sign-in, so
+  /// the Activate screen can say an account is already activated.
+  Future<void> markTeacherActivated(String email) {
+    return _db.collection('activatedTeachers').doc(email).set({
+      'activatedAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  /// Fail-open (false) so an unreachable check never blocks activation.
+  Future<bool> isTeacherActivated(String email) async {
+    try {
+      final doc = await _db
+          .collection('activatedTeachers')
+          .doc(email)
+          .get(const GetOptions(source: Source.server));
+      return doc.exists;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> docExists(String collection, String docId) async {
     try {
       final doc = await _db

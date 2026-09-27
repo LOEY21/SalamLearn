@@ -1,4 +1,5 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuthException;
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
@@ -184,6 +185,11 @@ class SessionNotifier extends Notifier<SessionState> {
   _PendingParentRegistration? _pendingParent;
   _PendingTeacherRegistration? _pendingTeacher;
 
+  /// Sign-up form fields saved when the form is submitted, so returning to
+  /// the form (e.g. back from PIN setup) refills them instead of starting
+  /// blank. Memory only; cleared once [createPin] finalizes the account.
+  final Map<String, String> signUpDraft = {};
+
   /// Whether the PIN about to be set up is for an account that already
   /// exists remotely (just verified via email + password on this new
   /// device) rather than a brand-new one — the PIN-setup screen uses this
@@ -364,12 +370,21 @@ class SessionNotifier extends Notifier<SessionState> {
     required String password,
     String? mobileNumber,
   }) {
+    final previous = _pendingParent;
     _pendingParent = _PendingParentRegistration(
       fullName: fullName,
       email: email,
       password: password,
       mobileNumber: mobileNumber,
     );
+    // Resubmitting the same account after going back must reuse the
+    // Firebase user the verification gate already created — signing up
+    // again would fail with email-already-in-use.
+    if (previous != null &&
+        previous.email == email &&
+        previous.password == password) {
+      _pendingParent!.firebaseUid = previous.firebaseUid;
+    }
     state = state.copyWith(activeRole: UserRole.parent, pinVerified: false);
   }
 
@@ -388,30 +403,89 @@ class SessionNotifier extends Notifier<SessionState> {
   /// instead of calling `signUp` a second time (which would either throw
   /// `email-already-in-use` or silently create a duplicate).
   ///
-  /// Best-effort by design, matching every other Firebase touchpoint in
-  /// this class: offline or any Firebase error just returns false so the
-  /// gate screen can offer "continue anyway" rather than permanently
-  /// stranding an offline-first registration on a network call.
-  Future<bool> beginParentEmailVerification() async {
-    final pending = _pendingParent;
-    if (pending == null) return false;
+  /// Returns null on success, otherwise a user-facing reason for the gate
+  /// screen to show.
+  ///
+  /// An earlier unfinished sign-up (app closed, or went back and started
+  /// over) leaves an unverified Firebase user behind, so `signUp` throws
+  /// `email-already-in-use` on the retry. If the same password signs into
+  /// that user and it's still unverified, it's this parent's own leftover:
+  /// reuse it instead of failing.
+  Future<String?> beginParentEmailVerification() async {
+    final error = await ensureParentFirebaseUser();
+    if (error != null) return error;
     try {
-      final gateway = FirebaseAuthGateway();
-      if (pending.firebaseUid == null) {
+      await FirebaseAuthGateway().sendEmailVerification();
+      return null;
+    } on FirebaseAuthException catch (e) {
+      debugPrint('beginParentEmailVerification failed: ${e.code} ${e.message}');
+      return _firebaseErrorMessage(e);
+    } catch (e) {
+      debugPrint('beginParentEmailVerification failed: $e');
+      return "Couldn't send the verification email. Please try again.";
+    }
+  }
+
+  static const emailAlreadyRegistered =
+      'This email address is already registered.';
+
+  /// Creates (or reuses this parent's own unverified leftover) Firebase
+  /// user for the staged registration. Called from the sign-up form so an
+  /// already-registered email is flagged right under the email field,
+  /// before leaving the form. Returns null on success, otherwise
+  /// [emailAlreadyRegistered] or another user-facing reason.
+  Future<String?> ensureParentFirebaseUser() async {
+    final pending = _pendingParent;
+    if (pending == null) {
+      return 'Your sign-up details were lost. Go back and try again.';
+    }
+    if (pending.firebaseUid != null) return null;
+    final gateway = FirebaseAuthGateway();
+    try {
+      try {
         final credential = await gateway.signUp(
           email: pending.email,
           password: pending.password,
         );
-        final uid = credential.user?.uid;
-        if (uid == null) return false;
-        pending.firebaseUid = uid;
+        pending.firebaseUid = credential.user?.uid;
+      } on FirebaseAuthException catch (e) {
+        if (e.code != 'email-already-in-use') rethrow;
+        try {
+          final credential = await gateway.signIn(
+            email: pending.email,
+            password: pending.password,
+          );
+          if (credential.user?.emailVerified ?? false) {
+            await gateway.signOut();
+            return emailAlreadyRegistered;
+          }
+          pending.firebaseUid = credential.user?.uid;
+        } on FirebaseAuthException {
+          return emailAlreadyRegistered;
+        }
       }
-      await gateway.sendEmailVerification();
-      return true;
+      if (pending.firebaseUid == null) {
+        return "Couldn't create your account. Please try again.";
+      }
+      return null;
+    } on FirebaseAuthException catch (e) {
+      debugPrint('ensureParentFirebaseUser failed: ${e.code} ${e.message}');
+      return _firebaseErrorMessage(e);
     } catch (e) {
-      debugPrint('beginParentEmailVerification failed: $e');
-      return false;
+      debugPrint('ensureParentFirebaseUser failed: $e');
+      return "Couldn't create your account. Please try again.";
     }
+  }
+
+  static String _firebaseErrorMessage(FirebaseAuthException e) {
+    return switch (e.code) {
+      'network-request-failed' =>
+        "Couldn't reach the server — check your internet connection.",
+      'too-many-requests' =>
+        'Too many attempts. Please wait a few minutes, then try again.',
+      'invalid-email' => 'That email address is not valid.',
+      _ => 'Something went wrong (${e.code}). Please try again.',
+    };
   }
 
   /// Re-fetches the Firebase user (`emailVerified` only updates locally
@@ -469,6 +543,7 @@ class SessionNotifier extends Notifier<SessionState> {
       final pending = _pendingTeacher;
       if (pending != null) {
         _pendingTeacher = null;
+        signUpDraft.clear();
         final account = pending.remoteId != null
             ? await _teachers.createFromRemote(
                 id: pending.remoteId!,
@@ -515,6 +590,7 @@ class SessionNotifier extends Notifier<SessionState> {
       final pending = _pendingParent;
       if (pending != null) {
         _pendingParent = null;
+        signUpDraft.clear();
         final account = pending.remoteId != null
             ? await _parents.createFromRemote(
                 id: pending.remoteId!,
@@ -707,6 +783,7 @@ class SessionNotifier extends Notifier<SessionState> {
           pinVerified: false,
         );
         await refreshTeacherStatus();
+        _markTeacherActivated(normalizedEmail);
         return SignInResult.success;
       }
       return _tryRemoteTeacherSignIn(
@@ -927,11 +1004,20 @@ class SessionNotifier extends Notifier<SessionState> {
         remoteVerificationStatus: remote.verificationStatus,
       );
       state = state.copyWith(activeRole: UserRole.asatidz, pinVerified: false);
+      _markTeacherActivated(email);
       return SignInResult.needsLocalPinSetup;
     } catch (e) {
       debugPrint('SessionNotifier: remote teacher sign-in failed: $e');
       return SignInResult.invalidCredentials;
     }
+  }
+
+  /// Best-effort, fire-and-forget — only feeds the Activate screen's
+  /// "already activated" notice, so a failure must never affect sign-in.
+  void _markTeacherActivated(String email) {
+    FirestoreMirror().markTeacherActivated(email).catchError((Object e) {
+      debugPrint('markTeacherActivated failed: $e');
+    });
   }
 
   /// Teacher verification (SL-TEA-01..03). The status lives in Hive (not in
@@ -978,6 +1064,41 @@ class SessionNotifier extends Notifier<SessionState> {
   /// account is active for the current role. Returns false (not an
   /// exception) when no account exists yet, matching the old stub's
   /// "just tell me yes/no" contract that the PIN pad widgets rely on.
+  /// Pure check of [candidate] against the active account's PIN — unlike
+  /// [verifyPin], doesn't touch session state. Used by Settings "Change PIN".
+  bool isCurrentPin(String candidate) {
+    if (state.activeRole == UserRole.asatidz) {
+      final account = state.activeTeacherId == null
+          ? null
+          : _teachers.findById(state.activeTeacherId!);
+      return account != null && _teachers.verifyPin(account, candidate);
+    }
+    final account = state.activeParentId == null
+        ? null
+        : _parents.findById(state.activeParentId!);
+    return account != null && _parents.verifyPin(account, candidate);
+  }
+
+  /// Replaces the active Parent/Teacher account's PIN. Callers must check
+  /// the old PIN with [isCurrentPin] first.
+  Future<void> changePin(String newPin) async {
+    if (state.activeRole == UserRole.asatidz) {
+      final account = state.activeTeacherId == null
+          ? null
+          : _teachers.findById(state.activeTeacherId!);
+      if (account != null) {
+        await _teachers.updatePin(account: account, newPin: newPin);
+      }
+    } else {
+      final account = state.activeParentId == null
+          ? null
+          : _parents.findById(state.activeParentId!);
+      if (account != null) {
+        await _parents.updatePin(account: account, newPin: newPin);
+      }
+    }
+  }
+
   bool verifyPin(String candidate) {
     final bool ok;
     if (state.activeRole == UserRole.asatidz) {

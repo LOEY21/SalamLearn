@@ -333,6 +333,16 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
+    // Public "teacher has signed in at least once" marker, keyed by
+    // lowercase email, so the app's Activate screen can tell an
+    // already-activated teacher apart before sign-in. Single-doc get only
+    // (no listing), and only the signed-in owner of that email can write it.
+    match /activatedTeachers/{email} {
+      allow get: if true;
+      allow create, update: if isSignedIn() && request.auth.token.email == email;
+      allow delete: if isAdmin();
+    }
+
     match /trashbin/{trashId} {
       // `batch.set` in the admin website is a `create` the first time and
       // an `update` on re-delete (when a previously-deleted-and-re-synced

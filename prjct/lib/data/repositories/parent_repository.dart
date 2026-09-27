@@ -273,6 +273,28 @@ class ParentRepository {
   bool verifyPin(ParentAccount account, String candidate) =>
       CredentialHasher.verify(candidate, account.pinSalt, account.pinHash);
 
+  /// Settings "Change PIN". Local only — PINs are never mirrored.
+  Future<ParentAccount> updatePin({
+    required ParentAccount account,
+    required String newPin,
+  }) async {
+    final pinSalt = CredentialHasher.generateSalt();
+    final updated = ParentAccount(
+      id: account.id,
+      fullName: account.fullName,
+      email: account.email,
+      mobileNumber: account.mobileNumber,
+      passwordHash: account.passwordHash,
+      passwordSalt: account.passwordSalt,
+      pinHash: CredentialHasher.hash(newPin, pinSalt),
+      pinSalt: pinSalt,
+      createdAt: account.createdAt,
+      firebaseUid: account.firebaseUid,
+    );
+    await _box.put(account.id, updated);
+    return updated;
+  }
+
   /// Pushes every locally-stored parent account to Firestore (FR-7.2 sync).
   /// Skips accounts with no `firebaseUid` (registered offline, never
   /// linked) — the security rules require `firebaseUid == request.auth.uid`

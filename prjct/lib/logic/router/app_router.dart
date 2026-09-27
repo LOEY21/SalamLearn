@@ -174,7 +174,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/auth',
             pageBuilder: (context, state) =>
-                _fadePage(state, const AuthChoiceScreen()),
+                _fadePage(
+                  state,
+                  AuthChoiceScreen(
+                    startOnSignUp: state.uri.queryParameters['step'] == 'signup',
+                  ),
+                ),
           ),
         ],
       ),

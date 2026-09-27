@@ -15,6 +15,7 @@ import '../../logic/sync/sync_manager.dart';
 import '../../logic/teacher/teacher_providers.dart';
 import '../theme/app_colors.dart';
 import '../widgets/auth_loading_overlay.dart';
+import '../widgets/change_pin_card.dart';
 import '../widgets/flat_dashboard_header.dart';
 import '../widgets/mock_icons.dart';
 import '../widgets/soft_card.dart';
@@ -4852,6 +4853,11 @@ class _SettingsTab extends ConsumerWidget {
         const _StaggerFadeIn(
           delay: Duration(milliseconds: 145),
           child: _TeacherLinkFirebaseCard(),
+        ),
+        const SizedBox(height: 14),
+        const _StaggerFadeIn(
+          delay: Duration(milliseconds: 160),
+          child: ChangePinCard(accentColor: AppColors.gold),
         ),
         const SizedBox(height: 14),
         const _StaggerFadeIn(

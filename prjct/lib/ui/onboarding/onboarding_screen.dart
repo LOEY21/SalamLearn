@@ -324,7 +324,7 @@ class _StatusCard extends StatelessWidget {
                   ),
                 ),
                 const Text(
-                  '512MB free · 500MB required',
+                  'You have met the allowable storage requirements',
                   style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
               ],
