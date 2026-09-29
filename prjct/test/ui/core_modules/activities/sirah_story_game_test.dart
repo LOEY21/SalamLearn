@@ -539,7 +539,7 @@ void main() {
     expect(fullScreen(const Color(0x9E181006)), isNotNull);
   });
 
-  testWidgets('the decoy never advances the story', (tester) async {
+  testWidgets('the decoy gets no MUMTAZ celebration', (tester) async {
     const session = sirahHalimahSession;
     await tester.pumpWidget(host(session));
     await start(tester);
@@ -550,7 +550,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('MUMTAZ!'), findsNothing);
-    // Still the same question, both answers still on offer.
+    // The card holds for its beat, showing both answers, before moving on.
     expect(find.text(session.pages.first.prompt), findsOneWidget);
     expect(find.text(session.pages.first.correct), findsOneWidget);
   });
@@ -645,9 +645,9 @@ void main() {
       );
     }
 
-    // The panel congratulates them on finishing the whole lesson.
-    expect(find.text('Congratulations!'), findsOneWidget);
-    expect(find.text('You completed the whole lesson!'), findsOneWidget);
+    // The panel sums up the round: the score, then each question.
+    expect(find.text('You got 2 of 2 right!'), findsOneWidget);
+    expect(find.byIcon(Icons.check_rounded), findsNWidgets(2));
 
     // Nothing is reported until Continue Next Lesson is pressed.
     expect(xp, isNull);
@@ -658,6 +658,49 @@ void main() {
     expect(xp, 40);
     expect(errors, 0);
     expect(accuracy, 100.0);
+  });
+
+  testWidgets('a wrong answer is marked and the story moves on', (
+    tester,
+  ) async {
+    const session = sirahAlAminSession;
+    double? accuracy;
+    int? errors;
+    await tester.pumpWidget(
+      host(
+        session,
+        onComplete: (_, a, e) {
+          accuracy = a;
+          errors = e;
+        },
+      ),
+    );
+    await start(tester);
+
+    for (final page in session.pages) {
+      await hearOut(tester, page);
+      await openQuestion(tester);
+      await tester.tap(find.text(page.decoy));
+      await tester.pump();
+      expect(find.byIcon(Icons.close_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.check_rounded), findsNothing);
+      await advance(tester);
+    }
+
+    expect(find.text('You got 0 of 2 right!'), findsOneWidget);
+    // Each miss is marked, with the right answer shown beside it.
+    expect(find.byIcon(Icons.close_rounded), findsNWidgets(2));
+    for (final page in session.pages) {
+      expect(
+        find.textContaining(page.correct, findRichText: true),
+        findsWidgets,
+      );
+    }
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.tap(find.byKey(const ValueKey('sirah-continue')));
+    await tester.pump();
+    expect(errors, session.pages.length);
+    expect(accuracy, 0.0);
   });
 
   testWidgets('backing out of the first page asks before leaving', (

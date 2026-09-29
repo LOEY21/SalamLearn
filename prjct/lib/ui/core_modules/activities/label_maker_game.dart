@@ -676,37 +676,71 @@ class _LabelMakerGameState extends State<LabelMakerGame>
         return Stack(
           fit: StackFit.expand,
           children: [
-            Image.asset('$_kA/$bg.png', fit: BoxFit.cover),
+            AnimatedSwitcher(
+              duration: _kSwap,
+              child: Image.asset(
+                '$_kA/$bg.png',
+                key: ValueKey(bg),
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+              ),
+            ),
             FittedBox(
               child: SizedBox(
                 key: _stageKey,
                 width: _kW,
                 height: _kH,
-                child: switch (_screen) {
-                  _Screen.start => AnimatedBuilder(
-                    animation: Listenable.merge([_c, _light]),
-                    builder: (context, _) => _buildStart(
-                      _c.value * 2 * math.pi,
-                      MediaQuery.of(context).disableAnimations
-                          ? .2
-                          : _light.value,
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: _kSwap,
+                  curve: Curves.easeOutCubic,
+                  builder: (context, v, c) => _enter(v, c!),
+                  child: AnimatedSwitcher(
+                    duration: _kSwap,
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    layoutBuilder: (cur, prev) =>
+                        Stack(fit: StackFit.expand, children: [...prev, ?cur]),
+                    transitionBuilder: (c, a) => AnimatedBuilder(
+                      animation: a,
+                      // Outgoing screen stays visible but can't be tapped.
+                      builder: (context, c) => IgnorePointer(
+                        ignoring: a.status == AnimationStatus.reverse,
+                        child: _enter(a.value, c!),
+                      ),
+                      child: c,
+                    ),
+                    child: KeyedSubtree(
+                      key: ValueKey(_screen),
+                      child: switch (_screen) {
+                        _Screen.start => AnimatedBuilder(
+                          animation: Listenable.merge([_c, _light]),
+                          builder: (context, _) => _buildStart(
+                            _c.value * 2 * math.pi,
+                            MediaQuery.of(context).disableAnimations
+                                ? .2
+                                : _light.value,
+                          ),
+                        ),
+                        _Screen.howTo => AnimatedBuilder(
+                          animation: _c,
+                          builder: (context, _) => _buildHowTo(_c.value),
+                        ),
+                        _Screen.play => _buildPlay(scale),
+                        _Screen.congrats => AnimatedBuilder(
+                          animation: _c,
+                          builder: (context, _) => _buildCongrats(_c.value),
+                        ),
+                        _Screen.summary => AnimatedBuilder(
+                          animation: _c,
+                          builder: (context, _) =>
+                              _buildSummary(_c.value * 2 * math.pi),
+                        ),
+                      },
                     ),
                   ),
-                  _Screen.howTo => AnimatedBuilder(
-                    animation: _c,
-                    builder: (context, _) => _buildHowTo(_c.value),
-                  ),
-                  _Screen.play => _buildPlay(scale),
-                  _Screen.congrats => AnimatedBuilder(
-                    animation: _c,
-                    builder: (context, _) => _buildCongrats(_c.value),
-                  ),
-                  _Screen.summary => AnimatedBuilder(
-                    animation: _c,
-                    builder: (context, _) =>
-                        _buildSummary(_c.value * 2 * math.pi),
-                  ),
-                },
+                ),
               ),
             ),
           ],
@@ -714,6 +748,18 @@ class _LabelMakerGameState extends State<LabelMakerGame>
       },
     );
   }
+
+  static const _kSwap = Duration(milliseconds: 450);
+
+  /// Screen entrance at progress [v]: fades in while rising and settling
+  /// from a touch smaller.
+  static Widget _enter(double v, Widget c) => Opacity(
+    opacity: v.clamp(0.0, 1.0),
+    child: Transform.translate(
+      offset: Offset(0, 24 * (1 - v)),
+      child: Transform.scale(scale: .96 + .04 * v, child: c),
+    ),
+  );
 
   Widget _at(double l, double t, double w, double h, Widget c) =>
       Positioned(left: l, top: t, width: w, height: h, child: c);

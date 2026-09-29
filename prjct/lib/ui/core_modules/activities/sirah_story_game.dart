@@ -78,7 +78,7 @@ const double _kEndPlaqueW = 0.33 * _kW;
 const double _kEndPlaqueAspect = 1269 / 955;
 const double _kRibbonArtAspect = 1842 / 539;
 const double _kBadgeW = 560.0; // the MUMTAZ ribbon, as the in-game badge
-const double _kEndPanelW = 0.34 * _kW;
+const double _kEndPanelW = 0.38 * _kW;
 const double _kEndPanelAspect = 1378 / 427;
 const double _kEndBtnW = 0.22 * _kW;
 const double _kEndBtnAspect = 1874 / 620;
@@ -126,6 +126,7 @@ const _greenDeep = Color(0xFF1D5730);
 const _greenMid = Color(0xFF3D9159);
 const _greenBtnShade = Color(0xFF14472A);
 const _gold = Color(0xFFFFD75E);
+const _red = Color(0xFFC2452D);
 const _plateEyebrow = Color(0xFF8A5A17);
 
 const _endVeil = Color(0x3DFFE9B8); // warm daylight wash over the last scene
@@ -295,6 +296,9 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   String _curtainLabel = '';
   bool _showModal = false;
   bool _answered = false;
+
+  /// The card was answered with the decoy: marked wrong, no celebration.
+  bool _missed = false;
   bool _shake = false;
   bool _confirmExit = false;
   bool _finished = false;
@@ -304,7 +308,10 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   bool _flip = false;
   final math.Random _rng = math.Random();
 
-  int _errors = 0;
+  /// Each page's answer, by page index: true when the right one was picked.
+  /// Going Back and answering again overwrites it.
+  final Map<int, bool> _results = {};
+  int get _errors => _results.values.where((ok) => !ok).length;
 
   // Live start-screen backdrop; null until loaded (static art meanwhile).
   // The second shader instance renders the open-sky mask the birds fly in.
@@ -416,7 +423,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
         _screen = _Screen.play;
         _screenT0 = _now;
         _page = 0;
-        _errors = 0;
+        _results.clear();
         _finished = false;
       });
       _beginPage();
@@ -519,6 +526,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
     setState(() {
       _opening = true;
       _answered = false;
+      _missed = false;
     });
     _openTimer?.cancel();
     _openTimer = Timer(_ms(_kOpenQuestion), () {
@@ -564,8 +572,15 @@ class _SirahStoryGameState extends State<SirahStoryGame>
     if (_audio != null) unawaited(_audio!.stopVoice());
     setState(() {
       _answered = true;
+      _results[_page] = true;
       _badgeT0 = _now;
     });
+    _advance();
+  }
+
+  /// Holds the answered card for a beat, then moves on to the next page or
+  /// the ending — right or wrong, the story keeps going.
+  void _advance() {
     _advanceTimer?.cancel();
     _advanceTimer = Timer(_ms(_kAdvance), () {
       if (!mounted) return;
@@ -598,7 +613,9 @@ class _SirahStoryGameState extends State<SirahStoryGame>
     HapticFeedback.lightImpact();
     if (_audio != null) unawaited(_audio!.stopVoice());
     setState(() {
-      _errors++;
+      _results[_page] = false;
+      _answered = true;
+      _missed = true;
       _shake = true;
       _shakeT0 = _now;
     });
@@ -607,6 +624,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
       if (!mounted) return;
       setState(() => _shake = false);
     });
+    _advance();
   }
 
   /// The prototype's back arrow: one page back, or — on the first page — the
@@ -655,8 +673,8 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   /// it reports the session's score up to the lesson player.
   void _finish() {
     if (_audio != null) unawaited(_audio!.stopVoice());
-    final attempts = _pages.length + _errors;
-    final accuracy = attempts == 0 ? 100.0 : _pages.length / attempts * 100.0;
+    final n = _pages.length;
+    final accuracy = n == 0 ? 100.0 : (n - _errors) / n * 100.0;
     widget.onComplete(widget.xp, accuracy, _errors);
   }
 
@@ -1006,7 +1024,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
               aspect: _kBackAspect,
             ),
           ),
-        if (_answered) _buildConfetti(_badgeT0),
+        if (_answered && !_missed) _buildConfetti(_badgeT0),
         if (_confirmExit) _buildConfirmExit(),
         if (_finished) _buildFinish(),
       ],
@@ -1604,6 +1622,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(_kBarH / 2),
                   child: SizedBox(
+                    width: double.infinity,
                     height: _kBarH,
                     child: ColoredBox(
                       color: const Color(0x2E7A5F34),
@@ -1779,13 +1798,14 @@ class _SirahStoryGameState extends State<SirahStoryGame>
             ],
           ),
         ),
-        if (_answered) Positioned(top: -44, child: _mumtazBadge()),
+        if (_answered && !_missed) Positioned(top: -44, child: _mumtazBadge()),
       ],
     );
   }
 
   Widget _option(bool isCorrect, int index) {
-    final won = isCorrect && _answered;
+    final won = isCorrect && _answered && !_missed;
+    final lost = !isCorrect && _missed;
     // The tile is the painted pill; the label sits on it and the win state
     // is a gold glow and a tick rather than a repaint of the art.
     final button = _Push(
@@ -1800,6 +1820,14 @@ class _SirahStoryGameState extends State<SirahStoryGame>
                 ? const [
                     BoxShadow(
                       color: Color(0x99FFD75E),
+                      spreadRadius: 6,
+                      blurRadius: 22,
+                    ),
+                  ]
+                : lost
+                ? const [
+                    BoxShadow(
+                      color: Color(0x80C2452D),
                       spreadRadius: 6,
                       blurRadius: 22,
                     ),
@@ -1827,22 +1855,26 @@ class _SirahStoryGameState extends State<SirahStoryGame>
                     fontFamily: 'Baloo2Var',
                     fontVariations: const [FontVariation('wght', 800)],
                     fontSize: 40,
-                    color: won ? _green : _ink,
+                    color: won
+                        ? _green
+                        : lost
+                        ? _red
+                        : _ink,
                     height: 1.15,
                     letterSpacing: 0.2,
                   ),
                 ),
               ),
-              if (won)
+              if (won || lost)
                 Positioned(
                   right: 26,
                   child: Container(
                     width: 60,
                     height: 60,
                     alignment: Alignment.center,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: _green,
+                      color: won ? _green : _red,
                       boxShadow: [
                         BoxShadow(
                           color: Color(0x40000000),
@@ -1851,8 +1883,8 @@ class _SirahStoryGameState extends State<SirahStoryGame>
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.check_rounded,
+                    child: Icon(
+                      won ? Icons.check_rounded : Icons.close_rounded,
                       size: 38,
                       color: Colors.white,
                     ),
@@ -2156,19 +2188,14 @@ class _SirahStoryGameState extends State<SirahStoryGame>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              'Congratulations!',
-                              style: _endStyle(40, 800, _greenDeep),
+                              'You got ${_pages.length - _errors} of '
+                              '${_pages.length} right!',
+                              style: _endStyle(38, 800, _greenDeep),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'You completed the whole lesson!',
-                              style: _endStyle(28, 700, _ink),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Keep learning and doing good.',
-                              style: _endStyle(24, 600, _plateEyebrow),
-                            ),
+                            for (final (i, page) in _pages.indexed) ...[
+                              const SizedBox(height: 8),
+                              _summaryRow(page, _results[i] ?? false),
+                            ],
                           ],
                         ),
                       ),
@@ -2181,7 +2208,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
           Positioned(
             left: 0,
             right: 0,
-            top: 0.80 * _kH,
+            top: 0.82 * _kH,
             child: Center(
               child: _enterArt(
                 _inContinue,
@@ -2214,6 +2241,40 @@ class _SirahStoryGameState extends State<SirahStoryGame>
           _buildConfetti(_finishT0),
         ],
       ),
+    );
+  }
+
+  /// One question on the ending panel: its mark, the question, and the
+  /// right answer — shown on a miss too, so the child leaves knowing it.
+  Widget _summaryRow(SirahStoryPage page, bool ok) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: ok ? _green : _red,
+          ),
+          child: Icon(
+            ok ? Icons.check_rounded : Icons.close_rounded,
+            size: 26,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(text: '${page.prompt}  '),
+              TextSpan(text: page.correct, style: _endStyle(26, 800, _green)),
+            ],
+          ),
+          style: _endStyle(26, 600, _ink),
+        ),
+      ],
     );
   }
 

@@ -80,6 +80,7 @@ void main() {
     // Back on How to Play returns to the start screen, then in again.
     await tester.tap(find.byKey(const ValueKey('lm-back')));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('How to Play'), findsNothing);
     expect(find.text('Learn Arabic Words'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('lm-play')));
@@ -97,6 +98,7 @@ void main() {
     // 3-2-1-Go! countdown, with the badge locked until it ends.
     await tester.tap(find.byKey(const ValueKey('lm-go')));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('How to Play'), findsNothing);
     expect(find.text('3'), findsWidgets);
     expect(find.text('Get Ready!'), findsWidgets);
