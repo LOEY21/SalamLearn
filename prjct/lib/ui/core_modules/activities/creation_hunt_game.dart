@@ -3,9 +3,11 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart' hide Text, TextSpan;
+import 'package:flutter/services.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
+import 'creation_hunt_audio.dart';
 
 /// Allah's Creation Hunt — a hidden-object hunt across one illustrated
 /// scene. Ported 1:1 from the supplied "Allah's Creation Hunt" design
@@ -71,6 +73,13 @@ const Curve _doneBgCurve = Cubic(0.22, 0.9, 0.3, 1);
 const Curve _medalDrop = Cubic(0.22, 1.2, 0.36, 1);
 
 double _c01(double v) => v.clamp(0.0, 1.0);
+
+/// Seconds the how-to board stays up before its start button appears, so
+/// there's time to take in the instructions.
+const double _kStartDelay = 5;
+
+/// The 3-2-1 countdown over the scene before the hunt opens.
+const int _kCountdown = 3;
 
 /// Interpolates a CSS `@keyframes` track: [stops] are the percentage marks
 /// (0..1) and [vals] the value at each, with [curve] applied *within* each
@@ -169,6 +178,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
   _Reveal? _reveal;
   String? _hinting;
   bool _closing = false;
+  bool _counting = false; // the 3-2-1 before the hunt opens
   int _recapCount = 0; // found spots lit so far in the end-of-hunt recap
   bool _startPressed = false;
   bool _keepPressed = false;
@@ -181,19 +191,33 @@ class _CreationHuntGameState extends State<CreationHuntGame>
   Timer? _closeTimer;
   Timer? _endTimer;
   Timer? _hintTimer;
+  Timer? _countTimer;
   final Set<Timer> _rippleTimers = {};
+
+  final CreationHuntAudio _audio = CreationHuntAudio();
+
+  /// Music button state: off silences the forest ambience.
+  bool _sound = true;
 
   CreationHuntStage get _stage => widget.stage;
   List<CreationHuntSpot> get _creations => _stage.creations;
   int get _total => _creations.length;
 
   @override
+  void initState() {
+    super.initState();
+    _audio.startMusic();
+  }
+
+  @override
   void dispose() {
+    _audio.dispose();
     _beginTimer?.cancel();
     _markTimer?.cancel();
     _closeTimer?.cancel();
     _endTimer?.cancel();
     _hintTimer?.cancel();
+    _countTimer?.cancel();
     for (final t in _rippleTimers) {
       t.cancel();
     }
@@ -237,6 +261,11 @@ class _CreationHuntGameState extends State<CreationHuntGame>
         _hinting = null;
         _closing = false;
         _recapCount = 0;
+        _counting = true;
+      });
+      _countTimer?.cancel();
+      _countTimer = Timer(const Duration(seconds: _kCountdown), () {
+        if (mounted) setState(() => _counting = false);
       });
     });
   }
@@ -304,7 +333,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
   }
 
   void _tapSpot(CreationHuntSpot spot) {
-    if (_reveal != null || _found.length == _total) return;
+    if (_counting || _reveal != null || _found.length == _total) return;
     if (_found.contains(spot.key)) return;
     if (spot.isCreation) {
       setState(() {
@@ -335,6 +364,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
   }
 
   void _hint() {
+    if (_counting) return;
     final left = _creations.where((c) => !_found.contains(c.key)).toList();
     if (left.isEmpty) return;
     final pick = left[math.Random().nextInt(left.length)];
@@ -363,6 +393,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
   }
 
   void _addRipple(Offset local) {
+    if (_counting) return;
     final ripple = _TapRipple(++_tapId, local.dx, local.dy, _now);
     setState(() => _taps.add(ripple));
     late final Timer timer;
@@ -464,11 +495,10 @@ class _CreationHuntGameState extends State<CreationHuntGame>
               child: Transform.scale(
                 scale: 1.1 + (1.06 - 1.1) * p,
                 alignment: const Alignment(0, 0.1), // 50% 55%
-                child: Image.asset(
+                child: _LiveScene(
                   '$_kA/intro_explorers.png',
-                  width: _kW,
-                  height: _kH,
-                  fit: BoxFit.cover,
+                  time: _clock,
+                  now: () => _now,
                 ),
               ),
             );
@@ -496,6 +526,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
           const IgnorePointer(child: _Vignette()),
           _buildTitleBlock(),
           _buildIntroFooter(),
+          ..._topButtons(onBack: widget.onExit),
           // Opening curtain — the scene fades up out of black.
           _fx((t) {
             final p = _easeOut.transform(_once(t, 1.1));
@@ -1033,20 +1064,27 @@ class _CreationHuntGameState extends State<CreationHuntGame>
                         top: panelH * 0.815,
                         width: btnW,
                         height: btnW / 3,
-                        child: _entrance(
-                          dur: 0.5,
-                          delay: 0.62,
-                          child: _pressImage(
-                            pressed: _startPressed,
-                            up: '$_kA/btn_start_up.png',
-                            down: '$_kA/btn_start_down.png',
-                            width: btnW,
-                            height: btnW / 3,
-                            pressedScale: 0.94,
-                            onDown: () => setState(() => _startPressed = true),
-                            onUp: () => setState(() => _startPressed = false),
-                            onTap: _begin,
-                            semantics: 'Start the hunt',
+                        child: _fxWrap(
+                          _entrance(
+                            dur: 0.5,
+                            delay: _kStartDelay,
+                            child: _pressImage(
+                              pressed: _startPressed,
+                              up: '$_kA/btn_start_up.png',
+                              down: '$_kA/btn_start_down.png',
+                              width: btnW,
+                              height: btnW / 3,
+                              pressedScale: 0.94,
+                              onDown: () =>
+                                  setState(() => _startPressed = true),
+                              onUp: () => setState(() => _startPressed = false),
+                              onTap: _begin,
+                              semantics: 'Start the hunt',
+                            ),
+                          ),
+                          (t, c) => IgnorePointer(
+                            ignoring: t < _kStartDelay,
+                            child: c,
                           ),
                         ),
                       ),
@@ -1064,8 +1102,47 @@ class _CreationHuntGameState extends State<CreationHuntGame>
             top: 0.83 * _kH,
             child: Center(child: _loadingRow()),
           ),
+        ..._topButtons(onBack: () => _goto(_Screen.intro)),
       ],
     );
+  }
+
+  /// Back (or Home, on the badge screen) top-left and Music top-right, on
+  /// every screen but the hunt, whose HUD has its own exit chip.
+  List<Widget> _topButtons({VoidCallback? onBack}) {
+    const size = 48.0;
+    const top = 54.0;
+    return [
+      if (onBack != null)
+        Positioned(
+          left: 14,
+          top: top,
+          width: size,
+          height: size,
+          child: _ImgBtn(
+            up: 'btn_back',
+            down: 'btn_back_down',
+            label: 'Back',
+            onTap: onBack,
+          ),
+        ),
+      Positioned(
+        right: 14,
+        top: top,
+        width: size,
+        height: size,
+        child: _ImgBtn(
+          up: 'btn_music',
+          down: 'btn_music_down',
+          label: 'Music',
+          off: !_sound,
+          onTap: () {
+            setState(() => _sound = !_sound);
+            _audio.setEnabled(_sound);
+          },
+        ),
+      ),
+    ];
   }
 
   /// The prototype's `acRise` — the entrance nearly every small chip uses.
@@ -1146,12 +1223,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            child: Image.asset(
-              _stage.background,
-              width: _kW,
-              height: _kH,
-              fit: BoxFit.cover,
-            ),
+            child: _LiveScene(_stage.background, time: _clock, now: () => _now),
           ),
           Positioned(
             left: -0.1 * _kW,
@@ -1210,7 +1282,70 @@ class _CreationHuntGameState extends State<CreationHuntGame>
           _buildInstruction(),
           if (_reveal != null) _buildReveal(_reveal!),
           _buildTokenTray(),
+          if (_counting) _buildCountdown(),
         ],
+      ),
+    );
+  }
+
+  /// 3, 2, 1 over the dimmed scene, one number a second, each popping in
+  /// and fading out. The scene can't be tapped until it's done; the HUD's
+  /// exit chip still works.
+  Widget _buildCountdown() {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: _fx((t) {
+          final n = (_kCountdown - t.floor()).clamp(1, _kCountdown);
+          final local = t - t.floor();
+          final pop = _popOut.transform(_c01(local / .35));
+          final fade = _kf(local, [0, .75, 1], [1, 1, 0]);
+          final dim = _kf(
+            t,
+            [0, _kCountdown - .4, _kCountdown.toDouble()],
+            [.45, .45, 0],
+          );
+          return ColoredBox(
+            color: Colors.black.withValues(alpha: _c01(dim)),
+            child: Center(
+              child: Opacity(
+                opacity: _c01(fade),
+                child: Transform.scale(
+                  scale: 1.8 - .8 * pop,
+                  child: Container(
+                    width: 150,
+                    height: 150,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _inkPanel,
+                      border: Border.all(
+                        color: const Color(0xFFFFD166),
+                        width: 5,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x80FFD166),
+                          blurRadius: 30,
+                          spreadRadius: 4,
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      '$n',
+                      style: _t(
+                        96,
+                        FontWeight.w800,
+                        _creamBright,
+                        height: 1.1,
+                        shadow: true,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
       ),
     );
   }
@@ -1376,11 +1511,16 @@ class _CreationHuntGameState extends State<CreationHuntGame>
                           final local = tt - _hintT0;
                           if (local > 2.2) return const SizedBox.shrink();
                           final p = _loop(local, 1.1);
-                          final o = _kf(p, [0, .5, 1], [0, .85, 0], _easeInOut);
+                          final o = _kf(
+                            p,
+                            [0, .5, 1],
+                            [.25, 1, .25],
+                            _easeInOut,
+                          );
                           final s = _kf(
                             p,
                             [0, .5, 1],
-                            [.9, 1.05, .9],
+                            [.94, 1.08, .94],
                             _easeInOut,
                           );
                           return Opacity(
@@ -1390,13 +1530,25 @@ class _CreationHuntGameState extends State<CreationHuntGame>
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
                                   borderRadius: radius,
+                                  border: Border.all(
+                                    color: const Color(0xFFFFF6C8),
+                                    width: 3,
+                                  ),
                                   gradient: const RadialGradient(
                                     colors: [
-                                      Color(0x59FFEC96),
-                                      Color(0x00FFEC96),
+                                      Color(0xCCFFFBE0),
+                                      Color(0x99FFE27A),
+                                      Color(0x00FFE27A),
                                     ],
-                                    stops: [0, 0.7],
+                                    stops: [0, 0.45, 0.85],
                                   ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0xCCFFD84D),
+                                      blurRadius: 26,
+                                      spreadRadius: 8,
+                                    ),
+                                  ],
                                 ),
                                 child: const SizedBox.expand(),
                               ),
@@ -1995,11 +2147,10 @@ class _CreationHuntGameState extends State<CreationHuntGame>
               final p = _doneBgCurve.transform(_once(t, 2.4));
               return Transform.scale(
                 scale: 1.12 + (1.02 - 1.12) * p,
-                child: Image.asset(
+                child: _LiveScene(
                   _stage.background,
-                  width: _kW,
-                  height: _kH,
-                  fit: BoxFit.cover,
+                  time: _clock,
+                  now: () => _now,
                 ),
               );
             }),
@@ -2171,6 +2322,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
               ),
             ),
           ),
+          ..._topButtons(),
         ],
       ),
     );
@@ -2540,6 +2692,135 @@ class _PanelCopy extends StatelessWidget {
   }
 }
 
+/// Each scene's waterfall in its art's px: left, lip, right, splash line,
+/// and whether its spray may drift past the water (0 on the title art,
+/// where the explorers stand right in front of the falls). Scenes without
+/// falls aren't listed.
+const Map<String, List<double>> _kFalls = {
+  '$_kA/forest_detective.png': [386, 770, 462, 866, 1],
+  '$_kA/sky_landscape.png': [392, 1346, 444, 1418, 1],
+  '$_kA/intro_explorers.png': [380, 956, 450, 1108, 0],
+};
+
+/// The hunt scene drawn through `creation_hunt_bg.frag`: its trees bend
+/// in the wind and its waterfall runs. Driven by the game clock [time],
+/// read through [now]. Shows the plain art until the shader is ready, or
+/// for good where shaders aren't supported.
+class _LiveScene extends StatefulWidget {
+  const _LiveScene(this.asset, {required this.time, required this.now});
+  final String asset;
+  final Listenable time;
+  final double Function() now;
+
+  @override
+  State<_LiveScene> createState() => _LiveSceneState();
+}
+
+class _LiveSceneState extends State<_LiveScene> {
+  static final Future<ui.FragmentProgram> _program =
+      ui.FragmentProgram.fromAsset('shaders/creation_hunt_bg.frag');
+  static final Map<String, Future<ui.Image>> _images = {};
+
+  static Future<ui.Image> _decode(String asset) =>
+      _images[asset] ??= rootBundle.load(asset).then((data) async {
+        final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+        return (await codec.getNextFrame()).image;
+      });
+
+  ui.FragmentShader? _shader;
+  ui.Image? _bg;
+  ui.Image? _map;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final program = await _program;
+      final bg = await _decode(widget.asset);
+      final map = await _decode(
+        widget.asset.replaceFirst('.png', '_motion.png'),
+      );
+      if (!mounted) return;
+      setState(() {
+        _shader = program.fragmentShader();
+        _bg = bg;
+        _map = map;
+      });
+    } catch (_) {
+      // Shaders unsupported here: the still art stays.
+    }
+  }
+
+  @override
+  void dispose() {
+    _shader?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shader = _shader;
+    if (shader == null) {
+      return Image.asset(
+        widget.asset,
+        width: _kW,
+        height: _kH,
+        fit: BoxFit.cover,
+      );
+    }
+    return RepaintBoundary(
+      child: CustomPaint(
+        size: Size.infinite,
+        painter: _ScenePainter(
+          shader,
+          _bg!,
+          _map!,
+          _kFalls[widget.asset] ?? const [0, 0, 0, 0, 0],
+          widget.time,
+          widget.now,
+        ),
+      ),
+    );
+  }
+}
+
+class _ScenePainter extends CustomPainter {
+  _ScenePainter(this.shader, this.bg, this.map, this.falls, this.time, this.now)
+    : super(repaint: time);
+  final ui.FragmentShader shader;
+  final ui.Image bg;
+  final ui.Image map;
+  final List<double> falls;
+  final Listenable time;
+  final double Function() now;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    shader
+      ..setFloat(0, size.width)
+      ..setFloat(1, size.height)
+      ..setFloat(2, bg.width.toDouble())
+      ..setFloat(3, bg.height.toDouble())
+      ..setFloat(4, now())
+      ..setFloat(5, falls[0])
+      ..setFloat(6, falls[1])
+      ..setFloat(7, falls[2])
+      ..setFloat(8, falls[3])
+      ..setFloat(9, falls[4])
+      ..setImageSampler(0, bg)
+      ..setImageSampler(1, map);
+    canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
+  }
+
+  @override
+  bool shouldRepaint(_ScenePainter old) =>
+      old.shader != shader || old.bg != bg || old.map != map;
+}
+
 /// The soft shafts of light raking across the top of every scene.
 class _GodRays extends StatelessWidget {
   const _GodRays({required this.opacityScale});
@@ -2628,6 +2909,84 @@ class _SpinnerRing extends StatelessWidget {
 }
 
 /// A button that sinks 3px while held, like the prototype's `:active` rule.
+/// A round art button that swaps to its pressed art while held. [off]
+/// dims it and adds a muted badge (the Music toggle).
+class _ImgBtn extends StatefulWidget {
+  const _ImgBtn({
+    required this.up,
+    required this.down,
+    required this.label,
+    required this.onTap,
+    this.off = false,
+  });
+
+  final String up;
+  final String down;
+  final String label;
+  final VoidCallback onTap;
+  final bool off;
+
+  @override
+  State<_ImgBtn> createState() => _ImgBtnState();
+}
+
+class _ImgBtnState extends State<_ImgBtn> {
+  bool _down = false;
+
+  void _set(bool v) {
+    if (_down != v) setState(() => _down = v);
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: widget.label,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => _set(true),
+      onTapUp: (_) => _set(false),
+      onTapCancel: () => _set(false),
+      onTap: widget.onTap,
+      child: Transform.scale(
+        scale: _down ? .94 : 1,
+        child: Stack(
+          fit: StackFit.expand,
+          clipBehavior: Clip.none,
+          children: [
+            Opacity(
+              opacity: widget.off ? .6 : 1,
+              child: Image.asset(
+                '$_kA/${_down ? widget.down : widget.up}.png',
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+              ),
+            ),
+            if (widget.off)
+              Positioned(
+                right: -4,
+                top: -4,
+                width: 20,
+                height: 20,
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFFE0453A),
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: const Icon(
+                    Icons.volume_off_rounded,
+                    color: Colors.white,
+                    size: 11,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class _PressDown extends StatefulWidget {
   const _PressDown({required this.child, required this.onTap});
 

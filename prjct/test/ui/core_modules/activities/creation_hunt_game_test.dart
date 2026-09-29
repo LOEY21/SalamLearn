@@ -43,15 +43,18 @@ void main() {
 
   Offset centreOf(CreationHuntSpot spot) => Offset(spot.x * 393, spot.y * 852);
 
-  /// Walks title -> how to play -> the hunt itself.
+  /// Walks title -> how to play (the start button waits 5s) -> the 3s
+  /// countdown -> the hunt itself.
   Future<void> startHunt(WidgetTester tester) async {
     await tester.tapAt(const Offset(196, 400));
     await tester.pump(const Duration(milliseconds: 700));
+    await tester.pump(const Duration(milliseconds: 5000));
     await tester.tap(
       find.bySemanticsLabel('Start the hunt'),
       warnIfMissed: false,
     );
     await tester.pump(const Duration(milliseconds: 1300));
+    await tester.pump(const Duration(milliseconds: 3000));
     await tester.pump(const Duration(milliseconds: 600));
   }
 
@@ -64,8 +67,48 @@ void main() {
 
       await tester.tapAt(const Offset(196, 400));
       await tester.pump(const Duration(milliseconds: 700));
+      await tester.pump(const Duration(milliseconds: 5000));
       expect(find.bySemanticsLabel('Start the hunt'), findsOneWidget);
     }
+    handle.dispose();
+  });
+
+  testWidgets('start waits 5s, then a 3-2-1 holds the hunt shut', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(host(forestHuntStage));
+    await tester.tapAt(const Offset(196, 400));
+    await tester.pump(const Duration(milliseconds: 700));
+
+    // Too early: the start button isn't showing or live yet.
+    expect(find.bySemanticsLabel('Start the hunt'), findsNothing);
+    await tester.tapAt(const Offset(196, 572));
+    await tester.pump(const Duration(milliseconds: 1300));
+    expect(find.text('Found: 0/6'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 4000));
+    await tester.tap(
+      find.bySemanticsLabel('Start the hunt'),
+      warnIfMissed: false,
+    );
+    await tester.pump(const Duration(milliseconds: 1300));
+    expect(find.text('Found: 0/6'), findsOneWidget);
+    final digit = find.textContaining(RegExp(r'^[123]$'));
+    expect(digit, findsOneWidget);
+
+    // Taps during the countdown don't count.
+    final bird = forestHuntStage.spots.firstWhere((s) => s.id == 'bird');
+    await tester.tapAt(centreOf(bird));
+    await tester.pump(const Duration(milliseconds: 1000));
+    expect(digit, findsOneWidget);
+    expect(find.text('Found: 0/6'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 2100));
+    expect(digit, findsNothing);
+    await tester.tapAt(centreOf(bird));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('Found: 1/6'), findsOneWidget);
     handle.dispose();
   });
 

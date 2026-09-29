@@ -98,6 +98,7 @@ flutter:
     - shaders/good_deed_tree_sway.frag
     - shaders/good_deed_start_bg.frag
     - shaders/sand_tracer_bg.frag
+    - shaders/creation_hunt_bg.frag
 
   assets:
     - assets/audio/sand_tracer/
