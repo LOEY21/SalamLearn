@@ -213,6 +213,8 @@ class ParentRepository {
 
   ParentAccount? findById(String id) => _box.get(id);
 
+  Future<void> delete(String id) => _box.delete(id);
+
   /// Case-insensitive — the email is normalized to lowercase at
   /// registration time, but this also protects against callers (like the
   /// sign-in form) not normalizing what the user typed before looking it

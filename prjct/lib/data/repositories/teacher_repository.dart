@@ -212,6 +212,8 @@ class TeacherRepository {
 
   TeacherAccount? findById(String id) => _box.get(id);
 
+  Future<void> delete(String id) => _box.delete(id);
+
   /// Case-insensitive — see `ParentRepository.findByEmail` doc for why.
   TeacherAccount? findByEmail(String email) {
     final normalized = email.trim().toLowerCase();

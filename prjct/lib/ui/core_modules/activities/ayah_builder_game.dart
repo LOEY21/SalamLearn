@@ -9,6 +9,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
+import 'ayah_builder_audio.dart';
 
 /// Ayah Builder — listen to an ayah, then drag its word cards into the
 /// numbered slots in order. Ported 1:1 from the supplied "Ayah Builder"
@@ -31,6 +32,7 @@ class AyahBuilderGame extends StatefulWidget {
     required this.initialIndex,
     required this.xp,
     required this.onComplete,
+    this.onEnding,
     this.onExit,
   });
 
@@ -38,6 +40,10 @@ class AyahBuilderGame extends StatefulWidget {
   final int initialIndex;
   final int xp;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
+  /// Fired when the game's own ending screen appears (the lesson player's
+  /// cue for its congratulations sound).
+  final VoidCallback? onEnding;
   final VoidCallback? onExit;
 
   @override
@@ -260,10 +266,13 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
   // in, its plain art stands in.
   final Map<String, ImageInfo> _art = {};
 
+  late final AyahBuilderAudio _audio = AyahBuilderAudio(_session);
+
   @override
   void initState() {
     super.initState();
     _resetRound();
+    _audio.startMusic();
     for (final asset in [..._startScene.images, ..._gameScene.images]) {
       final stream = AssetImage(asset).resolve(ImageConfiguration.empty);
       late final ImageStreamListener listener;
@@ -282,6 +291,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
   @override
   void dispose() {
     _clearTimers();
+    _audio.dispose();
     _clock.dispose();
     for (final info in _art.values) {
       info.dispose();
@@ -337,9 +347,9 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     );
   }
 
-  /// The prototype's `sfx()` — it stands short synth tones in for the real
-  /// word/ayah recordings. There is no audio engine in the app yet, so each
-  /// cue is a system click plus a haptic tap, muted by the sound toggle.
+  /// The prototype's `sfx()` cues (countdown, drops, stars) — a system click
+  /// plus a haptic tap, muted by the sound toggle. Words and the ayah itself
+  /// play their real recordings through [_audio].
   void _sfx(String kind) {
     if (!_soundOn) return;
     switch (kind) {
@@ -372,6 +382,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
   void _transitionTo(_Screen s, [VoidCallback? onSwap]) {
     if (_exitT0 != null) return;
     _clearTimers();
+    _audio.stopVoice();
     setState(() => _exitT0 = _now);
     _later(450, () {
       setState(() {
@@ -457,19 +468,24 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     _litIndex = -1;
   });
 
-  void _playAyah([VoidCallback? done]) {
+  /// Recites the ayah, lighting each word card in turn across the recording
+  /// (or on the prototype's 620ms beat when it can't play).
+  Future<void> _playAyah([VoidCallback? done]) async {
     if (_ayahPlaying) return;
     setState(() {
       _ayahPlaying = true;
       _litIndex = 0;
     });
+    final length = _soundOn ? await _audio.playAyah() : null;
+    if (!mounted || !_ayahPlaying) return;
+    final step = length == null ? 620 : length.inMilliseconds ~/ _n;
     for (var i = 0; i < _n; i++) {
-      _later(i * 620, () {
+      _later(i * step, () {
         setState(() => _litIndex = i);
-        _sfx('word');
+        if (length == null) _sfx('word');
       });
     }
-    _later(_n * 620 + 320, () {
+    _later(_n * step + 320, () {
       setState(() {
         _ayahPlaying = false;
         _litIndex = -1;
@@ -479,7 +495,10 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
   }
 
   void _tapWord(int id) {
-    _sfx('word');
+    if (_soundOn) {
+      _audio.playWord(id);
+      HapticFeedback.selectionClick();
+    }
     setState(() => _tappedId = id);
     _later(950, () {
       if (_tappedId == id) setState(() => _tappedId = null);
@@ -488,6 +507,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
 
   void _dropCorrect(int index) {
     _sfx('correct');
+    if (_soundOn) _audio.playWord(index);
     _correctDrops += 1;
     setState(() {
       _placed[index] = true;
@@ -506,18 +526,22 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     }
   }
 
-  void _finish() {
+  /// The finished ayah recited once more over the lit cards, then the reward.
+  Future<void> _finish() async {
     setState(() {
       _ayahPlaying = true;
       _litIndex = 0;
     });
+    final length = _soundOn ? await _audio.playAyah() : null;
+    if (!mounted || _screen != _Screen.puzzle || _exitT0 != null) return;
+    final step = length == null ? 650 : length.inMilliseconds ~/ _n;
     for (var i = 0; i < _n; i++) {
-      _later(i * 650, () {
+      _later(i * step, () {
         setState(() => _litIndex = i);
-        _sfx('word');
+        if (length == null) _sfx('word');
       });
     }
-    _later(_n * 650 + 420, () {
+    _later(_n * step + 420, () {
       _sfx('star');
       _transitionTo(_Screen.reward, () {
         _ayahPlaying = false;
@@ -525,6 +549,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
         final m = _roundMistakes;
         _roundStars = m == 0 ? 3 : (m <= 2 ? 2 : 1);
         _stars += _roundStars;
+        widget.onEnding?.call();
       });
     });
   }
@@ -1653,7 +1678,10 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
           width: 42,
           height: 42,
           child: _Press(
-            onTap: () => setState(() => _soundOn = !_soundOn),
+            onTap: () {
+              setState(() => _soundOn = !_soundOn);
+              _audio.setOn(_soundOn);
+            },
             builder: (pressed) => Opacity(
               opacity: _soundOn ? 1 : .55,
               child: Image.asset(

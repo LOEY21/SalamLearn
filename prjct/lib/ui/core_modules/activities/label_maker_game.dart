@@ -41,9 +41,7 @@ class _Word {
   final String ar;
   final String en;
 
-  /// AUDIO PLUG POINT: spoken prompt from the Label Maker spec. The app has
-  /// no audio package or vocab recordings yet, so prompts are shown as text
-  /// on the badge and Replay only pulses it.
+  /// Spoken Arabic word, played on each new prompt, Replay and word-wall taps.
   final String audio;
 
   /// Where the placed label's pin touches the object.
@@ -69,7 +67,7 @@ const _kSessions = {
     _Word(
       'بَابٌ',
       'Door',
-      'audio/vocab/bab.mp3',
+      'audio/label_maker/vocab/bab.mp3',
       Offset(290, 470),
       Offset(290, 330),
       [Rect.fromLTWH(240, 370, 100, 295)],
@@ -77,7 +75,7 @@ const _kSessions = {
     _Word(
       'سَرِيرٌ',
       'Bed',
-      'audio/vocab/sarir.mp3',
+      'audio/label_maker/vocab/sarir.mp3',
       Offset(670, 160),
       Offset(670, 282),
       [Rect.fromLTWH(505, 80, 330, 150)],
@@ -85,7 +83,7 @@ const _kSessions = {
     _Word(
       'شُبَّاكٌ',
       'Window',
-      'audio/vocab/shubbak.mp3',
+      'audio/label_maker/vocab/shubbak.mp3',
       Offset(1150, 110),
       Offset(1150, 205),
       [Rect.fromLTWH(1030, 25, 240, 165)],
@@ -93,7 +91,7 @@ const _kSessions = {
     _Word(
       'بَيْتٌ',
       'House',
-      'audio/vocab/bayt.mp3',
+      'audio/label_maker/vocab/bayt.mp3',
       Offset(1288, 480),
       Offset(1270, 345),
       [Rect.fromLTWH(1240, 440, 95, 80)],
@@ -101,7 +99,7 @@ const _kSessions = {
     _Word(
       'طَاوِلَةٌ',
       'Table',
-      'audio/vocab/tawila.mp3',
+      'audio/label_maker/vocab/tawila.mp3',
       Offset(758, 640),
       Offset(758, 725),
       [Rect.fromLTWH(630, 615, 258, 60)],
@@ -109,7 +107,7 @@ const _kSessions = {
     _Word(
       'تِلْفَازٌ',
       'TV',
-      'audio/vocab/tilfaz.mp3',
+      'audio/label_maker/vocab/tilfaz.mp3',
       Offset(637, 457),
       Offset(637, 355),
       [Rect.fromLTWH(540, 400, 195, 115)],
@@ -117,7 +115,7 @@ const _kSessions = {
     _Word(
       'مِصْبَاحٌ',
       'Lamp',
-      'audio/vocab/misbah.mp3',
+      'audio/label_maker/vocab/misbah.mp3',
       Offset(1115, 440),
       Offset(1100, 345),
       [Rect.fromLTWH(1072, 412, 88, 205)],
@@ -125,7 +123,7 @@ const _kSessions = {
     _Word(
       'مَطْبَخٌ',
       'Kitchen',
-      'audio/vocab/matbakh.mp3',
+      'audio/label_maker/vocab/matbakh.mp3',
       Offset(1620, 450),
       Offset(1640, 262),
       [Rect.fromLTWH(1360, 300, 500, 300)],
@@ -133,7 +131,7 @@ const _kSessions = {
     _Word(
       'كُوبٌ',
       'Cup',
-      'audio/vocab/kub.mp3',
+      'audio/label_maker/vocab/kub.mp3',
       Offset(1558, 700),
       Offset(1450, 600),
       [Rect.fromLTWH(1515, 665, 90, 72)],
@@ -141,7 +139,7 @@ const _kSessions = {
     _Word(
       'مِفْتَاحٌ',
       'Key',
-      'audio/vocab/miftah.mp3',
+      'audio/label_maker/vocab/miftah.mp3',
       Offset(1628, 758),
       Offset(1785, 785),
       [Rect.fromLTWH(1570, 728, 120, 60)],
@@ -151,7 +149,7 @@ const _kSessions = {
     _Word(
       'رَأْسٌ',
       'Head',
-      'audio/vocab/rasun.mp3',
+      'audio/label_maker/vocab/rasun.mp3',
       Offset(924, 205),
       Offset(670, 190),
       [Rect.fromLTWH(830, 185, 185, 52)],
@@ -159,7 +157,7 @@ const _kSessions = {
     _Word(
       'عَيْنٌ',
       'Eye',
-      'audio/vocab/aynun.mp3',
+      'audio/label_maker/vocab/aynun.mp3',
       Offset(889, 310),
       Offset(670, 334),
       [Rect.fromLTWH(866, 288, 46, 44), Rect.fromLTWH(934, 288, 46, 44)],
@@ -167,7 +165,7 @@ const _kSessions = {
     _Word(
       'أَنْفٌ',
       'Nose',
-      'audio/vocab/anfun.mp3',
+      'audio/label_maker/vocab/anfun.mp3',
       Offset(923, 322),
       Offset(670, 406),
       [Rect.fromLTWH(910, 308, 26, 30)],
@@ -175,7 +173,7 @@ const _kSessions = {
     _Word(
       'فَمٌ',
       'Mouth',
-      'audio/vocab/famun.mp3',
+      'audio/label_maker/vocab/famun.mp3',
       Offset(924, 350),
       Offset(1180, 406),
       [Rect.fromLTWH(898, 338, 52, 30)],
@@ -183,7 +181,7 @@ const _kSessions = {
     _Word(
       'يَدٌ',
       'Hand',
-      'audio/vocab/yadun.mp3',
+      'audio/label_maker/vocab/yadun.mp3',
       Offset(1050, 500),
       Offset(1180, 520),
       [Rect.fromLTWH(755, 470, 80, 65), Rect.fromLTWH(1010, 470, 80, 65)],
@@ -191,7 +189,7 @@ const _kSessions = {
     _Word(
       'شَعْرٌ',
       'Hair',
-      'audio/vocab/sharun.mp3',
+      'audio/label_maker/vocab/sharun.mp3',
       Offset(870, 255),
       Offset(670, 262),
       [Rect.fromLTWH(822, 237, 200, 38)],
@@ -199,7 +197,7 @@ const _kSessions = {
     _Word(
       'أُذُنٌ',
       'Ear',
-      'audio/vocab/udhun.mp3',
+      'audio/label_maker/vocab/udhun.mp3',
       Offset(1004, 328),
       Offset(1180, 262),
       [Rect.fromLTWH(826, 300, 32, 56), Rect.fromLTWH(988, 300, 32, 56)],
@@ -207,7 +205,7 @@ const _kSessions = {
     _Word(
       'قَدَمٌ',
       'Foot',
-      'audio/vocab/qadam.mp3',
+      'audio/label_maker/vocab/qadam.mp3',
       Offset(870, 712),
       Offset(705, 700),
       [Rect.fromLTWH(818, 680, 95, 58), Rect.fromLTWH(930, 680, 100, 58)],
@@ -215,7 +213,7 @@ const _kSessions = {
     _Word(
       'رِجْلٌ',
       'Leg',
-      'audio/vocab/rijl.mp3',
+      'audio/label_maker/vocab/rijl.mp3',
       Offset(960, 620),
       Offset(1180, 640),
       [Rect.fromLTWH(845, 565, 160, 112)],
@@ -223,7 +221,7 @@ const _kSessions = {
     _Word(
       'وَجْهٌ',
       'Face',
-      'audio/vocab/wajh.mp3',
+      'audio/label_maker/vocab/wajh.mp3',
       Offset(955, 352),
       Offset(1180, 334),
       [Rect.fromLTWH(842, 262, 165, 110)],
@@ -236,7 +234,7 @@ const _kSessions = {
       _Word(
         'كِتَابٌ',
         'Book',
-        'audio/vocab/kitab.mp3',
+        'audio/label_maker/vocab/kitab.mp3',
         Offset(535, 290),
         Offset(535, 122),
         [Rect.fromLTWH(440, 145, 190, 300)],
@@ -244,7 +242,7 @@ const _kSessions = {
       _Word(
         'قَلَمٌ',
         'Pen',
-        'audio/vocab/qalam.mp3',
+        'audio/label_maker/vocab/qalam.mp3',
         Offset(1000, 768),
         Offset(1200, 760),
         [Rect.fromLTWH(895, 742, 220, 56)],
@@ -252,7 +250,7 @@ const _kSessions = {
       _Word(
         'سَبُّورَةٌ',
         'Blackboard',
-        'audio/vocab/sabburah.mp3',
+        'audio/label_maker/vocab/sabburah.mp3',
         Offset(975, 230),
         Offset(975, 230),
         [Rect.fromLTWH(695, 120, 565, 230)],
@@ -260,7 +258,7 @@ const _kSessions = {
       _Word(
         'كُرْسِيٌّ',
         'Chair',
-        'audio/vocab/kursi.mp3',
+        'audio/label_maker/vocab/kursi.mp3',
         Offset(895, 505),
         Offset(895, 440),
         [
@@ -273,7 +271,7 @@ const _kSessions = {
       _Word(
         'مَكْتَبٌ',
         'Desk',
-        'audio/vocab/maktab.mp3',
+        'audio/label_maker/vocab/maktab.mp3',
         Offset(885, 420),
         Offset(1200, 400),
         [
@@ -285,7 +283,7 @@ const _kSessions = {
       _Word(
         'حَقِيبَةٌ',
         'Bag',
-        'audio/vocab/haqiba.mp3',
+        'audio/label_maker/vocab/haqiba.mp3',
         Offset(300, 510),
         Offset(300, 410),
         [Rect.fromLTWH(215, 435, 175, 155)],
@@ -293,7 +291,7 @@ const _kSessions = {
       _Word(
         'وَرَقَةٌ',
         'Paper',
-        'audio/vocab/waraqa.mp3',
+        'audio/label_maker/vocab/waraqa.mp3',
         Offset(748, 758),
         Offset(560, 610),
         [Rect.fromLTWH(612, 698, 272, 122)],
@@ -301,7 +299,7 @@ const _kSessions = {
       _Word(
         'مِمْحَاةٌ',
         'Eraser',
-        'audio/vocab/mimha.mp3',
+        'audio/label_maker/vocab/mimha.mp3',
         Offset(1518, 740),
         Offset(1440, 650),
         [Rect.fromLTWH(1470, 712, 98, 56)],
@@ -309,7 +307,7 @@ const _kSessions = {
       _Word(
         'مِسْطَرَةٌ',
         'Ruler',
-        'audio/vocab/mistara.mp3',
+        'audio/label_maker/vocab/mistara.mp3',
         Offset(1650, 772),
         Offset(1760, 690),
         [Rect.fromLTWH(1525, 730, 245, 85)],
@@ -319,7 +317,7 @@ const _kSessions = {
       _Word(
         'نَافِذَةٌ',
         'Window',
-        'audio/vocab/nafidha.mp3',
+        'audio/label_maker/vocab/nafidha.mp3',
         Offset(170, 200),
         Offset(170, 440),
         [Rect.fromLTWH(60, 15, 225, 390)],
@@ -352,6 +350,7 @@ class LabelMakerGame extends StatefulWidget {
     required this.session,
     required this.xp,
     required this.onComplete,
+    this.onEnding,
     this.onExit,
     this.random,
   });
@@ -359,6 +358,10 @@ class LabelMakerGame extends StatefulWidget {
   final LabelMakerSession session;
   final int xp;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
+  /// Fired when the game's own ending screen appears (the lesson player's
+  /// cue for its congratulations sound).
+  final VoidCallback? onEnding;
   final VoidCallback? onExit;
 
   /// Word order source; tests pass a seeded one.
@@ -512,8 +515,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
   void _say() => setState(_sayNow);
 
   void _sayNow() {
-    // AUDIO PLUG POINT: play _s.words[_cur].audio here.
-    _click();
+    _audio.playWord(_s.words[_cur].audio);
     _pulseN++;
   }
 
@@ -595,6 +597,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
 
   void _toCongrats() {
     _screen = _Screen.congrats;
+    widget.onEnding?.call();
     _c.repeat();
     final round = _round;
     _timers.add(
@@ -1678,8 +1681,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
   };
 
   void _hear(int i) {
-    // AUDIO PLUG POINT: play _s.words[i].audio here.
-    _click();
+    _audio.playWord(_s.words[i].audio);
     setState(() {
       _heardI = i;
       _heardN++;

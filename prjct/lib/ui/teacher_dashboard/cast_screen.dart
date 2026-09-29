@@ -30,6 +30,7 @@ class CastScreen extends ConsumerStatefulWidget {
 class _CastScreenState extends ConsumerState<CastScreen> {
   // Who's on the Hot Seat — games stay locked until someone is drawn.
   String? _hotSeatStudent;
+  String? _hotSeatLearnerId;
 
   @override
   void initState() {
@@ -64,9 +65,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
     } on PlatformException {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cast isn\'t available on this device.'),
-        ),
+        const SnackBar(content: Text('Cast isn\'t available on this device.')),
       );
     }
   }
@@ -88,6 +87,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
         lesson: lesson,
         destinationId: destinationId,
         classroomPlay: true,
+        classroomLearnerId: _hotSeatLearnerId,
         onClose: () => Navigator.of(playerContext).pop(),
       ),
     );
@@ -203,10 +203,14 @@ class _CastScreenState extends ConsumerState<CastScreen> {
                                   width: 280,
                                   child: _HotSeatPanel(
                                     student: student,
-                                    onPicked: (name) =>
-                                        setState(() => _hotSeatStudent = name),
-                                    onReset: () =>
-                                        setState(() => _hotSeatStudent = null),
+                                    onPicked: (id, name) => setState(() {
+                                      _hotSeatLearnerId = id;
+                                      _hotSeatStudent = name;
+                                    }),
+                                    onReset: () => setState(() {
+                                      _hotSeatLearnerId = null;
+                                      _hotSeatStudent = null;
+                                    }),
                                   ),
                                 ),
                                 const SizedBox(width: 14),
@@ -314,7 +318,12 @@ class _Header extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: 6),
           child: Icon(Icons.chevron_right, size: 16, color: Colors.white38),
         ),
-        _StepChip(n: 2, label: 'Choose a game', done: false, active: student != null),
+        _StepChip(
+          n: 2,
+          label: 'Choose a game',
+          done: false,
+          active: student != null,
+        ),
         const SizedBox(width: 14),
         DecoratedBox(
           decoration: BoxDecoration(
@@ -425,7 +434,7 @@ class _HotSeatPanel extends ConsumerWidget {
   });
 
   final String? student;
-  final ValueChanged<String> onPicked;
+  final void Function(String learnerId, String name) onPicked;
   final VoidCallback onReset;
 
   @override
@@ -483,7 +492,7 @@ class _HotSeatPanel extends ConsumerWidget {
                       fit: BoxFit.scaleDown,
                       child: HotSeatWheel(
                         roster: roster,
-                        onPicked: (_, name) => onPicked(name),
+                        onPicked: onPicked,
                         onSpinningChanged: (_) {},
                       ),
                     ),

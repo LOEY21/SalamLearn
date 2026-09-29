@@ -180,13 +180,9 @@ class SyncManager {
   /// what's missing.
   Future<void> _pullProgressForLearner(String learnerId) async {
     try {
-      final remoteRecords = await _mirror.fetchProgressForLearner(learnerId);
-      final box = Hive.box<ProgressRecord>(HiveBoxes.progress);
-      for (final record in remoteRecords) {
-        if (!box.containsKey(record.id)) {
-          await box.put(record.id, record);
-        }
-      }
+      await _progress.mergeRemote(
+        await _mirror.fetchProgressForLearner(learnerId),
+      );
     } catch (e) {
       debugPrint('SyncManager: pulling progress for $learnerId failed: $e');
     }

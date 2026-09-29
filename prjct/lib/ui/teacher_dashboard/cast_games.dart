@@ -27,52 +27,22 @@ class CastGame {
   String get emoji => sessions.first.activity.icon;
 }
 
-const Map<ActivityType, (String, String)> _gameArt = {
-  ActivityType.pronounce: (
-    'Greeting Match',
-    'assets/images/greeting_match/start_bg.png',
-  ),
-  ActivityType.creationHunt: (
-    "Allah's Creation Hunt",
-    'assets/images/creation_hunt/intro_title_art.png',
-  ),
-  ActivityType.trace: (
-    'Magic Sand Tracer',
-    'assets/images/tracing/bg_field.png',
-  ),
-  ActivityType.soundDetective: (
-    'Arabic Sound Detective',
-    'assets/images/sound_detective/start_bg.jpg',
-  ),
-  ActivityType.quranEtiquette: (
-    "The Qur'an Etiquette",
-    'assets/images/quran_etiquette/start_bg.jpg',
-  ),
-  ActivityType.labelMaker: ('Label Maker', 'assets/images/label_maker/bg.png'),
-  ActivityType.ayahBuilder: (
-    'Ayah Builder',
-    'assets/images/ayah_builder/bg_night_mosque_plate.jpg',
-  ),
-  ActivityType.sirahStory: (
-    'Sirah Story',
-    'assets/images/sirah_story/s1p1_bg.png',
-  ),
-  ActivityType.classroomHeroes: (
-    'Classroom Heroes',
-    'assets/images/classroom_heroes/start_screen.png',
-  ),
-  ActivityType.taharahAdventure: (
-    'Taharah Adventure',
-    'assets/images/taharah/s1_start_bg.png',
-  ),
-  ActivityType.fivePillars: (
-    'The Five Pillars',
-    'assets/images/five_pillars/start_bg.png',
-  ),
-  ActivityType.goodDeedTree: (
-    'The Good Deed Tree',
-    'assets/images/good_deed_tree/start_bg.png',
-  ),
+/// Cover art per game; names come from [castGameNames].
+const Map<ActivityType, String> _gameCovers = {
+  ActivityType.pronounce: 'assets/images/greeting_match/start_bg.png',
+  ActivityType.creationHunt: 'assets/images/creation_hunt/intro_title_art.png',
+  ActivityType.trace: 'assets/images/tracing/start_bg.png',
+  ActivityType.soundDetective: 'assets/images/sound_detective/start_bg.jpg',
+  ActivityType.quranEtiquette: 'assets/images/quran_etiquette/start_bg.jpg',
+  ActivityType.labelMaker: 'assets/images/label_maker/bg.png',
+  ActivityType.ayahBuilder:
+      'assets/images/ayah_builder/bg_night_mosque_plate.jpg',
+  ActivityType.sirahStory: 'assets/images/sirah_story/s1p1_bg.png',
+  ActivityType.classroomHeroes:
+      'assets/images/classroom_heroes/start_screen.png',
+  ActivityType.taharahAdventure: 'assets/images/taharah/s1_start_bg.png',
+  ActivityType.fivePillars: 'assets/images/five_pillars/start_bg.png',
+  ActivityType.goodDeedTree: 'assets/images/good_deed_tree/start_bg.png',
 };
 
 final List<CastGame> castGames = () {
@@ -82,8 +52,13 @@ final List<CastGame> castGames = () {
   }
   return [
     for (final e in byType.entries)
-      if (_gameArt[e.key] case final art?)
-        CastGame(type: e.key, name: art.$1, cover: art.$2, sessions: e.value),
+      if (_gameCovers[e.key] case final cover?)
+        CastGame(
+          type: e.key,
+          name: castGameNames[e.key]!,
+          cover: cover,
+          sessions: e.value,
+        ),
   ];
 }();
 
@@ -183,10 +158,11 @@ class _CastGamesStageState extends ConsumerState<CastGamesStage> {
     );
   }
 
-  void _play(List<ModuleRef> refs, {String? id, String? title}) => widget.onPlay(
-    castLesson(refs, id: id ?? 'cast-${refs.first.ref}', title: title),
-    refs.first.destinationId,
-  );
+  void _play(List<ModuleRef> refs, {String? id, String? title}) =>
+      widget.onPlay(
+        castLesson(refs, id: id ?? 'cast-${refs.first.ref}', title: title),
+        refs.first.destinationId,
+      );
 
   void _playFolder(LessonFolder folder) {
     final refs = folder.itemRefs
@@ -218,13 +194,14 @@ class _CastGamesStageState extends ConsumerState<CastGamesStage> {
         children: [
           Row(
             children: [
-              const _PanelLabel('STEP 2 · CHOOSE A GAME', color: AppColors.mintGreen),
+              const _PanelLabel(
+                'STEP 2 · CHOOSE A GAME',
+                color: AppColors.mintGreen,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  locked
-                      ? 'Spin the Hot Seat first'
-                      : 'for $student',
+                  locked ? 'Spin the Hot Seat first' : 'for $student',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -306,7 +283,11 @@ class _Tabs extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 14, color: active ? AppColors.ink : Colors.white70),
+              Icon(
+                icon,
+                size: 14,
+                color: active ? AppColors.ink : Colors.white70,
+              ),
               const SizedBox(width: 5),
               Text(
                 label,
@@ -370,13 +351,12 @@ class _LibraryList extends StatelessWidget {
                   ),
                 )
               : GridView.builder(
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 8,
-                        crossAxisSpacing: 8,
-                        mainAxisExtent: 58,
-                      ),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 8,
+                    crossAxisSpacing: 8,
+                    mainAxisExtent: 58,
+                  ),
                   itemCount: folders.length,
                   itemBuilder: (_, i) => _FolderTile(
                     folder: folders[i],
@@ -473,7 +453,11 @@ class _FolderTile extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
           child: Row(
             children: [
-              const Icon(Icons.folder_rounded, color: AppColors.goldSoft, size: 22),
+              const Icon(
+                Icons.folder_rounded,
+                color: AppColors.goldSoft,
+                size: 22,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -491,7 +475,10 @@ class _FolderTile extends StatelessWidget {
                     ),
                     Text(
                       '$count module${count == 1 ? '' : 's'}',
-                      style: const TextStyle(fontSize: 10.5, color: Colors.white54),
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        color: Colors.white54,
+                      ),
                     ),
                   ],
                 ),
@@ -558,7 +545,10 @@ class _GameCard extends StatelessWidget {
                 top: 10,
                 right: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.gold,
                     borderRadius: BorderRadius.circular(999),

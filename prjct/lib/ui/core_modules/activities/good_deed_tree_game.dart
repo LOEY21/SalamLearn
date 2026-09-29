@@ -28,12 +28,17 @@ class GoodDeedTreeGame extends StatefulWidget {
     required this.session,
     required this.xp,
     required this.onComplete,
+    this.onEnding,
     this.onExit,
   });
 
   final GoodDeedTreeSession session;
   final int xp;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
+  /// Fired when the game's own ending screen appears (the lesson player's
+  /// cue for its congratulations sound).
+  final VoidCallback? onEnding;
 
   /// Leaves the lesson from the start screen's home button.
   final VoidCallback? onExit;
@@ -893,12 +898,15 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
         });
         _later(
           3400,
-          () => setState(() {
-            _screen = _Screen.done;
-            _clock.stop();
-            _fb = null;
-            _burst = false;
-          }),
+          () {
+            setState(() {
+              _screen = _Screen.done;
+              _clock.stop();
+              _fb = null;
+              _burst = false;
+            });
+            widget.onEnding?.call();
+          },
         );
       }
     });

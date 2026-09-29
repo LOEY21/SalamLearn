@@ -2,8 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/curriculum_data.dart';
 import '../../data/models/curriculum/curriculum_models.dart';
+import '../../data/models/progress_record.dart';
 import '../../data/repositories/progress_repository.dart';
 import '../auth/session.dart';
+import '../progress_providers.dart';
 
 /// Bump counter so KPI/chart/breakdown providers below recompute after
 /// `SyncManager` pulls remote progress into Hive — plain `Provider`s cache
@@ -87,6 +89,7 @@ MetricTrend _trend(
 
 final parentKpiProvider = Provider<ParentKpis>((ref) {
   ref.watch(parentProgressRefreshProvider);
+  ref.watch(progressChangesProvider);
   final learnerId = ref.watch(sessionProvider.select((s) => s.learner?.id));
   if (learnerId == null) return ParentKpis.empty;
 
@@ -128,6 +131,7 @@ final parentKpiProvider = Provider<ParentKpis>((ref) {
 /// get their own cached result.
 final parentWeeklyChartProvider = Provider.family<List<ChartPoint>, int>((ref, windowDays) {
   ref.watch(parentProgressRefreshProvider);
+  ref.watch(progressChangesProvider);
   final learnerId = ref.watch(sessionProvider.select((s) => s.learner?.id));
   if (learnerId == null) return const [];
   return ProgressRepository().weeklyChartData(learnerId, windowDays: windowDays);
@@ -139,9 +143,25 @@ final parentWeeklyChartProvider = Provider.family<List<ChartPoint>, int>((ref, w
 /// below that (see `_TrendChartCardState`'s honesty note in the dashboard).
 final parentCompletedLessonsProvider = Provider<Set<String>>((ref) {
   ref.watch(parentProgressRefreshProvider);
+  ref.watch(progressChangesProvider);
   final learnerId = ref.watch(sessionProvider.select((s) => s.learner?.id));
   if (learnerId == null) return const {};
   return ProgressRepository().completedLessonIds(learnerId);
+});
+
+/// Latest [ProgressRecord] per lesson id. Every lesson holds exactly one
+/// game, so this is each game's most recent result.
+final parentGameResultsProvider = Provider<Map<String, ProgressRecord>>((ref) {
+  ref.watch(parentProgressRefreshProvider);
+  ref.watch(progressChangesProvider);
+  final learnerId = ref.watch(sessionProvider.select((s) => s.learner?.id));
+  if (learnerId == null) return const {};
+  final results = <String, ProgressRecord>{};
+  // byLearnerId is newest-first, so the first hit per lesson wins.
+  for (final r in ProgressRepository().byLearnerId(learnerId)) {
+    if (r.lessonId != null) results.putIfAbsent(r.lessonId!, () => r);
+  }
+  return results;
 });
 
 /// One adventure's (destination's) rollup — the Telemetry Visualization
@@ -167,6 +187,7 @@ class AdventureProgress {
 /// zero-filled.
 final parentAdventureBreakdownProvider = Provider<List<AdventureProgress>>((ref) {
   ref.watch(parentProgressRefreshProvider);
+  ref.watch(progressChangesProvider);
   final learnerId = ref.watch(sessionProvider.select((s) => s.learner?.id));
   if (learnerId == null) return const [];
 

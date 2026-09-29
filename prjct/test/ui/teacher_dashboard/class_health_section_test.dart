@@ -7,7 +7,7 @@ import 'package:salamlearn/ui/teacher_dashboard/teacher_dashboard_screen.dart';
 const _classId = 'class-1';
 
 void main() {
-  testWidgets('shows "no activity yet" for a module with hasActivity false', (
+  testWidgets('summarizes games not cast yet instead of listing them', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -32,8 +32,8 @@ void main() {
       ),
     );
 
-    expect(find.text('Alif to Yaa'), findsOneWidget);
-    expect(find.text('Not cast yet this week'), findsOneWidget);
+    expect(find.text('Alif to Yaa'), findsNothing);
+    expect(find.textContaining('No games cast yet'), findsOneWidget);
   });
 
   testWidgets('shows a High health pill and an upward trend for a healthy module', (

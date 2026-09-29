@@ -28,6 +28,7 @@ class ClassroomHeroesGame extends StatefulWidget {
     required this.session,
     required this.xp,
     required this.onComplete,
+    this.onEnding,
     this.onExit,
     this.audioEnabled = true,
     this.audio,
@@ -36,6 +37,10 @@ class ClassroomHeroesGame extends StatefulWidget {
   final ClassroomHeroesSession session;
   final int xp;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
+  /// Fired when the game's own ending screen appears (the lesson player's
+  /// cue for its congratulations sound).
+  final VoidCallback? onEnding;
 
   /// Leaves the lesson — wired to the title screen's ✕ and the badge
   /// screen's home button, the two places the prototype's layout has room
@@ -90,11 +95,6 @@ const _curtainDim = Color(0xFF22462D);
 const _badgeEdge = Color(0xFFD8B04A);
 const _sunYellow = Color(0xFFFFD94A);
 const _ringYellow = Color(0xFFFFD75E);
-const _retryBg = Color(0xFFFFF3F2);
-const _retryEdge = Color(0xFFCF4A44);
-const _retryInk = Color(0xFFC0342F);
-const _retryBody = Color(0xFF6B3A36);
-const _retryMark = Color(0xFFD8A52F);
 const _successBg = Color(0xFFEEF7EA);
 const _successEdge = Color(0xFF9FC9A6);
 const _successCircle = Color(0xFFDCEFD6);
@@ -146,7 +146,6 @@ double _loop(double t, double dur) {
 const double _kCurtain = 1.0;
 const double _kNarrateDelay = 0.62;
 const double _kMumtaz = 1.7;
-const double _kTryAgain = 2.6;
 const double _kReplaySpin = 0.9;
 
 enum _Screen { start, play }
@@ -171,7 +170,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   double _panelT0 = 0;
   double _successT0 = 0;
   double _mumtazT0 = 0;
-  double _tryAgainT0 = 0;
+  double _bandT0 = 0;
   double _wrongT0 = 0;
   double _replayT0 = 0;
   double _finishT0 = 0;
@@ -189,7 +188,6 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   bool _answered = false;
   bool _wrong = false;
   bool _mumtaz = false;
-  bool _tryAgain = false;
   bool _replaying = false;
   bool _curtain = false;
   bool _narrating = false;
@@ -201,7 +199,6 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
 
   Timer? _curtainTimer;
   Timer? _mumtazTimer;
-  Timer? _tryAgainTimer;
   Timer? _replayTimer;
   Timer? _narrateDelayTimer;
   Timer? _narrateEndTimer;
@@ -232,7 +229,6 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   void dispose() {
     _curtainTimer?.cancel();
     _mumtazTimer?.cancel();
-    _tryAgainTimer?.cancel();
     _replayTimer?.cancel();
     _stopNarration();
     if (_audio != null) unawaited(_audio!.dispose());
@@ -356,7 +352,6 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       _correct = 0;
       _answered = false;
       _wrong = false;
-      _tryAgain = false;
       _mumtaz = false;
       _finished = false;
       _errors = 0;
@@ -367,7 +362,6 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   void _backToStart() {
     _curtainTimer?.cancel();
     _mumtazTimer?.cancel();
-    _tryAgainTimer?.cancel();
     _stopNarration();
     setState(() {
       _screen = _Screen.start;
@@ -376,7 +370,6 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       _correct = 0;
       _answered = false;
       _wrong = false;
-      _tryAgain = false;
       _mumtaz = false;
       _curtain = false;
       _narrating = false;
@@ -392,10 +385,10 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       setState(() {
         _answered = true;
         _wrong = false;
-        _tryAgain = false;
         _mumtaz = true;
         _mumtazT0 = _now;
         _successT0 = _now;
+        _bandT0 = _now;
         _correct += 1;
       });
       _mumtazTimer?.cancel();
@@ -404,21 +397,15 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
         setState(() => _mumtaz = false);
       });
     } else {
+      // A wrong pick still ends the question: the decoy shakes, the hero
+      // card is revealed, and Next moves on — no retry prompt.
       HapticFeedback.lightImpact();
       setState(() {
+        _answered = true;
         _wrong = true;
         _wrongT0 = _now;
-        _tryAgain = true;
-        _tryAgainT0 = _now;
+        _bandT0 = _now;
         _errors += 1;
-      });
-      _tryAgainTimer?.cancel();
-      _tryAgainTimer = Timer(_ms(_kTryAgain), () {
-        if (!mounted) return;
-        setState(() {
-          _tryAgain = false;
-          _wrong = false;
-        });
       });
     }
   }
@@ -432,13 +419,13 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
         _mumtaz = false;
         _finishT0 = _now;
       });
+      widget.onEnding?.call();
       return;
     }
     setState(() {
       _index += 1;
       _answered = false;
       _wrong = false;
-      _tryAgain = false;
       _mumtaz = false;
     });
     _beginQuestion();
@@ -466,8 +453,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   /// reports the session's score up to the lesson player.
   void _finish() {
     if (_audio != null) unawaited(_audio!.stopVoice());
-    final attempts = _items.length + _errors;
-    final accuracy = attempts == 0 ? 100.0 : _items.length / attempts * 100.0;
+    final accuracy = _items.isEmpty ? 100.0 : _correct / _items.length * 100.0;
     widget.onComplete(widget.xp, accuracy, _errors);
   }
 
@@ -668,7 +654,6 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
         if (_narrating && !_finished) _buildNarrationBar(),
         if (!_narrating && !_finished) _buildPanel(),
         if (_mumtaz) _buildMumtaz(),
-        if (_tryAgain) _buildTryAgain(),
         if (_finished) _buildFinish(),
       ],
     );
@@ -1047,7 +1032,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
 
   Widget _successBand() {
     return _fx((_) {
-      final p = _easeOut.transform(_once(_now - _successT0, 0.3));
+      final p = _easeOut.transform(_once(_now - _bandT0, 0.3));
       return Opacity(
         opacity: p,
         child: Transform.translate(
@@ -1070,8 +1055,8 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
                     shape: BoxShape.circle,
                     border: Border.all(color: _successEdge, width: 5),
                   ),
-                  child: const Icon(
-                    Icons.check,
+                  child: Icon(
+                    _wrong ? Icons.lightbulb_outline : Icons.check,
                     size: 44,
                     color: _leafGreenDeep,
                   ),
@@ -1079,7 +1064,9 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
                 const SizedBox(width: 24),
                 Expanded(
                   child: Text(
-                    _q.successFeedback,
+                    _wrong
+                        ? 'Good try! The hero choice is marked.'
+                        : _q.successFeedback,
                     style: const TextStyle(
                       fontFamily: _kBaloo,
                       fontSize: 36,
@@ -1470,105 +1457,6 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     );
   }
 
-  Widget _buildTryAgain() {
-    return Positioned(
-      right: 34,
-      top: 140,
-      child: _fx((_) {
-        final p = _easeOut.transform(_once(_now - _tryAgainT0, 0.28));
-        return Opacity(
-          opacity: p,
-          child: Transform.translate(
-            offset: Offset(0, 26 - 26 * p),
-            child: CustomPaint(
-              foregroundPainter: const _DashedBorder(
-                color: _retryEdge,
-                width: 5,
-                radius: 30,
-              ),
-              child: Container(
-                width: 400,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 28,
-                  vertical: 26,
-                ),
-                decoration: BoxDecoration(
-                  color: _retryBg,
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x3D000000),
-                      offset: Offset(0, 12),
-                      blurRadius: 26,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 56,
-                          height: 56,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: _ringYellow,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: _retryMark, width: 4),
-                          ),
-                          child: const Text(
-                            '?',
-                            style: TextStyle(
-                              fontFamily: _kNunito,
-                              fontSize: 32,
-                              fontWeight: FontWeight.w800,
-                              color: _goldInk,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        // Held to the card's width whatever the translation
-                        // or fallback font does to it.
-                        const Expanded(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Try again!',
-                              style: TextStyle(
-                                fontFamily: _kBaloo,
-                                fontSize: 36,
-                                fontWeight: FontWeight.w800,
-                                color: _retryInk,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _session.retryText,
-                      style: const TextStyle(
-                        fontFamily: _kNunito,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w700,
-                        height: 1.35,
-                        color: _retryBody,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      }),
-    );
-  }
-
   // =========================================================================
   // Badge screen
   // =========================================================================
@@ -1892,46 +1780,4 @@ class _StrokedTitle extends StatelessWidget {
       ],
     );
   }
-}
-
-/// `border: 5px dashed` — Flutter has no dashed border, so the Try again
-/// card's outline is stroked by hand.
-class _DashedBorder extends CustomPainter {
-  const _DashedBorder({
-    required this.color,
-    required this.width,
-    required this.radius,
-  });
-
-  final Color color;
-  final double width;
-  final double radius;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rrect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height).deflate(width / 2),
-      Radius.circular(radius),
-    );
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = width
-      ..color = color;
-    const dash = 14.0;
-    const gap = 10.0;
-    for (final metric in (Path()..addRRect(rrect)).computeMetrics()) {
-      var d = 0.0;
-      while (d < metric.length) {
-        canvas.drawPath(
-          metric.extractPath(d, (d + dash).clamp(0, metric.length)),
-          paint,
-        );
-        d += dash + gap;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DashedBorder old) =>
-      old.color != color || old.width != width || old.radius != radius;
 }

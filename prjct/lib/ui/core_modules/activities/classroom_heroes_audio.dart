@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:salamlearn/logic/localization/app_translations.dart';
 
 typedef ClassroomQuestionAudio = ({
   String prompt,
@@ -132,7 +133,9 @@ class ClassroomHeroesAudio implements ClassroomAudioPlayback {
       _duration = _voice.onDurationChanged.listen((duration) {
         if (generation == _generation) onDuration?.call(duration);
       });
-      await _voice.play(AssetSource('audio/classroom_heroes/$asset'));
+      await _voice.play(
+        AssetSource('audio/classroom_heroes/${localizedVoice(asset)}'),
+      );
     } catch (_) {
       if (generation == _generation) onError?.call();
     }

@@ -110,6 +110,15 @@ flutter:
     - assets/audio/greetings/
     - assets/audio/good_deed_tree/
     - assets/audio/label_maker/
+    - assets/audio/label_maker/vocab/
+    - assets/audio/ayah_builder/
+    - assets/audio/ayah_builder/basmalah/
+    - assets/audio/ayah_builder/fatihah1/
+    - assets/audio/ayah_builder/fatihah2/
+    - assets/audio/ayah_builder/ikhlas/
+    - assets/audio/ayah_builder/falaq/
+    - assets/audio/ayah_builder/nas/
+    - assets/audio/ayah_builder/kawthar/
     - assets/audio/taharah_wudhu/
     - assets/audio/game_ui/
     - assets/audio/classroom_heroes/
@@ -117,14 +126,24 @@ flutter:
     - assets/audio/classroom_heroes/kindness/
     - assets/audio/classroom_heroes/responsibility/
     - assets/audio/classroom_heroes/teamwork/
+    - assets/audio/classroom_heroes/fil/respect/
+    - assets/audio/classroom_heroes/fil/kindness/
+    - assets/audio/classroom_heroes/fil/responsibility/
+    - assets/audio/classroom_heroes/fil/teamwork/
     - assets/audio/quran_etiquette/
     - assets/audio/quran_etiquette/masjid/
     - assets/audio/quran_etiquette/home/
+    - assets/audio/quran_etiquette/fil/masjid/
+    - assets/audio/quran_etiquette/fil/home/
     - assets/audio/sirah_story/
     - assets/audio/sirah_story/birth/
     - assets/audio/sirah_story/halimah/
     - assets/audio/sirah_story/family/
     - assets/audio/sirah_story/al_amin/
+    - assets/audio/sirah_story/fil/birth/
+    - assets/audio/sirah_story/fil/halimah/
+    - assets/audio/sirah_story/fil/family/
+    - assets/audio/sirah_story/fil/al_amin/
     - assets/images/
     - assets/images/adventure_map/
     - assets/images/ayah_builder/

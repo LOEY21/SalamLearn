@@ -344,10 +344,32 @@ class SessionNotifier extends Notifier<SessionState> {
   /// checking that would mean querying Firestore by email pre-auth — the
   /// security rules deliberately block that (see `firestore.rules`'
   /// `/parents`/`/teachers` doc) to prevent account-enumeration.
-  bool emailTaken({required UserRole role, required String email}) {
-    return role == UserRole.asatidz
-        ? _teachers.findByEmail(email) != null
-        : _parents.findByEmail(email) != null;
+  ///
+  /// A local account the admin web panel deleted is stale, not taken: its
+  /// cloud doc is gone but this device's Hive copy isn't. Only a confirmed
+  /// server miss drops it ([FirestoreMirror.docExists] fails open).
+  Future<bool> emailTaken({
+    required UserRole role,
+    required String email,
+  }) async {
+    if (role == UserRole.asatidz) {
+      final account = _teachers.findByEmail(email);
+      if (account == null) return false;
+      if (account.firebaseUid == null ||
+          await FirestoreMirror().docExists(HiveBoxes.teachers, account.id)) {
+        return true;
+      }
+      await _teachers.delete(account.id);
+      return false;
+    }
+    final account = _parents.findByEmail(email);
+    if (account == null) return false;
+    if (account.firebaseUid == null ||
+        await FirestoreMirror().docExists(HiveBoxes.parents, account.id)) {
+      return true;
+    }
+    await _parents.delete(account.id);
+    return false;
   }
 
   /// FR-2.3/Figure 5 — stages a parent's personal-info form. Nothing is

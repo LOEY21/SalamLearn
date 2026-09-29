@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:salamlearn/logic/localization/app_translations.dart';
 
 typedef EtiquetteQuestionAudio = ({
   String prompt,
@@ -104,7 +105,9 @@ class QuranEtiquetteAudio {
       _duration = _voice.onDurationChanged.listen((duration) {
         if (generation == _generation) onDuration?.call(duration);
       });
-      await _voice.play(AssetSource('audio/quran_etiquette/$asset'));
+      await _voice.play(
+        AssetSource('audio/quran_etiquette/${localizedVoice(asset)}'),
+      );
     } catch (_) {
       if (generation == _generation) onError?.call();
     }

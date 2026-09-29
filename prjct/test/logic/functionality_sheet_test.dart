@@ -74,16 +74,16 @@ void main() {
       final n = await registeredParent(c);
 
       expect(
-        n.emailTaken(role: UserRole.parent, email: 'parent@example.com'),
+        await n.emailTaken(role: UserRole.parent, email: 'parent@example.com'),
         isTrue,
       );
       expect(
-        n.emailTaken(role: UserRole.parent, email: 'PARENT@example.com'),
+        await n.emailTaken(role: UserRole.parent, email: 'PARENT@example.com'),
         isTrue,
         reason: 'email match is case-insensitive',
       );
       expect(
-        n.emailTaken(role: UserRole.parent, email: 'new@example.com'),
+        await n.emailTaken(role: UserRole.parent, email: 'new@example.com'),
         isFalse,
       );
     });

@@ -149,21 +149,26 @@ void main() {
     }
   });
 
-  testWidgets('the decoy asks for another try and never advances', (
-    tester,
-  ) async {
+  testWidgets('the decoy counts as wrong and still moves on', (tester) async {
     const session = heroesRespectSession;
     await tester.pumpWidget(host(session));
     await startSession(tester, session);
 
     await tester.tap(find.text(session.questions.first.decoyText));
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('Try again!'), findsOneWidget);
-    expect(find.text(session.retryText), findsOneWidget);
-    // Still on the same question, with no success feedback.
-    expect(find.text(session.questions.first.promptText), findsOneWidget);
-    expect(find.text(session.questions.first.successFeedback), findsNothing);
+    expect(find.text('Try again!'), findsNothing);
+    expect(find.text('Good try! The hero choice is marked.'), findsOneWidget);
+    // Another tap can't change the answer.
+    await tester.tap(find.text(session.questions.first.correctText));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('MUMTAZ!'), findsNothing);
+
+    await tester.tap(find.text('Next'));
+    await tester.pump();
+    await skipNarration(tester);
+
+    expect(find.text(session.questions[1].promptText), findsOneWidget);
   });
 
   testWidgets('the hero choice congratulates, then moves on', (tester) async {
@@ -185,7 +190,7 @@ void main() {
     expect(find.text(session.questions[1].promptText), findsOneWidget);
   });
 
-  testWidgets('three hero choices finish the session and report the score', (
+  testWidgets('three answers finish the session and report the score', (
     tester,
   ) async {
     const session = heroesTeamworkSession;
@@ -205,12 +210,9 @@ void main() {
     await startSession(tester, session);
 
     for (var i = 0; i < session.questions.length; i++) {
-      // One wrong tap on the first scenario, so the score has an error in it.
-      if (i == 0) {
-        await tester.tap(find.text(session.questions[i].decoyText));
-        await tester.pump(const Duration(milliseconds: 300));
-      }
-      await tester.tap(find.text(session.questions[i].correctText));
+      // The first scenario is answered wrong — it still moves on.
+      final q = session.questions[i];
+      await tester.tap(find.text(i == 0 ? q.decoyText : q.correctText));
       await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(
         find.text(i == session.questions.length - 1 ? 'Finish' : 'Next'),
@@ -230,7 +232,7 @@ void main() {
 
     expect(xp, 30);
     expect(errors, 1);
-    expect(accuracy, closeTo(75, 0.01)); // 3 right out of 4 taps
+    expect(accuracy, closeTo(66.67, 0.01)); // 2 of 3 answered right
   });
 }
 

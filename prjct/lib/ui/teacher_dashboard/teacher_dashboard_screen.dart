@@ -10,6 +10,8 @@ import 'package:lottie/lottie.dart';
 import '../../data/repositories/class_repository.dart';
 import '../../data/repositories/progress_repository.dart';
 import '../../logic/auth/session.dart';
+import '../../logic/progress_providers.dart';
+import '../core_modules/module_registry.dart';
 import '../../logic/settings/settings_providers.dart';
 import '../../logic/sync/sync_manager.dart';
 import '../../logic/teacher/teacher_providers.dart';
@@ -61,6 +63,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen(teacherProgressSyncProvider, (_, _) {});
     // Watches the teacher's Firestore document in real time. If the admin
     // web panel deletes it, the stream emits false immediately and this
     // listener fires — showing the warning dialog without needing a page
@@ -1312,6 +1315,8 @@ class ClassHealthSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final modules = ref.watch(classHealthIndexProvider(classId));
+    final played = modules.where((m) => m.hasActivity).toList();
+    final notPlayed = modules.length - played.length;
 
     return SoftCard(
       onTap: () => context.push('/teacher/classes/$classId/health'),
@@ -1361,17 +1366,31 @@ class ClassHealthSection extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Hot Seat tracing attempts from live Cast sessions — not '
+            'Games played on the Hot Seat during live Cast sessions — not '
             'Adventure Map/Student Hub solo play.',
             style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
           ),
           const SizedBox(height: 12),
-          for (final module in modules)
+          for (final module in played)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: _ModuleHealthRow(
                 module: module,
                 tier: _tierFor(module.healthIndex),
+              ),
+            ),
+          if (notPlayed > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                played.isEmpty
+                    ? 'No games cast yet — draw a student on the Hot Seat '
+                          'and pick a game to start.'
+                    : '$notPlayed of ${modules.length} games not cast yet',
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  color: AppColors.textMuted,
+                ),
               ),
             ),
           Row(
@@ -1407,24 +1426,12 @@ class _ModuleHealthRow extends StatelessWidget {
   final ModuleHealth module;
   final String tier;
 
-  /// The Hot Seat letter itself, recovered from `hot_seat_<letter>` — kept
-  /// derived rather than a new [ModuleHealth] field since the moduleId
-  /// already carries it and nothing else needs the letter in isolation.
-  String get _letterGlyph => module.moduleId.replaceFirst('hot_seat_', '');
-
   @override
   Widget build(BuildContext context) {
     if (!module.hasActivity) {
       return Row(
         children: [
-          Text(
-            _letterGlyph,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.tealDark,
-            ),
-          ),
+          Text(module.icon, style: const TextStyle(fontSize: 13)),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
@@ -1461,14 +1468,7 @@ class _ModuleHealthRow extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(
-              _letterGlyph,
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: AppColors.tealDark,
-              ),
-            ),
+            Text(module.icon, style: const TextStyle(fontSize: 17)),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
@@ -1500,8 +1500,8 @@ class _ModuleHealthRow extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          '${module.avgAccuracy.round()}% avg stroke accuracy · '
-          '${module.attemptCount} attempt${module.attemptCount == 1 ? '' : 's'} · '
+          '${module.avgAccuracy.round()}% avg accuracy · '
+          '${module.attemptCount} play${module.attemptCount == 1 ? '' : 's'} · '
           '${module.studentsUp} student${module.studentsUp == 1 ? '' : 's'} up',
           style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
         ),
@@ -2167,28 +2167,8 @@ class StudentDetailsDialog extends ConsumerStatefulWidget {
 }
 
 class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
-  late final TextEditingController _feedbackC;
-  String _selectedModule = 'Letters Tracing (Alif to Kha)';
+  String _selectedModule = allGames.first.lesson.id;
   DateTime _dueDate = DateTime.now().add(const Duration(days: 3));
-
-  final _modules = [
-    'Letters Tracing (Alif to Kha)',
-    'Alphabet Song Practice',
-    'Pronunciation of Letter ج',
-    'Wudhu Sequence Matcher',
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _feedbackC = TextEditingController(text: widget.student['feedback'] ?? '');
-  }
-
-  @override
-  void dispose() {
-    _feedbackC.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -2351,29 +2331,10 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
                               ],
                             ),
                             const SizedBox(height: 10),
-                            DropdownButtonFormField<String>(
-                              initialValue: _selectedModule,
-                              decoration: InputDecoration(
-                                labelText: 'Select Module'.tr,
-                                isDense: true,
-                                border: OutlineInputBorder(),
-                              ),
-                              items: _modules
-                                  .map(
-                                    (m) => DropdownMenuItem(
-                                      value: m,
-                                      child: Text(
-                                        m,
-                                        style: const TextStyle(fontSize: 12.5),
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (v) {
-                                if (v != null) {
-                                  setState(() => _selectedModule = v);
-                                }
-                              },
+                            _GameSessionPicker(
+                              lessonId: _selectedModule,
+                              onChanged: (v) =>
+                                  setState(() => _selectedModule = v),
                             ),
                             const SizedBox(height: 10),
                             Row(
@@ -2440,7 +2401,7 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                        'Assigned "$_selectedModule" to $name',
+                                        'Assigned "${assignmentTitle(_selectedModule)}" to $name',
                                       ),
                                     ),
                                   );
@@ -2498,47 +2459,6 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
                         ),
                       ),
 
-                      const SizedBox(height: 14),
-                      SoftCard(
-                        color: AppColors.neutralTint,
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Row(
-                              children: [
-                                Icon(
-                                  Icons.rate_review_outlined,
-                                  size: 16,
-                                  color: AppColors.teal,
-                                ),
-                                SizedBox(width: 7),
-                                Flexible(
-                                  child: Text(
-                                    'Teacher Assessment & Feedback',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            TextField(
-                              controller: _feedbackC,
-                              maxLines: 2,
-                              decoration: InputDecoration(
-                                hintText:
-                                    'Leave custom feedback or study notes for parents...'.tr,
-                                filled: true,
-                                fillColor: AppColors.surface,
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -2570,30 +2490,12 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
                       ),
                     ),
                     const Spacer(),
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                    const SizedBox(width: 8),
                     FilledButton(
-                      onPressed: () {
-                        ref
-                            .read(teacherFeedbackProvider.notifier)
-                            .setFeedback(
-                              currentStudent['learnerId'] as String,
-                              _feedbackC.text.trim(),
-                            );
-                        Navigator.of(context).pop();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Feedback saved successfully!'),
-                          ),
-                        );
-                      },
+                      onPressed: () => Navigator.of(context).pop(),
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.teal,
                       ),
-                      child: const Text('Save Feedback'),
+                      child: const Text('Close'),
                     ),
                   ],
                 ),
@@ -4552,17 +4454,10 @@ class _HomeworkAssigner extends ConsumerStatefulWidget {
 }
 
 class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
-  String _selectedModule = 'Letters Tracing (Alif to Kha)';
+  String _selectedModule = allGames.first.lesson.id;
   DateTime _dueDate = DateTime.now().add(const Duration(days: 3));
   String _assigneeType = 'class'; // 'class' or 'student'
   String? _selectedStudent;
-
-  final _modules = [
-    'Letters Tracing (Alif to Kha)',
-    'Alphabet Song Practice',
-    'Pronunciation of Letter ج',
-    'Wudhu Sequence Matcher',
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -4577,18 +4472,9 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DropdownButtonFormField<String>(
-          value: _selectedModule,
-          decoration: InputDecoration(
-            labelText: 'Select Learning Module'.tr,
-            border: OutlineInputBorder(),
-          ),
-          items: _modules
-              .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-              .toList(),
-          onChanged: (v) {
-            if (v != null) setState(() => _selectedModule = v);
-          },
+        _GameSessionPicker(
+          lessonId: _selectedModule,
+          onChanged: (v) => setState(() => _selectedModule = v),
         ),
         const SizedBox(height: 12),
         // Radio choices for Assignee
@@ -4683,7 +4569,7 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
                   .then((_) => ref.invalidate(classHomeworkProvider));
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Assigned "$_selectedModule" to class!'),
+                  content: Text('Assigned "${assignmentTitle(_selectedModule)}" to class!'),
                 ),
               );
             } else if (_selectedStudent case final learnerId?) {
@@ -4705,7 +4591,7 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
                   });
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Assigned "$_selectedModule" to $studentName!'),
+                  content: Text('Assigned "${assignmentTitle(_selectedModule)}" to $studentName!'),
                 ),
               );
             }
@@ -5506,6 +5392,71 @@ class _DeleteAccountCard extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Two-step "Assign Learning Module" picker: pick one of the Student Hub's
+/// games, then one of that game's sessions. [lessonId] is the selected
+/// session (a curriculum lesson id) — what gets stored on the assignment.
+class _GameSessionPicker extends StatelessWidget {
+  const _GameSessionPicker({required this.lessonId, required this.onChanged});
+
+  final String lessonId;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final game = gameNameOf(gameForId(lessonId)?.lesson ?? allGames.first.lesson);
+    final sessions = gameSessions[game]!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          initialValue: game,
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: 'Select Game'.tr,
+            isDense: true,
+            border: const OutlineInputBorder(),
+          ),
+          items: [
+            for (final name in gameSessions.keys)
+              DropdownMenuItem(
+                value: name,
+                child: Text(name, overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: (v) {
+            if (v != null && v != game) onChanged(gameSessions[v]!.first.id);
+          },
+        ),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<String>(
+          // Rebuilt per game so it resets to the new game's first session.
+          key: ValueKey(game),
+          initialValue: lessonId,
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: 'Select Session'.tr,
+            isDense: true,
+            border: const OutlineInputBorder(),
+          ),
+          items: [
+            for (final lesson in sessions)
+              DropdownMenuItem(
+                value: lesson.id,
+                child: Text(
+                  sessionLabelOf(lesson),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: (v) {
+            if (v != null) onChanged(v);
+          },
+        ),
+      ],
     );
   }
 }

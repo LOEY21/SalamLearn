@@ -1,7 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/repositories/class_repository.dart';
+import '../../data/student_badges.dart';
+import '../../ui/core_modules/module_registry.dart';
 import '../auth/session.dart';
+import '../recent_module_provider.dart';
 
 /// A single notification surfaced to the learner (streak reminders, module
 /// unlocks, completion cheers). Placeholder phase: seeded mock data only —
@@ -13,6 +16,7 @@ class NotificationItem {
     required this.body,
     required this.emoji,
     this.read = false,
+    this.opensBackpack = false,
   });
 
   final String id;
@@ -21,37 +25,20 @@ class NotificationItem {
   final String emoji;
   final bool read;
 
+  /// Tapping takes the learner to the Backpack tab (badge/streak rewards).
+  final bool opensBackpack;
+
   NotificationItem copyWith({bool? read}) => NotificationItem(
     id: id,
     title: title,
     body: body,
     emoji: emoji,
     read: read ?? this.read,
+    opensBackpack: opensBackpack,
   );
 }
 
-String _titleForModuleId(String id) {
-  final cleanId = switch (id) {
-    '1' => 'village-of-salaam',
-    '2' => 'desert-of-letters',
-    '3' => 'garden-of-words',
-    '4' => 'river-of-sirah',
-    '5' => 'masjid-of-salah',
-    '6' => 'mountain-of-iman',
-    '7' => 'quran-corner',
-    _ => id,
-  };
-  return switch (cleanId) {
-    'village-of-salaam' => 'Welcome to Madrasah',
-    'desert-of-letters' => 'Exploring Our World',
-    'garden-of-words' => 'A Growing Muslim',
-    'river-of-sirah' => 'Stories & Letters',
-    'masjid-of-salah' => 'Cleanliness & Character',
-    'mountain-of-iman' => 'The Path of the Prophet',
-    'quran-corner' => 'The Good Deed Hero',
-    _ => cleanId,
-  };
-}
+String _titleForModuleId(String id) => assignmentTitle(id);
 
 /// In-memory notification inbox. Resets on app restart, same as the rest
 /// of session state — no persistence until Hive/Firebase land.
@@ -60,13 +47,37 @@ class NotificationsNotifier extends Notifier<List<NotificationItem>> {
 
   @override
   List<NotificationItem> build() {
+    final streak = ref.watch(learnerStreakProvider);
+    final newBadges = ref
+        .watch(unlockedBadgesProvider)
+        .where((b) => !UnlockedBadgesNotifier.seed.contains(b))
+        .toList()
+        .reversed;
+
+    final badgeNotifications = [
+      for (final name in newBadges)
+        if (allStudentBadges.where((b) => isBadgeUnlocked(b, [name])).firstOrNull
+            case final badge?)
+          NotificationItem(
+            id: 'badge-${badge.id}',
+            emoji: badge.emoji,
+            title: 'You earned the ${badge.shortName} badge!',
+            body: badge.category == BadgeCategory.streak
+                ? 'Open your Backpack and tap Streaks to see it.'
+                : 'Open your Backpack to see your new badge.',
+            opensBackpack: true,
+          ),
+    ];
+
     // Seed default notifications
     final baseList = [
-      const NotificationItem(
-        id: 'streak',
+      NotificationItem(
+        id: 'streak-$streak',
         emoji: '🔥',
-        title: '5-day streak!',
-        body: "You've learned something new 5 days in a row. Keep it up!",
+        title: '$streak-day streak!',
+        body:
+            "You've learned something new $streak days in a row. Open your Backpack to see your streak!",
+        opensBackpack: true,
       ),
       const NotificationItem(
         id: 'tracing-done',
@@ -129,13 +140,22 @@ class NotificationsNotifier extends Notifier<List<NotificationItem>> {
       );
     }
 
-    final combined = [...homeworkNotifications, ...baseList];
+    final combined = [
+      ...badgeNotifications,
+      ...homeworkNotifications,
+      ...baseList,
+    ];
     return [
       for (final n in combined)
         n.copyWith(
           read: _readIds.contains(n.id) || n.id == 'sorting-unlock',
         ),
     ];
+  }
+
+  void markRead(String id) {
+    _readIds.add(id);
+    state = [for (final n in state) n.id == id ? n.copyWith(read: true) : n];
   }
 
   void markAllRead() {

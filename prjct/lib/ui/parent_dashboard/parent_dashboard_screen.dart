@@ -12,11 +12,14 @@ import '../../data/local/hive_boxes.dart';
 import '../../data/models/curriculum/curriculum_models.dart';
 import '../../data/models/enrollment.dart';
 import '../../data/models/assigned_module.dart';
+import '../../data/models/progress_record.dart';
 import '../../data/remote/firestore_mirror.dart';
 import '../../data/repositories/class_repository.dart';
 import '../../logic/auth/session.dart';
 import '../../logic/parent/analytics_providers.dart';
 import '../../logic/parent/children_providers.dart';
+import '../../logic/parent/game_grades.dart';
+import '../../logic/progress_providers.dart';
 import '../../logic/settings/settings_providers.dart';
 import '../../logic/sync/sync_manager.dart';
 import '../../logic/teacher/teacher_providers.dart';
@@ -132,6 +135,7 @@ class ParentDashboardScreen extends ConsumerWidget {
     // and re-picks the active learner — see the provider's doc for details.
     ref.listen(learnerSyncProvider, (_, _) {});
     ref.listen(parentEnrollmentSyncProvider, (_, _) {});
+    ref.listen(parentProgressSyncProvider, (_, _) {});
 
     // Without this, hardware/system back had no explicit handling here,
     // so it fell through to go_router's default history-pop — silently
@@ -624,9 +628,9 @@ class _UnlinkedLearnersCard extends ConsumerWidget {
                                 .attachUnlinkedLearner(profile.id!);
                           } catch (error) {
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('$error')),
-                              );
+                              ScaffoldMessenger.of(
+                                context,
+                              ).showSnackBar(SnackBar(content: Text('$error')));
                             }
                           }
                         },
@@ -1586,6 +1590,10 @@ class _AdventureDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final completedLessons = ref.watch(parentCompletedLessonsProvider);
+    final results = ref.watch(parentGameResultsProvider);
+    final learnerName =
+        ref.watch(sessionProvider.select((s) => s.learner?.name)) ??
+        'Your child';
     final destination = progress.destination;
     final levels = _splitIntoLevels(destination.lessons);
     final totalLessons = destination.lessons.length;
@@ -1754,8 +1762,8 @@ class _AdventureDetailScreen extends ConsumerWidget {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      "Tracked per lesson, not per game — every game a lesson "
-                      "contains is listed for reference.",
+                      'Tap a finished game to see its grade, what it '
+                      'practises, and feedback.',
                       style: TextStyle(
                         fontSize: 11,
                         color: AppColors.textMuted,
@@ -1778,6 +1786,8 @@ class _AdventureDetailScreen extends ConsumerWidget {
                         meta: _adventureLevelMeta[li < 2 ? li : 2],
                         lessons: levels[li],
                         completedLessons: completedLessons,
+                        results: results,
+                        learnerName: learnerName,
                         unlocked: _isLevelUnlocked(
                           destination,
                           levels,
@@ -1837,12 +1847,16 @@ class _AdventureLevelSection extends StatefulWidget {
     required this.meta,
     required this.lessons,
     required this.completedLessons,
+    required this.results,
+    required this.learnerName,
     required this.unlocked,
   });
 
   final _AdventureLevelMeta meta;
   final List<Lesson> lessons;
   final Set<String> completedLessons;
+  final Map<String, ProgressRecord> results;
+  final String learnerName;
   final bool unlocked;
 
   @override
@@ -1975,6 +1989,8 @@ class _AdventureLevelSectionState extends State<_AdventureLevelSection> {
                     lesson: lesson,
                     activity: activity,
                     done: widget.completedLessons.contains(lesson.id),
+                    record: widget.results[lesson.id],
+                    learnerName: widget.learnerName,
                   ),
           ],
         ),
@@ -1987,8 +2003,8 @@ class _AdventureLevelSectionState extends State<_AdventureLevelSection> {
 /// (`quranSync`, `fiqhDrag`) is camelCase code, not something to show a
 /// parent.
 String _activityTypeLabel(ActivityType type) => switch (type) {
-  ActivityType.trace => 'Letter Tracing',
-  ActivityType.pronounce => 'Pronunciation',
+  ActivityType.trace => 'Magic Sand Tracer',
+  ActivityType.pronounce => 'The Greeting Match',
   ActivityType.quranSync => "Qur'an Sync",
   ActivityType.story => 'Story',
   ActivityType.fiqhDrag => 'Fiqh Match',
@@ -2011,96 +2027,1058 @@ class _AdventureGameRow extends StatelessWidget {
     required this.lesson,
     required this.activity,
     required this.done,
+    required this.record,
+    required this.learnerName,
   });
 
   final Lesson lesson;
   final Activity activity;
   final bool done;
+  final ProgressRecord? record;
+  final String learnerName;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-      decoration: BoxDecoration(
-        color: done ? AppColors.mint.withValues(alpha: 0.5) : null,
-        border: const Border(top: BorderSide(color: AppColors.creamBorder)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.cream,
-              borderRadius: BorderRadius.circular(10),
+    final record = this.record;
+    return InkWell(
+      onTap: record == null
+          ? null
+          : () => _showGameReport(
+              context,
+              title: activity.title,
+              icon: activity.icon,
+              type: activity.type,
+              record: record,
+              learnerName: learnerName,
             ),
-            child: Text(activity.icon, style: const TextStyle(fontSize: 15)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  activity.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  '${_activityTypeLabel(activity.type)} · +${activity.xp}xp',
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (done)
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+        decoration: BoxDecoration(
+          color: done ? AppColors.mint.withValues(alpha: 0.5) : null,
+          border: const Border(top: BorderSide(color: AppColors.creamBorder)),
+        ),
+        child: Row(
+          children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              width: 30,
+              height: 30,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: AppColors.teal,
-                borderRadius: BorderRadius.circular(999),
+                color: AppColors.cream,
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
+              child: Text(activity.icon, style: const TextStyle(fontSize: 15)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.check, size: 10, color: Colors.white),
-                  SizedBox(width: 3),
                   Text(
-                    'Done',
-                    style: TextStyle(
-                      fontSize: 9.5,
+                    activity.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    record == null
+                        ? '${_activityTypeLabel(activity.type)} · +${activity.xp}xp'
+                        : '${_activityTypeLabel(activity.type)} · Tap for feedback',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: AppColors.textMuted,
                     ),
                   ),
                 ],
               ),
-            )
-          else
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: AppColors.creamBorder),
+            ),
+            if (record != null) ...[
+              _GradeChip(scorePct: record.strokeAccuracyPct),
+              const Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: AppColors.textMuted,
               ),
-              child: const Text(
-                'Not started',
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textMuted,
+            ] else if (done)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.teal,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check, size: 10, color: Colors.white),
+                    SizedBox(width: 3),
+                    Text(
+                      'Done',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: AppColors.creamBorder),
+                ),
+                child: const Text(
+                  'Not started',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------- per-game grades
+
+Color _gradeColor(GradeBand band) => switch (band) {
+  GradeBand.outstanding || GradeBand.verySatisfactory => AppColors.teal,
+  GradeBand.satisfactory || GradeBand.fairlySatisfactory => AppColors.gold,
+  GradeBand.needsPractice => AppColors.coral,
+};
+
+Color _gradeTint(GradeBand band) => switch (band) {
+  GradeBand.outstanding || GradeBand.verySatisfactory => AppColors.mint,
+  GradeBand.satisfactory || GradeBand.fairlySatisfactory => AppColors.goldTint,
+  GradeBand.needsPractice => AppColors.coralTint,
+};
+
+const _monthNames = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+String _shortDate(DateTime dt) =>
+    '${_monthNames[dt.month - 1]} ${dt.day}, ${dt.year}';
+
+/// "92% · Outstanding" pill, colored by grade.
+class _GradeChip extends StatelessWidget {
+  const _GradeChip({required this.scorePct});
+
+  final double scorePct;
+
+  @override
+  Widget build(BuildContext context) {
+    final band = GradeBand.forScore(scorePct);
+    final color = _gradeColor(band);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: _gradeTint(band),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        '${scorePct.round()}% · ${band.label}',
+        style: TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.w800,
+          color:
+              band == GradeBand.satisfactory ||
+                  band == GradeBand.fairlySatisfactory
+              ? AppColors.ink
+              : color,
+        ),
+      ),
+    );
+  }
+}
+
+/// Full report for one game attempt: score + grade, mistakes, time, date,
+/// what the game practises, written feedback, and a home tip. [type] is
+/// null for classroom Hot Seat records, which aren't a curriculum game.
+void _showGameReport(
+  BuildContext context, {
+  required String title,
+  required String icon,
+  required ActivityType? type,
+  required ProgressRecord record,
+  required String learnerName,
+  String? subtitle,
+}) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: AppColors.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (_) => _GameReportSheet(
+      title: title,
+      icon: icon,
+      type: type,
+      record: record,
+      learnerName: learnerName,
+      subtitle: subtitle,
+    ),
+  );
+}
+
+class _GameReportSheet extends StatelessWidget {
+  const _GameReportSheet({
+    required this.title,
+    required this.icon,
+    required this.type,
+    required this.record,
+    required this.learnerName,
+    this.subtitle,
+  });
+
+  final String title;
+  final String icon;
+  final ActivityType? type;
+  final ProgressRecord record;
+  final String learnerName;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final score = record.strokeAccuracyPct;
+    final band = GradeBand.forScore(score);
+    final color = _gradeColor(band);
+    final type = this.type;
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.88,
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(18, 10, 18, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.creamBorder,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.cream,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(icon, style: const TextStyle(fontSize: 22)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontFamily: 'Fredoka',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 17,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                      Text(
+                        subtitle ??
+                            (type == null
+                                ? 'Classroom activity'
+                                : _activityTypeLabel(type)),
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Score + grade
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _gradeTint(band),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 72,
+                          height: 72,
+                          child: CircularProgressIndicator(
+                            value: (score / 100).clamp(0.0, 1.0),
+                            strokeWidth: 6,
+                            backgroundColor: Colors.white,
+                            valueColor: AlwaysStoppedAnimation(color),
+                          ),
+                        ),
+                        Text(
+                          '${score.round()}%',
+                          style: const TextStyle(
+                            fontFamily: 'Outfit',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 17,
+                            color: AppColors.ink,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'GRADE',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                        Text(
+                          band.label,
+                          style: const TextStyle(
+                            fontFamily: 'Fredoka',
+                            fontWeight: FontWeight.w700,
+                            fontSize: 19,
+                            color: AppColors.ink,
+                          ),
+                        ),
+                        Text(
+                          'Score ${score.round()} out of 100',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _ReportStat(
+                    label: 'Mistakes',
+                    value: '${record.sequencingErrors}',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _ReportStat(
+                    label: 'Time spent',
+                    value: formatDuration(record.timeOnTaskSeconds),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _ReportStat(
+                    label: 'Played on',
+                    value: _shortDate(record.completedAt),
+                  ),
+                ),
+              ],
+            ),
+            if (record.assignedByTeacher) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Assigned by the teacher.',
+                style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+              ),
+            ],
+            if (type != null) ...[
+              const SizedBox(height: 16),
+              _ReportSection(
+                heading: 'What this game practises',
+                body: gameSkill(type),
+              ),
+            ],
+            const SizedBox(height: 12),
+            _ReportSection(
+              heading: 'Feedback',
+              body: gameFeedback(
+                scorePct: score,
+                mistakes: record.sequencingErrors,
+                name: learnerName,
+              ),
+              tint: _gradeTint(band),
+            ),
+            if (type != null) ...[
+              const SizedBox(height: 12),
+              _ReportSection(
+                heading: 'Try at home',
+                body: gameHomeTip(type),
+                tint: AppColors.cream,
+              ),
+            ],
+            const SizedBox(height: 16),
+            _GradeScaleLegend(current: band),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReportStat extends StatelessWidget {
+  const _ReportStat({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.creamBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+              color: AppColors.ink,
+            ),
+          ),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _ReportSection extends StatelessWidget {
+  const _ReportSection({
+    required this.heading,
+    required this.body,
+    this.tint = Colors.white,
+  });
+
+  final String heading;
+  final String body;
+  final Color tint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: tint,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.creamBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            heading,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: AppColors.ink,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            body,
+            style: const TextStyle(
+              fontSize: 12.5,
+              height: 1.45,
+              color: AppColors.ink,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The five-band scale, with [current] highlighted when given.
+class _GradeScaleLegend extends StatelessWidget {
+  const _GradeScaleLegend({this.current});
+
+  final GradeBand? current;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.creamBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'How grades work',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: AppColors.ink,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final band in GradeBand.values)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: _gradeColor(band),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      band.label,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: band == current
+                            ? FontWeight.w800
+                            : FontWeight.w500,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    band.range,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: band == current
+                          ? FontWeight.w800
+                          : FontWeight.w500,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One game in the progress report: how many of its sessions are played
+/// and their average grade; expands to list every session.
+class _GameGroupCard extends StatefulWidget {
+  const _GameGroupCard({
+    super.key,
+    required this.game,
+    required this.results,
+    required this.learnerName,
+  });
+
+  final GameGroup game;
+  final Map<String, ProgressRecord> results;
+  final String learnerName;
+
+  @override
+  State<_GameGroupCard> createState() => _GameGroupCardState();
+}
+
+class _GameGroupCardState extends State<_GameGroupCard> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final game = widget.game;
+    final played = [
+      for (final s in game.sessions)
+        if (widget.results[s.lesson.id] case final r?) r,
+    ];
+    final total = game.sessions.length;
+    final average = played.isEmpty
+        ? null
+        : played.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) /
+              played.length;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.creamBorder),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _open = !_open),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.cream,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      game.icon,
+                      style: const TextStyle(fontSize: 19),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          game.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.ink,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${played.length} of $total session${total == 1 ? '' : 's'} played',
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(999),
+                          child: LinearProgressIndicator(
+                            value: played.length / total,
+                            minHeight: 4,
+                            backgroundColor: AppColors.mint,
+                            valueColor: const AlwaysStoppedAnimation(
+                              AppColors.teal,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (average != null)
+                    _GradeChip(scorePct: average)
+                  else
+                    const Text(
+                      'Not started',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  AnimatedRotation(
+                    turns: _open ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 18,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_open)
+            for (final session in game.sessions)
+              _SessionRow(
+                game: game,
+                lesson: session.lesson,
+                destination: session.destination,
+                record: widget.results[session.lesson.id],
+                learnerName: widget.learnerName,
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The report's progress list, switchable between the 12 games and the 7
+/// map stages; each card opens to its sessions.
+class _ProgressGroupsSection extends StatefulWidget {
+  const _ProgressGroupsSection({
+    required this.results,
+    required this.learnerName,
+  });
+
+  final Map<String, ProgressRecord> results;
+  final String learnerName;
+
+  @override
+  State<_ProgressGroupsSection> createState() => _ProgressGroupsSectionState();
+}
+
+class _ProgressGroupsSectionState extends State<_ProgressGroupsSection> {
+  bool _byStage = false;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget segment(String label, bool value) {
+      final active = _byStage == value;
+      return GestureDetector(
+        onTap: () => setState(() => _byStage = value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: active ? AppColors.teal : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: active ? Colors.white : AppColors.teal,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'PROGRESS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textMuted,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.teal, width: 1.2),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  segment('12 Games', false),
+                  segment('7 Stages', true),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          _byStage
+              ? 'Tap a stage to see its sessions, then tap a session for '
+                    'its full grade and feedback.'
+              : 'Tap a game to see its sessions, then tap a session for '
+                    'its full grade and feedback.',
+          style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+        ),
+        const SizedBox(height: 8),
+        for (final group in _byStage ? curriculumStages() : curriculumGames())
+          _GameGroupCard(
+            key: ValueKey(group.name),
+            game: group,
+            results: widget.results,
+            learnerName: widget.learnerName,
+          ),
+      ],
+    );
+  }
+}
+
+class _SessionRow extends StatelessWidget {
+  const _SessionRow({
+    required this.game,
+    required this.lesson,
+    required this.destination,
+    required this.record,
+    required this.learnerName,
+  });
+
+  final GameGroup game;
+  final Lesson lesson;
+  final Destination destination;
+  final ProgressRecord? record;
+  final String learnerName;
+
+  @override
+  Widget build(BuildContext context) {
+    final record = this.record;
+    final session = sessionLabel(lesson);
+    final gameName = gameNameOf(lesson);
+    // By game: "Session 1 (Forest)" over its stage; by stage: the game over
+    // its session.
+    final label = game.isStage ? gameName : session;
+    final detail = game.isStage ? session : destination.name;
+    return InkWell(
+      onTap: record == null
+          ? null
+          : () => _showGameReport(
+              context,
+              title: gameName,
+              subtitle: '$session · ${destination.name}',
+              icon: lesson.activities.first.icon,
+              type: lesson.activities.first.type,
+              record: record,
+              learnerName: learnerName,
+            ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+        decoration: BoxDecoration(
+          color: record == null ? null : AppColors.mint.withValues(alpha: 0.35),
+          border: const Border(top: BorderSide(color: AppColors.creamBorder)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                  Text(
+                    detail,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (record != null) ...[
+              _GradeChip(scorePct: record.strokeAccuracyPct),
+              const Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: AppColors.textMuted,
+              ),
+            ] else
+              const Text(
+                'Not played yet',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textMuted,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One game's row in the progress report: title, grade, and the first
+/// line of feedback. Tapping opens the full [_GameReportSheet].
+class _GameResultCard extends StatelessWidget {
+  const _GameResultCard({
+    required this.title,
+    required this.icon,
+    required this.subtitle,
+    required this.type,
+    required this.record,
+    required this.learnerName,
+  });
+
+  final String title;
+  final String icon;
+  final String subtitle;
+  final ActivityType? type;
+  final ProgressRecord record;
+  final String learnerName;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => _showGameReport(
+            context,
+            title: title,
+            icon: icon,
+            type: type,
+            record: record,
+            learnerName: learnerName,
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.creamBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(icon, style: const TextStyle(fontSize: 20)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                          Text(
+                            subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _GradeChip(scorePct: record.strokeAccuracyPct),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  gameFeedback(
+                    scorePct: record.strokeAccuracyPct,
+                    mistakes: record.sequencingErrors,
+                    name: learnerName,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    height: 1.4,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    if (record.assignedByTeacher)
+                      const Text(
+                        'HOMEWORK',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.tealDark,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    const Spacer(),
+                    const Text(
+                      'See full report',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.teal,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right,
+                      size: 14,
+                      color: AppColors.teal,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -3279,6 +4257,8 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
 
     final repo = ProgressRepository();
     final records = repo.byLearnerId(learnerId);
+    final results = ref.watch(parentGameResultsProvider);
+    final classroomRecords = records.where((r) => r.isClassroomMode).toList();
     final moduleSummaries = repo.summaryByModule(learnerId);
 
     String formatDate(DateTime dt) {
@@ -3302,13 +4282,7 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
       return '${months[dt.month - 1]} ${dt.day}, ${dt.year} $hour:$minute $ampm';
     }
 
-    String getModuleTitle(String moduleId) {
-      try {
-        return coreModules.firstWhere((m) => m.id == moduleId).title;
-      } catch (_) {
-        return moduleId;
-      }
-    }
+    String getModuleTitle(String moduleId) => assignmentTitle(moduleId);
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -3537,7 +4511,7 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                                       ),
                                       const SizedBox(width: 12),
                                       Text(
-                                        '${mod.accuracyPct.round()}% accuracy',
+                                        '${mod.accuracyPct.round()}% · ${GradeBand.forScore(mod.accuracyPct).label}',
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w700,
@@ -3553,7 +4527,7 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                                   if (mod.errorCount > 0) ...[
                                     const SizedBox(height: 4),
                                     Text(
-                                      '${mod.errorCount} sequencing error${mod.errorCount == 1 ? '' : 's'} logged',
+                                      '${mod.errorCount} mistake${mod.errorCount == 1 ? '' : 's'} this week',
                                       style: const TextStyle(
                                         fontSize: 11,
                                         color: AppColors.coral,
@@ -3568,176 +4542,41 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                         }),
                       const SizedBox(height: 22),
 
-                      // Section: Recent Activity
-                      const Text(
-                        'RECENT LESSONS',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textMuted,
-                          letterSpacing: 0.8,
-                        ),
+                      // Section: every game or stage, each with its sessions
+                      _ProgressGroupsSection(
+                        results: results,
+                        learnerName: learner?.name ?? 'Your child',
                       ),
-                      const SizedBox(height: 8),
-                      if (records.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.neutralTint,
-                            borderRadius: BorderRadius.circular(12),
+                      if (classroomRecords.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        const Text(
+                          'CLASSROOM ACTIVITIES',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textMuted,
+                            letterSpacing: 0.8,
                           ),
-                          child: const Text(
-                            'No activities logged yet.',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: AppColors.textMuted,
-                            ),
+                        ),
+                        const SizedBox(height: 8),
+                        for (final rec in classroomRecords.take(10))
+                          _GameResultCard(
+                            title: rec.moduleId.startsWith('hot_seat_')
+                                ? 'Hot Seat tracing: ${rec.moduleId.substring(9)}'
+                                : castGameNames[castGameFor(rec)] ??
+                                      'Classroom game',
+                            icon: '🏫',
+                            subtitle:
+                                'In class · ${formatDate(rec.completedAt)}',
+                            type: rec.moduleId.startsWith('cast_')
+                                ? castGameFor(rec)
+                                : null,
+                            record: rec,
+                            learnerName: learner?.name ?? 'Your child',
                           ),
-                        )
-                      else
-                        ...records.take(15).map((rec) {
-                          final title = getModuleTitle(rec.moduleId);
-                          final timeStr = formatDate(rec.completedAt);
-                          final durationMin = (rec.timeOnTaskSeconds / 60.0)
-                              .toStringAsFixed(1);
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 12,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.neutralTint,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: AppColors.creamBorder.withOpacity(0.5),
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        title,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppColors.ink,
-                                        ),
-                                      ),
-                                    ),
-                                    if (rec.assignedByTeacher)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.teal.withOpacity(
-                                            0.12,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'HOMEWORK',
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w800,
-                                            color: AppColors.tealDark,
-                                            letterSpacing: 0.3,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        timeStr,
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: AppColors.textMuted,
-                                        ),
-                                      ),
-                                    ),
-                                    Text(
-                                      '${durationMin}m on task',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.textMuted,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const Divider(height: 12, thickness: 0.5),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.check_circle_outline_rounded,
-                                          size: 13,
-                                          color: rec.strokeAccuracyPct >= 80
-                                              ? AppColors.teal
-                                              : (rec.strokeAccuracyPct >= 60
-                                                    ? AppColors.gold
-                                                    : AppColors.coral),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'Accuracy: ${rec.strokeAccuracyPct.round()}%',
-                                          style: TextStyle(
-                                            fontSize: 11.5,
-                                            fontWeight: FontWeight.w700,
-                                            color: rec.strokeAccuracyPct >= 80
-                                                ? AppColors.tealDark
-                                                : (rec.strokeAccuracyPct >= 60
-                                                      ? AppColors.gold
-                                                      : AppColors.coral),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.error_outline_rounded,
-                                          size: 13,
-                                          color: rec.sequencingErrors > 0
-                                              ? AppColors.coral
-                                              : AppColors.teal,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'Errors: ${rec.sequencingErrors}',
-                                          style: TextStyle(
-                                            fontSize: 11.5,
-                                            fontWeight: FontWeight.w700,
-                                            color: rec.sequencingErrors > 0
-                                                ? AppColors.coral
-                                                : AppColors.tealDark,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
+                      ],
+                      const SizedBox(height: 14),
+                      const _GradeScaleLegend(),
                     ],
                   ),
                 ),

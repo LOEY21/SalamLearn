@@ -29,12 +29,17 @@ class CreationHuntGame extends StatefulWidget {
     required this.stage,
     required this.xp,
     required this.onComplete,
+    this.onEnding,
     this.onExit,
   });
 
   final CreationHuntStage stage;
   final int xp;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
+  /// Fired when the game's own ending screen appears (the lesson player's
+  /// cue for its congratulations sound).
+  final VoidCallback? onEnding;
 
   /// Leaves the lesson — wired to the hunt HUD's ✕ chip, which is the only
   /// exit the prototype's layout has room for.
@@ -323,6 +328,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
       _screen = _Screen.done;
       _screenT0 = _now;
     });
+    widget.onEnding?.call();
   }
 
   void _finish() {

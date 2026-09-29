@@ -7,6 +7,9 @@ import '../../data/models/curriculum/curriculum_models.dart';
 import '../../data/models/progress_record.dart';
 import '../../data/repositories/class_repository.dart';
 import '../../data/repositories/progress_repository.dart';
+import '../progress_providers.dart';
+import '../parent/game_grades.dart';
+import 'teacher_providers.dart';
 
 /// FR-6.2B — Home Mode analytics live entirely separately from
 /// [computeClassHealthIndex] (teacher_providers.dart, now Hot-Seat/
@@ -66,7 +69,7 @@ List<HomeModeAggregate> computeHomeModeAggregate(String classId) {
   // byLearnerId repeatedly for each learner (which causes heavy database scans and lag).
   final recordsByModule = <String, List<ProgressRecord>>{};
   final learnersWithActivityByModule = <String, int>{};
-  
+
   final learnerIds = enrollments.map((e) => e.learnerId).toSet();
   final studentModuleRecords = <String, Map<String, List<ProgressRecord>>>{};
 
@@ -100,10 +103,10 @@ List<HomeModeAggregate> computeHomeModeAggregate(String classId) {
     final completionRate = learnersWithActivity / rosterSize;
     final avgAccuracy =
         allRecords.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) /
-            allRecords.length;
+        allRecords.length;
     final avgErrors =
         allRecords.map((r) => r.sequencingErrors).reduce((a, b) => a + b) /
-            allRecords.length;
+        allRecords.length;
 
     final thisWeek = allRecords.where((r) => r.completedAt.isAfter(weekAgo));
     final priorWeek = allRecords.where(
@@ -114,10 +117,10 @@ List<HomeModeAggregate> computeHomeModeAggregate(String classId) {
     if (thisWeek.isNotEmpty && priorWeek.isNotEmpty) {
       final thisWeekAvg =
           thisWeek.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) /
-              thisWeek.length;
+          thisWeek.length;
       final priorWeekAvg =
           priorWeek.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) /
-              priorWeek.length;
+          priorWeek.length;
       trend = thisWeekAvg - priorWeekAvg;
     }
 
@@ -135,9 +138,11 @@ List<HomeModeAggregate> computeHomeModeAggregate(String classId) {
 
 /// Class-wide Aggregate Home Performance View (FR-6.2B) for `classId`.
 final homeModeAggregateProvider =
-    Provider.family<List<HomeModeAggregate>, String>(
-      (ref, classId) => computeHomeModeAggregate(classId),
-    );
+    Provider.family<List<HomeModeAggregate>, String>((ref, classId) {
+      ref.watch(rosterRefreshProvider);
+      ref.watch(progressChangesProvider);
+      return computeHomeModeAggregate(classId);
+    });
 
 /// The single weakest destination with recorded activity — the "collective
 /// misconception" the Aggregate view is required to surface. Null once
@@ -185,10 +190,11 @@ String destinationNameForModuleId(String moduleId) {
 
 /// Every `ProgressRecord` this learner earned outside a Cast session, most
 /// recent first — the Individual view's "completion history" list.
-List<ProgressRecord> homeModeHistoryFor(String learnerId) => ProgressRepository()
-    .byLearnerId(learnerId)
-    .where((r) => !r.isClassroomMode)
-    .toList();
+List<ProgressRecord> homeModeHistoryFor(String learnerId) =>
+    ProgressRepository()
+        .byLearnerId(learnerId)
+        .where((r) => !r.isClassroomMode)
+        .toList();
 
 /// Longitudinal mastery view — this learner's Home Mode records rolled up
 /// per destination, weakest accuracy first (mirrors
@@ -202,9 +208,10 @@ List<HomeModeModuleSummary> homeModeSummaryFor(String learnerId) {
     final records = entry.value;
     final avgAccuracy =
         records.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) /
-            records.length;
-    final totalErrors =
-        records.map((r) => r.sequencingErrors).reduce((a, b) => a + b);
+        records.length;
+    final totalErrors = records
+        .map((r) => r.sequencingErrors)
+        .reduce((a, b) => a + b);
     return HomeModeModuleSummary(
       moduleId: entry.key,
       moduleName: destinationNameForModuleId(entry.key),
@@ -217,12 +224,166 @@ List<HomeModeModuleSummary> homeModeSummaryFor(String learnerId) {
   return summaries;
 }
 
-final homeModeHistoryProvider =
-    Provider.family<List<ProgressRecord>, String>(
-      (ref, learnerId) => homeModeHistoryFor(learnerId),
-    );
+final homeModeHistoryProvider = Provider.family<List<ProgressRecord>, String>((
+  ref,
+  learnerId,
+) {
+  ref.watch(progressChangesProvider);
+  return homeModeHistoryFor(learnerId);
+});
 
 final homeModeModuleSummaryProvider =
-    Provider.family<List<HomeModeModuleSummary>, String>(
-      (ref, learnerId) => homeModeSummaryFor(learnerId),
-    );
+    Provider.family<List<HomeModeModuleSummary>, String>((ref, learnerId) {
+      ref.watch(progressChangesProvider);
+      return homeModeSummaryFor(learnerId);
+    });
+
+/// One session in Home Performance: how many students played it at home
+/// and their average score (null when nobody has).
+class HomeSession {
+  const HomeSession({
+    required this.label,
+    required this.detail,
+    required this.studentsPlayed,
+    required this.avgAccuracy,
+  });
+
+  final String label;
+  final String detail;
+  final int studentsPlayed;
+  final double? avgAccuracy;
+}
+
+/// A game or a stage (map destination) with its sessions, rolled up from
+/// Home Mode records.
+class HomeProgressGroup {
+  const HomeProgressGroup({
+    required this.name,
+    required this.icon,
+    required this.sessions,
+    required this.studentsPlayed,
+    required this.avgAccuracy,
+  });
+
+  final String name;
+  final String icon;
+  final List<HomeSession> sessions;
+
+  /// Distinct students with at least one session played.
+  final int studentsPlayed;
+  final double? avgAccuracy;
+
+  int get sessionsPlayed => sessions.where((s) => s.studentsPlayed > 0).length;
+}
+
+Map<String, List<ProgressRecord>> _homeRecordsByLesson(
+  Iterable<ProgressRecord> records,
+) {
+  final byLesson = <String, List<ProgressRecord>>{};
+  for (final r in records) {
+    if (!r.isClassroomMode && r.lessonId != null) {
+      byLesson.putIfAbsent(r.lessonId!, () => []).add(r);
+    }
+  }
+  return byLesson;
+}
+
+double? _avgAccuracy(Iterable<ProgressRecord> rs) => rs.isEmpty
+    ? null
+    : rs.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) / rs.length;
+
+HomeProgressGroup _group({
+  required String name,
+  required String icon,
+  required List<(Lesson, String label, String detail)> sessions,
+  required Map<String, List<ProgressRecord>> byLesson,
+}) {
+  final all = [for (final (lesson, _, _) in sessions) ...?byLesson[lesson.id]];
+  return HomeProgressGroup(
+    name: name,
+    icon: icon,
+    studentsPlayed: all.map((r) => r.learnerId).toSet().length,
+    avgAccuracy: _avgAccuracy(all),
+    sessions: [
+      for (final (lesson, label, detail) in sessions)
+        HomeSession(
+          label: label,
+          detail: detail,
+          studentsPlayed: (byLesson[lesson.id] ?? const [])
+              .map((r) => r.learnerId)
+              .toSet()
+              .length,
+          avgAccuracy: _avgAccuracy(byLesson[lesson.id] ?? const []),
+        ),
+    ],
+  );
+}
+
+String _gameName(Lesson lesson) {
+  final type = lesson.activities.first.type;
+  return castGameNames[type] ?? lesson.title.split(' - ').first;
+}
+
+/// The 12 games in map order, each with its sessions, from [records] —
+/// one learner's history for the Individual view or the whole roster's for
+/// the Aggregate view. Only records with a lessonId map to a session.
+List<HomeProgressGroup> homeModeGamesFor(Iterable<ProgressRecord> records) {
+  final byLesson = _homeRecordsByLesson(records);
+  return [
+    for (final game in curriculumGames())
+      _group(
+        name: castGameNames[game.type] ?? game.name,
+        icon: game.icon,
+        byLesson: byLesson,
+        sessions: [
+          for (final s in game.sessions)
+            (s.lesson, sessionLabel(s.lesson), s.destination.name),
+        ],
+      ),
+  ];
+}
+
+/// The 7 map stages (destinations), each with the sessions played there.
+List<HomeProgressGroup> homeModeStagesFor(Iterable<ProgressRecord> records) {
+  final byLesson = _homeRecordsByLesson(records);
+  return [
+    for (final (i, destination) in curriculum.indexed)
+      _group(
+        name: 'Stage ${i + 1}: ${destination.name}',
+        icon: destination.icon,
+        byLesson: byLesson,
+        sessions: [
+          for (final lesson in destination.lessons)
+            (lesson, _gameName(lesson), sessionLabel(lesson)),
+        ],
+      ),
+  ];
+}
+
+Iterable<ProgressRecord> _classRecords(String classId) {
+  final learnerIds = {
+    for (final e in ClassRepository().byClassId(classId)) e.learnerId,
+  };
+  return Hive.box<ProgressRecord>(
+    HiveBoxes.progress,
+  ).values.where((r) => learnerIds.contains(r.learnerId));
+}
+
+/// Aggregate view: every enrolled student's Home Mode records, grouped by
+/// game ([byStage] false) or by map stage ([byStage] true).
+final homeModeClassGroupsProvider =
+    Provider.family<List<HomeProgressGroup>, (String, bool)>((ref, args) {
+      final (classId, byStage) = args;
+      ref.watch(rosterRefreshProvider);
+      ref.watch(progressChangesProvider);
+      final records = _classRecords(classId);
+      return byStage ? homeModeStagesFor(records) : homeModeGamesFor(records);
+    });
+
+/// Individual view: this learner's Home Mode history, by game or by stage.
+final homeModeLearnerGroupsProvider =
+    Provider.family<List<HomeProgressGroup>, (String, bool)>((ref, args) {
+      final (learnerId, byStage) = args;
+      final history = ref.watch(homeModeHistoryProvider(learnerId));
+      return byStage ? homeModeStagesFor(history) : homeModeGamesFor(history);
+    });

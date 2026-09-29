@@ -28,6 +28,7 @@ class TraceActivity extends StatefulWidget {
     required this.xp,
     required this.color,
     required this.onComplete,
+    this.onEnding,
     required this.onBack,
     this.audioEnabled = true,
   });
@@ -36,6 +37,10 @@ class TraceActivity extends StatefulWidget {
   final int xp;
   final Color color;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
+  /// Fired when the game's own ending screen appears (the lesson player's
+  /// cue for its congratulations sound).
+  final VoidCallback? onEnding;
 
   /// `LessonPlayerScreen` skips its own top bar for trace (see its
   /// `_activity.type` switch) since this scene's back control is baked into
@@ -436,6 +441,7 @@ class _TraceActivityState extends State<TraceActivity>
       _click();
       setState(() => _screen = _Screen.done);
       _enter.forward(from: 0);
+      widget.onEnding?.call();
     } else {
       setState(() {
         _idx += 1;

@@ -11,10 +11,9 @@ import 'package:salamlearn/logic/teacher/teacher_providers.dart';
 
 import '../../test_helpers/hive_test_setup.dart';
 
-// 'ا' (Alif) — one of the four letters `HotSeatDrawingCanvas` offers, so
-// its `hot_seat_ا` moduleId is a row [computeClassHealthIndex] actually
-// tracks. See `_hotSeatLetters` in teacher_providers.dart.
-const _moduleId = 'hot_seat_ا';
+// What the Cast screen's lesson player saves when Ayah Builder is played
+// on the Hot Seat — and the id of the Ayah Builder row.
+const _moduleId = 'cast_ayahBuilder';
 
 void main() {
   late Directory tempDir;
@@ -30,7 +29,8 @@ void main() {
   test('module with no records reports hasActivity false and no score', () {
     final result = computeClassHealthIndex('missing-class');
 
-    expect(result, hasLength(4)); // one row per Hot Seat letter
+    expect(result, hasLength(12)); // one row per Cast screen game
+    expect(result.map((m) => m.moduleName), containsAll(castGameNames.values));
     expect(result.every((m) => !m.hasActivity), isTrue);
     expect(result.every((m) => m.healthIndex == 0), isTrue);
   });
@@ -53,8 +53,8 @@ void main() {
     );
     await classes.enroll(classId: section.id, learnerId: a.id!);
 
-    // Home-mode Adventure Map play — moduleId isn't even a Hot Seat
-    // letter, and isClassroomMode defaults to false either way.
+    // Home-mode Adventure Map play — moduleId isn't a Cast game
+    // either, and isClassroomMode defaults to false.
     await progress.writeProgress(
       learnerId: a.id!,
       moduleId: '1',
@@ -68,7 +68,7 @@ void main() {
     expect(result.every((m) => !m.hasActivity), isTrue);
   });
 
-  test('completion rate counts distinct learners with >=1 Classroom Mode record for the letter', () async {
+  test('completion rate counts distinct learners with >=1 Classroom Mode record for the game', () async {
     final classes = ClassRepository();
     final learners = LearnerRepository();
     final progress = ProgressRepository();
@@ -102,7 +102,7 @@ void main() {
       assignedByTeacher: true,
       isClassroomMode: true,
     );
-    // Learner B was never called up to the Hot Seat for this letter.
+    // Learner B never played this game on the Hot Seat.
 
     final result = computeClassHealthIndex(section.id);
     final moduleHealth = result.firstWhere((m) => m.moduleId == _moduleId);
@@ -148,11 +148,11 @@ void main() {
     expect(moduleHealth.healthIndex, 100);
   });
 
-  test('enrolled roster with zero Classroom Mode records for a letter reports hasActivity false', () async {
+  test('enrolled roster with zero Classroom Mode records for a game reports hasActivity false', () async {
     final classes = ClassRepository();
     final learners = LearnerRepository();
     final progress = ProgressRepository();
-    const otherModuleId = 'hot_seat_ب';
+    const otherModuleId = 'cast_labelMaker';
 
     final section = await classes.create(
       teacherId: 't1',
@@ -166,7 +166,7 @@ void main() {
       username: 'learner_a',
     );
     await classes.enroll(classId: section.id, learnerId: a.id!);
-    // Learner has activity, but only for a different letter.
+    // Learner has activity, but only for a different game.
     await progress.writeProgress(
       learnerId: a.id!,
       moduleId: otherModuleId,
@@ -182,6 +182,40 @@ void main() {
 
     expect(moduleHealth.hasActivity, isFalse);
     expect(moduleHealth.healthIndex, 0);
+  });
+
+  test('dashboard letter Hot Seat tracing counts under Magic Sand Tracer', () async {
+    final classes = ClassRepository();
+    final learners = LearnerRepository();
+    final progress = ProgressRepository();
+
+    final section = await classes.create(
+      teacherId: 't1',
+      gradeLevel: 'Grade 1',
+      section: 'A',
+    );
+    final a = await learners.register(
+      parentId: 'p1',
+      name: 'Learner A',
+      age: 6,
+      username: 'learner_a',
+    );
+    await classes.enroll(classId: section.id, learnerId: a.id!);
+    await progress.writeProgress(
+      learnerId: a.id!,
+      moduleId: 'hot_seat_ا',
+      strokeAccuracyPct: 75,
+      sequencingErrors: 2,
+      timeOnTaskSeconds: 60,
+      assignedByTeacher: true,
+      isClassroomMode: true,
+    );
+
+    final tracer = computeClassHealthIndex(
+      section.id,
+    ).firstWhere((m) => m.moduleName == 'Magic Sand Tracer');
+    expect(tracer.hasActivity, isTrue);
+    expect(tracer.avgAccuracy, 75);
   });
 
   test('trend compares this-week vs prior-week average accuracy', () async {

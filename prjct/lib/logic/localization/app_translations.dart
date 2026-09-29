@@ -98,6 +98,11 @@ class AppTranslations {
   }
 }
 
+/// A game voice clip in the learner's language: Tagalog recordings sit in
+/// a `fil/` folder mirroring the English layout.
+String localizedVoice(String asset) =>
+    AppTranslations.currentLanguageCode == 'fil' ? 'fil/$asset' : asset;
+
 extension TranslationExtension on String {
   String get tr => AppTranslations.translate(this);
 }

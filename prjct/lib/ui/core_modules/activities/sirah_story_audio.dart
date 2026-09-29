@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:salamlearn/logic/localization/app_translations.dart';
 
 /// The supplied recordings, in the order of each session's two pages.
 typedef SirahPageAudio = ({
@@ -113,7 +114,9 @@ class SirahStoryAudio implements SirahAudioPlayback {
       _complete = _voice.onPlayerComplete.listen((_) {
         if (generation == _generation) onComplete?.call();
       });
-      await _voice.play(AssetSource('audio/sirah_story/$asset'));
+      await _voice.play(
+        AssetSource('audio/sirah_story/${localizedVoice(asset)}'),
+      );
     } catch (_) {
       if (generation == _generation) onError?.call();
     }

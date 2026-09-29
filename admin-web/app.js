@@ -1471,7 +1471,8 @@ async function confirmDeleteTeacher(row, btn) {
     const { id, ...teacherData } = row;
     archiveDocToTrashbinBatch(batch, "teachers", row.id, teacherData, batchId);
     batch.delete(doc(db, "teachers", row.id));
-    
+    if (row.email) batch.delete(doc(db, "activatedTeachers", row.email.toLowerCase()));
+
     await batch.commit();
     await loadAllData();
     hideLoading();

@@ -8,19 +8,36 @@ class GreetingMatchAudio {
   static const tryAgain = 'audio/greetings/try_again.mp3';
 
   final AudioPlayer _voice = AudioPlayer();
+  final AudioPlayer _music = AudioPlayer();
   int _generation = 0;
   bool _disposed = false;
   bool _muted = false;
 
   bool get muted => _muted;
 
+  Future<void> startMusic() async {
+    if (_muted || _disposed) return;
+    try {
+      await _music.setReleaseMode(ReleaseMode.loop);
+      await _music.setVolume(0.18);
+      if (_muted || _disposed) return;
+      await _music.play(
+        AssetSource('audio/greetings/audio_bgm_greetings_ambient.mp3'),
+      );
+    } catch (_) {
+      // Missing audio output must not block the game.
+    }
+  }
+
   /// Sound on/off (the Music button). Muting cuts off whatever is playing.
   Future<void> setMuted(bool muted) async {
     _muted = muted;
-    if (!muted || _disposed) return;
+    if (_disposed) return;
+    if (!muted) return startMusic();
     _generation++;
     try {
       await _voice.stop();
+      await _music.stop();
     } catch (_) {
       // Nothing playing / player already released.
     }
@@ -47,5 +64,6 @@ class GreetingMatchAudio {
     if (_disposed) return;
     _disposed = true;
     await _voice.dispose();
+    await _music.dispose();
   }
 }

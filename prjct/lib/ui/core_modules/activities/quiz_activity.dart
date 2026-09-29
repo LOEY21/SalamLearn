@@ -73,8 +73,8 @@ class _QuizActivityState extends State<QuizActivity> {
 
   void _handleNext() {
     if (_qi + 1 >= widget.questions.length) {
-      final correctCount =
-          _score + (_state == _QuizState.correct ? 1 : 0);
+      // _handleAnswer already counted the last answer.
+      final correctCount = _score;
       final finalXp =
           (widget.xp * correctCount / widget.questions.length).round();
       final accuracyPct = correctCount / widget.questions.length * 100;

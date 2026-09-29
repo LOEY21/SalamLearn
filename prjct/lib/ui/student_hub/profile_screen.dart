@@ -8,7 +8,6 @@ import 'package:lottie/lottie.dart';
 
 import '../../data/curriculum_data.dart';
 import '../../data/repositories/class_repository.dart';
-import '../../data/models/curriculum/curriculum_models.dart';
 import '../../data/repositories/progress_repository.dart';
 import '../../logic/auth/session.dart';
 import '../../logic/recent_module_provider.dart';
@@ -1183,28 +1182,7 @@ class _AssignedHomeworkButton extends ConsumerWidget {
       final maxLevel = assignment['maxLevel'] as int;
       final maxLessons = assignment['maxLessons'] as int?;
 
-      final module = coreModules.firstWhere(
-        (m) => m.id == moduleId || m.destinationId.toString() == moduleId,
-        orElse: () => coreModules.first,
-      );
-      final dest = curriculum.firstWhere((d) => d.id == module.destinationId, orElse: () => curriculum.first);
-
-      final lessons = dest.lessons;
-      final perLevel = (lessons.length / 3).ceil();
-      final levelsList = [
-        lessons.take(perLevel).toList(),
-        lessons.skip(perLevel).take(perLevel).toList(),
-        lessons.skip(perLevel * 2).toList(),
-      ].where((group) => group.isNotEmpty).toList();
-
-      final List<Lesson> assignedLessons = [];
-      for (var li = 0; li < maxLevel; li++) {
-        if (li >= levelsList.length) break;
-        final group = levelsList[li];
-        final cap = (li == maxLevel - 1) ? maxLessons : null;
-        final count = cap ?? group.length;
-        assignedLessons.addAll(group.take(count));
-      }
+      final assignedLessons = assignedLessonsFor(moduleId, maxLevel, maxLessons);
 
       pendingCount += assignedLessons.where((l) => !completed.contains(l.id)).length;
     }
@@ -1411,19 +1389,14 @@ class AssignedHomeworkScreen extends ConsumerWidget {
                   final maxLevel = assignment['maxLevel'] as int;
                   final maxLessons = assignment['maxLessons'] as int?;
 
-                  // Look up module info
-                  final module = coreModules.firstWhere(
-                    (m) => m.id == moduleId || m.destinationId.toString() == moduleId,
-                    orElse: () => coreModules.first,
-                  );
-
-                  // Look up destination
+                  final module =
+                      moduleForAssignment(moduleId) ?? coreModules.first;
                   final dest = curriculum.firstWhere(
                     (d) => d.id == module.destinationId,
                     orElse: () => curriculum.first,
                   );
-
-                  // Split lessons into levels
+                  final assignedLessons =
+                      assignedLessonsFor(moduleId, maxLevel, maxLessons);
                   final lessons = dest.lessons;
                   final perLevel = (lessons.length / 3).ceil();
                   final levelsList = [
@@ -1431,16 +1404,6 @@ class AssignedHomeworkScreen extends ConsumerWidget {
                     lessons.skip(perLevel).take(perLevel).toList(),
                     lessons.skip(perLevel * 2).toList(),
                   ].where((group) => group.isNotEmpty).toList();
-
-                  // Gather all assigned lessons
-                  final List<Lesson> assignedLessons = [];
-                  for (var li = 0; li < maxLevel; li++) {
-                    if (li >= levelsList.length) break;
-                    final group = levelsList[li];
-                    final cap = (li == maxLevel - 1) ? maxLessons : null;
-                    final count = cap ?? group.length;
-                    assignedLessons.addAll(group.take(count));
-                  }
 
                   final completedLessons = ProgressRepository().completedLessonIds(learnerId);
 
@@ -1474,7 +1437,7 @@ class AssignedHomeworkScreen extends ConsumerWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      module.title,
+                                      assignmentTitle(moduleId),
                                       style: const TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w800,

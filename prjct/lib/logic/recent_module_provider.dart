@@ -36,12 +36,16 @@ final learnerCompletedTodayProvider =
 );
 
 class UnlockedBadgesNotifier extends Notifier<List<String>> {
+  /// Mock badges the learner starts with — anything beyond these was earned
+  /// this session and gets a "go see it" notification.
+  static const seed = [
+    'First Steps Badge',
+    'Desert Calligrapher Badge',
+    'Curious Spark Badge (3-Day Streak)',
+  ];
+
   @override
-  List<String> build() => [
-        'First Steps Badge',
-        'Desert Calligrapher Badge',
-        'Curious Spark Badge (3-Day Streak)',
-      ];
+  List<String> build() => seed;
 
   void unlockBadge(String badge) {
     if (!state.contains(badge)) {

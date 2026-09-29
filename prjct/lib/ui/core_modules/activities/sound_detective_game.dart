@@ -307,6 +307,7 @@ class SoundDetectiveGame extends StatefulWidget {
     required this.session,
     required this.xp,
     required this.onComplete,
+    this.onEnding,
     this.onExit,
     this.random,
     this.musicEnabled = true,
@@ -315,6 +316,10 @@ class SoundDetectiveGame extends StatefulWidget {
   final SoundDetectiveSession session;
   final int xp;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
+  /// Fired when the game's own ending screen appears (the lesson player's
+  /// cue for its congratulations sound).
+  final VoidCallback? onEnding;
   final VoidCallback? onExit;
 
   /// Sign and animal order source; tests pass a seeded one.
@@ -692,6 +697,7 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
           _screen = _Screen.done;
           _screenAt = _now;
           _locked = false;
+          widget.onEnding?.call();
           return;
         }
         _qi = next;

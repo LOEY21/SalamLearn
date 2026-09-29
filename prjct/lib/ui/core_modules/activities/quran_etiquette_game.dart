@@ -31,6 +31,7 @@ class QuranEtiquetteGame extends StatefulWidget {
     required this.session,
     required this.xp,
     required this.onComplete,
+    this.onEnding,
     this.onExit,
     this.audioEnabled = true,
   });
@@ -38,6 +39,10 @@ class QuranEtiquetteGame extends StatefulWidget {
   final QuranEtiquetteSession session;
   final int xp;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
+  /// Fired when the game's own ending screen appears (the lesson player's
+  /// cue for its congratulations sound).
+  final VoidCallback? onEnding;
 
   /// Leaves the lesson from the title screen's ✕.
   final VoidCallback? onExit;
@@ -457,6 +462,7 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
         _showcase = false;
         _finishT0 = _now;
       });
+      widget.onEnding?.call();
       return;
     }
     final shown = _q.feedbackImage;

@@ -251,22 +251,62 @@ class FirestoreMirror {
         .collection(HiveBoxes.progress)
         .where('learnerId', isEqualTo: learnerId)
         .get();
-    return snapshot.docs.map((doc) {
-      final data = doc.data();
-      return ProgressRecord(
-        id: doc.id,
-        learnerId: data['learnerId'] as String? ?? learnerId,
-        moduleId: data['moduleId'] as String? ?? '',
-        strokeAccuracyPct: (data['strokeAccuracyPct'] as num?)?.toDouble() ?? 0,
-        sequencingErrors: data['sequencingErrors'] as int? ?? 0,
-        timeOnTaskSeconds: data['timeOnTaskSeconds'] as int? ?? 0,
-        completedAt:
-            DateTime.tryParse(data['completedAt'] as String? ?? '') ?? DateTime.now(),
-        assignedByTeacher: data['assignedByTeacher'] as bool? ?? false,
-        lessonId: data['lessonId'] as String?,
-        isClassroomMode: data['isClassroomMode'] as bool? ?? false,
-      );
-    }).toList();
+    return snapshot.docs.map(_progressFromDoc).toList();
+  }
+
+  /// Real-time counterpart to [fetchProgressForLearner] for several
+  /// learners — emits each chunk's full record list on every change, so a
+  /// parent/teacher dashboard picks up games played on another device
+  /// without a manual sync.
+  Stream<List<ProgressRecord>> watchProgressForLearners(List<String> learnerIds) {
+    if (learnerIds.isEmpty) return const Stream.empty();
+    final controller = StreamController<List<ProgressRecord>>();
+    final subs = <StreamSubscription>[];
+    controller.onListen = () {
+      try {
+        // Firestore `in` limit is 10; chunk for safety
+        for (var i = 0; i < learnerIds.length; i += 10) {
+          final chunk = learnerIds.sublist(i, (i + 10).clamp(0, learnerIds.length));
+          subs.add(
+            _db
+                .collection(HiveBoxes.progress)
+                .where('learnerId', whereIn: chunk)
+                .snapshots()
+                .listen(
+                  (snap) => controller.add(snap.docs.map(_progressFromDoc).toList()),
+                  onError: controller.addError,
+                ),
+          );
+        }
+      } catch (e) {
+        // Firebase not initialized (e.g. widget tests) — stay local-only.
+        controller.addError(e);
+      }
+    };
+    controller.onCancel = () {
+      for (final sub in subs) {
+        sub.cancel();
+      }
+      subs.clear();
+    };
+    return controller.stream;
+  }
+
+  ProgressRecord _progressFromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? const {};
+    return ProgressRecord(
+      id: doc.id,
+      learnerId: data['learnerId'] as String? ?? '',
+      moduleId: data['moduleId'] as String? ?? '',
+      strokeAccuracyPct: (data['strokeAccuracyPct'] as num?)?.toDouble() ?? 0,
+      sequencingErrors: (data['sequencingErrors'] as num?)?.toInt() ?? 0,
+      timeOnTaskSeconds: (data['timeOnTaskSeconds'] as num?)?.toInt() ?? 0,
+      completedAt:
+          DateTime.tryParse(data['completedAt'] as String? ?? '') ?? DateTime.now(),
+      assignedByTeacher: data['assignedByTeacher'] as bool? ?? false,
+      lessonId: data['lessonId'] as String?,
+      isClassroomMode: data['isClassroomMode'] as bool? ?? false,
+    );
   }
 
   Future<void> pushAssignedModule(AssignedModule assignment) {

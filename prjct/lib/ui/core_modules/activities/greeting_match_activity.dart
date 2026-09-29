@@ -31,12 +31,17 @@ class GreetingMatchActivity extends StatefulWidget {
     required this.session,
     required this.xp,
     required this.onComplete,
+    this.onEnding,
     this.onBack,
   });
 
   final GreetingMatchSession session;
   final int xp;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
+  /// Fired when the game's own ending screen appears (the lesson player's
+  /// cue for its congratulations sound).
+  final VoidCallback? onEnding;
   final VoidCallback? onBack;
 
   @override
@@ -113,6 +118,7 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
+    unawaited(_audio.startMusic());
   }
 
   @override
@@ -311,6 +317,7 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
       _revealTimer?.cancel();
       _idleController.repeat();
       setState(() => _screen = _Screen.done);
+      widget.onEnding?.call();
     } else {
       setState(() {
         _idx++;

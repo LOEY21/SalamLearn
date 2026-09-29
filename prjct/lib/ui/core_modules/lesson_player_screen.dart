@@ -57,6 +57,7 @@ class LessonPlayerScreen extends ConsumerStatefulWidget {
     required this.onClose,
     this.uiAudio,
     this.classroomPlay = false,
+    this.classroomLearnerId,
   });
 
   final Lesson lesson;
@@ -69,8 +70,13 @@ class LessonPlayerScreen extends ConsumerStatefulWidget {
   final GameUiAudioPlayback? uiAudio;
 
   /// Played on the classroom projector from the Cast screen — no learner is
-  /// signed in, so nothing is awarded or recorded (same path as a replay).
+  /// signed in, so nothing is awarded (same path as a replay).
   final bool classroomPlay;
+
+  /// The Hot Seat student during [classroomPlay]: each finished game is
+  /// saved for them as a Classroom Mode record, which feeds the Class
+  /// Health Index.
+  final String? classroomLearnerId;
 
   @override
   ConsumerState<LessonPlayerScreen> createState() => _LessonPlayerScreenState();
@@ -111,6 +117,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
   double _accuracySum = 0.0;
   int _accuracyCount = 0;
   int _errorsTotal = 0;
+  int _activityStartSeconds = 0;
 
   Activity get _activity => widget.lesson.activities[_activityIndex];
 
@@ -128,9 +135,9 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
     _alreadyCompleted =
         widget.classroomPlay ||
         learnerId != null &&
-        ProgressRepository()
-            .completedLessonIds(learnerId)
-            .contains(widget.lesson.id);
+            ProgressRepository()
+                .completedLessonIds(learnerId)
+                .contains(widget.lesson.id);
   }
 
   // Pause the stopwatch while backgrounded so time-on-task reflects actual
@@ -151,11 +158,32 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
     super.dispose();
   }
 
-  void _handleActivityComplete(int xp, double accuracyPct, int errors) {
+  int _celebratedIndex = -1;
+
+  /// The level-complete cheer (plus the star award on the lesson's last
+  /// game) — played the moment a game's own ending screen appears, not when
+  /// its continue button is tapped.
+  void _celebrate(int index) {
+    if (_finished || index != _activityIndex) return;
+    _celebratedIndex = index;
     _uiAudio.levelComplete();
-    if (_activityIndex + 1 >= widget.lesson.activities.length) {
+    if (index + 1 >= widget.lesson.activities.length) {
       Future.delayed(const Duration(milliseconds: 450), _uiAudio.starAward);
     }
+  }
+
+  void _handleActivityComplete(
+    int index,
+    int xp,
+    double accuracyPct,
+    int errors,
+  ) {
+    // A game's finish button tapped twice would otherwise skip the next
+    // game or record the lesson twice, skewing parent/teacher analytics.
+    if (_finished || index != _activityIndex) return;
+    // Games with their own ending already cheered when it appeared.
+    if (_celebratedIndex != index) _celebrate(index);
+    _writeClassroomResult(accuracyPct, errors);
     final next = _xpEarned + xp;
     _accuracySum += accuracyPct;
     _accuracyCount += 1;
@@ -210,6 +238,26 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         _activityIndex += 1;
       });
     }
+  }
+
+  /// One Classroom Mode record per game played from the Cast screen, keyed
+  /// `cast_<game>` rather than by lesson so class play never marks the
+  /// student's own Adventure Map lessons as done.
+  void _writeClassroomResult(double accuracyPct, int errors) {
+    final seconds = _stopwatch.elapsed.inSeconds;
+    final elapsed = seconds - _activityStartSeconds;
+    _activityStartSeconds = seconds;
+    final learnerId = widget.classroomLearnerId;
+    if (!widget.classroomPlay || learnerId == null) return;
+    ProgressRepository().writeProgress(
+      learnerId: learnerId,
+      moduleId: 'cast_${_activity.type.name}',
+      strokeAccuracyPct: accuracyPct,
+      sequencingErrors: errors,
+      timeOnTaskSeconds: elapsed,
+      assignedByTeacher: true,
+      isClassroomMode: true,
+    );
   }
 
   /// Mid-lesson quit — nothing is saved until the last activity completes
@@ -523,6 +571,10 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
 
   Widget _buildActivityContent(Color lessonColor) {
     final activity = _activity;
+    final index = _activityIndex;
+    void onComplete(int xp, double accuracyPct, int errors) =>
+        _handleActivityComplete(index, xp, accuracyPct, errors);
+    void onEnding() => _celebrate(index);
     // `key: ValueKey(activity.id)` matters here, not just style: two
     // consecutive activities of the same type (e.g. two trace activities
     // back to back) are the same widget type at the same tree position, so
@@ -535,14 +587,16 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         cards: activity.cards!,
         xp: activity.xp,
         color: lessonColor,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
+        onEnding: onEnding,
         onBack: _confirmExit,
       ),
       ActivityType.pronounce => GreetingMatchActivity(
         key: ValueKey(activity.id),
         session: activity.greetingSession!,
         xp: activity.xp,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
+        onEnding: onEnding,
         onBack: _confirmExit,
       ),
       ActivityType.quranSync => QuranSyncActivity(
@@ -550,14 +604,15 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         line: activity.quranLine!,
         xp: activity.xp,
         color: lessonColor,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
       ),
       ActivityType.ayahBuilder => AyahBuilderGame(
         key: ValueKey(activity.id),
         sessions: ayahBuilderSessions,
         initialIndex: ayahBuilderSessions.indexOf(activity.ayahSession!),
         xp: activity.xp,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
+        onEnding: onEnding,
         onExit: _confirmExit,
       ),
       ActivityType.story => StoryActivity(
@@ -565,7 +620,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         activityId: activity.id,
         panels: activity.panels!,
         xp: activity.xp,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
       ),
       ActivityType.fiqhDrag => FiqhDragActivity(
         key: ValueKey(activity.id),
@@ -574,7 +629,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         zones: activity.fiqhZones!,
         xp: activity.xp,
         color: lessonColor,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
         onBack: _confirmExit,
       ),
       ActivityType.quiz => QuizActivity(
@@ -582,69 +637,78 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         questions: activity.questions!,
         xp: activity.xp,
         color: lessonColor,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
       ),
       ActivityType.creationHunt => CreationHuntGame(
         key: ValueKey(activity.id),
         stage: activity.huntStage!,
         xp: activity.xp,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
+        onEnding: onEnding,
         onExit: _confirmExit,
       ),
       ActivityType.classroomHeroes => ClassroomHeroesGame(
         key: ValueKey(activity.id),
         session: activity.heroesSession!,
         xp: activity.xp,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
+        onEnding: onEnding,
         onExit: _confirmExit,
       ),
       ActivityType.sirahStory => SirahStoryGame(
         key: ValueKey(activity.id),
         session: activity.sirahSession!,
         xp: activity.xp,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
+        onEnding: onEnding,
         onExit: _confirmExit,
       ),
       ActivityType.quranEtiquette => QuranEtiquetteGame(
         key: ValueKey(activity.id),
         session: activity.etiquetteSession!,
         xp: activity.xp,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
+        onEnding: onEnding,
         onExit: _confirmExit,
       ),
       ActivityType.fivePillars => FivePillarsGame(
         key: ValueKey(activity.id),
         mode: activity.pillarsMode!,
         xp: activity.xp,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
+        onEnding: onEnding,
         onExit: _confirmExit,
       ),
       ActivityType.goodDeedTree => GoodDeedTreeGame(
         key: ValueKey(activity.id),
         session: activity.deedTreeSession!,
         xp: activity.xp,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
+        onEnding: onEnding,
         onExit: _confirmExit,
       ),
       ActivityType.taharahAdventure => TaharahAdventureGame(
         key: ValueKey(activity.id),
         session: activity.taharahSession!,
         xp: activity.xp,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
+        onEnding: onEnding,
         onExit: _confirmExit,
       ),
       ActivityType.labelMaker => LabelMakerGame(
         key: ValueKey(activity.id),
         session: activity.labelSession!,
         xp: activity.xp,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
+        onEnding: onEnding,
         onExit: _confirmExit,
       ),
       ActivityType.soundDetective => SoundDetectiveGame(
         key: ValueKey(activity.id),
         session: activity.soundSession!,
         xp: activity.xp,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
+        onEnding: onEnding,
         onExit: _confirmExit,
       ),
       ActivityType.harakatPop => HarakatPopActivity(
@@ -652,7 +716,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         cards: activity.cards!,
         xp: activity.xp,
         color: lessonColor,
-        onComplete: _handleActivityComplete,
+        onComplete: onComplete,
       ),
     };
   }

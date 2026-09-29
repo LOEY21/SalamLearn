@@ -51,7 +51,7 @@ class ClassHealthDetailScreen extends ConsumerWidget {
                 children: [
                   _OverallSummaryCard(overall: overall, moduleCount: active.length),
                   const SizedBox(height: 18),
-                  const _SectionHeading('MODULES'),
+                  const _SectionHeading('GAMES'),
                   const SizedBox(height: 10),
                   for (final module in modules)
                     Padding(
@@ -194,7 +194,7 @@ class _OverallSummaryCard extends StatelessWidget {
                 Text(
                   overall == null
                       ? 'No classroom activity recorded yet.'
-                      : 'Average across $moduleCount active module'
+                      : 'Average across $moduleCount active game'
                             '${moduleCount == 1 ? '' : 's'} this class has '
                             'practiced in Classroom Mode.',
                   style: const TextStyle(
@@ -302,7 +302,7 @@ class _ModuleDetailCard extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                module.moduleName,
+                '${module.icon}  ${module.moduleName}'.trim(),
                 style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
               ),
             ),
@@ -349,7 +349,7 @@ class _ModuleDetailCard extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              module.moduleName,
+                              '${module.icon}  ${module.moduleName}'.trim(),
                               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
                             ),
                           ),
@@ -477,7 +477,7 @@ class _MethodologyCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Each module\'s health index is a weighted blend of three '
+            'Each game\'s health index is a weighted blend of three '
             'Classroom Mode signals — solo Student Hub practice at home '
             'never counts toward it:',
             style: TextStyle(fontSize: 12.5, color: AppColors.ink, height: 1.4),
@@ -489,13 +489,13 @@ class _MethodologyCard extends StatelessWidget {
             color: AppColors.teal,
             weight: '40%',
             label: 'Completion rate',
-            detail: 'share of the roster who practiced this module in class',
+            detail: 'share of the roster who played this game on the Hot Seat',
           ),
           const _WeightRow(
             color: AppColors.gold,
             weight: '40%',
             label: 'Average accuracy',
-            detail: 'mean stroke accuracy across every classroom attempt',
+            detail: 'mean score across every classroom play',
           ),
           const _WeightRow(
             color: AppColors.coral,
@@ -523,7 +523,7 @@ class _MethodologyCard extends StatelessWidget {
           const SizedBox(height: 14),
           const Text(
             'Trend arrows compare this week\'s average accuracy to the '
-            'prior week and only appear once a module has at least one '
+            'prior week and only appear once a game has at least one '
             'record in both. Solo Student Hub practice at home never '
             'counts here — see Home Mode Insights for that.',
             style: TextStyle(fontSize: 11.5, color: AppColors.textMuted, height: 1.4),

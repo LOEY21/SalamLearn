@@ -269,13 +269,13 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
         classId: classId,
         learnerId: null,
       );
-      if (classAssignments.any((a) => a.moduleId == moduleId)) return true;
+      if (classAssignments.any((a) => moduleForAssignment(a.moduleId)?.id == moduleId)) return true;
 
       final personalAssignments = ClassRepository().assignmentsFor(
         classId: classId,
         learnerId: learnerId,
       );
-      if (personalAssignments.any((a) => a.moduleId == moduleId)) return true;
+      if (personalAssignments.any((a) => moduleForAssignment(a.moduleId)?.id == moduleId)) return true;
     }
 
     return false;
@@ -312,14 +312,14 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
         learnerId: null,
       );
       for (final a in classAssignments) {
-        if (a.moduleId == moduleId && a.dueDate.isBefore(now)) return true;
+        if (moduleForAssignment(a.moduleId)?.id == moduleId && a.dueDate.isBefore(now)) return true;
       }
       final personalAssignments = ClassRepository().assignmentsFor(
         classId: classId,
         learnerId: learnerId,
       );
       for (final a in personalAssignments) {
-        if (a.moduleId == moduleId && a.dueDate.isBefore(now)) return true;
+        if (moduleForAssignment(a.moduleId)?.id == moduleId && a.dueDate.isBefore(now)) return true;
       }
     }
     return false;
@@ -828,11 +828,10 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
   // an idle node costs nothing to rebuild.
   late final _transformAnimations = Listenable.merge([_entrance, _wobble]);
 
-  /// Checkpoint art per destination (1-6). Destination 7 has no icon yet —
-  /// only its tile shows until that asset exists.
+  /// Checkpoint art per destination (1-7); the last one is the trophy.
   String? get _iconAsset {
     final id = widget.module.destinationId;
-    return id >= 1 && id <= 6
+    return id >= 1 && id <= 7
         ? 'assets/images/adventure_map/checkpoint_$id.png'
         : null;
   }

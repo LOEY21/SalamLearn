@@ -186,8 +186,11 @@ void main() {
       await tester.tap(find.byKey(const Key('greeting-choice-1')));
       await tester.pump(const Duration(milliseconds: 1700));
       await tester.pump(const Duration(milliseconds: 1500));
+      // The cheer plays as the ending appears, not on Continue.
+      expect(audio.levels, 1);
       await tester.tap(find.byKey(const Key('greeting-end-continue')));
       await tester.pump();
+      expect(audio.levels, 1);
 
       // Straight into the second activity's start screen.
       expect(find.byKey(const Key('greeting-match-play-btn')), findsOneWidget);

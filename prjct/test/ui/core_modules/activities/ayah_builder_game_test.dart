@@ -138,7 +138,9 @@ void main() {
     for (var i = 0; i < words.length; i++) {
       await drag(tester, words[i].text, i + 1);
     }
-    await tester.pump(const Duration(seconds: 4));
+    // Tests have no audio plugin, so the recitation times out (1s) before
+    // the fallback word beat runs.
+    await tester.pump(const Duration(seconds: 5));
     expect(find.bySemanticsLabel("Masha'Allah!"), findsOneWidget);
     // One mistake earns 2 of the 3 stars; the summary recaps the round.
     expect(find.text('You earned 2 stars · 2 total'), findsOneWidget);

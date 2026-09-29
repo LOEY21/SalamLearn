@@ -82,3 +82,83 @@ IconData _iconFor(int destinationId) => switch (destinationId) {
   7 => Icons.auto_stories_outlined, // The Good Deed Hero — final review
   _ => Icons.explore_outlined,
 };
+
+/// Every game the Student Hub offers (one per curriculum lesson), in map
+/// order — what a teacher picks from when assigning a learning module.
+final allGames = [
+  for (final d in curriculum)
+    for (final l in d.lessons) (lesson: l, destination: d),
+];
+
+/// The game an assignment's `moduleId` names, or null for older
+/// whole-destination assignments (slug or destination number).
+({Lesson lesson, Destination destination})? gameForId(String id) {
+  for (final game in allGames) {
+    if (game.lesson.id == id) return game;
+  }
+  return null;
+}
+
+/// The Adventure Map node an assignment belongs to, or null if [moduleId]
+/// names nothing in the curriculum.
+ModuleInfo? moduleForAssignment(String moduleId) {
+  final destinationId = gameForId(moduleId)?.destination.id;
+  return coreModules
+      .where(
+        (m) => destinationId != null
+            ? m.destinationId == destinationId
+            : m.id == moduleId || '${m.destinationId}' == moduleId,
+      )
+      .firstOrNull;
+}
+
+/// Display name for an assignment: the game's title, else the destination's.
+String assignmentTitle(String moduleId) =>
+    gameForId(moduleId)?.lesson.title ??
+    moduleForAssignment(moduleId)?.title ??
+    moduleId;
+
+/// The lessons an assignment gives the learner: just the game itself, or
+/// for a whole-destination assignment every lesson up to
+/// [maxLevel]/[maxLessons] (levels are the destination's lessons in thirds).
+List<Lesson> assignedLessonsFor(String moduleId, int maxLevel, int? maxLessons) {
+  final game = gameForId(moduleId);
+  if (game != null) return [game.lesson];
+  final destinationId = moduleForAssignment(moduleId)?.destinationId;
+  final lessons = [
+    for (final d in curriculum)
+      if (d.id == destinationId) ...d.lessons,
+  ];
+  final perLevel = (lessons.length / 3).ceil();
+  final levelsList = [
+    lessons.take(perLevel).toList(),
+    lessons.skip(perLevel).take(perLevel).toList(),
+    lessons.skip(perLevel * 2).toList(),
+  ].where((group) => group.isNotEmpty).toList();
+  final result = <Lesson>[];
+  for (var li = 0; li < maxLevel; li++) {
+    if (li >= levelsList.length) break;
+    final cap = (li == maxLevel - 1) ? maxLessons : null;
+    result.addAll(levelsList[li].take(cap ?? levelsList[li].length));
+  }
+  return result;
+}
+
+/// Which game a session belongs to — its title before " - Session …".
+String gameNameOf(Lesson lesson) => lesson.title.split(' - ').first;
+
+/// The session part of a lesson's title, e.g. "Session 2 (Sky)".
+String sessionLabelOf(Lesson lesson) {
+  final rest = lesson.title.substring(gameNameOf(lesson).length);
+  return rest.startsWith(' - ') ? rest.substring(3) : lesson.title;
+}
+
+/// The Student Hub's games (Greeting Match, Ayah Builder, …), each with its
+/// sessions in map order.
+final Map<String, List<Lesson>> gameSessions = {
+  for (final name in {for (final g in allGames) gameNameOf(g.lesson)})
+    name: [
+      for (final g in allGames)
+        if (gameNameOf(g.lesson) == name) g.lesson,
+    ],
+};

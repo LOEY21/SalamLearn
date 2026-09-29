@@ -29,6 +29,7 @@ class SirahStoryGame extends StatefulWidget {
     required this.session,
     required this.xp,
     required this.onComplete,
+    this.onEnding,
     this.onExit,
     this.audioEnabled = true,
     this.audio,
@@ -37,6 +38,10 @@ class SirahStoryGame extends StatefulWidget {
   final SirahStorySession session;
   final int xp;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
+  /// Fired when the game's own ending screen appears (the lesson player's
+  /// cue for its congratulations sound).
+  final VoidCallback? onEnding;
 
   /// Leaves the lesson — wired to the start screen's ✕, the one place the
   /// prototype's layout has room for an exit.
@@ -593,6 +598,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
           _finishT0 = _now;
         });
         _end.forward(from: 0);
+        widget.onEnding?.call();
       } else {
         // The scene itself changes here, so the swap happens behind the
         // curtain the same way the question's does.

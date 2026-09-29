@@ -1076,10 +1076,12 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
               notifier.signUpDraft.addAll({
                 for (final e in _grownupFields.entries) e.key: e.value.text,
               });
-              if (notifier.emailTaken(
+              final taken = await notifier.emailTaken(
                 role: isTeacher ? UserRole.asatidz : UserRole.parent,
                 email: email,
-              )) {
+              );
+              if (!mounted) return;
+              if (taken) {
                 setState(
                   () => _emailError = 'This email is already registered',
                 );

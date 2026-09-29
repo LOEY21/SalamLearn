@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
 
@@ -76,9 +77,27 @@ class ProgressRepository {
       lessonId: lessonId,
       isClassroomMode: isClassroomMode,
     );
-    await _progress.put(record.id, record);
+    // Streak first: dashboards recompute on the progress box's change
+    // event, and should read the streak this record just earned.
     await _bumpStreak(learnerId);
+    await _progress.put(record.id, record);
+    // Push now instead of waiting for the next SyncManager run, so a
+    // parent/teacher on another device sees it live. Not awaited — an
+    // offline Firestore write only completes once the server acks it.
+    Future.sync(() => FirestoreMirror().pushProgress(record)).catchError(
+      (Object e) => debugPrint('writeProgress: push failed: $e'),
+    );
     return record;
+  }
+
+  /// Adds remote records this device doesn't have yet. Records never
+  /// change after being written, so an existing id is always up to date.
+  Future<void> mergeRemote(Iterable<ProgressRecord> records) async {
+    for (final record in records) {
+      if (!_progress.containsKey(record.id)) {
+        await _progress.put(record.id, record);
+      }
+    }
   }
 
   List<ProgressRecord> byLearnerId(String learnerId) =>

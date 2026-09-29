@@ -27,12 +27,17 @@ class FivePillarsGame extends StatefulWidget {
     required this.mode,
     required this.xp,
     required this.onComplete,
+    this.onEnding,
     this.onExit,
   });
 
   final FivePillarsMode mode;
   final int xp;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
+  /// Fired when the game's own ending screen appears (the lesson player's
+  /// cue for its congratulations sound).
+  final VoidCallback? onEnding;
 
   /// Leaves the lesson from the start screen's back button.
   final VoidCallback? onExit;
@@ -689,6 +694,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
               _doneT0 = _now;
               _finaleT0 = null;
             });
+            widget.onEnding?.call();
           },
         ),
       ]);

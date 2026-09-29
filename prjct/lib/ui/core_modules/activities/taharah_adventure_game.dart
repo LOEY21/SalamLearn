@@ -29,12 +29,17 @@ class TaharahAdventureGame extends StatelessWidget {
     required this.session,
     required this.xp,
     required this.onComplete,
+    this.onEnding,
     this.onExit,
   });
 
   final TaharahSession session;
   final int xp;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
+  /// Fired when the game's own ending screen appears (the lesson player's
+  /// cue for its congratulations sound).
+  final VoidCallback? onEnding;
 
   /// Leaves the lesson from the start screen's back button.
   final VoidCallback? onExit;
@@ -44,18 +49,21 @@ class TaharahAdventureGame extends StatelessWidget {
     TaharahSession.cleanOrDirty => _CleanOrDirty(
       xp: xp,
       onComplete: onComplete,
+      onEnding: onEnding,
       onExit: onExit,
     ),
     TaharahSession.wudhuPart1 => _Wudhu(
       part: _kPart1,
       xp: xp,
       onComplete: onComplete,
+      onEnding: onEnding,
       onExit: onExit,
     ),
     TaharahSession.wudhuPart2 => _Wudhu(
       part: _kPart2,
       xp: xp,
       onComplete: onComplete,
+      onEnding: onEnding,
       onExit: onExit,
     ),
   };
@@ -1450,11 +1458,16 @@ class _CleanOrDirty extends StatefulWidget {
   const _CleanOrDirty({
     required this.xp,
     required this.onComplete,
+    this.onEnding,
     this.onExit,
   });
 
   final int xp;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
+  /// Fired when the game's own ending screen appears (the lesson player's
+  /// cue for its congratulations sound).
+  final VoidCallback? onEnding;
   final VoidCallback? onExit;
 
   @override
@@ -1714,6 +1727,7 @@ class _CleanOrDirtyState extends State<_CleanOrDirty> {
             _screen = _S1.done;
             _toast = null;
           });
+          widget.onEnding?.call();
         });
       }
     } else {
@@ -3684,12 +3698,17 @@ class _Wudhu extends StatefulWidget {
     required this.part,
     required this.xp,
     required this.onComplete,
+    this.onEnding,
     this.onExit,
   });
 
   final _WPart part;
   final int xp;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
+  /// Fired when the game's own ending screen appears (the lesson player's
+  /// cue for its congratulations sound).
+  final VoidCallback? onEnding;
   final VoidCallback? onExit;
 
   @override
@@ -3828,7 +3847,10 @@ class _WudhuState extends State<_Wudhu> {
         _doneT?.cancel();
         _doneT = Timer(
           const Duration(milliseconds: 5200),
-          () => setState(() => _screen = _WScreen.done),
+          () {
+            setState(() => _screen = _WScreen.done);
+            widget.onEnding?.call();
+          },
         );
       }
     } else {

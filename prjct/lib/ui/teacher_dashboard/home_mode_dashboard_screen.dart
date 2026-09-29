@@ -10,7 +10,8 @@ import '../../logic/teacher/home_mode_providers.dart';
 import '../../logic/teacher/teacher_providers.dart';
 import '../theme/app_colors.dart';
 import '../widgets/soft_card.dart';
-import 'teacher_dashboard_screen.dart' show masteryBarColor, MasteryPill, avatarColor;
+import 'teacher_dashboard_screen.dart'
+    show masteryBarColor, MasteryPill, avatarColor;
 
 /// FR-6.2B Home Mode Monitoring Dashboard — a dedicated screen kept
 /// deliberately separate from the Classroom tab's Class Health Index
@@ -36,8 +37,17 @@ class _HomeModeDashboardScreenState
     extends ConsumerState<HomeModeDashboardScreen> {
   _HomeModeView _view = _HomeModeView.individual;
   String? _selectedLearnerId;
+  String _query = '';
+  bool _byStage = false;
 
-  void _goBack() => context.go('/teacher?tab=1');
+  // Back from one student's detail returns to the student list first.
+  void _goBack() {
+    if (_view == _HomeModeView.individual && _selectedLearnerId != null) {
+      setState(() => _selectedLearnerId = null);
+      return;
+    }
+    context.go('/teacher?tab=1');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,8 +83,19 @@ class _HomeModeDashboardScreenState
                                 selectedLearnerId: _selectedLearnerId,
                                 onSelect: (id) =>
                                     setState(() => _selectedLearnerId = id),
+                                query: _query,
+                                onQueryChanged: (q) =>
+                                    setState(() => _query = q),
+                                byStage: _byStage,
+                                onByStageChanged: (v) =>
+                                    setState(() => _byStage = v),
                               )
-                            : _AggregateView(classId: section.id),
+                            : _AggregateView(
+                                classId: section.id,
+                                byStage: _byStage,
+                                onByStageChanged: (v) =>
+                                    setState(() => _byStage = v),
+                              ),
                       ),
               ),
             ],
@@ -238,20 +259,29 @@ class _NoClassState extends StatelessWidget {
 
 // ------------------------------------------------------------ individual
 
-/// Individual Progress Tracking (FR-6.2B): pick a student, see their
-/// longitudinal Home Mode mastery per destination plus a completion
-/// history — all sourced from `homeModeHistoryProvider`/
-/// `homeModeModuleSummaryProvider`, both Classroom-Mode-record-free.
+/// Individual Progress Tracking (FR-6.2B): a searchable list of every
+/// student in the class; picking one shows their longitudinal Home Mode
+/// mastery per destination plus a completion history — all sourced from
+/// `homeModeHistoryProvider`/`homeModeModuleSummaryProvider`, both
+/// Classroom-Mode-record-free.
 class _IndividualView extends ConsumerWidget {
   const _IndividualView({
     required this.classId,
     required this.selectedLearnerId,
     required this.onSelect,
+    required this.query,
+    required this.onQueryChanged,
+    required this.byStage,
+    required this.onByStageChanged,
   });
 
   final String classId;
   final String? selectedLearnerId;
-  final ValueChanged<String> onSelect;
+  final ValueChanged<String?> onSelect;
+  final String query;
+  final ValueChanged<String> onQueryChanged;
+  final bool byStage;
+  final ValueChanged<bool> onByStageChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -261,86 +291,114 @@ class _IndividualView extends ConsumerWidget {
       return const _EmptyBody(
         icon: Icons.groups_outlined,
         title: 'No students yet',
-        message: 'Enroll students into this class to see their Home Mode history.',
+        message:
+            'Enroll students into this class to see their Home Mode history.',
       );
     }
 
-    final activeId = selectedLearnerId ?? roster.first['learnerId'] as String;
-    final activeName = roster.firstWhere(
-      (s) => s['learnerId'] == activeId,
-      orElse: () => roster.first,
-    )['name'] as String;
+    final selected = roster
+        .where((s) => s['learnerId'] == selectedLearnerId)
+        .firstOrNull;
+    if (selected == null) {
+      final needle = query.trim().toLowerCase();
+      final students =
+          [
+            for (final s in roster)
+              if ((s['name'] as String).toLowerCase().contains(needle)) s,
+          ]..sort(
+            (a, b) => (a['name'] as String).toLowerCase().compareTo(
+              (b['name'] as String).toLowerCase(),
+            ),
+          );
+
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
+        children: [
+          TextFormField(
+            initialValue: query,
+            onChanged: onQueryChanged,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Search student',
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              isDense: true,
+              filled: true,
+              fillColor: AppColors.neutralTint,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.creamBorder),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.creamBorder),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            needle.isEmpty
+                ? 'ALL STUDENTS · ${roster.length}'
+                : '${students.length} OF ${roster.length} STUDENTS',
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+              color: AppColors.textMuted,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (students.isEmpty)
+            SoftCard(
+              child: Text(
+                'No student matches "${query.trim()}".',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textMuted,
+                ),
+              ),
+            )
+          else
+            for (final s in students)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _StudentListTile(
+                  learnerId: s['learnerId'] as String,
+                  name: s['name'] as String,
+                  onTap: () => onSelect(s['learnerId'] as String),
+                ),
+              ),
+        ],
+      );
+    }
+
+    final activeId = selected['learnerId'] as String;
+    final activeName = selected['name'] as String;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
+      padding: const EdgeInsets.fromLTRB(18, 6, 18, 24),
       children: [
-        SizedBox(
-          height: 38,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: roster.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
-            itemBuilder: (context, i) {
-              final student = roster[i];
-              final id = student['learnerId'] as String;
-              final name = student['name'] as String;
-              final active = id == activeId;
-              final mastery = student['mastery'] as String? ?? 'Needs help';
-              final initial = name.isEmpty ? '?' : name[0].toUpperCase();
-
-              return GestureDetector(
-                onTap: () => onSelect(id),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: active ? AppColors.teal : AppColors.neutralTint,
-                    borderRadius: BorderRadius.circular(19),
-                    border: Border.all(
-                      color: active ? AppColors.teal : AppColors.creamBorder,
-                    ),
-                  ),
-                  alignment: Alignment.center,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 18,
-                        height: 18,
-                        decoration: BoxDecoration(
-                          color: active ? Colors.white24 : avatarColor(mastery),
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          initial,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        name,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: active ? Colors.white : AppColors.ink,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => onSelect(null),
+            icon: const Icon(Icons.arrow_back_rounded, size: 16),
+            label: const Text('All students'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.teal,
+              textStyle: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 4),
         _StaggerFadeIn(
           delay: const Duration(milliseconds: 35),
-          child: _StudentProfileCard(learnerId: activeId, studentName: activeName),
+          child: _StudentProfileCard(
+            learnerId: activeId,
+            studentName: activeName,
+          ),
         ),
         const SizedBox(height: 14),
         _StaggerFadeIn(
@@ -353,21 +411,20 @@ class _IndividualView extends ConsumerWidget {
         const SizedBox(height: 18),
         _StaggerFadeIn(
           delay: const Duration(milliseconds: 105),
-          child: Text(
-            '$activeName · MASTERY BY ADVENTURE',
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-              color: AppColors.textMuted,
-            ),
+          child: _GroupHeading(
+            title: '$activeName · PROGRESS',
+            byStage: byStage,
+            onChanged: onByStageChanged,
           ),
         ),
         const SizedBox(height: 10),
-        _StaggerFadeIn(
-          delay: const Duration(milliseconds: 105),
-          child: _IndividualMasteryCard(learnerId: activeId),
-        ),
+        for (final group in ref.watch(
+          homeModeLearnerGroupsProvider((activeId, byStage)),
+        ))
+          _StaggerFadeIn(
+            delay: const Duration(milliseconds: 105),
+            child: _GameSessionsCard(group: group),
+          ),
         const SizedBox(height: 22),
         const _StaggerFadeIn(
           delay: Duration(milliseconds: 140),
@@ -391,8 +448,118 @@ class _IndividualView extends ConsumerWidget {
   }
 }
 
+/// One student in the list: home accuracy, playtime, sessions and mastery
+/// at a glance; tapping opens their full Home Mode detail.
+class _StudentListTile extends ConsumerWidget {
+  const _StudentListTile({
+    required this.learnerId,
+    required this.name,
+    required this.onTap,
+  });
+
+  final String learnerId;
+  final String name;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final history = ref.watch(homeModeHistoryProvider(learnerId));
+    final avgAccuracy = history.isEmpty
+        ? 0.0
+        : history.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) /
+              history.length;
+    final minutes =
+        history.fold<int>(0, (sum, r) => sum + r.timeOnTaskSeconds) ~/ 60;
+    final mastery = avgAccuracy >= 80
+        ? 'High'
+        : avgAccuracy >= 50
+        ? 'Medium'
+        : 'Needs help';
+
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.creamBorder),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: history.isEmpty
+                      ? AppColors.creamDark
+                      : avatarColor(mastery),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  name.isEmpty ? '?' : name[0].toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13.5,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      history.isEmpty
+                          ? 'No home activity yet'
+                          : '${avgAccuracy.round()}% accuracy · ${minutes}m · '
+                                '${history.length} session${history.length == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (history.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                MasteryPill(mastery: mastery),
+              ],
+              const Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: AppColors.textMuted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _StudentProfileCard extends ConsumerWidget {
-  const _StudentProfileCard({required this.learnerId, required this.studentName});
+  const _StudentProfileCard({
+    required this.learnerId,
+    required this.studentName,
+  });
 
   final String learnerId;
   final String studentName;
@@ -402,13 +569,16 @@ class _StudentProfileCard extends ConsumerWidget {
     final history = ref.watch(homeModeHistoryProvider(learnerId));
     final streak = ProgressRepository().currentStreak(learnerId);
 
-    final totalSeconds = history.fold<int>(0, (sum, r) => sum + r.timeOnTaskSeconds.toInt());
+    final totalSeconds = history.fold<int>(
+      0,
+      (sum, r) => sum + r.timeOnTaskSeconds.toInt(),
+    );
     final playtimeMinutes = totalSeconds ~/ 60;
 
     final avgAccuracy = history.isEmpty
         ? 0.0
         : history.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) /
-            history.length;
+              history.length;
 
     String overallMastery = 'Needs help';
     if (avgAccuracy >= 80) {
@@ -607,14 +777,27 @@ class _StudentWeeklyChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final days = List.generate(5, (i) => DateTime(now.year, now.month, now.day).subtract(Duration(days: 4 - i)));
-    
+    final days = List.generate(
+      5,
+      (i) => DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: 4 - i)),
+    );
+
     final dailySeconds = days.map((day) {
       final records = history.where((r) {
-        final rDate = DateTime(r.completedAt.year, r.completedAt.month, r.completedAt.day);
+        final rDate = DateTime(
+          r.completedAt.year,
+          r.completedAt.month,
+          r.completedAt.day,
+        );
         return rDate.isAtSameMomentAs(day);
       });
-      return records.isEmpty ? 0 : records.map((r) => r.timeOnTaskSeconds).reduce((a, b) => a + b);
+      return records.isEmpty
+          ? 0
+          : records.map((r) => r.timeOnTaskSeconds).reduce((a, b) => a + b);
     }).toList();
 
     final maxVal = dailySeconds.map((s) => s).reduce((a, b) => a > b ? a : b);
@@ -652,11 +835,7 @@ class _StudentWeeklyChart extends StatelessWidget {
                   ),
                 ],
               ),
-              Icon(
-                Icons.bar_chart_rounded,
-                color: AppColors.teal,
-                size: 16,
-              ),
+              Icon(Icons.bar_chart_rounded, color: AppColors.teal, size: 16),
             ],
           ),
           const SizedBox(height: 16),
@@ -675,11 +854,16 @@ class _StudentWeeklyChart extends StatelessWidget {
 
                 final targetHeight = seconds == 0 ? 6.0 : height;
                 return TweenAnimationBuilder<double>(
-                  tween: Tween<double>(begin: seconds == 0 ? 6.0 : 0.0, end: targetHeight),
+                  tween: Tween<double>(
+                    begin: seconds == 0 ? 6.0 : 0.0,
+                    end: targetHeight,
+                  ),
                   duration: const Duration(milliseconds: 900),
                   curve: Curves.easeOutCubic,
                   builder: (context, animatedHeight, child) {
-                    final animatedMinutes = seconds == 0 ? 0 : (minutes * (animatedHeight / targetHeight)).round();
+                    final animatedMinutes = seconds == 0
+                        ? 0
+                        : (minutes * (animatedHeight / targetHeight)).round();
                     return Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -714,7 +898,9 @@ class _StudentWeeklyChart extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 9.5,
                             fontWeight: FontWeight.bold,
-                            color: isToday ? AppColors.teal : AppColors.textMuted,
+                            color: isToday
+                                ? AppColors.teal
+                                : AppColors.textMuted,
                           ),
                         ),
                       ],
@@ -723,123 +909,6 @@ class _StudentWeeklyChart extends StatelessWidget {
                 );
               }),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Horizontal ring-tile scroller — replaces the old vertical list so a
-/// class's worth of destinations reads as a scannable strip rather than a
-/// stacked report, matching the redesign mock's adventure-tile layout.
-class _IndividualMasteryCard extends ConsumerWidget {
-  const _IndividualMasteryCard({required this.learnerId});
-
-  final String learnerId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final modules = ref.watch(homeModeModuleSummaryProvider(learnerId));
-
-    if (modules.isEmpty) {
-      return const SoftCard(
-        child: Text(
-          'No Home Mode activity recorded yet.',
-          style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
-        ),
-      );
-    }
-
-    return SizedBox(
-      height: 132,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: modules.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 10),
-        itemBuilder: (context, i) => _AdventureTile(module: modules[i]),
-      ),
-    );
-  }
-}
-
-class _AdventureTile extends StatelessWidget {
-  const _AdventureTile({required this.module});
-
-  final HomeModeModuleSummary module;
-
-  static String _tierFor(double accuracyPct) {
-    if (accuracyPct >= 80) return 'High';
-    if (accuracyPct >= 50) return 'Medium';
-    return 'Needs help';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tier = _tierFor(module.accuracyPct);
-    return Container(
-      width: 104,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.neutralTint,
-        border: Border.all(color: AppColors.creamBorder),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 44,
-            height: 44,
-            child: TweenAnimationBuilder<double>(
-              tween: Tween<double>(begin: 0.0, end: (module.accuracyPct / 100).clamp(0.0, 1.0)),
-              duration: const Duration(milliseconds: 900),
-              curve: Curves.easeOutCubic,
-              builder: (context, val, child) {
-                return Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    const SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: CircularProgressIndicator(
-                        value: 1,
-                        strokeWidth: 5,
-                        color: AppColors.creamDark,
-                      ),
-                    ),
-                    SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: CircularProgressIndicator(
-                        value: val,
-                        strokeWidth: 5,
-                        strokeCap: StrokeCap.round,
-                        backgroundColor: Colors.transparent,
-                        color: masteryBarColor(tier),
-                      ),
-                    ),
-                    Text(
-                      '${(val * 100).round()}%',
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            module.moduleName,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, height: 1.2),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            '${module.sessionCount} session${module.sessionCount == 1 ? '' : 's'}',
-            style: const TextStyle(fontSize: 9, color: AppColors.textMuted),
           ),
         ],
       ),
@@ -911,7 +980,8 @@ class _HistoryCard extends ConsumerWidget {
             ),
             _HistoryRow(record: recent[i]),
             if (i != recent.length - 1 &&
-                bucketFor(recent[i + 1].completedAt) == bucketFor(recent[i].completedAt))
+                bucketFor(recent[i + 1].completedAt) ==
+                    bucketFor(recent[i].completedAt))
               const Divider(height: 1, color: AppColors.creamBorder),
           ],
         ],
@@ -945,7 +1015,10 @@ class _HistoryRow extends StatelessWidget {
           Expanded(
             child: Text(
               moduleName,
-              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           Container(
@@ -980,33 +1053,51 @@ class _HistoryRow extends StatelessWidget {
 /// destination, plus a misconception banner for whichever module the class
 /// is collectively weakest in.
 class _AggregateView extends ConsumerWidget {
-  const _AggregateView({required this.classId});
+  const _AggregateView({
+    required this.classId,
+    required this.byStage,
+    required this.onByStageChanged,
+  });
 
   final String classId;
+  final bool byStage;
+  final ValueChanged<bool> onByStageChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rows = ref.watch(homeModeAggregateProvider(classId));
+    final groups = ref.watch(homeModeClassGroupsProvider((classId, byStage)));
     final weakest = weakestHomeModeAggregate(rows);
 
     final activeRows = rows.where((r) => r.hasActivity).toList();
-    final avgCompletionRate = rows.isEmpty ? 0.0 : rows.map((r) => r.completionRate).reduce((a, b) => a + b) / rows.length;
+    final avgCompletionRate = rows.isEmpty
+        ? 0.0
+        : rows.map((r) => r.completionRate).reduce((a, b) => a + b) /
+              rows.length;
     final playRatePct = (avgCompletionRate * 100).round();
 
     final avgAccuracyPct = activeRows.isEmpty
         ? 0.0
-        : activeRows.map((r) => r.avgAccuracy).reduce((a, b) => a + b) / activeRows.length;
+        : activeRows.map((r) => r.avgAccuracy).reduce((a, b) => a + b) /
+              activeRows.length;
 
     final progressRepo = ProgressRepository();
     final enrollments = ClassRepository().byClassId(classId);
     int totalHomeSeconds = 0;
     for (final e in enrollments) {
-      final records = progressRepo.byLearnerId(e.learnerId).where((r) => !r.isClassroomMode);
+      final records = progressRepo
+          .byLearnerId(e.learnerId)
+          .where((r) => !r.isClassroomMode);
       if (records.isNotEmpty) {
-        totalHomeSeconds += records.fold<int>(0, (sum, r) => sum + r.timeOnTaskSeconds.toInt());
+        totalHomeSeconds += records.fold<int>(
+          0,
+          (sum, r) => sum + r.timeOnTaskSeconds.toInt(),
+        );
       }
     }
-    final avgTimeMinutes = enrollments.isEmpty ? 0 : (totalHomeSeconds ~/ 60) ~/ enrollments.length;
+    final avgTimeMinutes = enrollments.isEmpty
+        ? 0
+        : (totalHomeSeconds ~/ 60) ~/ enrollments.length;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
@@ -1027,30 +1118,26 @@ class _AggregateView extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 16),
-        const _StaggerFadeIn(
-          delay: Duration(milliseconds: 70),
-          child: Text(
-            'COLLECTIVE MASTERY TRENDS',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-              color: AppColors.textMuted,
-            ),
+        _StaggerFadeIn(
+          delay: const Duration(milliseconds: 70),
+          child: _GroupHeading(
+            title: 'CLASS PROGRESS',
+            byStage: byStage,
+            onChanged: onByStageChanged,
           ),
         ),
         const SizedBox(height: 10),
-        for (var i = 0; i < rows.length; i++)
+        for (final (i, group) in groups.indexed)
           _StaggerFadeIn(
             delay: Duration(milliseconds: 70 + (i + 1) * 20),
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _AggregateRow(module: rows[i]),
+            child: _GameSessionsCard(
+              group: group,
+              rosterSize: enrollments.length,
             ),
           ),
         const SizedBox(height: 6),
         _StaggerFadeIn(
-          delay: Duration(milliseconds: 90 + (rows.length + 1) * 20),
+          delay: Duration(milliseconds: 90 + (groups.length + 1) * 20),
           child: _ClassActivityPeaksChart(classId: classId),
         ),
       ],
@@ -1134,7 +1221,9 @@ class _MisconceptionBanner extends StatelessWidget {
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Focusing next lesson plan on "${module.moduleName}" misconception'),
+                        content: Text(
+                          'Focusing next lesson plan on "${module.moduleName}" misconception',
+                        ),
                       ),
                     );
                   },
@@ -1145,7 +1234,10 @@ class _MisconceptionBanner extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    textStyle: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   child: const Text('Modify Lesson'),
                 ),
@@ -1156,7 +1248,9 @@ class _MisconceptionBanner extends StatelessWidget {
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Assigned custom practice homework for "${module.moduleName}" to class'),
+                        content: Text(
+                          'Assigned custom practice homework for "${module.moduleName}" to class',
+                        ),
                       ),
                     );
                   },
@@ -1167,7 +1261,10 @@ class _MisconceptionBanner extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    textStyle: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   child: const Text('Assign Homework'),
                 ),
@@ -1322,11 +1419,7 @@ class _ClassActivityPeaksChart extends StatelessWidget {
                   ),
                 ],
               ),
-              Icon(
-                Icons.timeline_rounded,
-                color: AppColors.teal,
-                size: 16,
-              ),
+              Icon(Icons.timeline_rounded, color: AppColors.teal, size: 16),
             ],
           ),
           const SizedBox(height: 16),
@@ -1349,11 +1442,46 @@ class _ClassActivityPeaksChart extends StatelessWidget {
           const Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              Text('Wed', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-              Text('Thu', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-              Text('Fri', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-              Text('Sat', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-              Text('Sun', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+              Text(
+                'Wed',
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              Text(
+                'Thu',
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              Text(
+                'Fri',
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              Text(
+                'Sat',
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              Text(
+                'Sun',
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textMuted,
+                ),
+              ),
             ],
           ),
         ],
@@ -1396,9 +1524,22 @@ class _LineChartPainter extends CustomPainter {
     for (int i = 1; i < points.length; i++) {
       final pPrev = points[i - 1];
       final pCurr = points[i];
-      final controlPoint1 = Offset(pPrev.dx + (pCurr.dx - pPrev.dx) / 2, pPrev.dy);
-      final controlPoint2 = Offset(pPrev.dx + (pCurr.dx - pPrev.dx) / 2, pCurr.dy);
-      path.cubicTo(controlPoint1.dx, controlPoint1.dy, controlPoint2.dx, controlPoint2.dy, pCurr.dx, pCurr.dy);
+      final controlPoint1 = Offset(
+        pPrev.dx + (pCurr.dx - pPrev.dx) / 2,
+        pPrev.dy,
+      );
+      final controlPoint2 = Offset(
+        pPrev.dx + (pCurr.dx - pPrev.dx) / 2,
+        pCurr.dy,
+      );
+      path.cubicTo(
+        controlPoint1.dx,
+        controlPoint1.dy,
+        controlPoint2.dx,
+        controlPoint2.dy,
+        pCurr.dx,
+        pCurr.dy,
+      );
     }
 
     final strokePaint = Paint()
@@ -1435,139 +1576,283 @@ class _LineChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _LineChartPainter oldDelegate) => oldDelegate.progress != progress;
+  bool shouldRepaint(covariant _LineChartPainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }
 
-class _AggregateRow extends StatelessWidget {
-  const _AggregateRow({required this.module});
+// ------------------------------------------------------------------ games
 
-  final HomeModeAggregate module;
+String _tierFor(double accuracyPct) {
+  if (accuracyPct >= 80) return 'High';
+  if (accuracyPct >= 50) return 'Medium';
+  return 'Needs help';
+}
 
-  static String _tierFor(double accuracyPct) {
-    if (accuracyPct >= 80) return 'High';
-    if (accuracyPct >= 50) return 'Medium';
-    return 'Needs help';
-  }
+/// One game or stage; tap to show its sessions. Without [rosterSize] it is
+/// one student's view (their score per session); with it, the class's (how
+/// many students played each session and their average).
+class _GameSessionsCard extends StatefulWidget {
+  const _GameSessionsCard({required this.group, this.rosterSize});
+
+  final HomeProgressGroup group;
+  final int? rosterSize;
+
+  @override
+  State<_GameSessionsCard> createState() => _GameSessionsCardState();
+}
+
+class _GameSessionsCardState extends State<_GameSessionsCard> {
+  bool _open = false;
 
   @override
   Widget build(BuildContext context) {
-    if (!module.hasActivity) {
-      return SoftCard(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                module.moduleName,
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+    final game = widget.group;
+    final roster = widget.rosterSize;
+    final total = game.sessions.length;
+    final progress = roster == null
+        ? game.sessionsPlayed / total
+        : roster == 0
+        ? 0.0
+        : game.studentsPlayed / roster;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.creamBorder),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _open = !_open),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.neutralTint,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      game.icon,
+                      style: const TextStyle(fontSize: 20),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          game.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13.5,
+                            color: AppColors.ink,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          roster == null
+                              ? '${game.sessionsPlayed} of $total session${total == 1 ? '' : 's'} played'
+                              : '${game.studentsPlayed} of $roster student${roster == 1 ? '' : 's'} played · $total session${total == 1 ? '' : 's'}',
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: LinearProgressIndicator(
+                            value: progress,
+                            minHeight: 5,
+                            backgroundColor: AppColors.creamDark,
+                            color: AppColors.teal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  _ScoreBadge(pct: game.avgAccuracy, emptyLabel: 'Not started'),
+                  AnimatedRotation(
+                    turns: _open ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const Text(
-              'No activity yet',
-              style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+          ),
+          if (_open)
+            for (final session in game.sessions)
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 10, 14, 10),
+                decoration: BoxDecoration(
+                  color: session.studentsPlayed > 0
+                      ? AppColors.mint.withValues(alpha: 0.35)
+                      : null,
+                  border: const Border(
+                    top: BorderSide(color: AppColors.creamBorder),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            session.label,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                          Text(
+                            roster == null
+                                ? session.detail
+                                : '${session.detail} · ${session.studentsPlayed}/$roster played',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _ScoreBadge(
+                      pct: session.avgAccuracy,
+                      emptyLabel: roster == null
+                          ? 'Not played'
+                          : 'No plays yet',
+                    ),
+                  ],
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Section heading with the "12 Games | 7 Stages" switch.
+class _GroupHeading extends StatelessWidget {
+  const _GroupHeading({
+    required this.title,
+    required this.byStage,
+    required this.onChanged,
+  });
+
+  final String title;
+  final bool byStage;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget segment(String label, bool value) {
+      final active = byStage == value;
+      return GestureDetector(
+        onTap: () => onChanged(value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: active ? AppColors.teal : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: active ? Colors.white : AppColors.teal,
             ),
-          ],
+          ),
         ),
       );
     }
 
-    final tier = _tierFor(module.avgAccuracy);
-    final trend = module.trend;
-    String? trendLabel;
-    Color? trendColor;
-    if (trend != null && trend != 0) {
-      final sign = trend > 0 ? '+' : '';
-      trendLabel = '$sign${trend.toStringAsFixed(1)} pts vs. last week';
-      trendColor = trend > 0 ? AppColors.teal : AppColors.coral;
-    }
-
-    // Mastery-colored rail — same treatment as `ClassHealthDetailScreen`'s
-    // module cards, so the two class-analytics screens read as one family.
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: AppColors.creamBorder),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(width: 5, color: masteryBarColor(tier)),
-              Expanded(
-                child: Container(
-                  color: AppColors.surface,
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              module.moduleName,
-                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
-                            ),
-                          ),
-                          MasteryPill(mastery: tier),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: TweenAnimationBuilder<double>(
-                          tween: Tween<double>(begin: 0.0, end: module.completionRate),
-                          duration: const Duration(milliseconds: 900),
-                          curve: Curves.easeOutCubic,
-                          builder: (context, val, child) {
-                            return LinearProgressIndicator(
-                              value: val,
-                              minHeight: 6,
-                              backgroundColor: AppColors.creamDark,
-                              color: masteryBarColor(tier),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '${(module.completionRate * 100).round()}% of class played at home · '
-                        '${module.avgAccuracy.round()}% avg accuracy · '
-                        '${module.avgErrors.toStringAsFixed(1)} errors/session',
-                        style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
-                      ),
-                      if (trendLabel != null) ...[
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Icon(
-                              trend! > 0
-                                  ? Icons.arrow_upward_rounded
-                                  : Icons.arrow_downward_rounded,
-                              size: 14,
-                              color: trendColor,
-                            ),
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                trendLabel,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: trendColor,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ],
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+              color: AppColors.textMuted,
+            ),
           ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.teal, width: 1.2),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [segment('12 Games', false), segment('7 Stages', true)],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// "86%" tinted by mastery tier, or a muted label when there's no score.
+class _ScoreBadge extends StatelessWidget {
+  const _ScoreBadge({required this.pct, required this.emptyLabel});
+
+  final double? pct;
+  final String emptyLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = this.pct;
+    if (pct == null) {
+      return Text(
+        emptyLabel,
+        style: const TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textMuted,
+        ),
+      );
+    }
+    final color = masteryBarColor(_tierFor(pct));
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '${pct.round()}%',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: color,
         ),
       ),
     );
@@ -1575,7 +1860,11 @@ class _AggregateRow extends StatelessWidget {
 }
 
 class _EmptyBody extends StatelessWidget {
-  const _EmptyBody({required this.icon, required this.title, required this.message});
+  const _EmptyBody({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
 
   final IconData icon;
   final String title;
@@ -1603,7 +1892,10 @@ class _EmptyBody extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5),
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 12.5,
+              ),
             ),
           ],
         ),

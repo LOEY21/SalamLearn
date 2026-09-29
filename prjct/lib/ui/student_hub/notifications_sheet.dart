@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../logic/learner/hub_tab_provider.dart';
 import '../../logic/notifications/notification_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/soft_card.dart';
@@ -93,13 +95,28 @@ class NotificationsSheet extends ConsumerWidget {
   }
 }
 
-class _NotificationTile extends StatelessWidget {
+class _NotificationTile extends ConsumerWidget {
   const _NotificationTile({required this.item});
 
   final NotificationItem item;
 
+  void _openBackpack(BuildContext context, WidgetRef ref) {
+    final router = GoRouter.of(context);
+    ref.read(notificationsProvider.notifier).markRead(item.id);
+    ref.read(activeHubTabIndexProvider.notifier).set(1);
+    Navigator.of(context).pop();
+    router.go('/backpack');
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    return GestureDetector(
+      onTap: item.opensBackpack ? () => _openBackpack(context, ref) : null,
+      child: _buildCard(),
+    );
+  }
+
+  Widget _buildCard() {
     return SoftCard(
       color: item.read ? AppColors.surface : AppColors.mint,
       padding: const EdgeInsets.all(12),
