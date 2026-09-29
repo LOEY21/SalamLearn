@@ -172,6 +172,10 @@ const _svgCheck =
     '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4 10-10"/></svg>';
 const _svgCross =
     '<svg viewBox="0 0 24 24" fill="none" stroke="#C93B3B" stroke-width="3.5" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>';
+const _svgCrossWhite =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>';
+const _svgClock =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>';
 
 Widget _svg(String s, double w, [double? h]) =>
     SvgPicture.string(s, width: w, height: h ?? w);
@@ -212,8 +216,10 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
   // When the listen screen's ayah finished playing; Start building appears
   // only then.
   double? _listenDoneT;
-  // When the reward screen started fading out for a replay.
+  // When the current screen started fading out (see [_transitionTo]).
   double? _exitT0;
+  // When the how-to board's 3-2-1 countdown started.
+  double? _countT0;
   int _stars = 0;
   bool _soundOn = true;
   bool _completed = false;
@@ -223,6 +229,13 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
 
   int _correctDrops = 0;
   int _errors = 0;
+
+  // This round's drops in order (true = correct), its build time and its
+  // stars, for the ending screen's summary.
+  List<bool> _roundLog = [];
+  double _roundSecs = 0;
+  int _roundStars = 0;
+  int get _roundMistakes => _roundLog.where((c) => !c).length;
 
   // Drag state — the prototype's pointer handlers.
   int? _dragId;
@@ -351,12 +364,29 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
   void _go(_Screen s) {
     _screen = s;
     _screenT0 = _now;
+    _countT0 = null;
+  }
+
+  /// Fades the current screen out, then swaps to [s] (running [onSwap] as it
+  /// does) and lets [_screenTransition] fade it in.
+  void _transitionTo(_Screen s, [VoidCallback? onSwap]) {
+    if (_exitT0 != null) return;
+    _clearTimers();
+    setState(() => _exitT0 = _now);
+    _later(450, () {
+      setState(() {
+        _exitT0 = null;
+        onSwap?.call();
+        _go(s);
+      });
+    });
   }
 
   void _resetRound() {
     _placed = List.filled(_n, false);
     _placedT0 = List.filled(_n, 0);
     _trayOrder = _shuffleOrder(_n);
+    _roundLog = [];
     _tappedId = null;
     _oops = false;
     _wrongSlot = null;
@@ -385,30 +415,32 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     return a;
   }
 
-  void _onStart() => setState(() => _go(_Screen.instructions));
+  void _onStart() => _transitionTo(_Screen.instructions);
 
   /// The back button on every screen past the start — returns to the start
   /// screen, abandoning the round in progress.
-  void _onBack() {
-    _clearTimers();
-    setState(() {
-      _resetRound();
-      _go(_Screen.start);
-    });
+  void _onBack() => _transitionTo(_Screen.start, _resetRound);
+
+  /// I'm ready: a 3-2-1 countdown over the how-to board, then the listen
+  /// screen.
+  void _onReady() {
+    if (_countT0 != null) return;
+    setState(() => _countT0 = _now);
+    for (var i = 0; i < 3; i++) {
+      _later(i * 1000, () => _sfx('word'));
+    }
+    _later(3000, _onBeginListen);
   }
 
-  void _onBeginListen() {
-    setState(() {
-      _listenDoneT = null;
-      _go(_Screen.listen);
-    });
+  void _onBeginListen() => _transitionTo(_Screen.listen, () {
+    _listenDoneT = null;
     _later(
       500,
       () => _playAyah(() {
         if (_screen == _Screen.listen) setState(() => _listenDoneT = _now);
       }),
     );
-  }
+  });
 
   /// Plays the ayah again on the listen screen; the buttons step aside until
   /// it finishes.
@@ -419,15 +451,11 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     });
   }
 
-  void _onSkipToPuzzle() {
-    _clearTimers();
-    setState(() {
-      _trayOrder = _shuffleOrder(_n);
-      _ayahPlaying = false;
-      _litIndex = -1;
-      _go(_Screen.puzzle);
-    });
-  }
+  void _onSkipToPuzzle() => _transitionTo(_Screen.puzzle, () {
+    _trayOrder = _shuffleOrder(_n);
+    _ayahPlaying = false;
+    _litIndex = -1;
+  });
 
   void _playAyah([VoidCallback? done]) {
     if (_ayahPlaying) return;
@@ -464,6 +492,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     setState(() {
       _placed[index] = true;
       _placedT0[index] = _now;
+      _roundLog.add(true);
       _tappedId = index;
       _oops = false;
       _wrongSlot = null;
@@ -471,7 +500,10 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     _later(800, () {
       if (_tappedId == index) setState(() => _tappedId = null);
     });
-    if (_placed.every((p) => p)) _later(620, _finish);
+    if (_placed.every((p) => p)) {
+      _roundSecs = _now - _screenT0;
+      _later(620, _finish);
+    }
   }
 
   void _finish() {
@@ -487,29 +519,18 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     }
     _later(_n * 650 + 420, () {
       _sfx('star');
-      setState(() {
+      _transitionTo(_Screen.reward, () {
         _ayahPlaying = false;
         _litIndex = -1;
-        _stars += 1;
-        _go(_Screen.reward);
+        final m = _roundMistakes;
+        _roundStars = m == 0 ? 3 : (m <= 2 ? 2 : 1);
+        _stars += _roundStars;
       });
     });
   }
 
-  /// Fades the reward screen out, then brings a fresh round of the puzzle in
-  /// (the puzzle's own fade-in comes from [_screenTransition]).
-  void _onReplay() {
-    if (_exitT0 != null) return;
-    _clearTimers();
-    setState(() => _exitT0 = _now);
-    _later(450, () {
-      setState(() {
-        _exitT0 = null;
-        _resetRound();
-        _go(_Screen.puzzle);
-      });
-    });
-  }
+  /// Fades the reward screen out, then brings a fresh round of the puzzle in.
+  void _onReplay() => _transitionTo(_Screen.puzzle, _resetRound);
 
   void _onNextSession() {
     if (_completed) return;
@@ -612,6 +633,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
       _sfx('wrong');
       _errors += 1;
       setState(() {
+        _roundLog.add(false);
         _oops = true;
         _wrongSlot = hit;
         _wrongT0 = _now;
@@ -639,10 +661,9 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
           fit: StackFit.expand,
           children: [
             const ColoredBox(color: Color(0xFF070C24)),
-            // The start screen brings its own painted courtyard scene.
-            if (_screen == _Screen.start)
-              Image.asset(_kStartBg, fit: BoxFit.cover)
-            else ...[
+            // The start screen brings its own painted courtyard scene; it
+            // fades in over the night scene and back out when leaving.
+            if (_screen != _Screen.start || _exitT0 != null) ...[
               _scene(
                 _gameScene,
                 t,
@@ -672,6 +693,13 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                 lights: true,
               ),
             ],
+            if (_screen == _Screen.start)
+              Opacity(
+                opacity: _exitT0 != null
+                    ? 1 - _once(t - _exitT0!, .45)
+                    : _once(t - _screenT0, .4),
+                child: Image.asset(_kStartBg, fit: BoxFit.cover),
+              ),
             // The start screen's overlays are pinned to its painted scene,
             // so that frame covers the screen (cropping a sliver of edge)
             // instead of letterboxing inside a second copy of the backdrop.
@@ -699,7 +727,10 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                             ),
                           ),
                         Positioned.fill(
-                          child: _screenTransition(t, _buildScreen(t)),
+                          child: IgnorePointer(
+                            ignoring: _exitT0 != null,
+                            child: _screenTransition(t, _buildScreen(t)),
+                          ),
                         ),
                         ?_buildFloatingCard(t),
                       ],
@@ -714,8 +745,8 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     );
   }
 
-  /// The fade between screens: the reward screen shrinks and fades out when
-  /// Replay is tapped, and the puzzle fades and settles in when it opens.
+  /// The fade between screens: the leaving screen shrinks and fades out, and
+  /// the next one fades and settles in (the start screen stages its own).
   Widget _screenTransition(double t, Widget screen) {
     var opacity = 1.0;
     var scale = 1.0;
@@ -723,7 +754,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
       final e = Curves.easeInCubic.transform(_once(t - _exitT0!, .45));
       opacity = 1 - e;
       scale = 1 - .06 * e;
-    } else if (_screen == _Screen.puzzle) {
+    } else if (_screen != _Screen.start) {
       final u = Curves.easeOutCubic.transform(_once(t - _screenT0, .5));
       opacity = u;
       scale = .96 + .04 * u;
@@ -1271,21 +1302,71 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
           top: panelTop + panelH + 22,
           width: 300,
           height: 66.8,
-          child: _enter(
-            _once(st, .5, .35),
-            fromScale: .6,
-            _Press(
-              onTap: _onBeginListen,
-              builder: (pressed) => Image.asset(
-                '$_kA/btn_ready_${pressed ? 'down' : 'up'}.png',
-                fit: BoxFit.fill,
-                gaplessPlayback: true,
-                semanticLabel: "I'm ready",
+          // A 5s read of the board before I'm ready appears; it steps
+          // aside once the countdown starts.
+          child: IgnorePointer(
+            ignoring: st < 5 || _countT0 != null,
+            child: Opacity(
+              opacity: _countT0 == null ? 1 : 1 - _once(t - _countT0!, .25),
+              child: _enter(
+                _once(st, .5, 5),
+                fromScale: .6,
+                _Press(
+                  onTap: _onReady,
+                  builder: (pressed) => Image.asset(
+                    '$_kA/btn_ready_${pressed ? 'down' : 'up'}.png',
+                    fit: BoxFit.fill,
+                    gaplessPlayback: true,
+                    semanticLabel: "I'm ready",
+                  ),
+                ),
               ),
             ),
           ),
         ),
+        if (_countT0 != null)
+          Positioned.fill(
+            child: IgnorePointer(child: _countdown(t - _countT0!)),
+          ),
       ],
+    );
+  }
+
+  /// 3, 2, 1 over the dimmed board, one number a second, each popping in and
+  /// fading out.
+  Widget _countdown(double ct) {
+    final c = math.min(ct, 2.999);
+    final n = 3 - c.floor();
+    final local = c - c.floor();
+    final pop = Curves.easeOutBack.transform(_c01(local / .35));
+    return ColoredBox(
+      color: Color.fromRGBO(0, 0, 0, .5 * _c01(ct / .3)),
+      child: Center(
+        child: Opacity(
+          opacity: _kf(local, const [0, .75, 1], const [1, 1, 0]),
+          child: Transform.scale(
+            scale: 1.8 - .8 * pop,
+            child: Container(
+              width: 150,
+              height: 150,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: _panelGradient,
+                border: Border.all(color: _gold, width: 5),
+                boxShadow: [
+                  BoxShadow(
+                    color: _gold.withValues(alpha: .5),
+                    blurRadius: 30,
+                    spreadRadius: 4,
+                  ),
+                ],
+              ),
+              child: Text('$n', style: _baloo(96, 800, _cream, height: 1.1)),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -2029,30 +2110,55 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
   // ---- Reward --------------------------------------------------------------
 
   /// The end screen, laid out after the supplied "Masha'Allah!" reference:
-  /// three stars over the ribbon banner, the built ayah panel, the two
-  /// cheering kids around the cheer bubble, and replay / Next Session
-  /// buttons, all over the same night backdrop as the game.
-  /// The end screen, laid out after the supplied "Masha'Allah!" reference:
-  /// three stars over the ribbon banner, the built ayah panel, the two
-  /// cheering kids around the cheer bubble, and replay / Next Session
-  /// buttons, all over the same night backdrop as the game.
+  /// the round's stars over the ribbon banner, a summary of the round (words
+  /// built, every drop in order with the accuracy, build time), the built
+  /// ayah panel, the two cheering kids around the cheer bubble, and replay /
+  /// Next Session buttons, all over the same night backdrop as the game.
+  ///
+  /// Stars follow the round: 3 with no mistakes, 2 with one or two, else 1;
+  /// the ones not earned sit greyed out.
   ///
   /// Entrance, in order: a warm glow and slow light rays open behind the
-  /// banner as it drops in; the stars punch in one by one, each landing with
-  /// a white flash and a sparkle burst; the star count, ayah panel and its
-  /// word chips rise in; the kids slide in from the sides; the bubble pops;
-  /// the buttons arrive last. Afterwards everything keeps a gentle idle:
-  /// stars breathe their glow, the banner floats, the kids bounce and sway,
-  /// Next Session softly pulses.
+  /// banner as it drops in; the stars punch in one by one, each earned one
+  /// landing with a white flash and a sparkle burst; the summary rises in
+  /// and its drop dots pop one by one; the ayah panel and its word chips
+  /// rise in; the bubble pops between the kids, who stay still throughout;
+  /// the buttons arrive last. Afterwards a gentle idle: stars breathe their
+  /// glow, the banner floats, Next Session softly pulses.
   Widget _buildReward(double t) {
     final st = t - _screenT0;
     // Idle motion eases in once the entrance is done, so nothing jumps.
-    final idle = _c01((st - 2.2) / .8);
+    final idle = _c01((st - 2.6) / .8);
 
-    Widget star(double size, double delay, double phase) {
+    Widget star(double size, double delay, double phase, bool on) {
       final p = _once(st, .55, delay);
       final s = _kf(p, const [0, .6, 1], const [0, 1.3, 1], _easeOut);
       final r = _kf(p, const [0, .6, 1], const [-50, 10, 0], _easeOut);
+      if (!on) {
+        return Transform.rotate(
+          angle: r * math.pi / 180,
+          child: Transform.scale(
+            scale: s,
+            child: Opacity(
+              opacity: .4,
+              child: ColorFiltered(
+                colorFilter: const ColorFilter.matrix([
+                  .21, .72, .07, 0, 0, //
+                  .21, .72, .07, 0, 0, //
+                  .21, .72, .07, 0, 0, //
+                  0, 0, 0, 1, 0, //
+                ]),
+                child: Image.asset(
+                  '$_kA/reward_star.png',
+                  width: size,
+                  height: size,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+        );
+      }
       final landed = _c01((st - delay - .33) / .45);
       // White flash as it lands, then a soft glint every few seconds.
       final glint = _kf(
@@ -2104,29 +2210,19 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
       );
     }
 
-    Widget slideIn(double p, double dx, Widget child) {
-      final u = Curves.easeOutBack.transform(p);
-      return Opacity(
-        opacity: Curves.easeOut.transform(_c01(p / .5)),
-        child: Transform.translate(
-          offset: Offset(dx * (1 - u), 0),
-          child: child,
-        ),
-      );
-    }
-
     final last = _sessionIdx + 1 >= widget.sessions.length;
     final bannerFloat = 2.5 * math.sin(t * 1.6) * idle;
-    final girlHop = -6 * math.sin(t * 3.4).abs() * idle;
-    final boySway = 2.2 * math.sin(t * 1.9) * idle;
     final nextPulse = 1 + .025 * math.sin(t * 3) * idle;
+    final earned = _roundStars;
 
     return Stack(
       clipBehavior: Clip.none,
       children: [
         Positioned.fill(
           child: IgnorePointer(
-            child: CustomPaint(painter: _RewardFxPainter(t, st, behind: true)),
+            child: CustomPaint(
+              painter: _RewardFxPainter(t, st, earned, behind: true),
+            ),
           ),
         ),
         // The banner's cream panel keeps a band below its lettering for the
@@ -2160,7 +2256,8 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                     FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
-                        'You earned 1 star · $_stars total',
+                        'You earned $earned star${earned == 1 ? '' : 's'}'
+                        ' · $_stars total',
                         style: _baloo(14, 800, const Color(0xFF1B2F7E)),
                       ),
                     ),
@@ -2178,25 +2275,37 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              star(50, .45, 0),
+              star(50, .45, 0, earned >= 1),
               const SizedBox(width: 4),
-              star(66, .62, .33),
+              star(66, .62, .33, earned >= 2),
               const SizedBox(width: 4),
-              star(50, .79, .66),
+              star(50, .79, .66, earned >= 3),
             ],
           ),
         ),
         Positioned(
-          left: 36,
-          right: 36,
-          top: 252,
+          left: 24,
+          right: 24,
+          top: 248,
           child: _enter(
             _once(st, .6, .9),
             dy: 28,
             fromScale: .94,
             curve: Curves.easeOutCubic,
+            _roundSummary(st),
+          ),
+        ),
+        Positioned(
+          left: 36,
+          right: 36,
+          top: 386,
+          child: _enter(
+            _once(st, .6, 1.2),
+            dy: 28,
+            fromScale: .94,
+            curve: Curves.easeOutCubic,
             Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
                 gradient: _panelGradient,
@@ -2223,10 +2332,10 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                       _words.map((w) => w.text).join(' '),
                       textAlign: TextAlign.center,
                       textDirection: TextDirection.rtl,
-                      style: _arabic(28, _cream, 1.6),
+                      style: _arabic(26, _cream, 1.5),
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
@@ -2234,7 +2343,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                     children: [
                       for (var i = 0; i < _n; i++)
                         _pop(
-                          _once(st, .4, 1.25 + .09 * i),
+                          _once(st, .4, 1.55 + .09 * i),
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,
@@ -2255,13 +2364,13 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                         ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   _rise(
-                    _once(st, .5, 1.5),
+                    _once(st, .5, 1.8),
                     Text(
                       _session.englishTranslation,
                       textAlign: TextAlign.center,
-                      style: _nunito(13, 600, _cr(.9), height: 1.4),
+                      style: _nunito(12.5, 600, _cr(.9), height: 1.4),
                     ),
                   ),
                 ],
@@ -2269,38 +2378,27 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
             ),
           ),
         ),
+        // The mascots stand still.
         Positioned(
-          left: 10,
-          top: 470 + girlHop,
-          width: 160,
-          height: 232,
-          child: slideIn(
-            _once(st, .7, 1.35),
-            -90,
-            Image.asset('$_kA/reward_girl.png', fit: BoxFit.contain),
-          ),
+          left: 12,
+          top: 562,
+          width: 120,
+          height: 174,
+          child: Image.asset('$_kA/reward_girl.png', fit: BoxFit.contain),
         ),
         Positioned(
-          right: 10,
-          top: 448,
-          width: 160,
-          height: 254,
-          child: slideIn(
-            _once(st, .7, 1.5),
-            90,
-            Transform.rotate(
-              angle: boySway * math.pi / 180,
-              alignment: Alignment.bottomCenter,
-              child: Image.asset('$_kA/reward_boy.png', fit: BoxFit.contain),
-            ),
-          ),
+          right: 12,
+          top: 546,
+          width: 120,
+          height: 190,
+          child: Image.asset('$_kA/reward_boy.png', fit: BoxFit.contain),
         ),
         Positioned(
-          left: 136,
-          width: 130,
-          top: 548 + 3 * math.sin(t * 1.4 + 1) * idle,
+          left: 128,
+          width: 146,
+          top: 598 + 3 * math.sin(t * 1.4 + 1) * idle,
           child: _pop(
-            _once(st, .45, 1.9),
+            _once(st, .45, 2.3),
             _bubble(
               Text(
                 _session.cheer,
@@ -2314,7 +2412,9 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
         ),
         Positioned.fill(
           child: IgnorePointer(
-            child: CustomPaint(painter: _RewardFxPainter(t, st, behind: false)),
+            child: CustomPaint(
+              painter: _RewardFxPainter(t, st, earned, behind: false),
+            ),
           ),
         ),
         // Transition in from the finished puzzle: a warm flash that clears.
@@ -2337,7 +2437,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
           width: 62,
           height: 61,
           child: _enter(
-            _once(st, .55, 2.05),
+            _once(st, .55, 2.45),
             dy: 40,
             fromScale: .6,
             _Press(
@@ -2357,7 +2457,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
           width: 262,
           height: 70,
           child: _enter(
-            _once(st, .55, 2.15),
+            _once(st, .55, 2.55),
             dy: 40,
             fromScale: .6,
             Transform.scale(
@@ -2379,6 +2479,112 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
       ],
     );
   }
+
+  /// The round in three lines: the ayah built, every drop in order (green
+  /// for the right slot, red for a miss) with the accuracy, and build time.
+  Widget _roundSummary(double st) {
+    final mistakes = _roundMistakes;
+    final tries = _roundLog.length;
+    final pct = tries == 0 ? 100 : (_n / tries * 100).round();
+    final secs = _roundSecs.round();
+    final time = '${secs ~/ 60}:${(secs % 60).toString().padLeft(2, '0')}';
+    final value = _baloo(17, 800, _gold);
+
+    Widget row(Color disc, String icon, String label, Widget trailing) =>
+        SizedBox(
+          height: 34,
+          child: Row(
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: disc),
+                child: _svg(icon, 14),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(label, style: _nunito(14, 700, _cream)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              trailing,
+            ],
+          ),
+        );
+
+    final divider = Container(height: 1, color: _cr(.12));
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: _panelGradient,
+        border: Border.all(color: _gold.withValues(alpha: .55), width: 1.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x73000000),
+            blurRadius: 26,
+            offset: Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          row(
+            _green,
+            _svgCheck,
+            'Ayah built',
+            Text('$_n of $_n words', style: value),
+          ),
+          divider,
+          row(
+            mistakes == 0 ? _green : _red,
+            mistakes == 0 ? _svgCheck : _svgCrossWhite,
+            mistakes == 0
+                ? 'No mistakes!'
+                : '$mistakes mistake${mistakes == 1 ? '' : 's'}',
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (tries <= 10)
+                  for (var i = 0; i < tries; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 3),
+                      child: _pop(
+                        _once(st, .3, 1.15 + .07 * i),
+                        Container(
+                          width: 9,
+                          height: 9,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _roundLog[i] ? _green : _red,
+                          ),
+                        ),
+                      ),
+                    ),
+                const SizedBox(width: 8),
+                Text('$pct%', style: value),
+              ],
+            ),
+          ),
+          divider,
+          row(
+            const Color(0xFF2B7FD4),
+            _svgClock,
+            'Time',
+            Text(time, style: value),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// The end screen's light effects. Behind the banner ([behind]): a warm glow
@@ -2386,10 +2592,12 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
 /// as each star lands, then scattered twinkles. [t] is the game clock and
 /// [st] the time since the screen opened, both in seconds.
 class _RewardFxPainter extends CustomPainter {
-  _RewardFxPainter(this.t, this.st, {required this.behind});
+  _RewardFxPainter(this.t, this.st, this.earned, {required this.behind});
 
   final double t;
   final double st;
+  // Only the earned stars burst as they land.
+  final int earned;
   final bool behind;
 
   static const _center = Offset(201, 118);
@@ -2468,7 +2676,7 @@ class _RewardFxPainter extends CustomPainter {
     }
 
     // Landing bursts: 10 sparkles fly out from each star and fade.
-    for (final (c, at) in _stars) {
+    for (final (c, at) in _stars.take(earned)) {
       final p = _c01((st - at) / .9);
       if (p <= 0 || p >= 1) continue;
       final u = Curves.easeOutCubic.transform(p);
@@ -2517,7 +2725,10 @@ class _RewardFxPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RewardFxPainter old) =>
-      old.t != t || old.st != st || old.behind != behind;
+      old.t != t ||
+      old.st != st ||
+      old.earned != earned ||
+      old.behind != behind;
 }
 
 /// A tappable surface that reports its pressed state — the prototype's

@@ -36,7 +36,11 @@ void main() {
   Future<void> toPuzzle(WidgetTester tester) async {
     await tester.tap(find.byKey(const ValueKey('ab-play')));
     await tester.pump(const Duration(milliseconds: 600));
+    // I'm ready appears after a 5s read of the board.
+    await tester.pump(const Duration(milliseconds: 5600));
     await tester.tap(find.bySemanticsLabel("I'm ready"));
+    // 3-2-1 countdown, then the fade into the listen screen.
+    await tester.pump(const Duration(seconds: 3));
     await tester.pump(const Duration(milliseconds: 600));
     // Start building only appears once the ayah has finished playing.
     expect(find.bySemanticsLabel('Start building'), findsNothing);
@@ -77,6 +81,8 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('ab-play')));
     await tester.pump(const Duration(milliseconds: 600));
+    expect(find.bySemanticsLabel("I'm ready"), findsNothing);
+    await tester.pump(const Duration(milliseconds: 5600));
     expect(find.bySemanticsLabel("I'm ready"), findsOneWidget);
     expect(find.text("Let's build Al-Kawthar together!"), findsOneWidget);
 
@@ -132,9 +138,13 @@ void main() {
     for (var i = 0; i < words.length; i++) {
       await drag(tester, words[i].text, i + 1);
     }
-    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 4));
     expect(find.bySemanticsLabel("Masha'Allah!"), findsOneWidget);
-    expect(find.text('You earned 1 star · 1 total'), findsOneWidget);
+    // One mistake earns 2 of the 3 stars; the summary recaps the round.
+    expect(find.text('You earned 2 stars · 2 total'), findsOneWidget);
+    expect(find.text('3 of 3 words'), findsOneWidget);
+    expect(find.text('1 mistake'), findsOneWidget);
+    expect(find.text('75%'), findsOneWidget);
     expect(find.byKey(const ValueKey('ab-back')), findsNothing);
 
     await tester.tap(find.text('Finish'));
