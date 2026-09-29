@@ -349,9 +349,9 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
     required List<Widget> children,
     VoidCallback? onBackTap,
     required String keyPrefix,
-    bool home = true,
+    bool chrome = true,
   }) {
-    final showHome = home && widget.onBack != null;
+    final showHome = chrome && widget.onBack != null;
     return Container(
       width: double.infinity,
       height: double.infinity,
@@ -394,13 +394,14 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                           widget.onBack!,
                         ),
                       ),
-                    Positioned(
-                      right: showHome ? 162 : 32,
-                      top: 14,
-                      width: 110,
-                      height: 110,
-                      child: _musicButton(Key('$keyPrefix-music')),
-                    ),
+                    if (chrome)
+                      Positioned(
+                        right: showHome ? 162 : 32,
+                        top: 14,
+                        width: 110,
+                        height: 110,
+                        child: _musicButton(Key('$keyPrefix-music')),
+                      ),
                   ],
                 ),
               ),
@@ -585,7 +586,7 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
     final rating = _starRating;
     return _sceneCanvas(
       keyPrefix: 'greeting-end',
-      home: false,
+      chrome: false,
       children: [
         // Zara and Amir cheering either side of the results card.
         Positioned(

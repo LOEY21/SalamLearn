@@ -2322,7 +2322,6 @@ class _CreationHuntGameState extends State<CreationHuntGame>
               ),
             ),
           ),
-          ..._topButtons(),
         ],
       ),
     );

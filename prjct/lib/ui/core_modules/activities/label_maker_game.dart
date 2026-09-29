@@ -1158,8 +1158,8 @@ class _LabelMakerGameState extends State<LabelMakerGame>
   }
 
   /// Back (top-left) and Music (top-right), shared by every screen.
-  List<Widget> _topButtons({bool back = true, VoidCallback? onBack}) => [
-    if (back && (onBack != null || widget.onExit != null))
+  List<Widget> _topButtons({VoidCallback? onBack}) => [
+    if (onBack != null || widget.onExit != null)
       _at(
         24,
         20,
@@ -1613,7 +1613,6 @@ class _LabelMakerGameState extends State<LabelMakerGame>
               },
             ),
           ),
-          ..._topButtons(back: false),
         ],
       ),
     );
@@ -1974,7 +1973,6 @@ class _LabelMakerGameState extends State<LabelMakerGame>
                 dy: 24,
               ),
             ),
-            ..._topButtons(back: false),
           ],
         );
       },

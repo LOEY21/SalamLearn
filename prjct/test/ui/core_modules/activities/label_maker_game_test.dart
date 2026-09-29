@@ -186,6 +186,9 @@ void main() {
     expect(find.text('91%'), findsOneWidget);
     expect(find.text('+30'), findsOneWidget);
     expect(find.text('بَابٌ'), findsOneWidget);
+    // The ending leaves only its own buttons: no Back, no Music.
+    expect(find.byKey(const ValueKey('lm-back')), findsNothing);
+    expect(find.byKey(const ValueKey('lm-music')), findsNothing);
 
     // One slip: two stars, and the girl says so.
     expect(find.text('Great job!\nOnly 1 little slip.'), findsOneWidget);
