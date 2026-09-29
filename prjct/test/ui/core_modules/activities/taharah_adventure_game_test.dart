@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:salamlearn/data/curriculum_data.dart';
@@ -6,6 +7,13 @@ import 'package:salamlearn/data/models/curriculum/curriculum_models.dart';
 import 'package:salamlearn/ui/core_modules/activities/taharah_adventure_game.dart';
 
 void main() {
+  test('Taharah and Wudhu ambience is bundled', () async {
+    final bytes = await rootBundle.load(
+      'assets/audio/taharah_wudhu/audio_bgm_water_ambient.mp3',
+    );
+    expect(bytes.lengthInBytes, greaterThan(1000));
+  });
+
   setUp(() {
     final view =
         TestWidgetsFlutterBinding.instance.platformDispatcher.implicitView!;

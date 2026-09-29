@@ -5,113 +5,9 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lottie/lottie.dart';
 
+import '../../data/student_badges.dart';
 import '../../logic/recent_module_provider.dart';
 import '../theme/app_colors.dart';
-
-typedef _Badge = ({
-  String name,
-  String description,
-  IconData icon,
-  Color color,
-  int xp,
-});
-
-const _badges = <_Badge>[
-  (
-    name: 'First Steps',
-    description: 'Started your learning journey',
-    icon: Icons.child_care_rounded,
-    color: AppColors.teal,
-    xp: 50,
-  ),
-  (
-    name: 'Active Learner',
-    description: 'Earned a 5-day learning streak',
-    icon: Icons.local_fire_department,
-    color: AppColors.gold,
-    xp: 100,
-  ),
-  (
-    name: 'TRACING Master',
-    description: 'Completed the Tracing activity',
-    icon: Icons.draw_outlined,
-    color: AppColors.mintGreen,
-    xp: 150,
-  ),
-  (
-    name: 'FLASHCARDS Master',
-    description: 'Listened to all Alphabet Sounds',
-    icon: Icons.volume_up_outlined,
-    color: AppColors.coral,
-    xp: 150,
-  ),
-  (
-    name: 'RECITATION Master',
-    description: 'Completed Pronunciation class',
-    icon: Icons.menu_book_outlined,
-    color: Colors.blue,
-    xp: 200,
-  ),
-];
-
-typedef _Sticker = ({
-  String emoji,
-  String name,
-  bool unlocked,
-  String unlockDesc,
-});
-
-const _stickers = <_Sticker>[
-  (emoji: '🌙', name: 'Moon', unlocked: true, unlockDesc: 'Complete any lesson'),
-  (emoji: '⭐', name: 'Star', unlocked: true, unlockDesc: 'Complete any lesson'),
-  (emoji: '🕌', name: 'Masjid', unlocked: true, unlockDesc: 'Reach Cleanliness & Character'),
-  (emoji: '🌸', name: 'Flower', unlocked: true, unlockDesc: 'Reach A Growing Muslim'),
-  (emoji: '🐢', name: 'Turtle', unlocked: true, unlockDesc: 'Start your journey'),
-  (emoji: '🌴', name: 'Palm', unlocked: false, unlockDesc: 'Complete Exploring Our World'),
-  (emoji: '🦋', name: 'Butterfly', unlocked: false, unlockDesc: 'Finish A Growing Muslim'),
-  (emoji: '🌊', name: 'Wave', unlocked: false, unlockDesc: 'Finish Stories & Letters'),
-  (emoji: '🏔️', name: 'Mountain', unlocked: false, unlockDesc: 'Reach The Path of the Prophet'),
-  (emoji: '📖', name: 'Book', unlocked: false, unlockDesc: 'Finish The Good Deed Hero'),
-];
-
-typedef _GearItem = ({
-  String name,
-  String description,
-  String emoji,
-  double progress,
-  String unlockDesc,
-});
-
-const _gearItems = <_GearItem>[
-  (
-    name: 'Travel Prayer Mat',
-    description: 'A soft, portable rug for prayers.',
-    emoji: '🕋',
-    progress: 1.0,
-    unlockDesc: 'Unlocked via Streak Star',
-  ),
-  (
-    name: 'Olive Wood Miswak',
-    description: 'Traditional natural toothbrush.',
-    emoji: '🪵',
-    progress: 0.6,
-    unlockDesc: 'Complete 3 Sound lessons',
-  ),
-  (
-    name: 'Zamzam Flask',
-    description: 'Keep your blessed water cool.',
-    emoji: '🍶',
-    progress: 0.4,
-    unlockDesc: 'Complete 5 Tracing exercises',
-  ),
-  (
-    name: 'Quran Pointer (Siba)',
-    description: 'Beautiful carved pointer for reading.',
-    emoji: '✏️',
-    progress: 0.0,
-    unlockDesc: 'Complete Qur\'an Explorer',
-  ),
-];
 
 class BackpackScreen extends ConsumerStatefulWidget {
   const BackpackScreen({super.key});
@@ -121,7 +17,7 @@ class BackpackScreen extends ConsumerStatefulWidget {
 }
 
 class _BackpackScreenState extends ConsumerState<BackpackScreen> {
-  int _selectedTab = 0; // 0 = Badges, 1 = Gear, 2 = Stickers
+  int _selectedTab = 0; // 0 = Milestones, 1 = Streaks
 
   @override
   void initState() {
@@ -139,8 +35,8 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
   @override
   Widget build(BuildContext context) {
     final unlockedBadges = ref.watch(unlockedBadgesProvider);
-    final earnedCount = _badges
-        .where((b) => unlockedBadges.contains(b.name))
+    final earnedTotalCount = allStudentBadges
+        .where((b) => isBadgeUnlocked(b, unlockedBadges))
         .length;
 
     return Scaffold(
@@ -152,7 +48,9 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
             // Hero Header
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(18, 38, 18, 0),
-              sliver: SliverToBoxAdapter(child: _buildHeroHeader(earnedCount)),
+              sliver: SliverToBoxAdapter(
+                child: _buildHeroHeader(earnedTotalCount, allStudentBadges.length),
+              ),
             ),
 
             // Tab Selector
@@ -165,9 +63,8 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
               sliver: switch (_selectedTab) {
-                0 => _buildBadgesGrid(unlockedBadges),
-                1 => _buildGearGrid(),
-                _ => _buildStickersGrid(),
+                0 => _buildBadgesGrid(milestoneBadges, unlockedBadges),
+                _ => _buildBadgesGrid(streakBadges, unlockedBadges),
               },
             ),
           ],
@@ -176,8 +73,12 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
     );
   }
 
-  Widget _buildHeroHeader(int earnedCount) {
+  Widget _buildHeroHeader(int earnedCount, int totalCount) {
     final gradientColors = _tabGradient(_selectedTab);
+    final progressFraction = totalCount > 0
+        ? (earnedCount / totalCount).clamp(0.0, 1.0)
+        : 0.0;
+
     return AnimatedContainer(
       key: const Key('backpack-hero-tile'),
       duration: const Duration(milliseconds: 350),
@@ -260,7 +161,7 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
                       border: Border.all(color: Colors.white24),
                     ),
                     child: Text(
-                      '$earnedCount / ${_badges.length}',
+                      '$earnedCount / $totalCount',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 12,
@@ -279,7 +180,7 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
                     children: [
                       Flexible(
                         child: Text(
-                          '$earnedCount of ${_badges.length} badges earned',
+                          '$earnedCount of $totalCount badges earned',
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.9),
@@ -290,9 +191,9 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        '800 / 1000 XP',
+                        '${(progressFraction * 100).round()}% Completed',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.7),
+                          color: Colors.white.withValues(alpha: 0.8),
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),
@@ -333,7 +234,7 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(99),
                 child: LinearProgressIndicator(
-                  value: 0.8,
+                  value: progressFraction,
                   minHeight: 8,
                   backgroundColor: Colors.white.withValues(alpha: 0.2),
                   valueColor: const AlwaysStoppedAnimation(AppColors.gold),
@@ -371,11 +272,11 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
           // Sliding indicator background pill
           Positioned.fill(
             child: AnimatedAlign(
-              alignment: Alignment(-1.0 + _selectedTab * 1.0, 0.0),
+              alignment: Alignment(-1.0 + _selectedTab * 2.0, 0.0),
               duration: const Duration(milliseconds: 320),
-              curve: const Cubic(0.34, 1.56, 0.64, 1.0), // Playful overshoot bounce
+              curve: const Cubic(0.34, 1.56, 0.64, 1.0), // Playful bounce
               child: FractionallySizedBox(
-                widthFactor: 0.32,
+                widthFactor: 0.49,
                 heightFactor: 0.95,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
@@ -398,9 +299,8 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
           // The tabs Row
           Row(
             children: [
-              _buildTabItem(0, Icons.workspace_premium_rounded, 'Badges'),
-              _buildTabItem(1, Icons.backpack_rounded, 'Inventory'),
-              _buildTabItem(2, Icons.auto_awesome_rounded, 'Stickers'),
+              _buildTabItem(0, Icons.emoji_events_rounded, 'Milestones'),
+              _buildTabItem(1, Icons.local_fire_department_rounded, 'Streaks'),
             ],
           ),
         ],
@@ -410,8 +310,7 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
 
   List<Color> _tabGradient(int tab) => switch (tab) {
     0 => const [AppColors.teal, AppColors.mintGreen],
-    1 => const [AppColors.adventureBlue, AppColors.adventurePurple],
-    _ => const [AppColors.gold, AppColors.coral],
+    _ => const [AppColors.coral, AppColors.gold],
   };
 
   Widget _buildTabItem(int index, IconData icon, String label) {
@@ -454,152 +353,30 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
     );
   }
 
-  Widget _buildBadgesGrid(List<String> unlockedBadges) {
+  Widget _buildBadgesGrid(List<BadgeItem> badges, List<String> unlockedBadges) {
     return SliverGrid(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         mainAxisSpacing: 14,
         crossAxisSpacing: 14,
-        childAspectRatio: 0.82,
+        childAspectRatio: 0.80,
       ),
       delegate: SliverChildBuilderDelegate((context, index) {
-        final badge = _badges[index];
-        final earned = unlockedBadges.contains(badge.name);
+        final badge = badges[index];
+        final earned = isBadgeUnlocked(badge, unlockedBadges);
         return _buildBadgeCard(badge, earned);
-      }, childCount: _badges.length),
+      }, childCount: badges.length),
     );
   }
 
-  Widget _buildGearGrid() {
-    return SliverGrid(
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 14,
-        crossAxisSpacing: 14,
-        childAspectRatio: 0.82,
-      ),
-      delegate: SliverChildBuilderDelegate((context, index) {
-        final item = _gearItems[index];
-        return _buildGearCard(item);
-      }, childCount: _gearItems.length),
-    );
-  }
-
-  Widget _buildStickersGrid() {
-    return SliverGrid(
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 14,
-        crossAxisSpacing: 14,
-        childAspectRatio: 0.82,
-      ),
-      delegate: SliverChildBuilderDelegate((context, index) {
-        final sticker = _stickers[index];
-        return _buildStickerCard(sticker);
-      }, childCount: _stickers.length),
-    );
-  }
-
-  Widget _buildStickerCard(_Sticker sticker) {
-    final unlocked = sticker.unlocked;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: unlocked
-              ? AppColors.gold.withValues(alpha: 0.35)
-              : AppColors.creamBorder,
-          width: 1.5,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x062C2C2A),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(24),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(24),
-          onTap: () => _showStickerDetails(context, sticker),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            child: Column(
-              children: [
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: unlocked
-                          ? AppColors.gold.withValues(alpha: 0.12)
-                          : AppColors.creamDark.withValues(alpha: 0.6),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: unlocked ? AppColors.gold : const Color(0xFFCFC7B4),
-                        width: 2.5,
-                      ),
-                    ),
-                    padding: const EdgeInsets.all(12),
-                    child: Center(
-                      child: unlocked
-                          ? _buildLottieForSticker(sticker, size: 48)
-                          : const Text(
-                              '🔒',
-                              style: TextStyle(fontSize: 28),
-                            ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  sticker.name,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.ink,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: unlocked ? AppColors.goldTint : AppColors.neutralTint,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                  child: Text(
-                    unlocked ? 'Earned' : 'Locked',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: unlocked ? AppColors.gold : AppColors.textMuted,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBadgeCard(_Badge badge, bool earned) {
+  Widget _buildBadgeCard(BadgeItem badge, bool earned) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: earned
-              ? badge.color.withValues(alpha: 0.35)
+              ? badge.color.withValues(alpha: 0.40)
               : AppColors.creamBorder,
           width: 1.5,
         ),
@@ -625,7 +402,7 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
                   child: Container(
                     decoration: BoxDecoration(
                       color: earned
-                          ? badge.color.withValues(alpha: 0.12)
+                          ? badge.color.withValues(alpha: 0.14)
                           : AppColors.creamDark.withValues(alpha: 0.6),
                       shape: BoxShape.circle,
                       border: Border.all(
@@ -633,10 +410,10 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
                         width: 2.5,
                       ),
                     ),
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(8),
                     child: Center(
                       child: earned
-                          ? _buildLottieForBadge(badge, size: 48)
+                          ? _buildLottieOrIconForBadge(badge, size: 48)
                           : const Icon(
                               Icons.lock_outline_rounded,
                               color: Color(0xFFB9B2A2),
@@ -652,28 +429,29 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 13.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w900,
                     color: AppColors.ink,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  badge.description,
+                  badge.requirement,
                   textAlign: TextAlign.center,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 10,
+                    fontSize: 9.5,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textMuted,
+                    height: 1.2,
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
-                    vertical: 4,
+                    vertical: 3,
                   ),
                   decoration: BoxDecoration(
                     color: earned ? AppColors.mint : AppColors.neutralTint,
@@ -696,109 +474,7 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
     );
   }
 
-  Widget _buildGearCard(_GearItem item) {
-    final unlocked = item.progress >= 1.0;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: unlocked
-              ? AppColors.adventureGreen.withValues(alpha: 0.35)
-              : AppColors.creamBorder,
-          width: 1.5,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x062C2C2A),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(24),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(24),
-          onTap: () => _showGearDetails(context, item),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            child: Column(
-              children: [
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: unlocked
-                          ? AppColors.adventureGreen.withValues(alpha: 0.12)
-                          : AppColors.neutralTint,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: unlocked
-                            ? AppColors.adventureGreen
-                            : const Color(0xFFCFC7B4),
-                        width: 2,
-                      ),
-                    ),
-                    padding: const EdgeInsets.all(12),
-                    child: Center(
-                      child: Text(
-                        unlocked ? item.emoji : '🔒',
-                        style: const TextStyle(fontSize: 28),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  item.name,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.ink,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  unlocked ? 'Equipped' : item.unlockDesc,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    // Text (not just a decorative fill) needs AA contrast —
-                    // adventureGreen is ~3.45:1 on white, below the 4.5:1
-                    // normal-text threshold at this size, so labels keep
-                    // teal (~6.2:1) while the icon/border accents above use
-                    // adventureGreen freely as pure graphic elements.
-                    color: unlocked ? AppColors.teal : AppColors.textMuted,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(99),
-                  child: LinearProgressIndicator(
-                    value: item.progress,
-                    minHeight: 5,
-                    backgroundColor: AppColors.neutralTint,
-                    valueColor: AlwaysStoppedAnimation(
-                      unlocked ? AppColors.teal : AppColors.gold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showBadgeDetails(BuildContext context, _Badge badge, bool earned) {
+  void _showBadgeDetails(BuildContext context, BadgeItem badge, bool earned) {
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -826,7 +502,7 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
               backgroundColor: Colors.transparent,
               elevation: 0,
               child: Container(
-                constraints: const BoxConstraints(maxWidth: 320),
+                constraints: const BoxConstraints(maxWidth: 340),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(30),
@@ -840,409 +516,180 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
                 ),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
-                  vertical: 28,
+                  vertical: 26,
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        if (earned)
-                          _CelebratingGlow(color: badge.color)
-                        else
-                          Container(
-                            width: 140,
-                            height: 140,
-                            decoration: BoxDecoration(
-                              color: AppColors.neutralTint,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            color: earned
-                                ? badge.color.withValues(alpha: 0.15)
-                                : AppColors.creamDark,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: earned
-                                  ? badge.color
-                                  : const Color(0xFFCFC7B4),
-                              width: 3.5,
-                            ),
-                            boxShadow: earned
-                                ? [
-                                    BoxShadow(
-                                      color: badge.color.withValues(
-                                        alpha: 0.25,
-                                      ),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                          child: earned
-                              ? Center(child: _buildLottieForBadge(badge, size: 68))
-                              : const Icon(
-                                  Icons.lock_outline_rounded,
-                                  color: Color(0xFFB9B2A2),
-                                  size: 44,
-                                ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      badge.name,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      badge.description,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textMuted,
-                        height: 1.4,
-                      ),
-                    ),
-                    if (!earned) ...[
-                      const SizedBox(height: 12),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Badge category tag
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 6,
+                          horizontal: 10,
+                          vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.goldTint,
-                          borderRadius: BorderRadius.circular(20),
+                          color: badge.color.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: badge.color.withValues(alpha: 0.3),
+                          ),
                         ),
                         child: Text(
-                          '+${badge.xp} XP reward',
-                          style: const TextStyle(
-                            fontSize: 15,
+                          '${badge.category.title} (${badge.category.subtitle})',
+                          style: TextStyle(
+                            fontSize: 10,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.gold,
+                            color: badge.color,
                           ),
                         ),
                       ),
-                    ],
-                    const SizedBox(height: 20),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 6,
+                      const SizedBox(height: 16),
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          if (earned)
+                            _CelebratingGlow(color: badge.color)
+                          else
+                            Container(
+                              width: 130,
+                              height: 130,
+                              decoration: const BoxDecoration(
+                                color: AppColors.neutralTint,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          Container(
+                            width: 96,
+                            height: 96,
+                            decoration: BoxDecoration(
+                              color: earned
+                                  ? badge.color.withValues(alpha: 0.15)
+                                  : AppColors.creamDark,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: earned
+                                    ? badge.color
+                                    : const Color(0xFFCFC7B4),
+                                width: 3.5,
+                              ),
+                              boxShadow: earned
+                                  ? [
+                                      BoxShadow(
+                                        color: badge.color.withValues(
+                                          alpha: 0.25,
+                                        ),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: earned
+                                ? Center(
+                                    child: _buildLottieOrIconForBadge(
+                                      badge,
+                                      size: 64,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.lock_outline_rounded,
+                                    color: Color(0xFFB9B2A2),
+                                    size: 40,
+                                  ),
+                          ),
+                        ],
                       ),
-                      decoration: BoxDecoration(
-                        color: earned ? AppColors.mint : AppColors.neutralTint,
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                      child: Text(
-                        earned ? 'EARNED' : 'LOCKED',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          color: earned ? AppColors.teal : AppColors.textMuted,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _showGearDetails(BuildContext context, _GearItem item) {
-    final unlocked = item.progress >= 1.0;
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'GearDetails',
-      barrierColor: Colors.black.withValues(alpha: 0.55),
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, anim1, anim2) {
-        return const SizedBox.shrink();
-      },
-      transitionBuilder: (context, anim1, anim2, child) {
-        final scale = Tween<double>(
-          begin: 0.85,
-          end: 1.0,
-        ).animate(CurvedAnimation(parent: anim1, curve: Curves.easeOutBack));
-        final opacity = Tween<double>(
-          begin: 0.0,
-          end: 1.0,
-        ).animate(CurvedAnimation(parent: anim1, curve: Curves.easeOut));
-
-        return ScaleTransition(
-          scale: scale,
-          child: FadeTransition(
-            opacity: opacity,
-            child: Dialog(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 320),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 20,
-                      offset: Offset(0, 10),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 28,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        color: unlocked
-                            ? AppColors.adventureGreen.withValues(alpha: 0.12)
-                            : AppColors.neutralTint,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: unlocked
-                              ? AppColors.adventureGreen
-                              : const Color(0xFFCFC7B4),
-                          width: 3.5,
-                        ),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        unlocked ? item.emoji : '🔒',
-                        style: const TextStyle(fontSize: 44),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      item.name,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      item.description,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textMuted,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (!unlocked) ...[
+                      const SizedBox(height: 18),
                       Text(
-                        'Unlock rule: ${item.unlockDesc}',
+                        badge.name,
+                        textAlign: TextAlign.center,
                         style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.coral,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.ink,
                         ),
                       ),
                       const SizedBox(height: 12),
-                    ],
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: unlocked
-                            ? AppColors.adventureGreen.withValues(alpha: 0.14)
-                            : AppColors.neutralTint,
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                      child: Text(
-                        unlocked ? 'EQUIPPED' : 'IN PROGRESS',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          // Text stays teal for AA contrast — see the
-                          // matching note above on the badge-card label.
-                          color: unlocked
-                              ? AppColors.teal
-                              : AppColors.textMuted,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _showStickerDetails(BuildContext context, _Sticker sticker) {
-    final unlocked = sticker.unlocked;
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'StickerDetails',
-      barrierColor: Colors.black.withValues(alpha: 0.55),
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, anim1, anim2) {
-        return const SizedBox.shrink();
-      },
-      transitionBuilder: (context, anim1, anim2, child) {
-        final scale = Tween<double>(
-          begin: 0.85,
-          end: 1.0,
-        ).animate(CurvedAnimation(parent: anim1, curve: Curves.easeOutBack));
-        final opacity = Tween<double>(
-          begin: 0.0,
-          end: 1.0,
-        ).animate(CurvedAnimation(parent: anim1, curve: Curves.easeOut));
-
-        return ScaleTransition(
-          scale: scale,
-          child: FadeTransition(
-            opacity: opacity,
-            child: Dialog(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 320),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 20,
-                      offset: Offset(0, 10),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 28,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        color: unlocked
-                            ? AppColors.gold.withValues(alpha: 0.15)
-                            : AppColors.creamDark,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: unlocked ? AppColors.gold : const Color(0xFFCFC7B4),
-                          width: 3.5,
-                        ),
-                        boxShadow: unlocked
-                            ? [
-                                BoxShadow(
-                                  color: AppColors.gold.withValues(alpha: 0.25),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ]
-                            : null,
-                      ),
-                      alignment: Alignment.center,
-                      child: unlocked
-                          ? _buildLottieForSticker(sticker, size: 68)
-                          : const Text(
-                              '🔒',
-                              style: TextStyle(fontSize: 44),
-                            ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      sticker.name,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.ink,
-                      ),
-                    ),
-                    if (!unlocked) ...[
-                      const SizedBox(height: 16),
+                      // Requirement card
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
+                          horizontal: 14,
+                          vertical: 10,
                         ),
                         decoration: BoxDecoration(
                           color: AppColors.cream,
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.gold, width: 1.6),
+                          border: Border.all(color: AppColors.creamBorder),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'HOW TO UNLOCK',
+                            Text(
+                              'REQUIREMENT',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 10,
                                 fontWeight: FontWeight.w800,
-                                color: AppColors.gold,
+                                color: badge.color,
                                 letterSpacing: 0.4,
                               ),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              sticker.unlockDesc,
+                              badge.requirement,
                               style: const TextStyle(
-                                fontSize: 12.5,
+                                fontSize: 12,
+                                color: AppColors.ink,
+                                height: 1.35,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.textMuted,
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ],
-                    const SizedBox(height: 20),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: unlocked ? AppColors.goldTint : AppColors.neutralTint,
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                      child: Text(
-                        unlocked ? 'EARNED' : 'LOCKED',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          color: unlocked ? AppColors.gold : AppColors.textMuted,
+                      const SizedBox(height: 12),
+                      if (!earned) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.goldTint,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            '+${badge.xp} XP Reward',
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.gold,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: earned ? AppColors.mint : AppColors.neutralTint,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text(
+                          earned ? 'EARNED ✓' : 'LOCKED 🔒',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: earned ? AppColors.teal : AppColors.textMuted,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1252,86 +699,27 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
     );
   }
 
-  Widget _buildLottieForBadge(_Badge badge, {double size = 48}) {
-    final String assetPath;
-    switch (badge.name) {
-      case 'First Steps':
-        assetPath = 'assets/lottie/xp_star.json';
-        break;
-      case 'Active Learner':
-        assetPath = 'assets/lottie/flame_streak.json';
-        break;
-      case 'TRACING Master':
-        assetPath = 'assets/lottie/goal_target.json';
-        break;
-      case 'FLASHCARDS Master':
-        assetPath = 'assets/lottie/cast_ripple.json';
-        break;
-      case 'RECITATION Master':
-        assetPath = 'assets/lottie/milestone_burst.json';
-        break;
-      default:
-        return Icon(badge.icon, color: badge.color, size: size);
-    }
-    return Lottie.asset(
-      assetPath,
-      width: size,
-      height: size,
-      fit: BoxFit.contain,
-    );
-  }
-
-  Widget _buildLottieForSticker(_Sticker sticker, {double size = 48}) {
-    final String assetPath;
-    switch (sticker.emoji) {
-      case '⭐':
-        assetPath = 'assets/lottie/xp_star.json';
-        break;
-      case '🌙':
-        assetPath = 'assets/lottie/noor_glow.json';
-        break;
-      case '🕌':
-        assetPath = 'assets/lottie/milestone_burst.json';
-        break;
-      case '🌸':
-        assetPath = 'assets/lottie/milestone_burst.json';
-        break;
-      case '🐢':
-        assetPath = 'assets/lottie/owl_idle.json';
-        break;
-      case '🌴':
-        assetPath = 'assets/lottie/flame_streak.json';
-        break;
-      case '🦋':
-        assetPath = 'assets/lottie/cast_ripple.json';
-        break;
-      case '🌊':
-        assetPath = 'assets/lottie/cast_ripple.json';
-        break;
-      case '🏔️':
-        assetPath = 'assets/lottie/goal_target.json';
-        break;
-      case '📖':
-        assetPath = 'assets/lottie/practice_complete.json';
-        break;
-      default:
-        return Text(sticker.emoji, style: TextStyle(fontSize: size * 0.6));
-    }
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Lottie.asset(
-          assetPath,
-          width: size * 1.5,
-          height: size * 1.5,
-          fit: BoxFit.contain,
-        ),
-        if (sticker.emoji != '⭐')
-          Text(
-            sticker.emoji,
-            style: TextStyle(fontSize: size * 0.58),
+  Widget _buildLottieOrIconForBadge(BadgeItem badge, {double size = 48}) {
+    if (badge.lottieAsset != null) {
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          Lottie.asset(
+            badge.lottieAsset!,
+            width: size * 1.3,
+            height: size * 1.3,
+            fit: BoxFit.contain,
           ),
-      ],
+          Text(
+            badge.emoji,
+            style: TextStyle(fontSize: size * 0.46),
+          ),
+        ],
+      );
+    }
+    return Text(
+      badge.emoji,
+      style: TextStyle(fontSize: size * 0.6),
     );
   }
 }

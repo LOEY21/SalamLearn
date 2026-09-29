@@ -9,9 +9,6 @@ Widget _wrap() {
   );
 }
 
-// The default 800x600 test surface only fits one grid row below the hero
-// header + tab selector — every test here needs to see locked cards further
-// down the list, so give the surface real phone-sized headroom.
 Future<void> _pumpTall(WidgetTester tester) async {
   tester.view.physicalSize = const Size(400, 1400);
   tester.view.devicePixelRatio = 1.0;
@@ -21,51 +18,41 @@ Future<void> _pumpTall(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('defaults to the Badges tab showing earned/locked badges', (
+  testWidgets('defaults to the Milestones tab showing earned/locked badges', (
     tester,
   ) async {
     await _pumpTall(tester);
 
     expect(find.text('Digital Backpack'), findsOneWidget);
-    expect(find.text('First Steps'), findsOneWidget);
+    expect(find.text('Desert Calligrapher Badge'), findsOneWidget);
     expect(find.text('Earned'), findsWidgets);
     expect(find.text('Locked'), findsWidgets);
   });
 
-  testWidgets('switching to the Stickers tab shows sticker cards', (
+  testWidgets('switching to the Streaks tab shows streak badges', (
     tester,
   ) async {
     await _pumpTall(tester);
 
-    expect(find.text('Moon'), findsNothing);
+    expect(find.text('Curious Spark Badge (3-Day Streak)'), findsNothing);
 
-    await tester.tap(find.text('Stickers'));
+    await tester.tap(find.text('Streaks'));
     await tester.pump(const Duration(milliseconds: 350));
 
-    expect(find.text('Moon'), findsOneWidget);
+    expect(find.text('Curious Spark Badge (3-Day Streak)'), findsOneWidget);
+    expect(find.text('First Steps Badge'), findsOneWidget);
   });
 
-  testWidgets('tapping a locked sticker opens the unlock-rule detail dialog', (
+  testWidgets('tapping a locked badge shows its requirement and XP reward', (
     tester,
   ) async {
     await _pumpTall(tester);
-    await tester.tap(find.text('Stickers'));
+
+    await tester.tap(find.text('Sound Detective Star Badge'));
     await tester.pump(const Duration(milliseconds: 350));
 
-    await tester.tap(find.text('Palm'));
-    await tester.pump(const Duration(milliseconds: 350));
-
-    expect(find.text('HOW TO UNLOCK'), findsOneWidget);
-    expect(find.text('Complete Exploring Our World'), findsOneWidget);
-  });
-
-  testWidgets('tapping a locked badge shows its XP reward', (tester) async {
-    await _pumpTall(tester);
-
-    await tester.tap(find.text('TRACING Master'));
-    await tester.pump(const Duration(milliseconds: 350));
-
-    expect(find.text('+150 XP reward'), findsOneWidget);
+    expect(find.text('REQUIREMENT'), findsOneWidget);
+    expect(find.text('+150 XP Reward'), findsOneWidget);
   });
 
   Color heroTopLeftColor(WidgetTester tester) {
@@ -80,18 +67,13 @@ void main() {
     tester,
   ) async {
     await _pumpTall(tester);
-    final badgesColor = heroTopLeftColor(tester);
+    final milestonesColor = heroTopLeftColor(tester);
 
-    await tester.tap(find.text('Inventory'));
+    await tester.tap(find.text('Streaks'));
     await tester.pump(const Duration(milliseconds: 350));
-    final inventoryColor = heroTopLeftColor(tester);
+    final streaksColor = heroTopLeftColor(tester);
 
-    await tester.tap(find.text('Stickers'));
-    await tester.pump(const Duration(milliseconds: 350));
-    final stickersColor = heroTopLeftColor(tester);
-
-    expect(badgesColor, isNot(equals(inventoryColor)));
-    expect(inventoryColor, isNot(equals(stickersColor)));
-    expect(badgesColor, isNot(equals(stickersColor)));
+    expect(milestonesColor, isNot(equals(streaksColor)));
+    expect(find.text('Inventory'), findsNothing);
   });
 }

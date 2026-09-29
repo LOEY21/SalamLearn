@@ -190,7 +190,29 @@ void main() {
       expect(container.read(sessionProvider).pinVerified, isFalse);
     });
 
-    test('eraseAll clears learner, consent, and pin (FR-7.3)', () async {
+    test('delete account asks for the account password', () async {
+      final container = onlineContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(sessionProvider.notifier);
+
+      notifier.stageParentRegistration(
+        fullName: 'Aisha',
+        email: 'aisha@example.com',
+        password: 'Secret#123',
+      );
+      await notifier.createPin('1234');
+
+      expect(
+        await notifier.confirmAccountPassword('wrong'),
+        DeleteAccountCheck.wrongPassword,
+      );
+      expect(
+        await notifier.confirmAccountPassword('Secret#123'),
+        DeleteAccountCheck.ok,
+      );
+    });
+
+    test('deleteAccount clears learner, consent, and pin (FR-7.3)', () async {
       final container = onlineContainer();
       addTearDown(container.dispose);
       final notifier = container.read(sessionProvider.notifier);
@@ -206,7 +228,7 @@ void main() {
         password: 'password123',
       );
 
-      await notifier.eraseAll();
+      await notifier.deleteAccount();
       final state = container.read(sessionProvider);
       expect(state.learner, isNull);
       expect(state.consent, isNull);
@@ -708,18 +730,20 @@ void main() {
   });
 
   group('ProfileScreen', () {
-    testWidgets('shows stats and rows, and Settings routes through the '
-        'parent-PIN gate', (tester) async {
+    testWidgets('shows the settings rows, with Switch Account behind the '
+        'parent PIN', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       await tester.pumpWidget(
         const ProviderScope(child: MaterialApp(home: ProfileScreen())),
       );
-      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
 
-      expect(find.text('Day streak'), findsOneWidget);
-      expect(find.text('Modules done'), findsOneWidget);
       expect(find.text('Notifications'), findsOneWidget);
-      expect(find.text('My avatar'), findsOneWidget);
-      expect(find.text('Settings (parent PIN)'), findsOneWidget);
+      expect(find.text('My Avatar'), findsOneWidget);
+      expect(find.text('Switch Account'), findsOneWidget);
+      expect(find.text('Requires parent PIN'), findsOneWidget);
     });
   });
 

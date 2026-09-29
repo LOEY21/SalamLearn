@@ -235,7 +235,7 @@ class SyncManager {
   }
 
   /// FR-7.3 "Right to be Forgotten" — deletes every mirrored Firestore
-  /// document before the local Hive erase runs (`SessionNotifier.eraseAll`
+  /// document before the local Hive erase runs (`SessionNotifier.deleteAccount`
   /// calls this first, since it needs the ids while they still exist
   /// locally). Best-effort per document: if offline, or a document was
   /// never actually synced, that single delete just fails silently and

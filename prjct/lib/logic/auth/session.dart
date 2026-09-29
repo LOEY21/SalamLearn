@@ -55,6 +55,9 @@ enum SignInResult {
   noInternet,
 }
 
+/// Outcome of [SessionNotifier.confirmAccountPassword].
+enum DeleteAccountCheck { ok, wrongPassword, noInternet }
+
 /// Session state backed by real Hive-persisted accounts (Phase 4 of the
 /// backend plan) — [activeParentId]/[activeTeacherId] point at whichever
 /// [ParentAccount]/[TeacherAccount] is currently signed in on this device;
@@ -455,7 +458,11 @@ class SessionNotifier extends Notifier<SessionState> {
             email: pending.email,
             password: pending.password,
           );
-          if (credential.user?.emailVerified ?? false) {
+          // A verified user is someone's real account — unless its profile
+          // was erased ("Erase local data"), which leaves the Auth user
+          // behind. Then it's free to reuse.
+          if ((credential.user?.emailVerified ?? false) &&
+              !await _isProfileless(credential.user!.uid)) {
             await gateway.signOut();
             return emailAlreadyRegistered;
           }
@@ -474,6 +481,15 @@ class SessionNotifier extends Notifier<SessionState> {
     } catch (e) {
       debugPrint('ensureParentFirebaseUser failed: $e');
       return "Couldn't create your account. Please try again.";
+    }
+  }
+
+  static Future<bool> _isProfileless(String uid) async {
+    try {
+      return await FirestoreMirror().isProfilelessAuthUser(uid);
+    } catch (e) {
+      debugPrint('_isProfileless check failed: $e');
+      return false;
     }
   }
 
@@ -1315,7 +1331,7 @@ class SessionNotifier extends Notifier<SessionState> {
 
   /// Parent Dashboard's "Delete Child Profile" — permanently removes one
   /// learner (local record + best-effort mirrored Firestore doc, matching
-  /// [eraseAll]'s "delete remote before local" ordering while the id still
+  /// [deleteAccount]'s "delete remote before local" ordering while the id still
   /// resolves). If this was the active learner, re-picks another of the
   /// same parent's children if one exists, or clears `state.learner`
   /// entirely if that was the last one — done via a fresh [SessionState]
@@ -1326,7 +1342,7 @@ class SessionNotifier extends Notifier<SessionState> {
       await FirestoreMirror().deleteDoc(HiveBoxes.learners, learnerId);
     } catch (_) {
       // Offline, never-synced, or already gone — nothing to do, matching
-      // eraseAll's own best-effort remote-delete contract.
+      // deleteAccount's own best-effort remote-delete contract.
     }
     await _learners.delete(learnerId);
 
@@ -1398,7 +1414,7 @@ class SessionNotifier extends Notifier<SessionState> {
   /// account "active" on this device. Logging out clears which account is
   /// active entirely, so the next launch lands on the role picker and
   /// requires email + password again, not just the PIN. Leaves every
-  /// account's data untouched on disk — only [eraseAll] deletes data.
+  /// account's data untouched on disk — only [deleteAccount] deletes data.
   ///
   /// Also clears `activeLearnerId` — [build]'s startup rehydration reads it
   /// back regardless of `activeRole`, so leaving it set (the previous
@@ -1422,12 +1438,68 @@ class SessionNotifier extends Notifier<SessionState> {
     );
   }
 
-  /// FR-7.3 "Right to be Forgotten" — deletes every mirrored Firestore
+  (String? email, String? firebaseUid, bool Function(String) verifyLocal)
+      _activeGrownUp() {
+    if (state.activeRole == UserRole.asatidz) {
+      final id = state.activeTeacherId;
+      final account = id == null ? null : _teachers.findById(id);
+      return (
+        account?.email,
+        account?.firebaseUid,
+        (p) => account != null && _teachers.verifyPassword(account, p),
+      );
+    }
+    final id = state.activeParentId;
+    final account = id == null ? null : _parents.findById(id);
+    return (
+      account?.email,
+      account?.firebaseUid,
+      (p) => account != null && _parents.verifyPassword(account, p),
+    );
+  }
+
+  /// Settings "Delete account", step 1 — checks [password] for the active
+  /// parent/teacher without changing any state. A cloud-linked account is
+  /// checked by re-signing into Firebase with it, which is also the recent
+  /// sign-in Firebase requires before [deleteAccount] can delete the Auth
+  /// user.
+  Future<DeleteAccountCheck> confirmAccountPassword(String password) async {
+    final (email, firebaseUid, verifyLocal) = _activeGrownUp();
+    if (firebaseUid == null || email == null) {
+      return verifyLocal(password)
+          ? DeleteAccountCheck.ok
+          : DeleteAccountCheck.wrongPassword;
+    }
+    if (!await _hasInternet()) return DeleteAccountCheck.noInternet;
+    try {
+      await FirebaseAuthGateway().signIn(email: email, password: password);
+      return DeleteAccountCheck.ok;
+    } on FirebaseAuthException catch (e) {
+      return e.code == 'network-request-failed'
+          ? DeleteAccountCheck.noInternet
+          : DeleteAccountCheck.wrongPassword;
+    }
+  }
+
+  /// FR-7.3 "Right to be Forgotten" — step 2 of Settings "Delete account",
+  /// after [confirmAccountPassword] passed. Deletes every mirrored Firestore
   /// document (best-effort; needs the ids while they still exist locally,
-  /// so this must run *before* the local wipe), then wipes every Hive box
+  /// so this must run *before* the local wipe), then the Firebase Auth user
+  /// itself so the email can be registered again, then wipes every Hive box
   /// on disk and resets the in-memory session to a clean slate.
-  Future<void> eraseAll() async {
+  Future<void> deleteAccount() async {
+    final (_, firebaseUid, _) = _activeGrownUp();
     await SyncManager().eraseRemoteData();
+    try {
+      final user = FirebaseAuthGateway().currentUser;
+      // Only ever the active account's own user — on a device shared by
+      // two roles, Firebase may still be signed in as the other one.
+      if (firebaseUid != null && user?.uid == firebaseUid) await user!.delete();
+    } catch (e) {
+      // Best-effort — a leftover Auth user is reclaimed when the email
+      // registers again (see FirestoreMirror.isProfilelessAuthUser).
+      debugPrint('deleteAccount: Firebase Auth delete failed: $e');
+    }
     await HiveService.eraseEverything();
     state = const SessionState();
   }

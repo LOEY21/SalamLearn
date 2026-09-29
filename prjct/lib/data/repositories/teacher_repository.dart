@@ -53,7 +53,9 @@ class TeacherRepository {
       debugPrint(
         'TeacherRepository.register: Firebase Auth link failed (${e.code}): ${e.message}',
       );
-      firebaseUid = null;
+      firebaseUid = e.code == 'email-already-in-use'
+          ? await _reclaimErasedAuthUser(normalizedEmail, password)
+          : null;
     } catch (e) {
       debugPrint('TeacherRepository.register: Firebase Auth link failed: $e');
       firebaseUid = null;
@@ -75,6 +77,26 @@ class TeacherRepository {
     );
     await _box.put(account.id, account);
     return account;
+  }
+
+  /// "Erase local data" deletes the Firestore profile but not the Firebase
+  /// Auth user, so re-registering that email hits `email-already-in-use`.
+  /// Reuses that user when the password matches and no profile references
+  /// it anymore; otherwise null (unlinked, same as before).
+  Future<String?> _reclaimErasedAuthUser(String email, String password) async {
+    try {
+      final credential = await FirebaseAuthGateway().signIn(
+        email: email,
+        password: password,
+      );
+      final uid = credential.user?.uid;
+      if (uid != null && await FirestoreMirror().isProfilelessAuthUser(uid)) {
+        return uid;
+      }
+    } catch (e) {
+      debugPrint('TeacherRepository.register: reclaim failed: $e');
+    }
+    return null;
   }
 
   /// Bootstraps a bare account with only a PIN — see

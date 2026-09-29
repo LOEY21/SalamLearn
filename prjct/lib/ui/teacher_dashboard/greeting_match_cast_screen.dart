@@ -8,7 +8,7 @@ import '../theme/app_colors.dart';
 
 /// Classroom cast view for Greeting Match: locked landscape, one big
 /// phrase + play button, and a teacher-controlled "Reveal" that flips in
-/// the 4 choices with the correct one highlighted — the teacher paces the
+/// the choices with the correct one highlighted — the teacher paces the
 /// class's shout-the-answer moment, no timer, no auto-advance.
 ///
 /// Plain/default styling for now, matching the Home Mode widget's
@@ -21,11 +21,16 @@ class GreetingMatchCastScreen extends StatefulWidget {
       _GreetingMatchCastScreenState();
 }
 
+final List<GreetingQuestion> _castQuestions = [
+  ...greetingDailySession.questions,
+  ...greetingMannersSession.questions,
+];
+
 class _GreetingMatchCastScreenState extends State<GreetingMatchCastScreen> {
   int _idx = 0;
   bool _revealed = false;
 
-  GreetingQuestion get _question => greetingQuestions[_idx];
+  GreetingQuestion get _question => _castQuestions[_idx];
 
   @override
   void initState() {
@@ -48,7 +53,7 @@ class _GreetingMatchCastScreenState extends State<GreetingMatchCastScreen> {
   void _reveal() => setState(() => _revealed = true);
 
   void _next() {
-    if (_idx + 1 >= greetingQuestions.length) return;
+    if (_idx + 1 >= _castQuestions.length) return;
     setState(() {
       _idx++;
       _revealed = false;
@@ -80,7 +85,7 @@ class _GreetingMatchCastScreenState extends State<GreetingMatchCastScreen> {
                     icon: const Icon(Icons.close_rounded, color: Colors.white),
                   ),
                   Text(
-                    'Greeting ${_idx + 1} / ${greetingQuestions.length}',
+                    'Greeting ${_idx + 1} / ${_castQuestions.length}',
                     style: const TextStyle(
                       color: Colors.white70,
                       fontWeight: FontWeight.w700,
@@ -91,7 +96,7 @@ class _GreetingMatchCastScreenState extends State<GreetingMatchCastScreen> {
               Expanded(
                 child: Center(
                   child: Text(
-                    _question.phrase,
+                    '${_question.arabic}\n(${_question.meaning.tr})',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white,
@@ -122,7 +127,7 @@ class _GreetingMatchCastScreenState extends State<GreetingMatchCastScreen> {
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Text(
-                            '${choice.translit} — ${choice.meaning}',
+                            '${choice.arabic} — ${choice.meaning.tr}',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w700,
@@ -149,9 +154,7 @@ class _GreetingMatchCastScreenState extends State<GreetingMatchCastScreen> {
                   ),
                   const SizedBox(width: 16),
                   OutlinedButton(
-                    onPressed: _idx + 1 >= greetingQuestions.length
-                        ? null
-                        : _next,
+                    onPressed: _idx + 1 >= _castQuestions.length ? null : _next,
                     child: const Text('Next'),
                   ),
                 ],

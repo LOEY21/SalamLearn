@@ -576,19 +576,24 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
 
     final p = _toFrame(e.position);
     var hit = -1;
+    var best = double.infinity;
     for (var i = 0; i < _n; i++) {
+      if (_placed[i]) continue;
       final r = _rectOf(_slotKeys[i]);
       if (r == null) continue;
       if (p.dx > r.left - 26 &&
           p.dx < r.right + 26 &&
           p.dy > r.top - 34 &&
           p.dy < r.bottom + 34) {
-        hit = i;
-        break;
+        final d = (p - r.center).distanceSquared;
+        if (d < best) {
+          best = d;
+          hit = i;
+        }
       }
     }
 
-    if (hit >= 0 && !_placed[hit] && hit == id) {
+    if (hit == id) {
       _dropCorrect(hit);
       return;
     }

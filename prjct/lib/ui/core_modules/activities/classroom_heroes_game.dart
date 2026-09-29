@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
+import 'classroom_heroes_audio.dart';
 
 /// Classroom Heroes — pick the hero choice in three classroom scenarios.
 /// Ported 1:1 from the supplied "Classroom Heroes" design prototype: same
@@ -28,6 +29,8 @@ class ClassroomHeroesGame extends StatefulWidget {
     required this.xp,
     required this.onComplete,
     this.onExit,
+    this.audioEnabled = true,
+    this.audio,
   });
 
   final ClassroomHeroesSession session;
@@ -38,6 +41,8 @@ class ClassroomHeroesGame extends StatefulWidget {
   /// screen's home button, the two places the prototype's layout has room
   /// for an exit.
   final VoidCallback? onExit;
+  final bool audioEnabled;
+  final ClassroomAudioPlayback? audio;
 
   @override
   State<ClassroomHeroesGame> createState() => _ClassroomHeroesGameState();
@@ -69,7 +74,6 @@ const _goldInk = Color(0xFF7A4A17);
 const _goldDrop = Color(0xFFDCA42F);
 const _goldDropShade = Color(0xFFA97A1D);
 const _leafGreen = Color(0xFF4FB15F);
-const _leafGreenLit = Color(0xFF63C973);
 const _leafGreenDeep = Color(0xFF2F8B45);
 const _leafGreenShade = Color(0xFF1F6B32);
 const _meterFill = Color(0xFF5FC06F);
@@ -77,9 +81,10 @@ const _meterTrack = Color(0xFFC8C3B4);
 const _meterTrackEdge = Color(0xFFA9A394);
 const _barTrack = Color(0xFFDED6BF);
 const _barTrackEdge = Color(0xFFBDB29A);
-const _decoyRed = Color(0xFFD9544C);
-const _decoyRedDeep = Color(0xFFB32F2A);
-const _decoyEdge = Color(0xFF8F2521);
+// Both choice cards share one neutral colour, so neither gives the answer away.
+const _choiceBlue = Color(0xFF4A90D9);
+const _choiceBlueDeep = Color(0xFF2F6FB5);
+const _choiceBlueEdge = Color(0xFF1F4F86);
 const _curtainLit = Color(0xFF2C5A3A);
 const _curtainDim = Color(0xFF22462D);
 const _badgeEdge = Color(0xFFD8B04A);
@@ -172,6 +177,9 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   double _finishT0 = 0;
   double _narrateT0 = 0;
   double _narrateDur = 1;
+  ClassroomAudioPlayback? _audio;
+  ClassroomQuestionAudio get _questionAudio =>
+      classroomAudio[_session.number - 1][_index];
 
   double get _st => _now - _screenT0;
 
@@ -186,6 +194,8 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   bool _curtain = false;
   bool _narrating = false;
   bool _finished = false;
+  bool _heroLeft = true;
+  final _rng = math.Random();
 
   int _errors = 0;
 
@@ -203,6 +213,10 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   @override
   void initState() {
     super.initState();
+    if (widget.audioEnabled) {
+      _audio = widget.audio ?? ClassroomHeroesAudio();
+      unawaited(_audio!.startMusic());
+    }
     // The prototype's stage is a 1600x900 landscape canvas — the app is
     // portrait-locked everywhere else, so this activity flips the device for
     // as long as it is on screen and puts it back on the way out (the same
@@ -221,6 +235,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     _tryAgainTimer?.cancel();
     _replayTimer?.cancel();
     _stopNarration();
+    if (_audio != null) unawaited(_audio!.dispose());
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -250,12 +265,49 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   void _stopNarration() {
     _narrateDelayTimer?.cancel();
     _narrateEndTimer?.cancel();
+    if (_audio != null) unawaited(_audio!.stopVoice());
   }
 
-  /// The prototype's `narrate(delay)` — the question is "read out" as a
-  /// filling progress bar whose length scales with the prompt's word count.
-  /// There is no recorded audio yet, exactly as in the prototype (`say()` is
-  /// a no-op there); the bar is the whole of the narration beat.
+  void _endNarration() {
+    _narrateEndTimer?.cancel();
+    if (!mounted || !_narrating) return;
+    setState(() {
+      _narrating = false;
+      _panelT0 = _now;
+    });
+    _playChoices();
+  }
+
+  /// Reads the two cards aloud left to right — the hero choice's side is
+  /// random per question, so the spoken order doesn't give it away either.
+  void _playChoices() {
+    final audio = _audio;
+    if (audio == null) return;
+    final first = _heroLeft ? _questionAudio.correct : _questionAudio.decoy;
+    final second = _heroLeft ? _questionAudio.decoy : _questionAudio.correct;
+
+    void playSecond() {
+      if (!mounted ||
+          _screen != _Screen.play ||
+          _answered ||
+          _wrong ||
+          _narrating) {
+        return;
+      }
+      unawaited(audio.play(second));
+    }
+
+    unawaited(audio.play(first, onComplete: playSecond, onError: playSecond));
+  }
+
+  void _fallbackNarration(double duration) {
+    if (!mounted) return;
+    _narrateEndTimer?.cancel();
+    _narrateEndTimer = Timer(_ms(duration), _endNarration);
+  }
+
+  /// Play the prompt after the curtain's opening beat. The authored duration
+  /// remains the fallback when sound is unavailable.
   void _narrate(double delay) {
     _stopNarration();
     final words = _q.promptText.split(RegExp(r'\s+')).length;
@@ -268,13 +320,22 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     _narrateDelayTimer = Timer(_ms(delay), () {
       if (!mounted) return;
       setState(() => _narrateT0 = _now);
-      _narrateEndTimer = Timer(_ms(dur), () {
-        if (!mounted) return;
-        setState(() {
-          _narrating = false;
-          _panelT0 = _now;
-        });
-      });
+      if (_audio == null) {
+        _fallbackNarration(dur);
+      } else {
+        unawaited(
+          _audio!.play(
+            _questionAudio.prompt,
+            onComplete: _endNarration,
+            onError: () => _fallbackNarration(dur),
+            onDuration: (duration) {
+              if (mounted && duration.inMilliseconds > 0) {
+                setState(() => _narrateDur = duration.inMilliseconds / 1000);
+              }
+            },
+          ),
+        );
+      }
     });
   }
 
@@ -282,6 +343,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       Duration(milliseconds: (seconds * 1000).round());
 
   void _beginQuestion() {
+    _heroLeft = _rng.nextBool();
     _wipe();
     _narrate(_kNarrateDelay);
   }
@@ -324,6 +386,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
 
   void _pick(bool good) {
     if (_answered) return;
+    if (_audio != null) unawaited(_audio!.stopVoice());
     if (good) {
       HapticFeedback.mediumImpact();
       setState(() {
@@ -396,15 +459,13 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
 
   void _skipNarration() {
     _stopNarration();
-    setState(() {
-      _narrating = false;
-      _panelT0 = _now;
-    });
+    _endNarration();
   }
 
   /// The badge screen's continue button — the lesson's only way on, so it
   /// reports the session's score up to the lesson player.
   void _finish() {
+    if (_audio != null) unawaited(_audio!.stopVoice());
     final attempts = _items.length + _errors;
     final accuracy = attempts == 0 ? 100.0 : _items.length / attempts * 100.0;
     widget.onComplete(widget.xp, accuracy, _errors);
@@ -859,6 +920,20 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
 
   /// The question panel — prompt (or success band) over the two choices.
   Widget _buildPanel() {
+    final hero = _choice(
+      text: _q.correctText,
+      shake: false,
+      dim: 1,
+      tick: _answered,
+      onTap: () => _pick(true),
+    );
+    final decoy = _choice(
+      text: _q.decoyText,
+      shake: _wrong,
+      dim: _answered ? 0.55 : 1,
+      tick: false,
+      onTap: () => _pick(false),
+    );
     return Positioned(
       left: 26,
       right: 26,
@@ -895,33 +970,9 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Expanded(
-                          child: _choice(
-                            text: _q.correctText,
-                            icon: Icons.thumb_up,
-                            top: _answered ? _leafGreenLit : _leafGreen,
-                            bottom: _leafGreenDeep,
-                            edge: _leafGreenShade,
-                            shake: false,
-                            dim: 1,
-                            tick: _answered,
-                            onTap: () => _pick(true),
-                          ),
-                        ),
+                        Expanded(child: _heroLeft ? hero : decoy),
                         const SizedBox(width: 26),
-                        Expanded(
-                          child: _choice(
-                            text: _q.decoyText,
-                            icon: Icons.thumb_down,
-                            top: _decoyRed,
-                            bottom: _decoyRedDeep,
-                            edge: _decoyEdge,
-                            shake: _wrong,
-                            dim: _answered ? 0.55 : 1,
-                            tick: false,
-                            onTap: () => _pick(false),
-                          ),
-                        ),
+                        Expanded(child: _heroLeft ? decoy : hero),
                       ],
                     ),
                   ),
@@ -1092,10 +1143,6 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
 
   Widget _choice({
     required String text,
-    required IconData icon,
-    required Color top,
-    required Color bottom,
-    required Color edge,
     required bool shake,
     required double dim,
     required bool tick,
@@ -1110,12 +1157,12 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [top, bottom],
+            colors: [_choiceBlue, _choiceBlueDeep],
           ),
-          border: Border.all(color: edge, width: 5),
+          border: Border.all(color: _choiceBlueEdge, width: 5),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
-            BoxShadow(color: edge, offset: Offset(0, down ? 4 : 8)),
+            BoxShadow(color: _choiceBlueEdge, offset: Offset(0, down ? 4 : 8)),
             const BoxShadow(
               color: Color(0x29000000),
               offset: Offset(0, 12),
@@ -1133,7 +1180,11 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
                 color: const Color(0x33FFFFFF),
                 borderRadius: BorderRadius.circular(22),
               ),
-              child: Icon(icon, size: 52, color: Colors.white),
+              child: const Icon(
+                Icons.touch_app_rounded,
+                size: 52,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(width: 24),
             Expanded(

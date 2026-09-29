@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:flutter/services.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
+import 'sirah_story_audio.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 
@@ -29,6 +30,8 @@ class SirahStoryGame extends StatefulWidget {
     required this.xp,
     required this.onComplete,
     this.onExit,
+    this.audioEnabled = true,
+    this.audio,
   });
 
   final SirahStorySession session;
@@ -38,6 +41,8 @@ class SirahStoryGame extends StatefulWidget {
   /// Leaves the lesson — wired to the start screen's ✕, the one place the
   /// prototype's layout has room for an exit.
   final VoidCallback? onExit;
+  final bool audioEnabled;
+  final SirahAudioPlayback? audio;
 
   @override
   State<SirahStoryGame> createState() => _SirahStoryGameState();
@@ -308,6 +313,8 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   List<ui.Image>? _bgLayers;
 
   Timer? _narrateTimer;
+  SirahAudioPlayback? _audio;
+  SirahPageAudio get _pageAudio => sirahPageAudio[_session.number - 1][_page];
   Timer? _advanceTimer;
   Timer? _shakeTimer;
   Timer? _openTimer;
@@ -320,6 +327,10 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   @override
   void initState() {
     super.initState();
+    if (widget.audioEnabled) {
+      _audio = widget.audio ?? SirahStoryAudio();
+      unawaited(_audio!.startMusic());
+    }
     // The scenes are painted landscape — the app is portrait-locked
     // everywhere else, so this activity flips the device for as long as it is
     // on screen and puts it back on the way out (the same trade
@@ -365,6 +376,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
 
   @override
   void dispose() {
+    if (_audio != null) unawaited(_audio!.dispose());
     _bgShader?.dispose();
     _skyShader?.dispose();
     for (final i in _bgLayers ?? const <ui.Image>[]) {
@@ -411,10 +423,8 @@ class _SirahStoryGameState extends State<SirahStoryGame>
     });
   }
 
-  /// The prototype's `startNarration()` — the line is "read out" as a filling
-  /// progress bar for the page's own authored duration, and only then does the
-  /// scene dim and the subject light up. There is no recorded audio yet,
-  /// exactly as in the prototype; the bar is the whole of the narration beat.
+  /// Start the page recording. The authored timer remains as a fallback when
+  /// playback is disabled or an audio device cannot open the recording.
   void _beginPage() {
     _narrateTimer?.cancel();
     _opening = false;
@@ -424,13 +434,34 @@ class _SirahStoryGameState extends State<SirahStoryGame>
       _flip = _rng.nextBool();
       _narrateT0 = _now;
     });
-    _narrateTimer = Timer(Duration(milliseconds: _p.narrationMs), () {
-      if (!mounted) return;
-      setState(() {
-        _narrating = false;
-        _glowReady = true;
-        _glowT0 = _now;
-      });
+    if (_audio == null) {
+      _scheduleNarrationFallback();
+    } else {
+      unawaited(
+        _audio!.play(
+          _pageAudio.narration,
+          onComplete: _finishNarration,
+          onError: _scheduleNarrationFallback,
+        ),
+      );
+    }
+  }
+
+  void _scheduleNarrationFallback() {
+    if (!mounted) return;
+    _narrateTimer = Timer(
+      Duration(milliseconds: _p.narrationMs),
+      _finishNarration,
+    );
+  }
+
+  void _finishNarration() {
+    _narrateTimer?.cancel();
+    if (!mounted || !_narrating) return;
+    setState(() {
+      _narrating = false;
+      _glowReady = true;
+      _glowT0 = _now;
     });
   }
 
@@ -496,13 +527,41 @@ class _SirahStoryGameState extends State<SirahStoryGame>
         _opening = false;
         _showModal = true;
       });
+      _playQuestionAndChoices();
       _card.forward(from: 0);
     });
+  }
+
+  /// Read the question, then the answers in the same order as the tiles.
+  void _playQuestionAndChoices() {
+    final audio = _audio;
+    if (audio == null || !_showModal || _answered) return;
+    final first = _flip ? _pageAudio.decoy : _pageAudio.correct;
+    final second = _flip ? _pageAudio.correct : _pageAudio.decoy;
+
+    void playSecond() {
+      if (!mounted || !_showModal || _answered) return;
+      unawaited(audio.play(second));
+    }
+
+    void playFirst() {
+      if (!mounted || !_showModal || _answered) return;
+      unawaited(audio.play(first, onComplete: playSecond, onError: playSecond));
+    }
+
+    unawaited(
+      audio.play(
+        _pageAudio.question,
+        onComplete: playFirst,
+        onError: playFirst,
+      ),
+    );
   }
 
   void _pickCorrect() {
     if (_answered) return;
     HapticFeedback.mediumImpact();
+    if (_audio != null) unawaited(_audio!.stopVoice());
     setState(() {
       _answered = true;
       _badgeT0 = _now;
@@ -537,6 +596,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   void _pickWrong() {
     if (_answered) return;
     HapticFeedback.lightImpact();
+    if (_audio != null) unawaited(_audio!.stopVoice());
     setState(() {
       _errors++;
       _shake = true;
@@ -552,6 +612,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   /// The prototype's back arrow: one page back, or — on the first page — the
   /// "Leave the story?" confirm.
   void _back() {
+    if (_audio != null) unawaited(_audio!.stopVoice());
     _openTimer?.cancel();
     _wipeMidTimer?.cancel();
     _curtain = false;
@@ -570,6 +631,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   }
 
   void _backToStart() {
+    if (_audio != null) unawaited(_audio!.stopVoice());
     _narrateTimer?.cancel();
     _advanceTimer?.cancel();
     _openTimer?.cancel();
@@ -592,6 +654,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   /// The ending screen's Continue Next Lesson — the lesson's only way on, so
   /// it reports the session's score up to the lesson player.
   void _finish() {
+    if (_audio != null) unawaited(_audio!.stopVoice());
     final attempts = _pages.length + _errors;
     final accuracy = attempts == 0 ? 100.0 : _pages.length / attempts * 100.0;
     widget.onComplete(widget.xp, accuracy, _errors);
@@ -1687,10 +1750,16 @@ class _SirahStoryGameState extends State<SirahStoryGame>
                             child: _enter(
                               _inChip,
                               0.35,
-                              Image.asset(
-                                'assets/images/sirah_story/speaker.png',
-                                width: _kSpeakerD,
-                                height: _kSpeakerD,
+                              GestureDetector(
+                                key: const ValueKey('sirah-question-replay'),
+                                onTap: () {
+                                  _playQuestionAndChoices();
+                                },
+                                child: Image.asset(
+                                  'assets/images/sirah_story/speaker.png',
+                                  width: _kSpeakerD,
+                                  height: _kSpeakerD,
+                                ),
                               ),
                             ),
                           ),

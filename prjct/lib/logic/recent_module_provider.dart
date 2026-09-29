@@ -37,7 +37,11 @@ final learnerCompletedTodayProvider =
 
 class UnlockedBadgesNotifier extends Notifier<List<String>> {
   @override
-  List<String> build() => ['First Steps', 'Active Learner'];
+  List<String> build() => [
+        'First Steps Badge',
+        'Desert Calligrapher Badge',
+        'Curious Spark Badge (3-Day Streak)',
+      ];
 
   void unlockBadge(String badge) {
     if (!state.contains(badge)) {

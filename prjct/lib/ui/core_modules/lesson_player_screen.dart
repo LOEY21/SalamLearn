@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/curriculum_data.dart';
 import '../../data/models/curriculum/curriculum_models.dart';
 import '../../data/repositories/progress_repository.dart';
+import '../../data/student_badges.dart';
 import '../../logic/auth/session.dart';
 import '../../logic/learner/learner_xp_provider.dart';
 import '../../logic/recent_module_provider.dart';
@@ -28,6 +29,7 @@ import 'activities/quran_etiquette_game.dart';
 import 'activities/sirah_story_game.dart';
 import 'activities/taharah_adventure_game.dart';
 import 'lesson_complete_screen.dart';
+import 'game_ui_audio.dart';
 
 /// Parses the model's `#RRGGBB` hex strings into a [Color] — same
 /// convention as `destination_levels_sheet.dart`'s `_hexColor`.
@@ -54,6 +56,7 @@ class LessonPlayerScreen extends ConsumerStatefulWidget {
     required this.lesson,
     required this.destinationId,
     required this.onClose,
+    this.uiAudio,
   });
 
   final Lesson lesson;
@@ -63,6 +66,7 @@ class LessonPlayerScreen extends ConsumerStatefulWidget {
   /// Parent Dashboard can break progress down per adventure.
   final int destinationId;
   final VoidCallback onClose;
+  final GameUiAudioPlayback? uiAudio;
 
   @override
   ConsumerState<LessonPlayerScreen> createState() => _LessonPlayerScreenState();
@@ -73,6 +77,31 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
   int _activityIndex = 0;
   int _xpEarned = 0;
   bool _finished = false;
+  late final GameUiAudioPlayback _uiAudio =
+      widget.uiAudio ?? GameUiAudio.instance;
+  final Map<int, Offset> _tapStarts = {};
+
+  Widget _withUiTaps(Widget child) => Listener(
+    onPointerDown: (PointerDownEvent event) {
+      _tapStarts[event.pointer] = event.position;
+    },
+    onPointerMove: (PointerMoveEvent event) {
+      final start = _tapStarts[event.pointer];
+      if (start != null && (event.position - start).distance > 12) {
+        _tapStarts.remove(event.pointer);
+      }
+    },
+    onPointerUp: (PointerUpEvent event) {
+      final start = _tapStarts.remove(event.pointer);
+      if (start != null && (event.position - start).distance <= 12) {
+        _uiAudio.tap();
+      }
+    },
+    onPointerCancel: (PointerCancelEvent event) {
+      _tapStarts.remove(event.pointer);
+    },
+    child: child,
+  );
 
   final Stopwatch _stopwatch = Stopwatch()..start();
   double _accuracySum = 0.0;
@@ -118,6 +147,10 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
   }
 
   void _handleActivityComplete(int xp, double accuracyPct, int errors) {
+    _uiAudio.levelComplete();
+    if (_activityIndex + 1 >= widget.lesson.activities.length) {
+      Future.delayed(const Duration(milliseconds: 450), _uiAudio.starAward);
+    }
     final next = _xpEarned + xp;
     _accuracySum += accuracyPct;
     _accuracyCount += 1;
@@ -139,7 +172,27 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       ref.read(learnerStreakProvider.notifier).increment();
       ref
           .read(unlockedBadgesProvider.notifier)
-          .unlockBadge('${widget.lesson.title} Master');
+          .unlockBadge('First Steps Badge');
+      final earnedBadge = badgeForLessonTitle(widget.lesson.title);
+      if (earnedBadge != null) {
+        ref.read(unlockedBadgesProvider.notifier).unlockBadge(earnedBadge.name);
+      }
+      final currentStreak = ref.read(learnerStreakProvider);
+      if (currentStreak >= 3) {
+        ref
+            .read(unlockedBadgesProvider.notifier)
+            .unlockBadge('Curious Spark Badge (3-Day Streak)');
+      }
+      if (currentStreak >= 7) {
+        ref
+            .read(unlockedBadgesProvider.notifier)
+            .unlockBadge('Dedicated Learner Badge (7-Day Streak)');
+      }
+      if (currentStreak >= 30) {
+        ref
+            .read(unlockedBadgesProvider.notifier)
+            .unlockBadge('Monthly Star Seeker (30-Day Milestone)');
+      }
       _writeProgressRecord();
       setState(() {
         _xpEarned = next;
@@ -241,10 +294,12 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
     // Games with their own ending never show the old complete screen — not
     // even for the frame (or page-out transition) while the lesson closes.
     if (_finished && !_skipCompleteScreen) {
-      return LessonCompleteScreen(
-        lesson: widget.lesson,
-        xpEarned: _xpEarned,
-        onContinue: widget.onClose,
+      return _withUiTaps(
+        LessonCompleteScreen(
+          lesson: widget.lesson,
+          xpEarned: _xpEarned,
+          onContinue: widget.onClose,
+        ),
       );
     }
 
@@ -257,66 +312,68 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         ? 0.0
         : _activityIndex / widget.lesson.activities.length;
 
-    return PopScope(
-      // Prevent the default back-navigation — we handle it ourselves
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _confirmExit();
-      },
-      child: Scaffold(
-        backgroundColor: const Color(0xFFFFF7E9),
-        // Trace's, Ayah Builder's, and Greeting Match's own scenery
-        // backgrounds are meant to run fully edge-to-edge — under the status
-        // bar too — so unlike every other activity type they skip the
-        // opaque top bar and title row entirely instead of just relocating
-        // them. Trace's and Ayah Builder's exits are handled by the back
-        // arrow baked into their own layout (see `onBack`); Greeting
-        // Match's background has no such baked-in control, so it gets a
-        // small floating close button instead.
-        body: switch (_activity.type) {
-          ActivityType.trace ||
-          ActivityType.ayahBuilder => _buildActivityContent(lessonColor),
-          // Wudhu Master and Allah's Creation Hunt bring their own
-          // background, HUD and exit chip, so they run edge-to-edge like
-          // Trace does.
-          ActivityType.creationHunt ||
-          ActivityType.classroomHeroes ||
-          ActivityType.sirahStory ||
-          ActivityType.quranEtiquette ||
-          ActivityType.fivePillars ||
-          ActivityType.goodDeedTree ||
-          ActivityType.taharahAdventure ||
-          ActivityType.labelMaker ||
-          ActivityType.soundDetective ||
-          ActivityType.fiqhDrag when _isFullBleedActivity =>
-            _buildActivityContent(lessonColor),
-          ActivityType.pronounce => Stack(
-            children: [
-              Positioned.fill(child: _buildActivityContent(lessonColor)),
-              Positioned(
-                left: 16,
-                top: MediaQuery.of(context).padding.top + 12,
-                child: _buildFloatingClose(),
-              ),
-            ],
-          ),
-          _ => Column(
-            children: [
-              _buildTopBar(lessonColor, progress, totalXp),
-              Expanded(
-                child: SafeArea(
-                  top: false,
-                  child: Column(
-                    children: [
-                      _buildActivityTitleRow(),
-                      Expanded(child: _buildActivityContent(lessonColor)),
-                    ],
+    return _withUiTaps(
+      PopScope(
+        // Prevent the default back-navigation — we handle it ourselves
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _confirmExit();
+        },
+        child: Scaffold(
+          backgroundColor: const Color(0xFFFFF7E9),
+          // Trace's, Ayah Builder's, and Greeting Match's own scenery
+          // backgrounds are meant to run fully edge-to-edge — under the status
+          // bar too — so unlike every other activity type they skip the
+          // opaque top bar and title row entirely instead of just relocating
+          // them. Trace's and Ayah Builder's exits are handled by the back
+          // arrow baked into their own layout (see `onBack`); Greeting
+          // Match's background has no such baked-in control, so it gets a
+          // small floating close button instead.
+          body: switch (_activity.type) {
+            ActivityType.trace ||
+            ActivityType.ayahBuilder => _buildActivityContent(lessonColor),
+            // Wudhu Master and Allah's Creation Hunt bring their own
+            // background, HUD and exit chip, so they run edge-to-edge like
+            // Trace does.
+            ActivityType.creationHunt ||
+            ActivityType.classroomHeroes ||
+            ActivityType.sirahStory ||
+            ActivityType.quranEtiquette ||
+            ActivityType.fivePillars ||
+            ActivityType.goodDeedTree ||
+            ActivityType.taharahAdventure ||
+            ActivityType.labelMaker ||
+            ActivityType.soundDetective ||
+            ActivityType.fiqhDrag when _isFullBleedActivity =>
+              _buildActivityContent(lessonColor),
+            ActivityType.pronounce => Stack(
+              children: [
+                Positioned.fill(child: _buildActivityContent(lessonColor)),
+                Positioned(
+                  left: 16,
+                  top: MediaQuery.of(context).padding.top + 12,
+                  child: _buildFloatingClose(),
+                ),
+              ],
+            ),
+            _ => Column(
+              children: [
+                _buildTopBar(lessonColor, progress, totalXp),
+                Expanded(
+                  child: SafeArea(
+                    top: false,
+                    child: Column(
+                      children: [
+                        _buildActivityTitleRow(),
+                        Expanded(child: _buildActivityContent(lessonColor)),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        },
+              ],
+            ),
+          },
+        ),
       ),
     );
   }
@@ -518,10 +575,10 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       ),
       ActivityType.pronounce => GreetingMatchActivity(
         key: ValueKey(activity.id),
-        questions: activity.greetingQuestions!,
+        session: activity.greetingSession!,
         xp: activity.xp,
-        color: lessonColor,
         onComplete: _handleActivityComplete,
+        onBack: _confirmExit,
       ),
       ActivityType.quranSync => QuranSyncActivity(
         key: ValueKey(activity.id),

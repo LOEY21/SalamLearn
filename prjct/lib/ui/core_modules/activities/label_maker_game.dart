@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:flutter/services.dart';
+import 'label_maker_audio.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
@@ -390,6 +391,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
 
   /// Music button state: off silences the game's sounds.
   bool _sound = true;
+  final LabelMakerAudio _audio = LabelMakerAudio();
 
   late final List<int> _order = List.generate(_s.words.length, (i) => i)
     ..shuffle(widget.random ?? math.Random());
@@ -434,6 +436,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
   @override
   void initState() {
     super.initState();
+    _audio.startMusic();
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -484,6 +487,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
 
   @override
   void dispose() {
+    _audio.dispose();
     for (final t in _timers) {
       t.cancel();
     }
@@ -514,7 +518,6 @@ class _LabelMakerGameState extends State<LabelMakerGame>
   }
 
   void _click() {
-    // AUDIO PLUG POINT: background music would follow _sound too.
     if (_sound) SystemSound.play(SystemSoundType.click);
   }
 
@@ -1179,7 +1182,10 @@ class _LabelMakerGameState extends State<LabelMakerGame>
         up: 'btn_music',
         down: 'btn_music_down',
         off: !_sound,
-        onTap: () => setState(() => _sound = !_sound),
+        onTap: () {
+          setState(() => _sound = !_sound);
+          _audio.setEnabled(_sound);
+        },
       ),
     ),
   ];

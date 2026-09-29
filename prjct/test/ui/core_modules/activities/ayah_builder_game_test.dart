@@ -97,6 +97,23 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('dropping on an already-filled slot is not an error', (
+    tester,
+  ) async {
+    await tester.pumpWidget(host(6));
+    await tester.pump(const Duration(milliseconds: 600));
+    await toPuzzle(tester);
+
+    final words = ayahBuilderSessions[6].words;
+    final slot1 = tester.getCenter(find.text('1'));
+    await drag(tester, words[0].text, 1);
+    final from = tester.getCenter(find.text(words[1].text).last);
+    await tester.dragFrom(from, slot1 - from);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Oops! Try again!'), findsNothing);
+    await tester.pump(const Duration(seconds: 2));
+  });
+
   testWidgets('wrong drop says oops; building the ayah reaches the reward', (
     tester,
   ) async {

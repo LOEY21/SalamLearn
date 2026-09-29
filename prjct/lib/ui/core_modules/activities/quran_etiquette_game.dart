@@ -8,6 +8,7 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 import 'bend_sprite.dart';
+import 'quran_etiquette_audio.dart';
 
 /// The Qur'an Etiquette — pick the respectful choice in five scenes about
 /// listening to and handling the Qur'an. Built from the supplied
@@ -31,6 +32,7 @@ class QuranEtiquetteGame extends StatefulWidget {
     required this.xp,
     required this.onComplete,
     this.onExit,
+    this.audioEnabled = true,
   });
 
   final QuranEtiquetteSession session;
@@ -39,6 +41,7 @@ class QuranEtiquetteGame extends StatefulWidget {
 
   /// Leaves the lesson from the title screen's ✕.
   final VoidCallback? onExit;
+  final bool audioEnabled;
 
   @override
   State<QuranEtiquetteGame> createState() => _QuranEtiquetteGameState();
@@ -192,6 +195,10 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
   double _finishT0 = 0;
   double _revealT0 = 0;
   double _barT0 = 0;
+  double _revealSeconds = _kReveal;
+  QuranEtiquetteAudio? _audio;
+  EtiquetteQuestionAudio get _questionAudio =>
+      etiquetteAudio[_session.number - 1][_index];
 
   _Screen _screen = _Screen.start;
   int _index = 0;
@@ -236,6 +243,10 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
   @override
   void initState() {
     super.initState();
+    if (widget.audioEnabled) {
+      _audio = QuranEtiquetteAudio();
+      unawaited(_audio!.startMusic());
+    }
     _clock = AnimationController(
       vsync: this,
       duration: const Duration(hours: 1),
@@ -264,6 +275,7 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
       t?.cancel();
     }
     _stopReveal();
+    if (_audio != null) unawaited(_audio!.dispose());
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -312,6 +324,22 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
   void _stopReveal() {
     _revealDelayTimer?.cancel();
     _revealEndTimer?.cancel();
+    if (_audio != null) unawaited(_audio!.stopVoice());
+  }
+
+  void _endReveal() {
+    _revealEndTimer?.cancel();
+    if (!mounted || !_narrating) return;
+    setState(() {
+      _narrating = false;
+      _panelT0 = _now;
+    });
+  }
+
+  void _fallbackReveal() {
+    if (!mounted) return;
+    _revealEndTimer?.cancel();
+    _revealEndTimer = Timer(_ms(_kReveal), _endReveal);
   }
 
   /// The prototype's `reveal(delay)` — the prompt is shown in the narration
@@ -323,17 +351,27 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
       _narrating = true;
       _barT0 = _now;
       _revealT0 = _now + delay;
+      _revealSeconds = _kReveal;
     });
     _revealDelayTimer = Timer(_ms(delay), () {
       if (!mounted) return;
       setState(() => _revealT0 = _now);
-      _revealEndTimer = Timer(_ms(_kReveal), () {
-        if (!mounted) return;
-        setState(() {
-          _narrating = false;
-          _panelT0 = _now;
-        });
-      });
+      if (_audio == null) {
+        _fallbackReveal();
+      } else {
+        unawaited(
+          _audio!.play(
+            _questionAudio.prompt,
+            onComplete: _endReveal,
+            onError: _fallbackReveal,
+            onDuration: (duration) {
+              if (mounted && duration.inMilliseconds > 0) {
+                setState(() => _revealSeconds = duration.inMilliseconds / 1000);
+              }
+            },
+          ),
+        );
+      }
     });
   }
 
@@ -368,6 +406,11 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
   /// the Star Meter marks the socket accordingly.
   void _pick(bool good) {
     if (_answered || _missed || _narrating) return;
+    if (_audio != null) {
+      unawaited(
+        _audio!.play(good ? _questionAudio.correct : _questionAudio.decoy),
+      );
+    }
     if (good) {
       HapticFeedback.mediumImpact();
     } else {
@@ -453,15 +496,13 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
 
   void _skip() {
     _stopReveal();
-    setState(() {
-      _narrating = false;
-      _panelT0 = _now;
-    });
+    _endReveal();
   }
 
   /// The Qur'an Hero card's home button — the session is done, so it reports
   /// the score up to the lesson player.
   void _finish() {
+    if (_audio != null) unawaited(_audio!.stopVoice());
     final attempts = _items.length + _errors;
     final accuracy = attempts == 0 ? 100.0 : _items.length / attempts * 100.0;
     widget.onComplete(widget.xp, accuracy, _errors);
@@ -1189,7 +1230,7 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
         animation: _clock,
         builder: (_, _) {
           final inT = _easeOut.transform(_once(_now - _barT0, 0.3));
-          final pct = _c01((_now - _revealT0) / _kReveal);
+          final pct = _c01((_now - _revealT0) / _revealSeconds);
           return Opacity(
             opacity: inT,
             child: Transform.translate(

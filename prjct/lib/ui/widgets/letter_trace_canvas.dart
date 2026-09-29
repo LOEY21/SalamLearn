@@ -26,6 +26,7 @@ class LetterTraceCanvas extends StatefulWidget {
     required this.onDirectionViolation,
     required this.coverTolerance,
     this.showPassBurst = true,
+    this.glyphBuilder,
   });
 
   final bool passed;
@@ -48,6 +49,13 @@ class LetterTraceCanvas extends StatefulWidget {
   /// Activity wants it; Hot Seat doesn't gate on a pass threshold, so it
   /// opts out.
   final bool showPassBurst;
+
+  /// The letter's real outline, scaled to the canvas. When given, it's the
+  /// double mask: the faint letter drawn under everything, and the
+  /// learner's ink and the traced-so-far reveal kept strictly inside it, so
+  /// tracing fills the letter in and nothing shows outside it. Hot Seat
+  /// passes none and keeps its plain band and ink.
+  final Path Function(Size size)? glyphBuilder;
 
   @override
   State<LetterTraceCanvas> createState() => _LetterTraceCanvasState();
@@ -237,6 +245,7 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
                         demoProgress: _guideDemo.value,
                         badgeHitAt: _badgeHitAt,
                         coveredMask: _coveredMask,
+                        glyphBuilder: widget.glyphBuilder,
                       ),
                       child: widget.passed && widget.showPassBurst
                           ? Center(
@@ -301,9 +310,11 @@ class _TracePainter extends CustomPainter {
     required this.demoProgress,
     required this.badgeHitAt,
     required this.coveredMask,
+    this.glyphBuilder,
   });
 
   final List<List<Offset>> Function(Size size) guideBuilder;
+  final Path Function(Size size)? glyphBuilder;
   final List<List<Offset>> userStrokes;
   final Color strokeColor;
   final double guideOpacity;
@@ -356,10 +367,14 @@ class _TracePainter extends CustomPainter {
   /// only over the sub-segments [coveredMask] marks as already traced, so
   /// tracing progress reads as the guide visibly "filling in" instead of
   /// only the separate numeric accuracy bar moving.
-  void _paintGuideReveal(Canvas canvas, List<List<Offset>> guideStrokes) {
+  void _paintGuideReveal(
+    Canvas canvas,
+    List<List<Offset>> guideStrokes, {
+    double width = 26,
+  }) {
     final paint = Paint()
       ..color = strokeColor.withValues(alpha: 0.92)
-      ..strokeWidth = 26
+      ..strokeWidth = width
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke;
@@ -370,7 +385,11 @@ class _TracePainter extends CustomPainter {
 
       if (stroke.length == 1) {
         if (covered.isNotEmpty && covered[0]) {
-          canvas.drawCircle(stroke.first, 13, paint..style = PaintingStyle.fill);
+          canvas.drawCircle(
+            stroke.first,
+            width / 2,
+            paint..style = PaintingStyle.fill,
+          );
         }
         continue;
       }
@@ -507,6 +526,13 @@ class _TracePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final guideStrokes = guideBuilder(size);
+    final glyph = glyphBuilder?.call(size);
+    if (glyph != null) {
+      _paintInGlyph(canvas, size, glyph, guideStrokes);
+      _paintDemoShadow(canvas, guideStrokes);
+      _paintStrokeNumbers(canvas, guideStrokes);
+      return;
+    }
     _paintGuideBody(canvas, guideStrokes);
     _paintGuideReveal(canvas, guideStrokes);
     _paintDemoShadow(canvas, guideStrokes);
@@ -537,6 +563,79 @@ class _TracePainter extends CustomPainter {
         canvas.drawCircle(stroke.first, 5.5, Paint()..color = strokeColor);
       }
     }
+  }
+
+  /// [strokes] as one path; single points (dots) become tiny ovals so a
+  /// round stroke turns them into discs.
+  static Path _path(List<List<Offset>> strokes) {
+    final path = Path();
+    for (final stroke in strokes) {
+      if (stroke.isEmpty) continue;
+      if (stroke.length == 1) {
+        path.addOval(Rect.fromCircle(center: stroke.first, radius: 0.5));
+        continue;
+      }
+      path.moveTo(stroke.first.dx, stroke.first.dy);
+      for (final p in stroke.skip(1)) {
+        path.lineTo(p.dx, p.dy);
+      }
+    }
+    return path;
+  }
+
+  /// How much the letter's outline is fattened (stroke width, px) so a
+  /// child's finger fits comfortably inside even the thinner strokes.
+  static const _glyphSpread = 12.0;
+
+  /// Width of the traced fill as a fraction of the letter's longer side —
+  /// wide enough to cover a stroke's full thickness (the fill is cut to the
+  /// letter's shape anyway), narrow enough not to reach a neighbouring dot.
+  static const _fillFraction = 0.16;
+
+  static void _drawGlyph(Canvas canvas, Path glyph, Paint paint) {
+    canvas.drawPath(glyph, paint..style = PaintingStyle.fill);
+    canvas.drawPath(
+      glyph,
+      paint
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _glyphSpread
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  /// Double mask. Mask one: the letter itself, faint, pressed into the
+  /// sand. Mask two: the traced-so-far reveal and the learner's ink, drawn
+  /// wide and cut to the letter's shape, so tracing fills the whole shape
+  /// and nothing ever lands outside it.
+  void _paintInGlyph(
+    Canvas canvas,
+    Size size,
+    Path glyph,
+    List<List<Offset>> guideStrokes,
+  ) {
+    _drawGlyph(
+      canvas,
+      glyph,
+      Paint()..color = const Color(0xFF4A3A1E).withValues(alpha: guideOpacity),
+    );
+    final fillWidth =
+        glyph.getBounds().longestSide * _fillFraction + _glyphSpread;
+    final bounds = Offset.zero & size;
+    canvas.saveLayer(bounds, Paint());
+    _paintGuideReveal(canvas, guideStrokes, width: fillWidth);
+    canvas.drawPath(
+      _path(userStrokes),
+      Paint()
+        ..color = strokeColor
+        ..strokeWidth = fillWidth
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke,
+    );
+    canvas.saveLayer(bounds, Paint()..blendMode = BlendMode.dstIn);
+    _drawGlyph(canvas, glyph, Paint()..color = const Color(0xFF000000));
+    canvas.restore();
+    canvas.restore();
   }
 
   @override

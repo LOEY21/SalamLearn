@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
+import 'good_deed_tree_audio.dart';
 
 /// The Good Deed Tree — sort daily actions: good deeds to the tree, wrong
 /// actions to the bin. Ported 1:1 from the supplied "Good Deed Tree"
@@ -537,6 +538,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
   int _fbId = 0;
   bool _busy = false;
   bool _sound = true;
+  final GoodDeedTreeAudio _audio = GoodDeedTreeAudio();
   int? _top;
   bool _trayGone = false;
   int _errors = 0;
@@ -561,6 +563,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
   @override
   void initState() {
     super.initState();
+    _audio.startMusic();
     _ticker = createTicker((e) => _time.value = e.inMicroseconds / 1e6)
       ..start();
     for (final a in {..._d.trees, _d.doneTree}) {
@@ -642,6 +645,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
 
   @override
   void dispose() {
+    _audio.dispose();
     _startLive?.shader.dispose();
     _cancelTimers();
     _ticker.dispose();
@@ -855,6 +859,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
         _prevTree = changed ? from : null;
       });
       if (grows || changed) _fx.forward(from: 0);
+      if (grows) _audio.playBloom();
       if (!grows) _binCtl.forward(from: 0);
       _swapT?.cancel();
       if (changed) {
@@ -2328,7 +2333,10 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
                           key: const ValueKey('gdt-sound'),
                           up: _kBtnSound,
                           down: _kBtnSoundDown,
-                          onTap: () => setState(() => _sound = !_sound),
+                          onTap: () {
+                            setState(() => _sound = !_sound);
+                            _audio.setEnabled(_sound);
+                          },
                         ),
                       ),
                     ),

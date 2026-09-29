@@ -6,12 +6,45 @@ import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:flutter/painting.dart' as painting;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 
 const _kA = 'assets/images/sound_detective';
+
+/// Pronunciations shared with Magic Sand Tracer, keyed by each question name.
+const soundDetectiveLetterAudio = <String, String>{
+  'Alif': 'assets/audio/sand_tracer/stage1/alif.mp3',
+  'Ba': 'assets/audio/sand_tracer/stage1/ba.mp3',
+  'Ta': 'assets/audio/sand_tracer/stage1/ta.mp3',
+  'Tha': 'assets/audio/sand_tracer/stage1/tha.mp3',
+  'Jeem': 'assets/audio/sand_tracer/stage1/jeem.mp3',
+  'Ha': 'assets/audio/sand_tracer/stage1/ha.mp3',
+  'Kha': 'assets/audio/sand_tracer/stage1/kha.mp3',
+  'Dal': 'assets/audio/sand_tracer/stage2/dal.mp3',
+  'Dhal': 'assets/audio/sand_tracer/stage2/dhal.mp3',
+  'Ra': 'assets/audio/sand_tracer/stage2/ra.mp3',
+  'Zay': 'assets/audio/sand_tracer/stage2/zay.mp3',
+  'Seen': 'assets/audio/sand_tracer/stage2/seen.mp3',
+  'Sheen': 'assets/audio/sand_tracer/stage2/sheen.mp3',
+  'Sad': 'assets/audio/sand_tracer/stage2/sad.mp3',
+  'Dad': 'assets/audio/sand_tracer/stage3/dad.mp3',
+  'Taa': 'assets/audio/sand_tracer/stage3/ta_heavy.mp3',
+  'Dhaa': 'assets/audio/sand_tracer/stage3/zha.mp3',
+  'Ayn': 'assets/audio/sand_tracer/stage3/ayn.mp3',
+  'Ghayn': 'assets/audio/sand_tracer/stage3/ghayn.mp3',
+  'Fa': 'assets/audio/sand_tracer/stage3/fa.mp3',
+  'Qaf': 'assets/audio/sand_tracer/stage3/qaf.mp3',
+  'Kaf': 'assets/audio/sand_tracer/stage4/kaf.mp3',
+  'Lam': 'assets/audio/sand_tracer/stage4/lam.mp3',
+  'Meem': 'assets/audio/sand_tracer/stage4/meem.mp3',
+  'Noon': 'assets/audio/sand_tracer/stage4/noon.mp3',
+  'Haa': 'assets/audio/sand_tracer/stage4/ha_soft.mp3',
+  'Waw': 'assets/audio/sand_tracer/stage4/waw.mp3',
+  'Ya': 'assets/audio/sand_tracer/stage4/ya.mp3',
+};
 
 /// Phone-sized stage every screen is laid out in, scaled to fit.
 const _kW = 402.0;
@@ -276,6 +309,7 @@ class SoundDetectiveGame extends StatefulWidget {
     required this.onComplete,
     this.onExit,
     this.random,
+    this.musicEnabled = true,
   });
 
   final SoundDetectiveSession session;
@@ -285,6 +319,7 @@ class SoundDetectiveGame extends StatefulWidget {
 
   /// Sign and animal order source; tests pass a seeded one.
   final math.Random? random;
+  final bool musicEnabled;
 
   @override
   State<SoundDetectiveGame> createState() => _SoundDetectiveGameState();
@@ -345,6 +380,9 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
 
   /// Music button: off silences the game's sounds.
   bool _sound = true;
+  AudioPlayer? _music;
+  AudioPlayer? _voice;
+  int _voiceGeneration = 0;
 
   final List<Timer> _timers = [];
 
@@ -355,6 +393,11 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
   @override
   void initState() {
     super.initState();
+    if (widget.musicEnabled) {
+      _music = AudioPlayer();
+      _voice = AudioPlayer();
+      unawaited(_startMusic());
+    }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _ticker.start();
     _loadArt();
@@ -423,6 +466,9 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
 
   @override
   void dispose() {
+    ++_voiceGeneration;
+    if (_voice != null) unawaited(_voice!.dispose());
+    if (_music != null) unawaited(_music!.dispose());
     _clear();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     for (final img in _art.values) {
@@ -451,8 +497,60 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
   // ---- game logic ----
 
   void _sfx() {
-    // AUDIO PLUG POINT: background music would follow _sound too.
     if (_sound) SystemSound.play(SystemSoundType.click);
+  }
+
+  Future<void> _startMusic() async {
+    try {
+      final player = _music;
+      if (player == null) return;
+      await player.setReleaseMode(ReleaseMode.loop);
+      await player.setVolume(_sound ? 0.18 : 0);
+      await player.play(
+        AssetSource('audio/sound_detective/forest_ambient.mp3'),
+      );
+      await player.setVolume(_sound ? 0.18 : 0);
+    } catch (_) {
+      // The detective game remains playable without an audio device.
+    }
+  }
+
+  void _toggleSound() {
+    setState(() => _sound = !_sound);
+    if (_music != null) {
+      unawaited(_setMusicVolume());
+    }
+    if (!_sound) unawaited(_stopLetterAudio());
+  }
+
+  Future<void> _playLetterAudio(String asset) async {
+    final generation = ++_voiceGeneration;
+    try {
+      final player = _voice;
+      if (player == null) return;
+      await player.stop();
+      if (generation != _voiceGeneration || !_sound) return;
+      await player.play(AssetSource(asset.replaceFirst('assets/', '')));
+    } catch (_) {
+      // The game remains playable if the audio device cannot play a clip.
+    }
+  }
+
+  Future<void> _stopLetterAudio() async {
+    ++_voiceGeneration;
+    try {
+      await _voice?.stop();
+    } catch (_) {
+      // The player may already be closing with the game.
+    }
+  }
+
+  Future<void> _setMusicVolume() async {
+    try {
+      await _music?.setVolume(_sound ? 0.18 : 0);
+    } catch (_) {
+      // The mute control still silences the game's click cue.
+    }
   }
 
   /// A leafy wooden game button; [name] picks its art pair.
@@ -477,13 +575,13 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
         ),
       );
 
-  Widget _musicBtn() =>
-      _gameBtn('music', () => setState(() => _sound = !_sound), off: !_sound);
+  Widget _musicBtn() => _gameBtn('music', _toggleSound, off: !_sound);
 
   /// Back steps to the screen before this one; only Home leaves the game.
   Widget _backBtn(VoidCallback to) => _gameBtn('back', () {
     _clear();
     _count = null;
+    unawaited(_stopLetterAudio());
     to();
   });
 
@@ -531,8 +629,14 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
   }
 
   void _playAudio() {
-    // AUDIO PLUG POINT: play the recorded sound of _q.letter here.
-    _sfx();
+    if (_sound) {
+      final asset = soundDetectiveLetterAudio[_q.name];
+      if (asset != null && _voice != null) {
+        unawaited(_playLetterAudio(asset));
+      } else {
+        _sfx();
+      }
+    }
     _wave = true;
     _after(1000, () => _wave = false);
   }
@@ -543,6 +647,7 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
 
   void _tap(int slot) {
     if (_locked || _screen != _Screen.play) return;
+    unawaited(_stopLetterAudio());
     final q = _q;
     final right = _order[slot] == q.letter;
     final praise = _kPraise[_qi % _kPraise.length];

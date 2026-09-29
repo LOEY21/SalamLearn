@@ -37,13 +37,17 @@ class _PinVerifyScreenState extends ConsumerState<PinVerifyScreen>
       // either straight from the role picker (account already existed on
       // this device) or via the auth hub's Sign In success, so `/roles`
       // is the one destination that's correct either way.
-      if (redirect.contains('/parent') || redirect.contains('/teacher')) {
-        context.go('/roles');
-        return;
-      }
-      if (redirect.contains('/settings') || redirect.contains('/cast')) {
+      // Learner Hub's "Switch Account" — backing out hands the device
+      // back to the child.
+      if (redirect.contains('from=hub') ||
+          redirect.contains('/settings') ||
+          redirect.contains('/cast')) {
         ref.read(sessionProvider.notifier).selectRole(UserRole.learner);
         context.go('/profile');
+        return;
+      }
+      if (redirect.contains('/parent') || redirect.contains('/teacher')) {
+        context.go('/roles');
         return;
       }
     }

@@ -50,6 +50,7 @@ dependencies:
   android_intent_plus: ^6.0.0
   path_parsing: ^1.1.0
   internet_connection_checker_plus: 3.1.2
+  audioplayers: ^6.8.1
 
 dev_dependencies:
   flutter_test:
@@ -95,8 +96,33 @@ flutter:
     - shaders/wudhu_bg.frag
     - shaders/good_deed_tree_sway.frag
     - shaders/good_deed_start_bg.frag
+    - shaders/sand_tracer_bg.frag
 
   assets:
+    - assets/audio/sand_tracer/
+    - assets/audio/sand_tracer/stage1/
+    - assets/audio/sand_tracer/stage2/
+    - assets/audio/sand_tracer/stage3/
+    - assets/audio/sand_tracer/stage4/
+    - assets/audio/sound_detective/
+    - assets/audio/greetings/
+    - assets/audio/good_deed_tree/
+    - assets/audio/label_maker/
+    - assets/audio/taharah_wudhu/
+    - assets/audio/game_ui/
+    - assets/audio/classroom_heroes/
+    - assets/audio/classroom_heroes/respect/
+    - assets/audio/classroom_heroes/kindness/
+    - assets/audio/classroom_heroes/responsibility/
+    - assets/audio/classroom_heroes/teamwork/
+    - assets/audio/quran_etiquette/
+    - assets/audio/quran_etiquette/masjid/
+    - assets/audio/quran_etiquette/home/
+    - assets/audio/sirah_story/
+    - assets/audio/sirah_story/birth/
+    - assets/audio/sirah_story/halimah/
+    - assets/audio/sirah_story/family/
+    - assets/audio/sirah_story/al_amin/
     - assets/images/
     - assets/images/adventure_map/
     - assets/images/ayah_builder/
@@ -106,6 +132,7 @@ flutter:
     - assets/images/five_pillars/
     - assets/images/good_deed_tree/
     - assets/images/greeting_match/
+    - assets/images/greeting_match/scenes/
     - assets/images/label_maker/
     - assets/images/quran_etiquette/
     - assets/images/sirah_story/

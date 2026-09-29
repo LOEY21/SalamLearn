@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salamlearn/data/curriculum_data.dart';
 import 'package:salamlearn/data/models/curriculum/curriculum_models.dart';
@@ -21,6 +22,13 @@ const _home = {
 };
 
 void main() {
+  test('Label Maker room music is bundled', () async {
+    final bytes = await rootBundle.load(
+      'assets/audio/label_maker/audio_bgm_label_maker_room.mp3',
+    );
+    expect(bytes.lengthInBytes, greaterThan(1000));
+  });
+
   test('each session lands on its designated lesson', () {
     Activity actFor(String id) => curriculum
         .expand((d) => d.lessons)

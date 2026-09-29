@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
+import 'taharah_wudhu_audio.dart';
 
 /// FR-4.5.5 / FR-4.5.6 — Wudhu Master.
 ///
@@ -82,6 +83,7 @@ const _kAssets = 'assets/images/wudhu';
 class _WudhuMasterGameState extends State<WudhuMasterGame>
     with TickerProviderStateMixin {
   static const _slotCount = 10;
+  final TaharahWudhuAudio _audio = TaharahWudhuAudio();
 
   bool _started = false;
   late List<int> _order;
@@ -99,11 +101,13 @@ class _WudhuMasterGameState extends State<WudhuMasterGame>
   @override
   void initState() {
     super.initState();
+    _audio.start();
     _order = _shuffle();
   }
 
   @override
   void dispose() {
+    _audio.dispose();
     _chrome.dispose();
     super.dispose();
   }
@@ -300,10 +304,7 @@ class _WudhuMasterGameState extends State<WudhuMasterGame>
                 shape: BoxShape.circle,
                 border: Border.all(color: _C.iceTop, width: 3),
                 boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x66005060),
-                    offset: Offset(0, 4),
-                  ),
+                  BoxShadow(color: Color(0x66005060), offset: Offset(0, 4)),
                 ],
               ),
               alignment: Alignment.center,
@@ -446,9 +447,7 @@ class _WudhuMasterGameState extends State<WudhuMasterGame>
           Container(
             padding: const EdgeInsets.fromLTRB(12, 7, 8, 7),
             decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [_C.boardTop, _C.boardBottom],
-              ),
+              gradient: LinearGradient(colors: [_C.boardTop, _C.boardBottom]),
               borderRadius: BorderRadius.vertical(top: Radius.circular(19)),
             ),
             child: Row(
@@ -737,9 +736,7 @@ class _WudhuMasterGameState extends State<WudhuMasterGame>
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Row(
                   spacing: 8,
-                  children: [
-                    for (final id in trayIds) _buildTrayCard(id),
-                  ],
+                  children: [for (final id in trayIds) _buildTrayCard(id)],
                 ),
               ),
             ),
@@ -758,10 +755,7 @@ class _WudhuMasterGameState extends State<WudhuMasterGame>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: selected ? _C.orange : _C.cardLine,
-          width: 2,
-        ),
+        border: Border.all(color: selected ? _C.orange : _C.cardLine, width: 2),
         boxShadow: const [
           BoxShadow(color: Color(0x29146E82), offset: Offset(0, 3)),
         ],
@@ -807,9 +801,8 @@ class _WudhuMasterGameState extends State<WudhuMasterGame>
         feedback: Material(color: Colors.transparent, child: card),
         childWhenDragging: Opacity(opacity: 0.3, child: card),
         child: GestureDetector(
-          onTap: () => setState(
-            () => _selected = _selected == stepId ? null : stepId,
-          ),
+          onTap: () =>
+              setState(() => _selected = _selected == stepId ? null : stepId),
           child: card,
         ),
       ),
@@ -1150,7 +1143,8 @@ class _WudhuIntro extends StatelessWidget {
                           const SizedBox(height: 16),
                           const _Tip(
                             emoji: '👆',
-                            text: 'Tap a step, then tap a number — '
+                            text:
+                                'Tap a step, then tap a number — '
                                 'or drag it in.',
                             delayMs: 150,
                           ),
@@ -1426,8 +1420,11 @@ class _HatchPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4;
     for (var x = -size.height; x < size.width + size.height; x += 8) {
-      canvas.drawLine(Offset(x, 0), Offset(x + size.height, size.height),
-          stripe);
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x + size.height, size.height),
+        stripe,
+      );
     }
     canvas.restore();
     canvas.drawRRect(

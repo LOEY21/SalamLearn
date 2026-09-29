@@ -360,6 +360,22 @@ class FirestoreMirror {
     }
   }
 
+  /// True only when a server query confirms no parent or teacher profile
+  /// references [firebaseUid] — the Auth user "Erase local data" leaves
+  /// behind (it deletes the Firestore docs, never the Auth user). Unlike
+  /// the fetch methods above, errors throw instead of reading as "none".
+  Future<bool> isProfilelessAuthUser(String firebaseUid) async {
+    for (final collection in [HiveBoxes.parents, HiveBoxes.teachers]) {
+      final snapshot = await _db
+          .collection(collection)
+          .where('firebaseUid', isEqualTo: firebaseUid)
+          .limit(1)
+          .get(const GetOptions(source: Source.server));
+      if (snapshot.docs.isNotEmpty) return false;
+    }
+    return true;
+  }
+
   /// FR-7.2 "sign in on any device" — pulls every child profile belonging
   /// to [parentId] down onto a new device, so the Parent Dashboard isn't
   /// empty after signing in somewhere new. Queries by `parentId` itself

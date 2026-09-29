@@ -18,61 +18,7 @@ import '../theme/app_colors.dart';
 import 'notifications_sheet.dart';
 import '../widgets/learner_avatar.dart';
 
-// ─── Badge data ──────────────────────────────────────────────────────────────
-
-/// Each badge the learner can earn. [icon] uses emoji for kid-facing delight,
-/// [color] is the filled bg tint, [lockedColor] the greyed-out version.
-class _BadgeDef {
-  const _BadgeDef({
-    required this.id,
-    required this.icon,
-    required this.label,
-    required this.color,
-  });
-  final String id;
-  final String icon;
-  final String label;
-  final Color color;
-}
-
-const _allBadges = [
-  _BadgeDef(
-    id: 'first_steps',
-    icon: '👣',
-    label: 'First Steps',
-    color: Color(0xFF5BC4A0),
-  ),
-  _BadgeDef(
-    id: 'active_learner',
-    icon: '⚡',
-    label: 'Active Learner',
-    color: Color(0xFFEF9F27),
-  ),
-  _BadgeDef(
-    id: 'streak_3',
-    icon: '🔥',
-    label: '3-Day Streak',
-    color: Color(0xFFD85A30),
-  ),
-  _BadgeDef(
-    id: 'perfect_score',
-    icon: '⭐',
-    label: 'Perfect Score',
-    color: AppColors.adventurePurple,
-  ),
-  _BadgeDef(
-    id: 'bookworm',
-    icon: '📚',
-    label: 'Bookworm',
-    color: Color(0xFF0F6E56),
-  ),
-  _BadgeDef(
-    id: 'champion',
-    icon: '🏆',
-    label: 'Champion',
-    color: Color(0xFFE64E6A),
-  ),
-];
+import '../../data/student_badges.dart';
 
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
@@ -87,11 +33,9 @@ class ProfileScreen extends ConsumerWidget {
     final streakDays = ref.watch(learnerStreakProvider);
     final completedCount = ref.watch(learnerCompletedTodayProvider);
     final unlockedBadges = ref.watch(unlockedBadgesProvider);
-
-    // Map unlocked badge IDs (case-insensitive label match) for badge strip.
-    final unlockedIds = unlockedBadges
-        .map((b) => b.toLowerCase().replaceAll(' ', '_'))
-        .toSet();
+    final earnedCount = allStudentBadges
+        .where((b) => isBadgeUnlocked(b, unlockedBadges))
+        .length;
 
     return Scaffold(
       backgroundColor: AppColors.neutralTint,
@@ -120,7 +64,7 @@ class ProfileScreen extends ConsumerWidget {
                     streakDays: streakDays,
                     completedCount: completedCount,
                     totalModules: coreModules.length,
-                    badgeCount: unlockedBadges.length,
+                    badgeCount: earnedCount,
                   ),
                 ),
               ),
@@ -129,7 +73,7 @@ class ProfileScreen extends ConsumerWidget {
             // ── Badge showcase ───────────────────────────────────────────────
             _StaggerFadeIn(
               delay: const Duration(milliseconds: 160),
-              child: _BadgeShowcase(unlockedIds: unlockedIds),
+              child: _BadgeShowcase(unlockedBadges: unlockedBadges),
             ),
 
             const SizedBox(height: 20),
@@ -192,15 +136,15 @@ class ProfileScreen extends ConsumerWidget {
                   _StaggerFadeIn(
                     delay: const Duration(milliseconds: 380),
                     child: _ActionRow(
-                      icon: Icons.lock_rounded,
-                      label: 'Parent Settings',
-                      sublabel: 'Requires PIN',
+                      icon: Icons.switch_account_rounded,
+                      label: 'Switch Account',
+                      sublabel: 'Requires parent PIN',
                       iconBg: AppColors.teal,
                       onTap: () {
                         ref
                             .read(sessionProvider.notifier)
                             .selectRole(UserRole.parent);
-                        context.go('/settings?from=hub');
+                        context.go('/parent?from=hub');
                       },
                     ),
                   ),
@@ -707,11 +651,15 @@ class _BentoStat extends StatelessWidget {
 // ─── Badge showcase ───────────────────────────────────────────────────────────
 
 class _BadgeShowcase extends StatelessWidget {
-  const _BadgeShowcase({required this.unlockedIds});
-  final Set<String> unlockedIds;
+  const _BadgeShowcase({required this.unlockedBadges});
+  final List<String> unlockedBadges;
 
   @override
   Widget build(BuildContext context) {
+    final earnedCount = allStudentBadges
+        .where((b) => isBadgeUnlocked(b, unlockedBadges))
+        .length;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -722,7 +670,7 @@ class _BadgeShowcase extends StatelessWidget {
               const _SectionLabel(label: 'My Badges'),
               const Spacer(),
               Text(
-                '${unlockedIds.length}/${_allBadges.length} earned',
+                '$earnedCount/${allStudentBadges.length} earned',
                 style: const TextStyle(
                   fontSize: 11.5,
                   color: AppColors.textMuted,
@@ -733,19 +681,15 @@ class _BadgeShowcase extends StatelessWidget {
           ),
         ),
         SizedBox(
-          height: 102,
+          height: 104,
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 18),
             scrollDirection: Axis.horizontal,
-            itemCount: _allBadges.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemCount: allStudentBadges.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 10),
             itemBuilder: (context, i) {
-              final badge = _allBadges[i];
-              // Match by badge label normalisation.
-              final labelKey = badge.label.toLowerCase().replaceAll(' ', '_');
-              final isUnlocked =
-                  unlockedIds.contains(labelKey) ||
-                  unlockedIds.contains(badge.id);
+              final badge = allStudentBadges[i];
+              final isUnlocked = isBadgeUnlocked(badge, unlockedBadges);
               return _BadgeChip(badge: badge, isUnlocked: isUnlocked);
             },
           ),
@@ -757,7 +701,7 @@ class _BadgeShowcase extends StatelessWidget {
 
 class _BadgeChip extends StatefulWidget {
   const _BadgeChip({required this.badge, required this.isUnlocked});
-  final _BadgeDef badge;
+  final BadgeItem badge;
   final bool isUnlocked;
 
   @override
@@ -799,20 +743,121 @@ class _BadgeChipState extends State<_BadgeChip> with SingleTickerProviderStateMi
     super.dispose();
   }
 
+  void _showDetails() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  color: widget.isUnlocked
+                      ? widget.badge.color.withValues(alpha: 0.16)
+                      : AppColors.creamDark,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: widget.isUnlocked
+                        ? widget.badge.color
+                        : const Color(0xFFCFC7B4),
+                    width: 2.5,
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  widget.isUnlocked ? widget.badge.emoji : '🔒',
+                  style: const TextStyle(fontSize: 32),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                widget.badge.name,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.ink,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.cream,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.creamBorder),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'REQUIREMENT',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: widget.badge.color,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.badge.requirement,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.ink,
+                        height: 1.3,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: widget.isUnlocked ? AppColors.mint : AppColors.neutralTint,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: Text(
+                  widget.isUnlocked ? 'EARNED ✓' : 'LOCKED (+${widget.badge.xp} XP)',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: widget.isUnlocked ? AppColors.teal : AppColors.textMuted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final unlocked = widget.isUnlocked;
     return GestureDetector(
-      onTapDown: unlocked ? (_) => setState(() => _pressed = true) : null,
-      onTapUp: unlocked ? (_) => setState(() => _pressed = false) : null,
-      onTapCancel: unlocked ? () => setState(() => _pressed = false) : null,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        _showDetails();
+      },
+      onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
         scale: _pressed ? 0.93 : 1.0,
         duration: const Duration(milliseconds: 130),
         curve: Curves.easeOut,
         child: Container(
-          width: 80,
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+          width: 82,
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
           decoration: BoxDecoration(
             color: unlocked ? const Color(0xFFFFFDF9) : const Color(0xFFF0EDE8),
             borderRadius: BorderRadius.circular(20),
@@ -855,13 +900,15 @@ class _BadgeChipState extends State<_BadgeChip> with SingleTickerProviderStateMi
                             : const Color(0xFFE8E4DC),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: unlocked ? widget.badge.color.withValues(alpha: 0.35) : Colors.transparent,
+                          color: unlocked
+                              ? widget.badge.color.withValues(alpha: 0.35)
+                              : Colors.transparent,
                           width: 1.5,
                         ),
                       ),
                     ),
                     Text(
-                      unlocked ? widget.badge.icon : '🔒',
+                      unlocked ? widget.badge.emoji : '🔒',
                       style: TextStyle(
                         fontSize: 22,
                         color: unlocked ? null : const Color(0xFFBBB5A8),
@@ -870,16 +917,17 @@ class _BadgeChipState extends State<_BadgeChip> with SingleTickerProviderStateMi
                   ],
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 5),
               Text(
-                widget.badge.label,
+                widget.badge.shortName,
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 9.5,
+                  fontSize: 9.0,
                   fontWeight: FontWeight.w900,
                   color: unlocked ? const Color(0xFF8A5A12) : const Color(0xFFBBB5A8),
+                  height: 1.1,
                 ),
               ),
             ],
@@ -1084,7 +1132,7 @@ class _ActionRowState extends State<_ActionRow> {
 }
 
 class _AssignedHomeworkButton extends ConsumerWidget {
-  const _AssignedHomeworkButton({super.key});
+  const _AssignedHomeworkButton();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

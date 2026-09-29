@@ -183,8 +183,8 @@ class _InfoSheetContent extends ConsumerWidget {
                   icon: Icons.auto_stories_rounded,
                   title: 'Out of lanterns?',
                   body:
-                      'Revisit the Backpack to replay earned badges and '
-                      'stickers — that never costs energy.',
+                      'Revisit the Backpack to review earned badges and '
+                      'inventory — that never costs energy.',
                 ),
               ],
             ),

@@ -1,11 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:salamlearn/data/curriculum_data.dart';
 import 'package:salamlearn/data/models/curriculum/curriculum_models.dart';
 import 'package:salamlearn/ui/core_modules/activities/quran_etiquette_game.dart';
+import 'package:salamlearn/ui/core_modules/activities/quran_etiquette_audio.dart';
 
 void main() {
+  test('all Qur’an Etiquette recordings are bundled', () async {
+    expect(etiquetteAudio.length, 2);
+    final clips = <String>{'ambient.mp3'};
+    for (final session in etiquetteAudio) {
+      expect(session.length, 5);
+      for (final question in session) {
+        clips.addAll([question.prompt, question.correct, question.decoy]);
+      }
+    }
+    expect(clips.length, 31);
+    for (final clip in clips) {
+      final data = await rootBundle.load('assets/audio/quran_etiquette/$clip');
+      expect(data.lengthInBytes, greaterThan(0), reason: clip);
+    }
+  });
   setUp(() {
     final view =
         TestWidgetsFlutterBinding.instance.platformDispatcher.implicitView!;
@@ -31,6 +48,7 @@ void main() {
         xp: 30,
         onComplete: onComplete ?? (_, _, _) {},
         onExit: () {},
+        audioEnabled: false,
       ),
     ),
   );

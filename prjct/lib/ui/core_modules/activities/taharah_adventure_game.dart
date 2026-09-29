@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
+import 'taharah_wudhu_audio.dart';
 
 /// Taharah Adventure — ported 1:1 from the supplied "Taharah Adventure"
 /// prototypes:
@@ -1462,6 +1463,19 @@ class _CleanOrDirty extends StatefulWidget {
 
 class _CleanOrDirtyState extends State<_CleanOrDirty> {
   _S1 _screen = _S1.start;
+  final TaharahWudhuAudio _audio = TaharahWudhuAudio();
+  bool _sound = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _audio.start();
+  }
+
+  void _toggleSound() {
+    setState(() => _sound = !_sound);
+    _audio.setEnabled(_sound);
+  }
 
   /// Card id → true when sorted into the clean bin.
   final Map<String, bool> _sorted = {};
@@ -1568,6 +1582,7 @@ class _CleanOrDirtyState extends State<_CleanOrDirty> {
 
   @override
   void dispose() {
+    _audio.dispose();
     _toastT?.cancel();
     _doneT?.cancel();
     _wrongT?.cancel();
@@ -2498,10 +2513,12 @@ class _CleanOrDirtyState extends State<_CleanOrDirty> {
                         width: 116,
                         height: 105,
                         child: _roundButton(
-                          Icons.volume_up_rounded,
+                          _sound
+                              ? Icons.volume_up_rounded
+                              : Icons.volume_off_rounded,
                           _blue,
                           62,
-                          null,
+                          _toggleSound,
                         ),
                       ),
                       const Positioned(
@@ -3681,6 +3698,20 @@ class _Wudhu extends StatefulWidget {
 
 class _WudhuState extends State<_Wudhu> {
   _WScreen _screen = _WScreen.start;
+  final TaharahWudhuAudio _audio = TaharahWudhuAudio();
+  bool _sound = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _audio.start();
+  }
+
+  void _toggleSound() {
+    setState(() => _sound = !_sound);
+    _audio.setEnabled(_sound);
+  }
+
   int _idx = 0;
   String? _pose;
   _Toast? _toast;
@@ -3726,6 +3757,7 @@ class _WudhuState extends State<_Wudhu> {
 
   @override
   void dispose() {
+    _audio.dispose();
     for (final t in [_toastT, _doneT, _poseT, _readyT, _readyEndT]) {
       t?.cancel();
     }
@@ -4697,7 +4729,10 @@ class _WudhuState extends State<_Wudhu> {
               ),
             ),
           ),
-          _wIconButton('music', () {}),
+          Opacity(
+            opacity: _sound ? 1 : 0.45,
+            child: _wIconButton('music', _toggleSound),
+          ),
         ],
       ),
     ),

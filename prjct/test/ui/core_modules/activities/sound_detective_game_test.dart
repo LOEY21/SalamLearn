@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salamlearn/data/curriculum_data.dart';
 import 'package:salamlearn/data/models/curriculum/curriculum_models.dart';
@@ -9,6 +10,21 @@ import 'package:salamlearn/ui/core_modules/activities/sound_detective_game.dart'
 const _alifToKha = ['ا', 'ب', 'ت', 'ث', 'ج', 'ح', 'خ'];
 
 void main() {
+  test('forest music is bundled for offline play', () async {
+    final data = await rootBundle.load(
+      'assets/audio/sound_detective/forest_ambient.mp3',
+    );
+    expect(data.lengthInBytes, greaterThan(0));
+  });
+
+  test('all 28 detective letters have playable recordings', () async {
+    expect(soundDetectiveLetterAudio.length, 28);
+    expect(soundDetectiveLetterAudio.values.toSet().length, 28);
+    for (final asset in soundDetectiveLetterAudio.values) {
+      final data = await rootBundle.load(asset);
+      expect(data.lengthInBytes, greaterThan(0), reason: asset);
+    }
+  });
   test('each session lands on its designated lesson', () {
     Activity actFor(String id) => curriculum
         .expand((d) => d.lessons)
@@ -43,6 +59,7 @@ void main() {
             session: SoundDetectiveSession.alifToKha,
             xp: 30,
             random: math.Random(1),
+            musicEnabled: false,
             onComplete: (xp, acc, errors) => result = (xp, acc, errors),
           ),
         ),
@@ -154,6 +171,7 @@ void main() {
             session: SoundDetectiveSession.alifToKha,
             xp: 30,
             random: math.Random(1),
+            musicEnabled: false,
             onComplete: (_, _, _) {},
             onExit: () => exited++,
           ),

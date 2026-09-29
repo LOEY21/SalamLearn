@@ -49,7 +49,7 @@ _ActionStyle _styleFor(AuthLoadingAction action) {
         accent: AppColors.coral,
         haloAccent: AppColors.coral,
         icon: Icons.delete_outline_rounded,
-        heading: 'Erasing local data…',
+        heading: 'Deleting account…',
         subtitle: 'This may take a moment',
       );
     case AuthLoadingAction.switchProfile:
@@ -93,7 +93,7 @@ final rootNavigatorKey = GlobalKey<NavigatorState>();
 /// show through once the overlay drops, before the caller's own corrective
 /// `.go('/roles')` lands a moment later.
 ///
-/// The fix is to navigate to `/roles` *before* calling `logout()`/`eraseAll()`
+/// The fix is to navigate to `/roles` *before* calling `logout()`/`deleteAccount()`
 /// at all, so the current route is already safe by the time the redirect
 /// reacts. That means the overlay must still work after the screen that
 /// requested it has already been navigated away from (its `BuildContext`

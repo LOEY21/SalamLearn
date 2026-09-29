@@ -1309,318 +1309,236 @@ const List<AyahBuilderSession> ayahBuilderSessions = [
   ayahKawtharSession,
 ];
 
-const List<GreetingQuestion> greetingQuestions = [
-  GreetingQuestion(
-    id: 'greet1',
-    phrase: 'As-salāmu ʿalaykum',
-    arabic: 'اَلسَّلامُ عَلَيْكُم',
-    choices: [
-      GreetingChoice(
-        translit: 'Marhaban',
-        meaning: 'Hello / Welcome.',
-        emoji: '👋',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'As-salāmu ʿalaykum',
-        meaning: 'Peace be upon you.',
-        emoji: '🕊️',
-        correct: true,
-      ),
-      GreetingChoice(
-        translit: 'Maʿa as-salāmah',
-        meaning: 'Goodbye.',
-        emoji: '🤗',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Wa ʿalaykum as-salām',
-        meaning: 'And peace be upon you too.',
-        emoji: '🤲',
-        correct: false,
-      ),
-    ],
-  ),
-  GreetingQuestion(
-    id: 'greet2',
-    phrase: 'Wa ʿalaykum as-salām',
-    arabic: 'وَعَلَيْكُمُ السَّلام',
-    choices: [
-      GreetingChoice(
-        translit: 'Wa ʿalaykum as-salām',
-        meaning: 'And peace be upon you too.',
-        emoji: '🤲',
-        correct: true,
-      ),
-      GreetingChoice(
-        translit: 'Ahlan wa sahlan',
-        meaning: 'Welcome!',
-        emoji: '😊',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Ilā al-liqāʾ',
-        meaning: 'See you again.',
-        emoji: '🤝',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'As-salāmu ʿalaykum',
-        meaning: 'Peace be upon you.',
-        emoji: '🕊️',
-        correct: false,
-      ),
-    ],
-  ),
-  GreetingQuestion(
-    id: 'greet3',
-    phrase: 'Marhaban',
-    arabic: 'مَرْحَبًا',
-    choices: [
-      GreetingChoice(
-        translit: 'Masāʾ al-khayr',
-        meaning: 'Good evening.',
-        emoji: '🌆',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Ahlan wa sahlan',
-        meaning: 'Welcome!',
-        emoji: '😊',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Marhaban',
-        meaning: 'Hello / Welcome.',
-        emoji: '👋',
-        correct: true,
-      ),
-      GreetingChoice(
-        translit: 'Ṣabāḥ al-khayr',
-        meaning: 'Good morning.',
-        emoji: '🌅',
-        correct: false,
-      ),
-    ],
-  ),
-  GreetingQuestion(
-    id: 'greet4',
-    phrase: 'Ahlan wa sahlan',
-    arabic: 'أَهْلاً وَسَهْلاً',
-    choices: [
-      GreetingChoice(
-        translit: 'Ahlan wa sahlan',
-        meaning: 'Welcome!',
-        emoji: '😊',
-        correct: true,
-      ),
-      GreetingChoice(
-        translit: 'Masāʾ an-nūr',
-        meaning: 'Good evening (reply).',
-        emoji: '🌙',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Marhaban',
-        meaning: 'Hello / Welcome.',
-        emoji: '👋',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Ṣabāḥ an-nūr',
-        meaning: 'Good morning (reply).',
-        emoji: '☀️',
-        correct: false,
-      ),
-    ],
-  ),
-  GreetingQuestion(
-    id: 'greet5',
-    phrase: 'Ṣabāḥ al-khayr',
-    arabic: 'صَباحُ الخَيْر',
-    choices: [
-      GreetingChoice(
-        translit: 'Ṣabāḥ an-nūr',
-        meaning: 'Good morning (reply).',
-        emoji: '☀️',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Ṣabāḥ al-khayr',
-        meaning: 'Good morning.',
-        emoji: '🌅',
-        correct: true,
-      ),
-      GreetingChoice(
-        translit: 'As-salāmu ʿalaykum',
-        meaning: 'Peace be upon you.',
-        emoji: '🕊️',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Masāʾ al-khayr',
-        meaning: 'Good evening.',
-        emoji: '🌆',
-        correct: false,
-      ),
-    ],
-  ),
-  GreetingQuestion(
-    id: 'greet6',
-    phrase: 'Ṣabāḥ an-nūr',
-    arabic: 'صَباحُ النُّور',
-    choices: [
-      GreetingChoice(
-        translit: 'Ṣabāḥ an-nūr',
-        meaning: 'Good morning (reply).',
-        emoji: '☀️',
-        correct: true,
-      ),
-      GreetingChoice(
-        translit: 'Wa ʿalaykum as-salām',
-        meaning: 'And peace be upon you too.',
-        emoji: '🤲',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Ṣabāḥ al-khayr',
-        meaning: 'Good morning.',
-        emoji: '🌅',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Masāʾ an-nūr',
-        meaning: 'Good evening (reply).',
-        emoji: '🌙',
-        correct: false,
-      ),
-    ],
-  ),
-  GreetingQuestion(
-    id: 'greet7',
-    phrase: 'Masāʾ al-khayr',
-    arabic: 'مَساءُ الخَيْر',
-    choices: [
-      GreetingChoice(
-        translit: 'Maʿa as-salāmah',
-        meaning: 'Goodbye.',
-        emoji: '🤗',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Masāʾ al-khayr',
-        meaning: 'Good evening.',
-        emoji: '🌆',
-        correct: true,
-      ),
-      GreetingChoice(
-        translit: 'Masāʾ an-nūr',
-        meaning: 'Good evening (reply).',
-        emoji: '🌙',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Ṣabāḥ al-khayr',
-        meaning: 'Good morning.',
-        emoji: '🌅',
-        correct: false,
-      ),
-    ],
-  ),
-  GreetingQuestion(
-    id: 'greet8',
-    phrase: 'Masāʾ an-nūr',
-    arabic: 'مَساءُ النُّور',
-    choices: [
-      GreetingChoice(
-        translit: 'Masāʾ an-nūr',
-        meaning: 'Good evening (reply).',
-        emoji: '🌙',
-        correct: true,
-      ),
-      GreetingChoice(
-        translit: 'Masāʾ al-khayr',
-        meaning: 'Good evening.',
-        emoji: '🌆',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Ilā al-liqāʾ',
-        meaning: 'See you again.',
-        emoji: '🤝',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Ṣabāḥ an-nūr',
-        meaning: 'Good morning (reply).',
-        emoji: '☀️',
-        correct: false,
-      ),
-    ],
-  ),
-  GreetingQuestion(
-    id: 'greet9',
-    phrase: 'Maʿa as-salāmah',
-    arabic: 'مَعَ السَّلامَة',
-    choices: [
-      GreetingChoice(
-        translit: 'Ilā al-liqāʾ',
-        meaning: 'See you again.',
-        emoji: '🤝',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Alḥamdulillāh',
-        meaning: 'All praise is due to Allah.',
-        emoji: '🤍',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Maʿa as-salāmah',
-        meaning: 'Goodbye.',
-        emoji: '🤗',
-        correct: true,
-      ),
-      GreetingChoice(
-        translit: 'As-salāmu ʿalaykum',
-        meaning: 'Peace be upon you.',
-        emoji: '🕊️',
-        correct: false,
-      ),
-    ],
-  ),
-  GreetingQuestion(
-    id: 'greet10',
-    phrase: 'Ilā al-liqāʾ',
-    arabic: 'إِلى اللِّقاء',
-    choices: [
-      GreetingChoice(
-        translit: 'Subḥānallāh',
-        meaning: 'Glory be to Allah.',
-        emoji: '✨',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Ilā al-liqāʾ',
-        meaning: 'See you again.',
-        emoji: '🤝',
-        correct: true,
-      ),
-      GreetingChoice(
-        translit: 'Maʿa as-salāmah',
-        meaning: 'Goodbye.',
-        emoji: '🤗',
-        correct: false,
-      ),
-      GreetingChoice(
-        translit: 'Wa ʿalaykum as-salām',
-        meaning: 'And peace be upon you too.',
-        emoji: '🤲',
-        correct: false,
-      ),
-    ],
-  ),
-];
+const String _kGreetScenes = 'assets/images/greeting_match/scenes';
+const String _kGreetAudio = 'audio/greetings';
+
+/// Greeting Match Session 1 (Stage 1): everyday greetings — morning,
+/// evening, meeting, welcoming and leaving a friend.
+const GreetingMatchSession greetingDailySession = GreetingMatchSession(
+  title: 'Session 1: Daily Greetings',
+  subtitle: 'Learn everyday Islamic greetings with your friends.',
+  questions: [
+    GreetingQuestion(
+      id: 'greet-daily-1',
+      scenarioImage: '$_kGreetScenes/morning_greeting.jpg',
+      audioAsset: '$_kGreetAudio/sabahul_khair.mp3',
+      arabic: 'صَبَاحُ الْخَيْرِ',
+      meaning: 'Good Morning',
+      choices: [
+        GreetingChoice(
+          arabic: 'صَبَاحُ النُّورِ',
+          meaning: 'Good Morning',
+          correct: true,
+          audioAsset: '$_kGreetAudio/sabahun_nur.mp3',
+        ),
+        GreetingChoice(
+          arabic: 'مَسَاءُ النُّورِ',
+          meaning: 'Good Evening',
+          correct: false,
+          audioAsset: '$_kGreetAudio/masaun_nur.mp3',
+        ),
+      ],
+    ),
+    GreetingQuestion(
+      id: 'greet-daily-2',
+      scenarioImage: '$_kGreetScenes/evening_greeting.jpg',
+      audioAsset: '$_kGreetAudio/masaul_khair.mp3',
+      arabic: 'مَسَاءُ الْخَيْرِ',
+      meaning: 'Good Evening',
+      choices: [
+        GreetingChoice(
+          arabic: 'صَبَاحُ النُّورِ',
+          meaning: 'Good Morning',
+          correct: false,
+          audioAsset: '$_kGreetAudio/sabahun_nur.mp3',
+        ),
+        GreetingChoice(
+          arabic: 'مَسَاءُ النُّورِ',
+          meaning: 'Good Evening',
+          correct: true,
+          audioAsset: '$_kGreetAudio/masaun_nur.mp3',
+        ),
+      ],
+    ),
+    GreetingQuestion(
+      id: 'greet-daily-3',
+      scenarioImage: '$_kGreetScenes/meeting_friend.jpg',
+      audioAsset: '$_kGreetAudio/kaifa_haluk.mp3',
+      arabic: 'كَيْفَ حَالُكَ؟',
+      meaning: 'How are you?',
+      choices: [
+        GreetingChoice(
+          arabic: 'مَعَ السَّلَامَةِ',
+          meaning: 'Goodbye',
+          correct: false,
+          audioAsset: '$_kGreetAudio/maas_salamah.mp3',
+        ),
+        GreetingChoice(
+          arabic: 'بِخَيْرٍ، الْحَمْدُ لِلَّهِ',
+          meaning: 'Fine, praise be to Allah',
+          correct: true,
+          audioAsset: '$_kGreetAudio/bikhair.mp3',
+        ),
+      ],
+    ),
+    GreetingQuestion(
+      id: 'greet-daily-4',
+      scenarioImage: '$_kGreetScenes/welcoming_guest.jpg',
+      audioAsset: '$_kGreetAudio/ahlan_wa_sahlan.mp3',
+      arabic: 'أَهْلًا وَسَهْلًا',
+      meaning: 'Welcome',
+      choices: [
+        GreetingChoice(
+          arabic: 'أَهْلًا بِكَ',
+          meaning: 'Welcome to you too',
+          correct: true,
+          audioAsset: '$_kGreetAudio/ahlan_bika.mp3',
+        ),
+        GreetingChoice(
+          arabic: 'عَفْوًا',
+          meaning: "You're welcome",
+          correct: false,
+          audioAsset: '$_kGreetAudio/afwan.mp3',
+        ),
+      ],
+    ),
+    GreetingQuestion(
+      id: 'greet-daily-5',
+      scenarioImage: '$_kGreetScenes/leaving_friend.jpg',
+      audioAsset: '$_kGreetAudio/ilal_liqa.mp3',
+      arabic: 'إِلَى اللِّقَاءِ',
+      meaning: 'See you later',
+      choices: [
+        GreetingChoice(
+          arabic: 'صَبَاحُ النُّورِ',
+          meaning: 'Good Morning',
+          correct: false,
+          audioAsset: '$_kGreetAudio/sabahun_nur.mp3',
+        ),
+        GreetingChoice(
+          arabic: 'مَعَ السَّلَامَةِ',
+          meaning: 'Goodbye',
+          correct: true,
+          audioAsset: '$_kGreetAudio/maas_salamah.mp3',
+        ),
+      ],
+    ),
+  ],
+);
+
+/// Greeting Match Session 2 (Stage 2): classroom greetings and polite
+/// manners — thank you, sorry, excuse me, answering attendance.
+const GreetingMatchSession greetingMannersSession = GreetingMatchSession(
+  title: 'Session 2: Madrasah Manners',
+  subtitle: 'Learn polite Islamic greetings and classroom manners.',
+  questions: [
+    GreetingQuestion(
+      id: 'greet-manners-1',
+      scenarioImage: '$_kGreetScenes/teacher_enters.jpg',
+      audioAsset: '$_kGreetAudio/assalamu_alaykum.mp3',
+      arabic: 'السَّلَامُ عَلَيْكُمْ',
+      meaning: 'Peace be upon you',
+      choices: [
+        GreetingChoice(
+          arabic: 'شُكْرًا',
+          meaning: 'Thank you',
+          correct: false,
+          audioAsset: '$_kGreetAudio/shukran.mp3',
+        ),
+        GreetingChoice(
+          arabic: 'وَعَلَيْكُمُ السَّلَامُ',
+          meaning: 'And peace be upon you',
+          correct: true,
+          audioAsset: '$_kGreetAudio/wa_alaikumus_salam.mp3',
+        ),
+      ],
+    ),
+    GreetingQuestion(
+      id: 'greet-manners-2',
+      scenarioImage: '$_kGreetScenes/sharing_pencil.jpg',
+      audioAsset: '$_kGreetAudio/shukran.mp3',
+      arabic: 'شُكْرًا',
+      meaning: 'Thank you',
+      choices: [
+        GreetingChoice(
+          arabic: 'عَفْوًا',
+          meaning: "You're welcome",
+          correct: true,
+          audioAsset: '$_kGreetAudio/afwan.mp3',
+        ),
+        GreetingChoice(
+          arabic: 'لَا عَلَيْكَ',
+          meaning: 'No problem',
+          correct: false,
+          audioAsset: '$_kGreetAudio/la_alayk.mp3',
+        ),
+      ],
+    ),
+    GreetingQuestion(
+      id: 'greet-manners-3',
+      scenarioImage: '$_kGreetScenes/bumping_friend.jpg',
+      audioAsset: '$_kGreetAudio/ana_asif.mp3',
+      arabic: 'أَنَا آسِفٌ',
+      meaning: 'I am sorry',
+      choices: [
+        GreetingChoice(
+          arabic: 'مَعَ السَّلَامَةِ',
+          meaning: 'Goodbye',
+          correct: false,
+          audioAsset: '$_kGreetAudio/maas_salamah.mp3',
+        ),
+        GreetingChoice(
+          arabic: 'لَا عَلَيْكَ',
+          meaning: 'No problem / Never mind',
+          correct: true,
+          audioAsset: '$_kGreetAudio/la_alayk.mp3',
+        ),
+      ],
+    ),
+    GreetingQuestion(
+      id: 'greet-manners-4',
+      scenarioImage: '$_kGreetScenes/passing_by.jpg',
+      audioAsset: '$_kGreetAudio/samhan.mp3',
+      arabic: 'سَمْحًا',
+      meaning: 'Excuse me',
+      choices: [
+        GreetingChoice(
+          arabic: 'تَفَضَّلْ',
+          meaning: 'Go ahead / Please',
+          correct: true,
+          audioAsset: '$_kGreetAudio/tafaddal.mp3',
+        ),
+        GreetingChoice(
+          arabic: 'بِخَيْرٍ',
+          meaning: 'Fine',
+          correct: false,
+          audioAsset: '$_kGreetAudio/bikhair.mp3',
+        ),
+      ],
+    ),
+    GreetingQuestion(
+      id: 'greet-manners-5',
+      scenarioImage: '$_kGreetScenes/attendance_check.jpg',
+      audioAsset: '$_kGreetAudio/calling_name.mp3',
+      arabic: 'أَحْمَد؟',
+      meaning: 'Ahmad?',
+      choices: [
+        GreetingChoice(
+          arabic: 'إِلَى اللِّقَاءِ',
+          meaning: 'See you later',
+          correct: false,
+          audioAsset: '$_kGreetAudio/ilal_liqa.mp3',
+        ),
+        GreetingChoice(
+          arabic: 'حَاضِرٌ',
+          meaning: 'Present',
+          correct: true,
+          audioAsset: '$_kGreetAudio/hadir.mp3',
+        ),
+      ],
+    ),
+  ],
+);
 
 const List<FlashCard> animalsCards = [
   FlashCard(
@@ -3203,6 +3121,7 @@ const List<QuizQ> masteryQuiz = [
 const List<FlashCard> sandTracer1 = [
   FlashCard(
     id: 'st1',
+    audioAsset: 'assets/audio/sand_tracer/stage1/alif.mp3',
     emoji: '🍎',
     arabic: 'أَلِف\nا',
     translit: 'Alif',
@@ -3211,6 +3130,7 @@ const List<FlashCard> sandTracer1 = [
   ),
   FlashCard(
     id: 'st2',
+    audioAsset: 'assets/audio/sand_tracer/stage1/ba.mp3',
     emoji: '🏠',
     arabic: 'بَاء\nب',
     translit: 'Ba',
@@ -3219,6 +3139,7 @@ const List<FlashCard> sandTracer1 = [
   ),
   FlashCard(
     id: 'st3',
+    audioAsset: 'assets/audio/sand_tracer/stage1/ta.mp3',
     emoji: '🍎',
     arabic: 'تَاء\nت',
     translit: 'Ta',
@@ -3227,6 +3148,7 @@ const List<FlashCard> sandTracer1 = [
   ),
   FlashCard(
     id: 'st4',
+    audioAsset: 'assets/audio/sand_tracer/stage1/tha.mp3',
     emoji: '🦊',
     arabic: 'ثَاء\nث',
     translit: 'Tha',
@@ -3235,6 +3157,7 @@ const List<FlashCard> sandTracer1 = [
   ),
   FlashCard(
     id: 'st5',
+    audioAsset: 'assets/audio/sand_tracer/stage1/jeem.mp3',
     emoji: '🐪',
     arabic: 'جِيم\nج',
     translit: 'Jim',
@@ -3243,6 +3166,7 @@ const List<FlashCard> sandTracer1 = [
   ),
   FlashCard(
     id: 'st6',
+    audioAsset: 'assets/audio/sand_tracer/stage1/ha.mp3',
     emoji: '🐴',
     arabic: 'حَاء\nح',
     translit: 'Ha',
@@ -3251,6 +3175,7 @@ const List<FlashCard> sandTracer1 = [
   ),
   FlashCard(
     id: 'st7',
+    audioAsset: 'assets/audio/sand_tracer/stage1/kha.mp3',
     emoji: '🗺️',
     arabic: 'خَاء\nخ',
     translit: 'Kha',
@@ -3262,6 +3187,7 @@ const List<FlashCard> sandTracer1 = [
 const List<FlashCard> sandTracer2 = [
   FlashCard(
     id: 'st8',
+    audioAsset: 'assets/audio/sand_tracer/stage2/dal.mp3',
     emoji: '🐻',
     arabic: 'دَال\nد',
     translit: 'Dal',
@@ -3270,6 +3196,7 @@ const List<FlashCard> sandTracer2 = [
   ),
   FlashCard(
     id: 'st9',
+    audioAsset: 'assets/audio/sand_tracer/stage2/dhal.mp3',
     emoji: '🌽',
     arabic: 'ذَال\nذ',
     translit: 'Dhal',
@@ -3278,6 +3205,7 @@ const List<FlashCard> sandTracer2 = [
   ),
   FlashCard(
     id: 'st10',
+    audioAsset: 'assets/audio/sand_tracer/stage2/ra.mp3',
     emoji: '⚡',
     arabic: 'رَاء\nر',
     translit: 'Ra',
@@ -3286,6 +3214,7 @@ const List<FlashCard> sandTracer2 = [
   ),
   FlashCard(
     id: 'st11',
+    audioAsset: 'assets/audio/sand_tracer/stage2/zay.mp3',
     emoji: '🌺',
     arabic: 'زَاي\nز',
     translit: 'Zayn',
@@ -3294,6 +3223,7 @@ const List<FlashCard> sandTracer2 = [
   ),
   FlashCard(
     id: 'st12',
+    audioAsset: 'assets/audio/sand_tracer/stage2/seen.mp3',
     emoji: '🐟',
     arabic: 'سِين\nس',
     translit: 'Sin',
@@ -3302,6 +3232,7 @@ const List<FlashCard> sandTracer2 = [
   ),
   FlashCard(
     id: 'st13',
+    audioAsset: 'assets/audio/sand_tracer/stage2/sheen.mp3',
     emoji: '🌲',
     arabic: 'شِين\nش',
     translit: 'Shin',
@@ -3310,25 +3241,28 @@ const List<FlashCard> sandTracer2 = [
   ),
   FlashCard(
     id: 'st14',
+    audioAsset: 'assets/audio/sand_tracer/stage2/sad.mp3',
     emoji: '🐦',
     arabic: 'صَاد\nص',
     translit: 'Sad',
     english: 'Emphatic "s" — صَقْر (falcon)',
     color: '#FDECC8',
   ),
+];
+
+const List<FlashCard> sandTracer3 = [
   FlashCard(
     id: 'st15',
+    audioAsset: 'assets/audio/sand_tracer/stage3/dad.mp3',
     emoji: '🐸',
     arabic: 'ضَاد\nض',
     translit: 'Dad',
     english: 'Emphatic "d" — ضِفْدَع (frog)',
     color: '#FDDCCC',
   ),
-];
-
-const List<FlashCard> sandTracer3 = [
   FlashCard(
     id: 'st16',
+    audioAsset: 'assets/audio/sand_tracer/stage3/ta_heavy.mp3',
     emoji: '🍅',
     arabic: 'طَاء\nط',
     translit: 'Ta',
@@ -3337,6 +3271,7 @@ const List<FlashCard> sandTracer3 = [
   ),
   FlashCard(
     id: 'st17',
+    audioAsset: 'assets/audio/sand_tracer/stage3/zha.mp3',
     emoji: '🌿',
     arabic: 'ظَاء\nظ',
     translit: 'Dha',
@@ -3345,6 +3280,7 @@ const List<FlashCard> sandTracer3 = [
   ),
   FlashCard(
     id: 'st18',
+    audioAsset: 'assets/audio/sand_tracer/stage3/ayn.mp3',
     emoji: '🦅',
     arabic: 'عَيْن\nع',
     translit: "'Ayn",
@@ -3353,6 +3289,7 @@ const List<FlashCard> sandTracer3 = [
   ),
   FlashCard(
     id: 'st19',
+    audioAsset: 'assets/audio/sand_tracer/stage3/ghayn.mp3',
     emoji: '🌫️',
     arabic: 'غَيْن\nغ',
     translit: 'Ghayn',
@@ -3361,6 +3298,7 @@ const List<FlashCard> sandTracer3 = [
   ),
   FlashCard(
     id: 'st20',
+    audioAsset: 'assets/audio/sand_tracer/stage3/fa.mp3',
     emoji: '🦋',
     arabic: 'فَاء\nف',
     translit: 'Fa',
@@ -3369,6 +3307,7 @@ const List<FlashCard> sandTracer3 = [
   ),
   FlashCard(
     id: 'st21',
+    audioAsset: 'assets/audio/sand_tracer/stage3/qaf.mp3',
     emoji: '🐱',
     arabic: 'قَاف\nق',
     translit: 'Qaf',
@@ -3380,6 +3319,7 @@ const List<FlashCard> sandTracer3 = [
 const List<FlashCard> sandTracer4 = [
   FlashCard(
     id: 'st22',
+    audioAsset: 'assets/audio/sand_tracer/stage4/kaf.mp3',
     emoji: '📖',
     arabic: 'كَاف\nك',
     translit: 'Kaf',
@@ -3388,6 +3328,7 @@ const List<FlashCard> sandTracer4 = [
   ),
   FlashCard(
     id: 'st23',
+    audioAsset: 'assets/audio/sand_tracer/stage4/lam.mp3',
     emoji: '🦁',
     arabic: 'لَام\nل',
     translit: 'Lam',
@@ -3396,6 +3337,7 @@ const List<FlashCard> sandTracer4 = [
   ),
   FlashCard(
     id: 'st24',
+    audioAsset: 'assets/audio/sand_tracer/stage4/meem.mp3',
     emoji: '🕌',
     arabic: 'مِيم\nم',
     translit: 'Mim',
@@ -3404,6 +3346,7 @@ const List<FlashCard> sandTracer4 = [
   ),
   FlashCard(
     id: 'st25',
+    audioAsset: 'assets/audio/sand_tracer/stage4/noon.mp3',
     emoji: '⭐',
     arabic: 'نُون\nن',
     translit: 'Nun',
@@ -3412,6 +3355,7 @@ const List<FlashCard> sandTracer4 = [
   ),
   FlashCard(
     id: 'st26',
+    audioAsset: 'assets/audio/sand_tracer/stage4/ha_soft.mp3',
     emoji: '🌬️',
     arabic: 'هَاء\nه',
     translit: 'Ha',
@@ -3420,6 +3364,7 @@ const List<FlashCard> sandTracer4 = [
   ),
   FlashCard(
     id: 'st27',
+    audioAsset: 'assets/audio/sand_tracer/stage4/waw.mp3',
     emoji: '🌹',
     arabic: 'وَاو\nو',
     translit: 'Waw',
@@ -3428,6 +3373,7 @@ const List<FlashCard> sandTracer4 = [
   ),
   FlashCard(
     id: 'st28',
+    audioAsset: 'assets/audio/sand_tracer/stage4/ya.mp3',
     emoji: '🤲',
     arabic: 'يَاء\nي',
     translit: 'Ya',
@@ -4483,7 +4429,7 @@ const List<Destination> curriculum = [
             title: 'The Greeting Match',
             icon: '👋',
             xp: 20,
-            greetingQuestions: greetingQuestions,
+            greetingSession: greetingDailySession,
           ),
         ],
       ),
@@ -4589,7 +4535,7 @@ const List<Destination> curriculum = [
             title: 'The Greeting Match',
             icon: '👋',
             xp: 20,
-            greetingQuestions: greetingQuestions,
+            greetingSession: greetingMannersSession,
           ),
         ],
       ),
@@ -4631,7 +4577,7 @@ const List<Destination> curriculum = [
       ),
       Lesson(
         id: 'dest2-s4',
-        title: 'Magic Sand Tracer - Session 2 (Dal to Dad)',
+        title: 'Magic Sand Tracer - Session 2 (Dal to Sad)',
         titleAr: 'تَتَبُّعُ الرَّمْل السِّحْرِيّ 2',
         icon: '✍️',
         color: '#0F6E56',
@@ -4640,7 +4586,7 @@ const List<Destination> curriculum = [
           Activity(
             id: 'dest2-s4-act',
             type: ActivityType.trace,
-            title: 'Magic Sand Tracer (Dal to Dad)',
+            title: 'Magic Sand Tracer (Dal to Sad)',
             icon: '✍️',
             xp: 20,
             cards: sandTracer2,
@@ -4755,7 +4701,7 @@ const List<Destination> curriculum = [
       ),
       Lesson(
         id: 'dest3-s4',
-        title: 'Magic Sand Tracer - Session 3 (Ta to Qaf)',
+        title: 'Magic Sand Tracer - Session 3 (Dad to Qaf)',
         titleAr: 'تَتَبُّعُ الرَّمْل السِّحْرِيّ 3',
         icon: '✍️',
         color: '#0F6E56',
@@ -4764,7 +4710,7 @@ const List<Destination> curriculum = [
           Activity(
             id: 'dest3-s4-act',
             type: ActivityType.trace,
-            title: 'Magic Sand Tracer (Ta to Qaf)',
+            title: 'Magic Sand Tracer (Dad to Qaf)',
             icon: '✍️',
             xp: 20,
             cards: sandTracer3,

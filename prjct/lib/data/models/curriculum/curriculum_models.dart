@@ -82,48 +82,62 @@ class FlashCard {
   final String? audioAsset;
 }
 
-/// One choice on a [GreetingQuestion] — its translit text, English
-/// meaning, and whether it's the correct answer for that question.
-/// Distractors are other greetings' translit/meaning pairs, so the
-/// wrong choices still read as valid Arabic greetings, not nonsense.
+/// One response button on a [GreetingQuestion]: its Arabic text, English
+/// meaning, and the recording played when it's tapped.
 class GreetingChoice {
   const GreetingChoice({
-    required this.translit,
+    required this.arabic,
     required this.meaning,
     required this.correct,
-    required this.emoji,
+    this.audioAsset,
   });
 
-  final String translit;
+  final String arabic;
   final String meaning;
   final bool correct;
 
-  /// One glyph shown on the choice card (e.g. 🕊️ for "Peace be upon you").
-  final String emoji;
+  /// Relative to `assets/` (e.g. `audio/greetings/sabahun_nur.mp3`).
+  final String? audioAsset;
 }
 
-/// Greeting Match's content shape: one spoken/displayed greeting phrase
-/// and 4 [GreetingChoice]s, exactly one of which is correct — the correct
-/// choice is always that same phrase paired with its real meaning.
-/// `audioAsset` is nullable for the same placeholder-phase reason as
-/// [FlashCard.audioAsset]: the tap-to-play button exists and shows
-/// feedback, it just doesn't play a real recording yet.
+/// One Greeting Match scenario: a cartoon scene, the greeting the learner
+/// hears (auto-played, replayable), and the response choices — exactly one
+/// [GreetingChoice.correct]. Choice order in the data is the on-screen
+/// order, so the correct side varies per question.
 class GreetingQuestion {
   const GreetingQuestion({
     required this.id,
-    required this.phrase,
     required this.arabic,
+    required this.meaning,
+    required this.scenarioImage,
     required this.choices,
     this.audioAsset,
   });
 
   final String id;
-  final String phrase;
-
-  /// The prompt's Arabic script (e.g. "اَلسَّلامُ عَلَيْكُم").
   final String arabic;
+  final String meaning;
+
+  /// Full asset path of the full-bleed scene behind the card.
+  final String scenarioImage;
   final List<GreetingChoice> choices;
+
+  /// Relative to `assets/` (e.g. `audio/greetings/sabahul_khair.mp3`).
   final String? audioAsset;
+}
+
+/// A Greeting Match session: [title] labels the start-screen ribbon and
+/// in-game badge, [subtitle] fills the start-screen pill.
+class GreetingMatchSession {
+  const GreetingMatchSession({
+    required this.title,
+    required this.subtitle,
+    required this.questions,
+  });
+
+  final String title;
+  final String subtitle;
+  final List<GreetingQuestion> questions;
 }
 
 class QuizQ {
@@ -636,7 +650,7 @@ class Activity {
     required this.icon,
     required this.xp,
     this.cards,
-    this.greetingQuestions,
+    this.greetingSession,
     this.questions,
     this.panels,
     this.quranLine,
@@ -663,8 +677,8 @@ class Activity {
   /// Used by `trace` (see [FlashCard] doc).
   final List<FlashCard>? cards;
 
-  /// Used by `pronounce`, now Greeting Match (see [GreetingQuestion] doc).
-  final List<GreetingQuestion>? greetingQuestions;
+  /// Used by `pronounce`, now Greeting Match (see [GreetingMatchSession]).
+  final GreetingMatchSession? greetingSession;
   final List<QuizQ>? questions;
   final List<StoryPanel>? panels;
   final QuranSyncLine? quranLine;

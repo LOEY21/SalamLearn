@@ -1,11 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 
 import 'package:salamlearn/data/curriculum_data.dart';
 import 'package:salamlearn/data/models/curriculum/curriculum_models.dart';
 import 'package:salamlearn/ui/core_modules/activities/sirah_story_game.dart';
+import 'package:salamlearn/ui/core_modules/activities/sirah_story_audio.dart';
 
 void main() {
+  test('every recorded story line and choice is bundled', () async {
+    expect(sirahPageAudio.length, 4);
+    final clips = <String>{'ambient.mp3'};
+    for (final session in sirahPageAudio) {
+      expect(session.length, 2);
+      for (final page in session) {
+        clips.addAll([page.narration, page.question, page.correct, page.decoy]);
+      }
+    }
+    expect(clips.length, 33);
+    for (final clip in clips) {
+      final data = await rootBundle.load('assets/audio/sirah_story/$clip');
+      expect(data.lengthInBytes, greaterThan(0), reason: clip);
+    }
+  });
   // The game is laid out against the scene art's own 1870x841 landscape
   // stage and scaled to fit, so matching the surface to it makes the scale
   // exactly 1 and keeps every layer where the design puts it.
@@ -27,6 +44,7 @@ void main() {
     SirahStorySession session, {
     void Function(int, double, int)? onComplete,
     VoidCallback? onExit,
+    SirahAudioPlayback? audio,
   }) => MaterialApp(
     home: Scaffold(
       body: SirahStoryGame(
@@ -37,6 +55,8 @@ void main() {
         xp: 40,
         onComplete: onComplete ?? (_, _, _) {},
         onExit: onExit,
+        audioEnabled: audio != null,
+        audio: audio,
       ),
     ),
   );
@@ -47,6 +67,45 @@ void main() {
     sirahFamilySession,
     sirahAlAminSession,
   ];
+
+  testWidgets('question and both visible choices speak before selection', (
+    tester,
+  ) async {
+    final audio = _FakeSirahAudio();
+    const session = sirahBirthSession;
+    final page = session.pages.first;
+    await tester.pumpWidget(host(session, audio: audio));
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.tap(find.byKey(const ValueKey('sirah-play')));
+    for (var i = 0; i < 66; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(audio.played.last, sirahPageAudio.first.first.narration);
+
+    audio.complete();
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('sirah-glow')));
+    await tester.pump(const Duration(milliseconds: 1600));
+    await tester.pump(const Duration(milliseconds: 400));
+    final clips = sirahPageAudio.first.first;
+    expect(audio.played.last, clips.question);
+
+    final correctFirst =
+        tester.getTopLeft(find.text(page.correct)).dy <
+        tester.getTopLeft(find.text(page.decoy)).dy;
+    audio.complete();
+    await tester.pump();
+    expect(audio.played.last, correctFirst ? clips.correct : clips.decoy);
+    audio.complete();
+    await tester.pump();
+    expect(audio.played.last, correctFirst ? clips.decoy : clips.correct);
+
+    final beforeTap = audio.played.length;
+    await tester.tap(find.text(page.correct));
+    await tester.pump();
+    expect(audio.played.length, beforeTap);
+    expect(audio.stops, greaterThan(0));
+  });
 
   /// Advances [total] in real frames. The game's clock only moves on frame
   /// ticks, so one giant pump lets a timer fire mid-pump against a stale
@@ -627,4 +686,38 @@ void main() {
 
     expect(find.byKey(const ValueKey('sirah-play')), findsOneWidget);
   });
+}
+
+class _FakeSirahAudio implements SirahAudioPlayback {
+  final List<String> played = [];
+  void Function()? _onComplete;
+  int stops = 0;
+
+  void complete() {
+    final callback = _onComplete;
+    _onComplete = null;
+    callback?.call();
+  }
+
+  @override
+  Future<void> startMusic() async {}
+
+  @override
+  Future<void> play(
+    String asset, {
+    void Function()? onComplete,
+    void Function()? onError,
+  }) async {
+    played.add(asset);
+    _onComplete = onComplete;
+  }
+
+  @override
+  Future<void> stopVoice() async {
+    stops++;
+    _onComplete = null;
+  }
+
+  @override
+  Future<void> dispose() async {}
 }

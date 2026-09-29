@@ -1,11 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:salamlearn/data/curriculum_data.dart';
 import 'package:salamlearn/data/models/curriculum/curriculum_models.dart';
 import 'package:salamlearn/ui/core_modules/activities/classroom_heroes_game.dart';
+import 'package:salamlearn/ui/core_modules/activities/classroom_heroes_audio.dart';
 
 void main() {
+  test('all Classroom Heroes recordings are bundled', () async {
+    expect(classroomAudio.length, 4);
+    final clips = <String>{'ambient.mp3'};
+    for (final session in classroomAudio) {
+      expect(session.length, 3);
+      for (final question in session) {
+        clips.addAll([question.prompt, question.correct, question.decoy]);
+      }
+    }
+    expect(clips.length, 37);
+    for (final clip in clips) {
+      final data = await rootBundle.load('assets/audio/classroom_heroes/$clip');
+      expect(data.lengthInBytes, greaterThan(0), reason: clip);
+    }
+  });
   // The game is laid out against the prototype's 1600x900 landscape stage
   // and scaled to fit, so matching the surface to it makes the scale exactly
   // 1 and keeps the hit targets where the design puts them.
@@ -27,6 +44,7 @@ void main() {
     ClassroomHeroesSession session, {
     void Function(int, double, int)? onComplete,
     VoidCallback? onExit,
+    ClassroomAudioPlayback? audio,
   }) => MaterialApp(
     home: Scaffold(
       body: ClassroomHeroesGame(
@@ -37,6 +55,8 @@ void main() {
         xp: 30,
         onComplete: onComplete ?? (_, _, _) {},
         onExit: onExit,
+        audioEnabled: audio != null,
+        audio: audio,
       ),
     ),
   );
@@ -47,6 +67,41 @@ void main() {
     heroesResponsibilitySession,
     heroesTeamworkSession,
   ];
+
+  testWidgets('question and both choices speak before a tap', (tester) async {
+    final audio = _FakeClassroomAudio();
+    const session = heroesRespectSession;
+    final clips = classroomAudio.first.first;
+    await tester.pumpWidget(host(session, audio: audio));
+    await tester.pump(const Duration(milliseconds: 1400));
+    await tester.pump(const Duration(milliseconds: 1000));
+    final dynamic playButton = tester.widget(find.byKey(const ValueKey('ch-play')));
+    (playButton.onTap as VoidCallback)();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(audio.played.last, clips.prompt);
+
+    audio.complete();
+    await tester.pump(const Duration(milliseconds: 500));
+    final first = audio.played.last;
+    audio.complete();
+    await tester.pump();
+    // Read left to right, and the hero card's side is random.
+    expect({first, audio.played.last}, {clips.correct, clips.decoy});
+    final heroX = tester.getCenter(
+      find.text(session.questions.first.correctText),
+    ).dx;
+    final decoyX = tester.getCenter(
+      find.text(session.questions.first.decoyText),
+    ).dx;
+    expect(first == clips.correct, heroX < decoyX);
+
+    final beforeTap = audio.played.length;
+    await tester.tap(find.text(session.questions.first.correctText));
+    await tester.pump();
+    expect(audio.played.length, beforeTap);
+    expect(audio.stops, greaterThan(0));
+  });
 
   Future<void> skipNarration(WidgetTester tester) async {
     await tester.pump(const Duration(milliseconds: 700));
@@ -177,4 +232,39 @@ void main() {
     expect(errors, 1);
     expect(accuracy, closeTo(75, 0.01)); // 3 right out of 4 taps
   });
+}
+
+class _FakeClassroomAudio implements ClassroomAudioPlayback {
+  final List<String> played = [];
+  void Function()? _onComplete;
+  int stops = 0;
+
+  void complete() {
+    final callback = _onComplete;
+    _onComplete = null;
+    callback?.call();
+  }
+
+  @override
+  Future<void> startMusic() async {}
+
+  @override
+  Future<void> play(
+    String asset, {
+    void Function()? onComplete,
+    void Function()? onError,
+    void Function(Duration)? onDuration,
+  }) async {
+    played.add(asset);
+    _onComplete = onComplete;
+  }
+
+  @override
+  Future<void> stopVoice() async {
+    stops++;
+    _onComplete = null;
+  }
+
+  @override
+  Future<void> dispose() async {}
 }

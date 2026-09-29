@@ -22,6 +22,8 @@ import '../../logic/sync/sync_manager.dart';
 import '../../logic/teacher/teacher_providers.dart';
 import '../theme/app_colors.dart';
 import '../widgets/auth_loading_overlay.dart';
+import '../widgets/delete_account_dialog.dart';
+import '../settings/settings_screen.dart' show LanguageSettingRow;
 import '../widgets/change_pin_card.dart';
 import '../widgets/email_verification_card.dart';
 import '../widgets/flat_dashboard_header.dart';
@@ -2645,6 +2647,14 @@ class _SettingsTab extends ConsumerWidget {
             const SizedBox(height: 20),
             const _StaggerFadeIn(
               delay: Duration(milliseconds: 65),
+              child: SoftCard(
+                padding: EdgeInsets.all(6),
+                child: LanguageSettingRow(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const _StaggerFadeIn(
+              delay: Duration(milliseconds: 65),
               child: _SyncCard(),
             ),
             const SizedBox(height: 20),
@@ -2665,7 +2675,7 @@ class _SettingsTab extends ConsumerWidget {
             const SizedBox(height: 20),
             const _StaggerFadeIn(
               delay: Duration(milliseconds: 125),
-              child: _EraseCard(),
+              child: _DeleteAccountCard(),
             ),
             const SizedBox(height: 20),
             const _StaggerFadeIn(
@@ -3062,50 +3072,8 @@ class _SyncCardState extends ConsumerState<_SyncCard> {
   }
 }
 
-class _EraseCard extends ConsumerWidget {
-  const _EraseCard();
-
-  void _confirmErase(BuildContext context, WidgetRef ref) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        icon: const Icon(
-          Icons.warning_amber_rounded,
-          color: AppColors.coral,
-          size: 40,
-        ),
-        title: const Text('Erase everything?'),
-        content: const Text(
-          'This removes the learner profile, consent record, PIN, and all '
-          'progress from this device. This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.coral),
-            onPressed: () async {
-              Navigator.of(dialogContext).pop();
-              if (!context.mounted) return;
-              // Navigate off this admin-gated route BEFORE eraseAll() clears
-              // the account — otherwise go_router's refreshListenable reacts
-              // to that state change while still on `/parent`, transiently
-              // redirecting to `/pin/setup` (see auth_loading_overlay.dart's
-              // doc on `showAuthLoadingOverlay`).
-              context.go('/');
-              await runWithAuthLoadingOverlay(
-                AuthLoadingAction.erase,
-                () => ref.read(sessionProvider.notifier).eraseAll(),
-              );
-            },
-            child: const Text('Erase'),
-          ),
-        ],
-      ),
-    );
-  }
+class _DeleteAccountCard extends ConsumerWidget {
+  const _DeleteAccountCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -3133,12 +3101,12 @@ class _EraseCard extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Erase Local Data',
+                  'Delete Account',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 2),
                 const Text(
-                  'Permanently delete all stored profiles and progress data.',
+                  'Permanently delete your account and all its data.',
                   style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
               ],
@@ -3150,7 +3118,7 @@ class _EraseCard extends ConsumerWidget {
               foregroundColor: AppColors.coral,
               side: const BorderSide(color: AppColors.coral),
             ),
-            onPressed: () => _confirmErase(context, ref),
+            onPressed: () => showDeleteAccountDialog(context, ref),
             child: const Text('Delete'),
           ),
         ],
