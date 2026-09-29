@@ -131,9 +131,6 @@ class _TraceActivityState extends State<TraceActivity>
   );
   static const _kSeconds = 30;
 
-  /// Sound button: off silences the game's clicks.
-  bool _sound = true;
-
   /// Music button state.
   bool _music = true;
   TraceAudio? _audio;
@@ -470,11 +467,10 @@ class _TraceActivityState extends State<TraceActivity>
   }
 
   void _click() {
-    if (_sound) SystemSound.play(SystemSoundType.click);
+    SystemSound.play(SystemSoundType.click);
   }
 
   void _say() {
-    if (!_sound) return;
     final asset = _card.audioAsset;
     if (asset != null && _audio != null) {
       unawaited(_audio!.playLetter(asset));
@@ -486,11 +482,6 @@ class _TraceActivityState extends State<TraceActivity>
   void _toggleMusic() {
     setState(() => _music = !_music);
     if (_audio != null) unawaited(_audio!.setMusicEnabled(_music));
-  }
-
-  void _toggleSound() {
-    setState(() => _sound = !_sound);
-    if (!_sound && _audio != null) unawaited(_audio!.stopLetter());
   }
 
   @override
@@ -530,10 +521,15 @@ class _TraceActivityState extends State<TraceActivity>
     'start_logo',
     'start_boy',
     'start_girl',
+    'done_boy_cheer',
+    'done_girl_cheer',
+    'done_boy_thumbs',
+    'done_girl_thumbs',
     'start_tray',
     'start_play',
     'start_play_down',
     'hud_stars',
+    'star',
     'hud_accuracy',
     'hud_card',
     'hud_timer',
@@ -642,6 +638,9 @@ class _TraceActivityState extends State<TraceActivity>
       Positioned(left: l, top: t, width: w, height: h, child: c);
 
   Widget _img(String n) => Image.asset('$_kA/$n.png', fit: BoxFit.contain);
+
+  Widget _star(double size) =>
+      Image.asset('$_kA/star.png', width: size, height: size);
 
   /// Framed HUD art, drawn at 2x. Each piece is pre-rendered at its slot's
   /// exact shape, so nothing is stretched out of proportion here.
@@ -897,6 +896,23 @@ class _TraceActivityState extends State<TraceActivity>
                       },
                     ),
                   ),
+                  _at(
+                    30,
+                    40,
+                    105,
+                    105,
+                    _fx(
+                      _intro,
+                      .5,
+                      .9,
+                      offset: const Offset(0, -90),
+                      _roundBtn(
+                        'trace-home',
+                        Icons.home_rounded,
+                        widget.onBack,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -930,7 +946,13 @@ class _TraceActivityState extends State<TraceActivity>
           child: switch (_screen) {
             _Screen.start => _buildStart(),
             _Screen.howTo => _stage(_buildHowTo()),
-            _Screen.done => _stage(_buildDone()),
+            _Screen.done => Stack(
+              fit: StackFit.expand,
+              children: [
+                const ColoredBox(color: Color(0x8C000000)),
+                _stage(_buildDone()),
+              ],
+            ),
             _Screen.play => _buildPlay(),
           },
         ),
@@ -1031,11 +1053,7 @@ class _TraceActivityState extends State<TraceActivity>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(
-                      Icons.star_rounded,
-                      size: 48,
-                      color: Color(0xFFF4B400),
-                    ),
+                    _star(52),
                     const SizedBox(width: 10),
                     Text('$stars', style: _f(36, _kBrown)),
                   ],
@@ -1052,17 +1070,6 @@ class _TraceActivityState extends State<TraceActivity>
               'trace-music',
               _music ? Icons.music_note_rounded : Icons.music_off_rounded,
               _toggleMusic,
-            ),
-          ),
-          _at(
-            712,
-            60,
-            105,
-            105,
-            _roundBtn(
-              'trace-sound',
-              _sound ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-              _toggleSound,
             ),
           ),
         ]),
@@ -1186,7 +1193,6 @@ class _TraceActivityState extends State<TraceActivity>
                                       fontFamily: 'ScheherazadeNew',
                                       fontWeight: FontWeight.w700,
                                       fontSize: 84,
-                                      height: 1.25,
                                       color: _kBrown,
                                     ),
                                   ),
@@ -1478,15 +1484,13 @@ class _TraceActivityState extends State<TraceActivity>
                                 shape: BoxShape.circle,
                                 color: Colors.white,
                               ),
-                              child: Icon(
-                                pass
-                                    ? Icons.star_rounded
-                                    : Icons.refresh_rounded,
-                                size: 70,
-                                color: pass
-                                    ? const Color(0xFFF4B400)
-                                    : const Color(0xFFE5603F),
-                              ),
+                              child: pass
+                                  ? Center(child: _star(66))
+                                  : const Icon(
+                                      Icons.refresh_rounded,
+                                      size: 70,
+                                      color: Color(0xFFE5603F),
+                                    ),
                             ),
                             const SizedBox(width: 20),
                             Text(
@@ -1827,6 +1831,8 @@ class _TraceActivityState extends State<TraceActivity>
   Widget _buildDone() {
     final avg = _average;
     final stars = avg >= .9 ? 3 : (avg >= .8 ? 2 : 1);
+    // 2+ stars cheers; otherwise the mascots cheer the child on.
+    final high = stars >= 2;
     final secs = _watch.elapsed.inSeconds;
     final time = '${secs ~/ 60}:${(secs % 60).toString().padLeft(2, '0')}';
 
@@ -1840,17 +1846,20 @@ class _TraceActivityState extends State<TraceActivity>
           );
           return Transform.scale(
             scale: t,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Icon(Icons.star_rounded, size: size + 16, color: _kBrown),
-                Icon(
-                  Icons.star_rounded,
-                  size: size,
-                  color: on ? const Color(0xFFF4B400) : const Color(0xFFD9CFC0),
-                ),
-              ],
-            ),
+            child: on
+                ? _star(size)
+                : Opacity(
+                    opacity: .55,
+                    child: ColorFiltered(
+                      colorFilter: const ColorFilter.matrix([
+                        .33, .33, .33, 0, 0, //
+                        .33, .33, .33, 0, 0,
+                        .33, .33, .33, 0, 0,
+                        0, 0, 0, 1, 0,
+                      ]),
+                      child: _star(size),
+                    ),
+                  ),
           );
         },
       );
@@ -1910,6 +1919,18 @@ class _TraceActivityState extends State<TraceActivity>
       ],
     );
 
+    Widget mascot(String who, bool flip) => AnimatedBuilder(
+      animation: _breathe,
+      builder: (context, child) {
+        final v = flip ? 1 - _breathe.value : _breathe.value;
+        return Transform.translate(
+          offset: Offset(0, -(high ? 16 : 6) * Curves.easeInOut.transform(v)),
+          child: child,
+        );
+      },
+      child: _img('done_${who}_${high ? 'cheer' : 'thumbs'}'),
+    );
+
     return Stack(
       children: [
         _at(
@@ -1917,10 +1938,16 @@ class _TraceActivityState extends State<TraceActivity>
           90,
           473,
           204,
-          _rise(0, .3, _plaque('Mumtaz!', 'You traced every letter!')),
+          _rise(
+            0,
+            .3,
+            high
+                ? _plaque('Mumtaz!', 'You traced every letter!')
+                : _plaque('Good try!', 'Keep practising, you can do it!'),
+          ),
         ),
-        _at(10, 330, 200, 297, _rise(.1, .45, _img('start_boy'))),
-        _at(643, 330, 200, 307, _rise(.1, .45, _img('start_girl'))),
+        _at(-10, 300, 250, 380, _rise(.1, .45, mascot('girl', false))),
+        _at(613, 300, 250, 380, _rise(.1, .45, mascot('boy', true))),
         Positioned(
           left: 0,
           right: 0,
@@ -1930,12 +1957,12 @@ class _TraceActivityState extends State<TraceActivity>
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              star(0, 110),
+              star(0, 126),
               Padding(
                 padding: const EdgeInsets.only(bottom: 40),
-                child: star(1, 140),
+                child: star(1, 160),
               ),
-              star(2, 110),
+              star(2, 126),
             ],
           ),
         ),

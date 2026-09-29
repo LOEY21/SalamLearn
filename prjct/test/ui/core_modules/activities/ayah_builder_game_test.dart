@@ -135,6 +135,7 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     expect(find.bySemanticsLabel("Masha'Allah!"), findsOneWidget);
     expect(find.text('You earned 1 star · 1 total'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ab-back')), findsNothing);
 
     await tester.tap(find.text('Finish'));
     await tester.pump();

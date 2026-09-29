@@ -1618,18 +1618,6 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
                   ),
                 ),
               ),
-              if (widget.onExit != null)
-                Positioned(
-                  left: 30,
-                  top: 24,
-                  child: _roundGold(
-                    Icons.home_outlined,
-                    80,
-                    38,
-                    widget.onExit!,
-                    bordered: false,
-                  ),
-                ),
             ],
           ),
         );
@@ -1793,9 +1781,8 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     IconData icon,
     double size,
     double iconSize,
-    VoidCallback onTap, {
-    bool bordered = true,
-  }) {
+    VoidCallback onTap,
+  ) {
     return _Push(
       onTap: onTap,
       builder: (down) => Container(
@@ -1807,9 +1794,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: bordered
-                ? const [_gold, _goldDeep]
-                : const [_gold, _goldDrop],
+            colors: const [_gold, _goldDeep],
           ),
           border: Border.all(color: _goldEdge, width: 5),
           boxShadow: [
@@ -1821,11 +1806,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
             ),
           ],
         ),
-        child: Icon(
-          icon,
-          size: iconSize,
-          color: bordered ? const Color(0xFFFFFBE9) : _goldInk,
-        ),
+        child: Icon(icon, size: iconSize, color: const Color(0xFFFFFBE9)),
       ),
     );
   }

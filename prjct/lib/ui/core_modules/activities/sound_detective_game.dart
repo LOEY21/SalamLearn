@@ -2582,7 +2582,6 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
             ),
           ),
         ),
-        Positioned(left: 12, top: 52, child: _backBtn(_start)),
         Positioned(right: 12, top: 52, child: _musicBtn()),
       ],
     );

@@ -77,6 +77,11 @@ void main() {
     expect(find.byKey(const ValueKey('trace-play')), findsOneWidget);
     expect(find.byType(LetterTraceCanvas), findsNothing);
 
+    // Home on the start screen leaves the lesson.
+    await wait(1800);
+    await tap('trace-home');
+    expect(backs, 1);
+
     // Play opens How to Play; Let's Go only appears after a 5s read.
     await wait(1800);
     await tap('trace-play');
@@ -115,6 +120,6 @@ void main() {
     expect(find.byType(LetterTraceCanvas), findsOneWidget);
 
     await tap('trace-back');
-    expect(backs, 1);
+    expect(backs, 2);
   });
 }

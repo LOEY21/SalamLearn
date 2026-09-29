@@ -7,10 +7,9 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter/services.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
-import '../../theme/app_colors.dart';
 import 'greeting_match_audio.dart';
 
-enum _Screen { start, play }
+enum _Screen { start, howTo, countdown, play, done }
 
 /// Tapped-choice feedback state for one answer button.
 enum _ChoiceState { idle, correct, wrong }
@@ -48,16 +47,31 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
     with TickerProviderStateMixin {
   _Screen _screen = _Screen.start;
   int _idx = 0;
-  int _correctCount = 0;
-  int _errors = 0;
+
+  /// One result per answered question: true = gold star, false = red star.
+  final List<bool> _results = [];
   double _wobble = 0.0;
   bool _playDown = false;
   int? _correctIdx;
   int? _wrongIdx;
+
+  /// After a wrong tap, the right answer lights up green so the learner
+  /// sees it before the game moves on.
+  int? _revealIdx;
   Timer? _wrongTimer;
   Timer? _nextTimer;
   Timer? _promptTimer;
   Timer? _revealTimer;
+
+  /// How to Play holds its Let's Play button back for 5 seconds so the
+  /// steps get read first.
+  static const _howToHold = Duration(seconds: 5);
+  bool _howToReady = false;
+  Timer? _howToTimer;
+
+  /// 3-2-1 before each round.
+  int _count = 3;
+  Timer? _countTimer;
 
   /// False while the scene is shown alone before the choices slide in.
   bool _revealed = false;
@@ -120,6 +134,8 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
     _nextTimer?.cancel();
     _promptTimer?.cancel();
     _revealTimer?.cancel();
+    _howToTimer?.cancel();
+    _countTimer?.cancel();
     _wobbleController.dispose();
     _idleController.dispose();
     _cheerController.dispose();
@@ -128,10 +144,82 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
   }
 
   void _startGame() {
+    HapticFeedback.mediumImpact();
+    _openHowTo();
+  }
+
+  void _openHowTo() {
+    _howToTimer?.cancel();
+    setState(() {
+      _screen = _Screen.howTo;
+      _howToReady = false;
+    });
+    _howToTimer = Timer(_howToHold, () {
+      if (mounted) setState(() => _howToReady = true);
+    });
+  }
+
+  void _backToStart() {
+    _howToTimer?.cancel();
+    setState(() => _screen = _Screen.start);
+  }
+
+  void _startCountdown() {
+    HapticFeedback.mediumImpact();
+    _countTimer?.cancel();
+    setState(() {
+      _screen = _Screen.countdown;
+      _count = 3;
+    });
+    _countTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return t.cancel();
+      if (_count > 1) {
+        HapticFeedback.selectionClick();
+        setState(() => _count--);
+      } else {
+        t.cancel();
+        _beginRound();
+      }
+    });
+  }
+
+  void _beginRound() {
     _idleController.stop();
     HapticFeedback.mediumImpact();
-    setState(() => _screen = _Screen.play);
+    setState(() {
+      _screen = _Screen.play;
+      _idx = 0;
+      _results.clear();
+      _correctIdx = null;
+      _wrongIdx = null;
+      _revealIdx = null;
+    });
     _queuePrompt();
+  }
+
+  int get _correctCount => _results.where((r) => r).length;
+  int get _errors => _results.where((r) => !r).length;
+
+  double get _accuracyPct => _results.isEmpty
+      ? 100.0
+      : _correctCount / _results.length * 100;
+
+  /// 3 stars for all correct, 2 from 60%, 1 for any correct, else 0.
+  int get _starRating => _errors == 0
+      ? 3
+      : _accuracyPct >= 60
+      ? 2
+      : _correctCount > 0
+      ? 1
+      : 0;
+
+  void _finish() =>
+      widget.onComplete(widget.xp, _accuracyPct, _errors);
+
+  void _playAgain() {
+    HapticFeedback.mediumImpact();
+    _idleController.repeat();
+    _openHowTo();
   }
 
   /// Auto-plays the greeting once the new scene has faded in.
@@ -172,8 +260,10 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
     unawaited(_audio.play([_question.audioAsset]));
   }
 
+  /// One tap per question: right = gold star, wrong = red star (the right
+  /// answer is shown, then the game moves on — no retry).
   void _handleChoice(int i) {
-    if (_correctIdx != null || !_revealed) return;
+    if (_results.length > _idx || !_revealed) return;
     final choice = _question.choices[i];
     if (choice.correct) {
       HapticFeedback.lightImpact();
@@ -181,7 +271,7 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
       setState(() {
         _correctIdx = i;
         _wrongIdx = null;
-        _correctCount++;
+        _results.add(true);
       });
       if (MediaQuery.of(context).disableAnimations) {
         _cheerController.value = 1;
@@ -192,34 +282,41 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
       _nextTimer = Timer(const Duration(milliseconds: 1600), _next);
     } else {
       HapticFeedback.heavyImpact();
+      final right = _question.choices.indexWhere((c) => c.correct);
       setState(() {
-        _errors++;
         _wrongIdx = i;
+        _results.add(false);
       });
       if (!MediaQuery.of(context).disableAnimations) {
         _wobbleController.forward(from: 0);
       }
-      unawaited(_audio.play([GreetingMatchAudio.tryAgain]));
+      unawaited(
+        _audio.play([
+          GreetingMatchAudio.tryAgain,
+          _question.choices[right].audioAsset,
+        ]),
+      );
       _wrongTimer?.cancel();
       _wrongTimer = Timer(const Duration(milliseconds: 700), () {
-        if (mounted) setState(() => _wrongIdx = null);
+        if (mounted) setState(() => _revealIdx = right);
       });
+      _nextTimer = Timer(const Duration(milliseconds: 2400), _next);
     }
   }
 
   void _next() {
     if (!mounted) return;
     if (_idx + 1 >= _questions.length) {
-      final totalAttempts = _correctCount + _errors;
-      final accuracyPct = totalAttempts == 0
-          ? 100.0
-          : _correctCount / totalAttempts * 100;
-      widget.onComplete(widget.xp, accuracyPct, _errors);
+      _promptTimer?.cancel();
+      _revealTimer?.cancel();
+      _idleController.repeat();
+      setState(() => _screen = _Screen.done);
     } else {
       setState(() {
         _idx++;
         _correctIdx = null;
         _wrongIdx = null;
+        _revealIdx = null;
       });
       _queuePrompt();
     }
@@ -227,13 +324,447 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
 
   @override
   Widget build(BuildContext context) {
-    if (_screen == _Screen.start) {
-      return _buildStartScreen();
-    }
-    return _buildPlayScreen();
+    return AnimatedSwitcher(
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 450),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      child: KeyedSubtree(
+        key: ValueKey(_screen),
+        child: switch (_screen) {
+          _Screen.start => _buildStartScreen(),
+          _Screen.howTo => _buildHowToScreen(),
+          _Screen.countdown => _buildCountdownScreen(),
+          _Screen.play => _buildPlayScreen(),
+          _Screen.done => _buildEndScreen(),
+        },
+      ),
+    );
   }
 
+  // Shared 1870x841 canvas over the classroom scene, washed back so cards
+  // read clearly; Home + Music sit top-right like every other screen.
+  Widget _sceneCanvas({
+    required List<Widget> children,
+    VoidCallback? onBackTap,
+    required String keyPrefix,
+    bool home = true,
+  }) {
+    final showHome = home && widget.onBack != null;
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: const BoxDecoration(
+        color: Color(0xFFFAF6EC),
+        image: DecorationImage(
+          image: AssetImage('assets/images/greeting_match/start_bg.png'),
+          fit: BoxFit.cover,
+        ),
+      ),
+      child: Container(
+        color: const Color(0xFFFFF7E6).withValues(alpha: 0.55),
+        child: SafeArea(
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.contain,
+              child: SizedBox(
+                width: 1870,
+                height: 841,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    ...children,
+                    if (onBackTap != null)
+                      Positioned(
+                        left: 32,
+                        top: 14,
+                        width: 110,
+                        height: 110,
+                        child: _backButton(Key('$keyPrefix-back'), onBackTap),
+                      ),
+                    if (showHome)
+                      Positioned(
+                        right: 32,
+                        top: 14,
+                        width: 110,
+                        height: 110,
+                        child: _homeButton(
+                          Key('$keyPrefix-home'),
+                          widget.onBack!,
+                        ),
+                      ),
+                    Positioned(
+                      right: showHome ? 162 : 32,
+                      top: 14,
+                      width: 110,
+                      height: 110,
+                      child: _musicButton(Key('$keyPrefix-music')),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── HOW TO PLAY ─────────────────────────────────────────────────────────────
+
+  Widget _buildHowToScreen() {
+    const steps = [
+      (
+        Icons.volume_up_rounded,
+        _Palette.blue,
+        'Watch & Listen',
+        'Look at the picture and listen to the greeting.',
+      ),
+      (
+        Icons.touch_app_rounded,
+        _Palette.gold,
+        'Tap the Reply',
+        'Tap the correct Arabic reply to the greeting.',
+      ),
+      (
+        Icons.star_rounded,
+        _Palette.green,
+        'Earn Stars',
+        'Get a Greeting Star for every right answer!',
+      ),
+    ];
+    return _sceneCanvas(
+      keyPrefix: 'greeting-howto',
+      onBackTap: _backToStart,
+      children: [
+        const Positioned(
+          left: 0,
+          right: 0,
+          top: 12,
+          child: Center(
+            child: _Enter(
+              from: Offset(0, -0.4),
+              scale: 0.9,
+              curve: Curves.easeOutBack,
+              child: _TitleBadge(title: 'How to Play'),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 170,
+          right: 170,
+          top: 215,
+          height: 400,
+          child: Row(
+            children: [
+              for (final (i, (icon, palette, title, text)) in steps.indexed) ...[
+                if (i > 0) const SizedBox(width: 50),
+                Expanded(
+                  child: _Enter(
+                    delay: 250 + i * 160,
+                    from: const Offset(0, 0.18),
+                    scale: 0.94,
+                    child: _StepCard(
+                      number: i + 1,
+                      icon: icon,
+                      palette: palette,
+                      title: title,
+                      text: text,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (_howToReady)
+          Positioned(
+            left: (1870 - 480) / 2,
+            top: 668,
+            width: 480,
+            height: 118,
+            child: _Enter(
+              duration: 600,
+              from: Offset.zero,
+              scale: 0.4,
+              curve: Curves.easeOutBack,
+              child: _GlossyButton(
+                key: const Key('greeting-howto-play'),
+                palette: _Palette.green,
+                radius: 56,
+                depth: 9,
+                outline: Colors.white,
+                onTap: _startCountdown,
+                child: const _IconLabel(
+                  icon: Icons.play_arrow_rounded,
+                  label: "Let's Play!",
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // ─── COUNTDOWN ───────────────────────────────────────────────────────────────
+
+  Widget _buildCountdownScreen() {
+    return _sceneCanvas(
+      keyPrefix: 'greeting-countdown',
+      children: [
+        const Positioned(
+          left: 0,
+          right: 0,
+          top: 12,
+          child: Center(
+            child: _Enter(
+              from: Offset(0, -0.4),
+              scale: 0.9,
+              curve: Curves.easeOutBack,
+              child: _TitleBadge(title: 'Get Ready!'),
+            ),
+          ),
+        ),
+        Positioned(
+          left: (1870 - 360) / 2,
+          top: 250,
+          width: 360,
+          height: 360,
+          child: _Enter(
+            key: ValueKey('greeting-countdown-$_count'),
+            duration: 480,
+            from: Offset.zero,
+            scale: 0.3,
+            curve: Curves.easeOutBack,
+            child: _GlossyButton(
+              palette: _Palette.gold,
+              radius: 180,
+              depth: 14,
+              outline: Colors.white,
+              child: Text(
+                '$_count',
+                style: const TextStyle(
+                  fontFamily: _kUiFont,
+                  fontSize: 210,
+                  height: 1.0,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF6E3A08),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const Positioned(
+          left: 0,
+          right: 0,
+          top: 668,
+          child: Center(
+            child: _Enter(
+              delay: 200,
+              child: Text(
+                'Listen carefully!',
+                style: TextStyle(
+                  fontFamily: _kUiFont,
+                  fontSize: 46,
+                  fontWeight: FontWeight.w800,
+                  color: _kInk,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─── ENDING ──────────────────────────────────────────────────────────────────
+
+  Widget _buildEndScreen() {
+    final rating = _starRating;
+    return _sceneCanvas(
+      keyPrefix: 'greeting-end',
+      home: false,
+      children: [
+        // Zara and Amir cheering either side of the results card.
+        Positioned(
+          left: 40,
+          top: 300,
+          width: 390,
+          height: 520,
+          child: _Enter(
+            delay: 250,
+            from: const Offset(-0.6, 0),
+            duration: 700,
+            child: _bob(
+              Image.asset(
+                'assets/images/greeting_match/start_girl.png',
+                fit: BoxFit.contain,
+              ),
+              phase: 0,
+            ),
+          ),
+        ),
+        Positioned(
+          right: 40,
+          top: 300,
+          width: 390,
+          height: 520,
+          child: _Enter(
+            delay: 350,
+            from: const Offset(0.6, 0),
+            duration: 700,
+            child: _bob(
+              Image.asset(
+                'assets/images/greeting_match/start_boy.png',
+                fit: BoxFit.contain,
+              ),
+              phase: 0.5,
+            ),
+          ),
+        ),
+        const Positioned(
+          left: 0,
+          right: 0,
+          top: 12,
+          child: Center(
+            child: _Enter(
+              from: Offset(0, -0.4),
+              scale: 0.8,
+              duration: 650,
+              curve: Curves.easeOutBack,
+              child: _TitleBadge(title: 'Great Job!'),
+            ),
+          ),
+        ),
+        Positioned(
+          key: const Key('greeting-end'),
+          left: 460,
+          right: 460,
+          top: 196,
+          height: 468,
+          child: _Enter(
+            delay: 300,
+            from: const Offset(0, 0.08),
+            scale: 0.88,
+            duration: 600,
+            curve: Curves.easeOutBack,
+            child: _ResultsCard(
+              rating: rating,
+              results: _results,
+              accuracyPct: _accuracyPct,
+              xp: widget.xp,
+              questions: _questions,
+            ),
+          ),
+        ),
+        Positioned(
+          left: 1870 / 2 - 420,
+          top: 692,
+          width: 400,
+          height: 112,
+          child: _Enter(
+            delay: 1100,
+            from: const Offset(0, 0.5),
+            child: _GlossyButton(
+              key: const Key('greeting-end-replay'),
+              palette: _Palette.blue,
+              radius: 52,
+              depth: 9,
+              outline: Colors.white,
+              onTap: _playAgain,
+              child: const _IconLabel(
+                icon: Icons.replay_rounded,
+                label: 'Play Again',
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 1870 / 2 + 20,
+          top: 692,
+          width: 400,
+          height: 112,
+          child: _Enter(
+            delay: 1200,
+            from: const Offset(0, 0.5),
+            child: _GlossyButton(
+              key: const Key('greeting-end-continue'),
+              palette: _Palette.green,
+              radius: 52,
+              depth: 9,
+              outline: Colors.white,
+              onTap: _finish,
+              child: const _IconLabel(
+                icon: Icons.arrow_forward_rounded,
+                label: 'Continue',
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Gentle idle bob for the cheering mascots.
+  Widget _bob(Widget child, {required double phase}) => AnimatedBuilder(
+    animation: _idleController,
+    builder: (context, child) {
+      final t = (_idleController.value + phase) % 1.0;
+      return Transform.translate(
+        offset: Offset(0, math.sin(t * 2 * math.pi) * 8),
+        child: child,
+      );
+    },
+    child: child,
+  );
+
   // ─── START SCREEN ────────────────────────────────────────────────────────────
+
+  bool _muted = false;
+
+  void _toggleMuted() {
+    setState(() => _muted = !_muted);
+    unawaited(_audio.setMuted(_muted));
+  }
+
+  /// Music note = sound on/off. Muted shows greyed out with a red slash.
+  Widget _musicButton(Key key) => _Enter(
+    delay: 520,
+    from: Offset.zero,
+    scale: 0.7,
+    curve: Curves.easeOutBack,
+    child: _musicToggle(key),
+  );
+
+  Widget _musicToggle(Key key) => Semantics(
+    button: true,
+    toggled: !_muted,
+    label: _muted ? 'Sound off' : 'Sound on',
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        ColorFiltered(
+          colorFilter: _muted
+              ? const ColorFilter.matrix([
+                  0.5, 0.35, 0.1, 0, 0, //
+                  0.4, 0.4, 0.1, 0, 0, //
+                  0.35, 0.3, 0.2, 0, 0, //
+                  0, 0, 0, 1, 0,
+                ])
+              : const ColorFilter.mode(Color(0x00000000), BlendMode.dst),
+          child: _ImageButton(key: key, name: 'music', onTap: _toggleMuted),
+        ),
+        if (_muted)
+          IgnorePointer(
+            child: CustomPaint(painter: _MutedSlashPainter()),
+          ),
+      ],
+    ),
+  );
 
   Widget _buildStartScreen() {
     const double canvasW = 1870.0;
@@ -269,39 +800,35 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                         ),
                       ),
 
-                      // Back Button (if provided)
-                      if (widget.onBack != null)
+                      if (widget.onBack != null) ...[
                         Positioned(
-                          top: 24,
-                          left: 24,
-                          child: GestureDetector(
-                            onTap: widget.onBack,
-                            child: Container(
-                              width: 56,
-                              height: 56,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.9),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: AppColors.creamBorder,
-                                  width: 2,
-                                ),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Colors.black12,
-                                    blurRadius: 8,
-                                    offset: Offset(0, 3),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.arrow_back_rounded,
-                                size: 30,
-                                color: AppColors.ink,
-                              ),
-                            ),
+                          left: 32,
+                          top: 14,
+                          width: 110,
+                          height: 110,
+                          child: _backButton(
+                            const Key('greeting-start-back'),
+                            widget.onBack!,
                           ),
                         ),
+                        Positioned(
+                          right: 32,
+                          top: 14,
+                          width: 110,
+                          height: 110,
+                          child: _homeButton(
+                            const Key('greeting-start-home'),
+                            widget.onBack!,
+                          ),
+                        ),
+                      ],
+                      Positioned(
+                        right: widget.onBack != null ? 162 : 32,
+                        top: 14,
+                        width: 110,
+                        height: 110,
+                        child: _musicButton(const Key('greeting-start-music')),
+                      ),
 
                       // Floor shadows under the mascots' feet
                       const Positioned(
@@ -325,9 +852,14 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                         top: 239,
                         width: 422,
                         height: 562,
-                        child: Image.asset(
-                          'assets/images/greeting_match/start_girl.png',
-                          fit: BoxFit.contain,
+                        child: _Enter(
+                          delay: 250,
+                          from: const Offset(-0.5, 0),
+                          duration: 650,
+                          child: Image.asset(
+                            'assets/images/greeting_match/start_girl.png',
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
                       Positioned(
@@ -335,9 +867,14 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                         top: 253,
                         width: 413,
                         height: 550,
-                        child: Image.asset(
-                          'assets/images/greeting_match/start_boy.png',
-                          fit: BoxFit.contain,
+                        child: _Enter(
+                          delay: 330,
+                          from: const Offset(0.5, 0),
+                          duration: 650,
+                          child: Image.asset(
+                            'assets/images/greeting_match/start_boy.png',
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
 
@@ -352,7 +889,13 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                             top: 26 + dy,
                             width: 560,
                             height: 446,
-                            child: child!,
+                            child: _Enter(
+                              from: const Offset(0, -0.3),
+                              scale: 0.85,
+                              duration: 700,
+                              curve: Curves.easeOutBack,
+                              child: child!,
+                            ),
                           );
                         },
                         child: Stack(
@@ -403,47 +946,51 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                         top: 480,
                         width: 645,
                         height: 53,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Positioned.fill(
-                              child: FittedBox(
-                                fit: BoxFit.fill,
-                                child: SizedBox(
-                                  width: 5234,
-                                  height: 430,
-                                  child: Image.asset(
-                                    'assets/images/greeting_match/start_pill.png',
-                                    fit: BoxFit.fill,
-                                    centerSlice: const Rect.fromLTRB(
-                                      240,
-                                      0,
-                                      1645,
-                                      430,
+                        child: _Enter(
+                          delay: 450,
+                          from: const Offset(0, 0.6),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Positioned.fill(
+                                child: FittedBox(
+                                  fit: BoxFit.fill,
+                                  child: SizedBox(
+                                    width: 5234,
+                                    height: 430,
+                                    child: Image.asset(
+                                      'assets/images/greeting_match/start_pill.png',
+                                      fit: BoxFit.fill,
+                                      centerSlice: const Rect.fromLTRB(
+                                        240,
+                                        0,
+                                        1645,
+                                        430,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 26,
-                              ),
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  widget.session.subtitle,
-                                  textAlign: TextAlign.center,
-                                  maxLines: 1,
-                                  style: const TextStyle(
-                                    color: Color(0xFF5B3B1E),
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w800,
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 26,
+                                ),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    widget.session.subtitle,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    style: const TextStyle(
+                                      color: Color(0xFF5B3B1E),
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
 
@@ -453,9 +1000,15 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                         top: 572,
                         width: 56,
                         height: 64,
-                        child: Image.asset(
-                          'assets/images/greeting_match/start_rays.png',
-                          fit: BoxFit.contain,
+                        child: _Enter(
+                          delay: 700,
+                          from: Offset.zero,
+                          scale: 0.3,
+                          curve: Curves.easeOutBack,
+                          child: Image.asset(
+                            'assets/images/greeting_match/start_rays.png',
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
                       Positioned(
@@ -465,9 +1018,15 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                         height: 64,
                         child: Transform.flip(
                           flipX: true,
-                          child: Image.asset(
-                            'assets/images/greeting_match/start_rays.png',
-                            fit: BoxFit.contain,
+                          child: _Enter(
+                            delay: 700,
+                            from: Offset.zero,
+                            scale: 0.3,
+                            curve: Curves.easeOutBack,
+                            child: Image.asset(
+                              'assets/images/greeting_match/start_rays.png',
+                              fit: BoxFit.contain,
+                            ),
                           ),
                         ),
                       ),
@@ -490,20 +1049,27 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                               child: child,
                             );
                           },
-                          child: GestureDetector(
-                            key: const Key('greeting-match-play-btn'),
-                            onTapDown: (_) => setState(() => _playDown = true),
-                            onTapUp: (_) {
-                              setState(() => _playDown = false);
-                              _startGame();
-                            },
-                            onTapCancel: () =>
-                                setState(() => _playDown = false),
-                            child: Image.asset(
-                              _playDown
-                                  ? 'assets/images/greeting_match/start_play_down.png'
-                                  : 'assets/images/greeting_match/start_play.png',
-                              fit: BoxFit.contain,
+                          child: _Enter(
+                            delay: 560,
+                            from: Offset.zero,
+                            scale: 0.6,
+                            duration: 600,
+                            curve: Curves.easeOutBack,
+                            child: GestureDetector(
+                              key: const Key('greeting-match-play-btn'),
+                              onTapDown: (_) => setState(() => _playDown = true),
+                              onTapUp: (_) {
+                                setState(() => _playDown = false);
+                                _startGame();
+                              },
+                              onTapCancel: () =>
+                                  setState(() => _playDown = false),
+                              child: Image.asset(
+                                _playDown
+                                    ? 'assets/images/greeting_match/start_play_down.png'
+                                    : 'assets/images/greeting_match/start_play.png',
+                                fit: BoxFit.contain,
+                              ),
                             ),
                           ),
                         ),
@@ -542,11 +1108,16 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                 child: child,
               );
             },
-            child: Image.asset(
-              question.scenarioImage,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
+            child: _Enter(
+              duration: 900,
+              from: Offset.zero,
+              scale: 1.06,
+              child: Image.asset(
+                question.scenarioImage,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+              ),
             ),
           ),
         ),
@@ -569,14 +1140,14 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                       ),
                     ),
                     Positioned(
-                      left: (canvasW - 640) / 2,
-                      top: 20,
-                      width: 640,
-                      height: 84,
+                      left: (canvasW - _StarsBar.widthFor(_questions.length)) / 2,
+                      top: 18,
+                      width: _StarsBar.widthFor(_questions.length),
+                      height: 92,
                       child: _reveal(
                         _StarsBar(
                           total: _questions.length,
-                          earned: _correctCount,
+                          results: _results,
                         ),
                         dy: -0.6,
                       ),
@@ -585,22 +1156,20 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                       Positioned(
                         right: 32,
                         top: 14,
-                        width: 104,
-                        height: 104,
-                        child: _GlossyButton(
-                          key: const Key('greeting-home'),
-                          palette: _Palette.gold,
-                          radius: 52,
-                          depth: 7,
-                          outline: Colors.white,
-                          onTap: widget.onBack,
-                          child: const Icon(
-                            Icons.home_rounded,
-                            size: 58,
-                            color: Color(0xFF6E3A08),
-                          ),
+                        width: 110,
+                        height: 110,
+                        child: _homeButton(
+                          const Key('greeting-home'),
+                          widget.onBack!,
                         ),
                       ),
+                    Positioned(
+                      right: widget.onBack != null ? 162 : 32,
+                      top: 14,
+                      width: 110,
+                      height: 110,
+                      child: _musicButton(const Key('greeting-music')),
+                    ),
 
                     // "Mumtaz!" badge over the scene on a correct answer.
                     Positioned(
@@ -647,7 +1216,7 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                                 child: _ChoiceButton(
                                   key: Key('greeting-choice-$i'),
                                   choice: question.choices[i],
-                                  state: _correctIdx == i
+                                  state: _correctIdx == i || _revealIdx == i
                                       ? _ChoiceState.correct
                                       : _wrongIdx == i
                                       ? _ChoiceState.wrong
@@ -1047,10 +1616,15 @@ class _RibbonPainter extends CustomPainter {
 }
 
 class _StarsBar extends StatelessWidget {
-  const _StarsBar({required this.total, required this.earned});
+  const _StarsBar({required this.total, required this.results});
 
   final int total;
-  final int earned;
+
+  /// Room for the label at full size plus one 70px slot per star.
+  static double widthFor(int total) => 330 + total * 70.0;
+
+  /// Answered questions so far: true = gold, false = red; the rest empty.
+  final List<bool> results;
 
   @override
   Widget build(BuildContext context) {
@@ -1074,35 +1648,33 @@ class _StarsBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Flexible(
+          const Expanded(
             child: FittedBox(
               fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
               child: Text(
                 'Greeting Stars',
                 style: TextStyle(
                   fontFamily: _kUiFont,
-                  fontSize: 30,
+                  fontSize: 36,
                   fontWeight: FontWeight.w800,
                   color: _kInk,
                 ),
               ),
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: 12),
           for (var i = 0; i < total; i++)
             TweenAnimationBuilder<double>(
-              key: Key('greeting-star-$i-${i < earned ? 'on' : 'off'}'),
-              tween: Tween(begin: i < earned ? 0.55 : 1.0, end: 1.0),
+              key: Key('greeting-star-$i-${_StarKind.of(results, i).name}'),
+              tween: Tween(begin: i < results.length ? 0.55 : 1.0, end: 1.0),
               duration: const Duration(milliseconds: 420),
-              curve: Curves.easeOutQuart,
+              curve: Curves.easeOutBack,
               builder: (context, s, child) =>
                   Transform.scale(scale: s, child: child),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 3),
-                child: CustomPaint(
-                  size: const Size(62, 62),
-                  painter: _StarPainter(filled: i < earned),
-                ),
+                child: _StarImage(kind: _StarKind.of(results, i), size: 64),
               ),
             ),
         ],
@@ -1111,62 +1683,36 @@ class _StarsBar extends StatelessWidget {
   }
 }
 
-/// Rounded five-point star: gold with a gloss when [filled], stone grey
-/// otherwise.
-class _StarPainter extends CustomPainter {
-  const _StarPainter({required this.filled});
+enum _StarKind {
+  gold,
+  red,
+  empty;
 
-  final bool filled;
+  static _StarKind of(List<bool> results, int i) => i >= results.length
+      ? empty
+      : results[i]
+      ? gold
+      : red;
+}
+
+/// The Greeting Star art: gold (right), red (wrong), grey (not yet / not
+/// earned).
+class _StarImage extends StatelessWidget {
+  const _StarImage({required this.kind, required this.size});
+
+  final _StarKind kind;
+  final double size;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width / 2, size.height * 0.53);
-    final outer = size.width * 0.46;
-    final inner = outer * 0.5;
-    final path = Path();
-    for (var i = 0; i < 10; i++) {
-      final r = i.isEven ? outer : inner;
-      final a = -math.pi / 2 + i * math.pi / 5;
-      final p = c + Offset(math.cos(a) * r, math.sin(a) * r);
-      i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
-    }
-    path.close();
-
-    final bounds = path.getBounds();
-    final line = filled ? const Color(0xFFC06A00) : const Color(0xFF8F8878);
-    final stroke = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = 7
-      ..color = line;
-    canvas.drawPath(path.shift(const Offset(0, 3)), stroke);
-    canvas.drawPath(path, stroke);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..strokeJoin = StrokeJoin.round
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: filled
-              ? const [Color(0xFFFFEE70), Color(0xFFFFB400)]
-              : const [Color(0xFFE4E0D6), Color(0xFFB8B2A4)],
-        ).createShader(bounds),
+  Widget build(BuildContext context) {
+    return Image.asset(
+      'assets/images/greeting_match/star_${kind.name}.png',
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      gaplessPlayback: true,
     );
-    if (filled) {
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: c + Offset(-outer * 0.22, -outer * 0.3),
-          width: outer * 0.36,
-          height: outer * 0.2,
-        ),
-        Paint()..color = Colors.white.withValues(alpha: 0.75),
-      );
-    }
   }
-
-  @override
-  bool shouldRepaint(_StarPainter old) => old.filled != filled;
 }
 
 class _PromptCard extends StatelessWidget {
@@ -1412,6 +1958,514 @@ class _FloorShadow extends StatelessWidget {
           color: Color(0x963A2410),
         ),
       ),
+    );
+  }
+}
+
+// Home / Back / Music image buttons (art: assets/images/greeting_match/
+// btn_<name>_up.png and _down.png, swapped while pressed).
+Widget _homeButton(Key key, VoidCallback onTap) => _Enter(
+  delay: 450,
+  from: Offset.zero,
+  scale: 0.7,
+  curve: Curves.easeOutBack,
+  child: _ImageButton(key: key, name: 'home', onTap: onTap),
+);
+
+Widget _backButton(Key key, VoidCallback onTap) => _Enter(
+  delay: 450,
+  from: Offset.zero,
+  scale: 0.7,
+  curve: Curves.easeOutBack,
+  child: _ImageButton(key: key, name: 'back', onTap: onTap),
+);
+
+class _ImageButton extends StatefulWidget {
+  const _ImageButton({super.key, required this.name, required this.onTap});
+
+  final String name;
+  final VoidCallback onTap;
+
+  @override
+  State<_ImageButton> createState() => _ImageButtonState();
+}
+
+class _ImageButtonState extends State<_ImageButton> {
+  bool _down = false;
+
+  void _setDown(bool down) {
+    if (_down != down) setState(() => _down = down);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = _down ? 'down' : 'up';
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => _setDown(true),
+      onTapCancel: () => _setDown(false),
+      onTapUp: (_) => _setDown(false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _down ? 0.92 : 1,
+        duration: const Duration(milliseconds: 90),
+        curve: Curves.easeOutQuart,
+        child: Image.asset(
+          'assets/images/greeting_match/btn_${widget.name}_$state.png',
+          gaplessPlayback: true,
+        ),
+      ),
+    );
+  }
+}
+
+class _MutedSlashPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final a = Offset(size.width * 0.24, size.height * 0.24);
+    final b = Offset(size.width * 0.76, size.height * 0.76);
+    canvas.drawLine(
+      a,
+      b,
+      paint
+        ..color = Colors.white
+        ..strokeWidth = size.width * 0.13,
+    );
+    canvas.drawLine(
+      a,
+      b,
+      paint
+        ..color = const Color(0xFFE2372F)
+        ..strokeWidth = size.width * 0.08,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_MutedSlashPainter oldDelegate) => false;
+}
+
+/// How to Play step: numbered cream card with a glossy icon disc.
+class _StepCard extends StatelessWidget {
+  const _StepCard({
+    required this.number,
+    required this.icon,
+    required this.palette,
+    required this.title,
+    required this.text,
+  });
+
+  final int number;
+  final IconData icon;
+  final _Palette palette;
+  final String title;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned.fill(
+          child: _CreamCard(
+            padding: const EdgeInsets.fromLTRB(28, 40, 28, 28),
+            child: Column(
+              children: [
+                SizedBox(
+                  width: 150,
+                  height: 150,
+                  child: _GlossyButton(
+                    palette: palette,
+                    radius: 75,
+                    depth: 8,
+                    outline: Colors.white,
+                    child: Icon(
+                      icon,
+                      size: 84,
+                      color: Colors.white,
+                      shadows: const [
+                        Shadow(color: Color(0x59000000), offset: Offset(0, 3)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 22),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontFamily: _kUiFont,
+                      fontSize: 42,
+                      fontWeight: FontWeight.w800,
+                      color: _kInk,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: Text(
+                    text,
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: _kUiFont,
+                      fontSize: 29,
+                      height: 1.2,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF6B4A22),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          left: -14,
+          top: -18,
+          width: 76,
+          height: 76,
+          child: _GlossyButton(
+            palette: _Palette.gold,
+            radius: 38,
+            depth: 6,
+            outline: Colors.white,
+            child: Text(
+              '$number',
+              style: const TextStyle(
+                fontFamily: _kUiFont,
+                fontSize: 40,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF6E3A08),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Parchment card used by the prompt, How to Play and results panels.
+class _CreamCard extends StatelessWidget {
+  const _CreamCard({required this.child, required this.padding});
+
+  final Widget child;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFE9D3A0),
+        borderRadius: BorderRadius.circular(48),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x4D000000),
+            blurRadius: 22,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(6),
+      child: Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFFFFDF6), Color(0xFFFBF1DA)],
+          ),
+          borderRadius: BorderRadius.circular(42),
+          border: Border.all(color: Colors.white, width: 3),
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+/// Ending summary: star rating, round stats and every greeting pair the
+/// learner matched (prompt -> reply, with the reply's meaning).
+class _ResultsCard extends StatelessWidget {
+  const _ResultsCard({
+    required this.rating,
+    required this.results,
+    required this.accuracyPct,
+    required this.xp,
+    required this.questions,
+  });
+
+  final int rating;
+  final List<bool> results;
+  final double accuracyPct;
+  final int xp;
+  final List<GreetingQuestion> questions;
+
+  @override
+  Widget build(BuildContext context) {
+    return _CreamCard(
+      padding: const EdgeInsets.fromLTRB(34, 18, 34, 20),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (var i = 0; i < 3; i++)
+                _Enter(
+                  delay: 700 + i * 200,
+                  duration: 600,
+                  from: Offset.zero,
+                  scale: 0.2,
+                  curve: Curves.elasticOut,
+                  child: Padding(
+                    key: Key('greeting-end-star-$i-${i < rating ? 'on' : 'off'}'),
+                    padding: EdgeInsets.fromLTRB(8, i == 1 ? 0 : 14, 8, 0),
+                    child: _StarImage(
+                      kind: i < rating ? _StarKind.gold : _StarKind.empty,
+                      size: i == 1 ? 104 : 84,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              'You got ${results.where((r) => r).length} of ${questions.length} right!',
+              style: const TextStyle(
+                fontFamily: _kUiFont,
+                fontSize: 40,
+                fontWeight: FontWeight.w800,
+                color: _kInk,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _StatPill(
+                icon: Icons.track_changes_rounded,
+                label: 'Accuracy ${accuracyPct.round()}%',
+              ),
+              const SizedBox(width: 16),
+              _StatPill(icon: Icons.bolt_rounded, label: '+$xp XP'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Greetings you learned',
+              style: TextStyle(
+                fontFamily: _kUiFont,
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF8A5A1E),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Expanded(
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              itemCount: questions.length,
+              separatorBuilder: (_, _) =>
+                  const Divider(height: 6, color: Color(0xFFEBD9AE)),
+              itemBuilder: (_, i) {
+                final q = questions[i];
+                final reply = q.choices.firstWhere((c) => c.correct);
+                return Row(
+                  key: Key('greeting-end-row-$i'),
+                  children: [
+                    _StarImage(
+                      kind: _StarKind.of(results, i),
+                      size: 38,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          q.arabic,
+                          textDirection: TextDirection.rtl,
+                          style: const TextStyle(
+                            fontFamily: _kArabicFont,
+                            fontSize: 30,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF2E1D0B),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      child: Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 30,
+                        color: Color(0xFF2BAA35),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: reply.arabic,
+                                style: const TextStyle(
+                                  fontFamily: _kArabicFont,
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF16701E),
+                                ),
+                              ),
+                              TextSpan(
+                                text: '  (${reply.meaning.tr})',
+                                style: const TextStyle(
+                                  fontFamily: _kUiFont,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF6B4A22),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatPill extends StatelessWidget {
+  const _StatPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1C9),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE9C766), width: 3),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 30, color: const Color(0xFFC06A00)),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: _kUiFont,
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+              color: _kInk,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Entrance motion: fades in while easing from [from] (a fraction of the
+/// child's own size) and [scale] to rest, after [delay] ms. Plays once per
+/// element, so it runs when its screen (or keyed parent) appears. Skipped
+/// when the device asks to reduce motion.
+class _Enter extends StatefulWidget {
+  const _Enter({
+    super.key,
+    required this.child,
+    this.delay = 0,
+    this.duration = 550,
+    this.from = const Offset(0, 0.2),
+    this.scale = 1,
+    this.curve = Curves.easeOutCubic,
+  });
+
+  final Widget child;
+  final int delay;
+  final int duration;
+  final Offset from;
+  final double scale;
+  final Curve curve;
+
+  @override
+  State<_Enter> createState() => _EnterState();
+}
+
+class _EnterState extends State<_Enter> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: Duration(milliseconds: widget.duration),
+  );
+  Timer? _start;
+
+  @override
+  void initState() {
+    super.initState();
+    _start = Timer(Duration(milliseconds: widget.delay), () {
+      if (mounted) _c.forward();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _start?.cancel();
+      _c.value = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    _start?.cancel();
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      child: widget.child,
+      builder: (context, child) {
+        final t = widget.curve.transform(_c.value);
+        final fade = Curves.easeOut.transform((_c.value * 1.8).clamp(0.0, 1.0));
+        return Opacity(
+          opacity: fade,
+          child: FractionalTranslation(
+            translation: widget.from * (1 - t),
+            child: Transform.scale(
+              scale: widget.scale + (1 - widget.scale) * t,
+              child: child,
+            ),
+          ),
+        );
+      },
     );
   }
 }

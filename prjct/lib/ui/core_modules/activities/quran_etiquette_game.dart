@@ -334,6 +334,25 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
       _narrating = false;
       _panelT0 = _now;
     });
+    _narrateChoices();
+  }
+
+  /// Reads both choices aloud in on-screen order once they appear. A pick,
+  /// replay or the next question cuts the chain.
+  void _narrateChoices() {
+    final audio = _audio;
+    if (audio == null) return;
+    final a = _questionAudio;
+    final first = _correctFirst ? a.correct : a.decoy;
+    final second = _correctFirst ? a.decoy : a.correct;
+    unawaited(
+      audio.play(
+        first,
+        onComplete: () {
+          if (mounted) unawaited(audio.play(second));
+        },
+      ),
+    );
   }
 
   void _fallbackReveal() {
@@ -406,11 +425,7 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
   /// the Star Meter marks the socket accordingly.
   void _pick(bool good) {
     if (_answered || _missed || _narrating) return;
-    if (_audio != null) {
-      unawaited(
-        _audio!.play(good ? _questionAudio.correct : _questionAudio.decoy),
-      );
-    }
+    if (_audio != null) unawaited(_audio!.stopVoice());
     if (good) {
       HapticFeedback.mediumImpact();
     } else {

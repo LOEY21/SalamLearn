@@ -741,7 +741,8 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     _Screen.puzzle => _buildPuzzle(t),
     _Screen.instructions => _withBack(_buildInstructions(t)),
     _Screen.listen => _withBack(_buildListen(t)),
-    _Screen.reward => _withBack(_buildReward(t)),
+    // No back on the ending: Continue or Play Again moves on.
+    _Screen.reward => _buildReward(t),
   };
 
   Widget _withBack(Widget screen) => Stack(

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/curriculum_data.dart';
@@ -57,6 +56,7 @@ class LessonPlayerScreen extends ConsumerStatefulWidget {
     required this.destinationId,
     required this.onClose,
     this.uiAudio,
+    this.classroomPlay = false,
   });
 
   final Lesson lesson;
@@ -67,6 +67,10 @@ class LessonPlayerScreen extends ConsumerStatefulWidget {
   final int destinationId;
   final VoidCallback onClose;
   final GameUiAudioPlayback? uiAudio;
+
+  /// Played on the classroom projector from the Cast screen — no learner is
+  /// signed in, so nothing is awarded or recorded (same path as a replay).
+  final bool classroomPlay;
 
   @override
   ConsumerState<LessonPlayerScreen> createState() => _LessonPlayerScreenState();
@@ -122,6 +126,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
     WidgetsBinding.instance.addObserver(this);
     final learnerId = ref.read(sessionProvider).learner?.id;
     _alreadyCompleted =
+        widget.classroomPlay ||
         learnerId != null &&
         ProgressRepository()
             .completedLessonIds(learnerId)
@@ -262,6 +267,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
   // The hunt's, Classroom Heroes', Ayah Builder's and Magic Sand Tracer's
   // own reward screens already carry the continue button.
   bool get _skipCompleteScreen =>
+      _activity.type == ActivityType.pronounce ||
       _activity.type == ActivityType.trace ||
       _activity.type == ActivityType.ayahBuilder ||
       _activity.type == ActivityType.creationHunt ||
@@ -326,13 +332,12 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
           // backgrounds are meant to run fully edge-to-edge — under the status
           // bar too — so unlike every other activity type they skip the
           // opaque top bar and title row entirely instead of just relocating
-          // them. Trace's and Ayah Builder's exits are handled by the back
-          // arrow baked into their own layout (see `onBack`); Greeting
-          // Match's background has no such baked-in control, so it gets a
-          // small floating close button instead.
+          // them. Their exits are the back/home buttons baked into their own
+          // layouts (see `onBack`).
           body: switch (_activity.type) {
             ActivityType.trace ||
-            ActivityType.ayahBuilder => _buildActivityContent(lessonColor),
+            ActivityType.ayahBuilder ||
+            ActivityType.pronounce => _buildActivityContent(lessonColor),
             // Wudhu Master and Allah's Creation Hunt bring their own
             // background, HUD and exit chip, so they run edge-to-edge like
             // Trace does.
@@ -347,16 +352,6 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
             ActivityType.soundDetective ||
             ActivityType.fiqhDrag when _isFullBleedActivity =>
               _buildActivityContent(lessonColor),
-            ActivityType.pronounce => Stack(
-              children: [
-                Positioned.fill(child: _buildActivityContent(lessonColor)),
-                Positioned(
-                  left: 16,
-                  top: MediaQuery.of(context).padding.top + 12,
-                  child: _buildFloatingClose(),
-                ),
-              ],
-            ),
             _ => Column(
               children: [
                 _buildTopBar(lessonColor, progress, totalXp),
@@ -374,39 +369,6 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
               ],
             ),
           },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFloatingClose() {
-    return Material(
-      color: Colors.transparent,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: () {
-          HapticFeedback.lightImpact();
-          _confirmExit();
-        },
-        child: Container(
-          width: 44,
-          height: 44,
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Image.asset(
-            'assets/images/greeting_match/greeting_match_back_button.png',
-            fit: BoxFit.contain,
-          ),
         ),
       ),
     );

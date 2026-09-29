@@ -135,10 +135,12 @@ void main() {
 
   testWidgets(
     'activities auto-advance with no manual "start next activity" step, '
-    'and finishing the lesson awards XP/streak/badge then shows completion',
+    'and finishing the lesson awards XP then closes from the game\'s own '
+    'ending screen',
     (tester) async {
       final lesson = _twoGreetingMatchActivityLesson();
       final audio = _FakeGameUiAudio();
+      var closed = 0;
 
       await tester.pumpWidget(
         ProviderScope(
@@ -150,7 +152,7 @@ void main() {
             home: LessonPlayerScreen(
               lesson: lesson,
               destinationId: 1,
-              onClose: () {},
+              onClose: () => closed++,
               uiAudio: audio,
             ),
           ),
@@ -168,20 +170,33 @@ void main() {
       await tester.pump();
       expect(audio.taps, 0);
       await tester.tap(find.byKey(const Key('greeting-match-play-btn')));
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.tap(find.byKey(const Key('greeting-howto-play')));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(seconds: 4));
       await tester.pump(const Duration(milliseconds: 600));
 
-      // First activity's scenario is showing; tap the correct response —
-      // it auto-advances after the celebration.
+      // First activity's scenario is showing; tap the correct response,
+      // then Continue on the game's ending screen.
       expect(find.text('وَعَلَيْكُمُ السَّلَامُ'), findsOneWidget);
       expect(find.byType(LessonCompleteScreen), findsNothing);
       await tester.tap(find.byKey(const Key('greeting-choice-1')));
       await tester.pump(const Duration(milliseconds: 1700));
+      await tester.pump(const Duration(milliseconds: 1500));
+      await tester.tap(find.byKey(const Key('greeting-end-continue')));
+      await tester.pump();
 
-      // Auto-advanced straight into the second activity's start screen.
+      // Straight into the second activity's start screen.
       expect(find.byKey(const Key('greeting-match-play-btn')), findsOneWidget);
       await tester.tap(find.byKey(const Key('greeting-match-play-btn')));
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.tap(find.byKey(const Key('greeting-howto-play')));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(seconds: 4));
       await tester.pump(const Duration(milliseconds: 600));
@@ -190,13 +205,20 @@ void main() {
       expect(find.text('صَبَاحُ النُّورِ'), findsOneWidget);
       expect(find.byType(LessonCompleteScreen), findsNothing);
 
-      // Finish the last activity.
+      // Finish the last activity from its ending screen: XP is awarded and
+      // the player closes without the generic completion screen.
       await tester.tap(find.byKey(const Key('greeting-choice-0')));
       await tester.pump(const Duration(milliseconds: 1700));
+      await tester.pump(const Duration(milliseconds: 1500));
+      await tester.tap(find.byKey(const Key('greeting-end-continue')));
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.byType(LessonCompleteScreen), findsOneWidget);
-      expect(find.text('+20 XP'), findsOneWidget);
+      expect(find.byType(LessonCompleteScreen), findsNothing);
+      expect(closed, 1);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(LessonPlayerScreen)),
+      );
+      expect(container.read(learnerXpProvider), 20);
       expect(audio.taps, greaterThanOrEqualTo(4));
       expect(audio.levels, 2);
       expect(audio.stars, 1);

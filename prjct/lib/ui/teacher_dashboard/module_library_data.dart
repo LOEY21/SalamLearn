@@ -161,4 +161,22 @@ const Map<ActivityType, ActivityTypeStyle> activityTypeStyles = {
     color: AppColors.teal,
     bg: AppColors.mint,
   ),
+  ActivityType.ayahBuilder: ActivityTypeStyle(
+    label: 'Ayah Builder',
+    icon: Icons.extension_outlined,
+    color: AppColors.adventurePurple,
+    bg: AppColors.neutralTint,
+  ),
+  ActivityType.classroomHeroes: ActivityTypeStyle(
+    label: 'Classroom Heroes',
+    icon: Icons.groups_outlined,
+    color: AppColors.adventureGreen,
+    bg: AppColors.mint,
+  ),
+  ActivityType.creationHunt: ActivityTypeStyle(
+    label: 'Creation Hunt',
+    icon: Icons.forest_outlined,
+    color: AppColors.teal,
+    bg: AppColors.mint,
+  ),
 };
