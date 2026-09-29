@@ -662,13 +662,15 @@ class _LegalChip extends StatelessWidget {
         children: [
           Icon(Icons.fact_check_outlined, size: 13, color: AppColors.coral),
           SizedBox(width: 6),
-          Text(
-            'Protected under RA 10173 (Data Privacy Act)',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AppColors.coral,
-              letterSpacing: 0.2,
+          Flexible(
+            child: Text(
+              'Protected under RA 10173 (Data Privacy Act)',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.coral,
+                letterSpacing: 0.2,
+              ),
             ),
           ),
         ],

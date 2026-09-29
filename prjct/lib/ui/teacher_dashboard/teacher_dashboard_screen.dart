@@ -509,6 +509,8 @@ class _WideLayoutState extends ConsumerState<_WideLayout>
                                 children: [
                                   Text(
                                     activeClass,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
                                       fontSize: 26,
                                       fontWeight: FontWeight.w800,
@@ -528,37 +530,45 @@ class _WideLayoutState extends ConsumerState<_WideLayout>
                               ),
                             ),
                             const SizedBox(width: 16),
-                            OutlinedButton.icon(
-                              onPressed: () => _switchUser(context, ref),
-                              icon: const Icon(
-                                Icons.people_outline_rounded,
-                                size: 18,
-                              ),
-                              label: const Text('Switch user'),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(
-                                  color: AppColors.creamBorder,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            OutlinedButton.icon(
-                              onPressed: () {
-                                _playCastRipple(context);
-                                context.go('/cast');
-                              },
-                              icon: const Icon(Icons.cast, size: 18),
-                              label: const Text('Cast to class'),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(
-                                  color: AppColors.creamBorder,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
+                            Flexible(
+                              child: Wrap(
+                                alignment: WrapAlignment.end,
+                                spacing: 10,
+                                runSpacing: 8,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: () => _switchUser(context, ref),
+                                    icon: const Icon(
+                                      Icons.people_outline_rounded,
+                                      size: 18,
+                                    ),
+                                    label: const Text('Switch user'),
+                                    style: OutlinedButton.styleFrom(
+                                      side: const BorderSide(
+                                        color: AppColors.creamBorder,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: () {
+                                      _playCastRipple(context);
+                                      context.go('/cast');
+                                    },
+                                    icon: const Icon(Icons.cast, size: 18),
+                                    label: const Text('Cast to class'),
+                                    style: OutlinedButton.styleFrom(
+                                      side: const BorderSide(
+                                        color: AppColors.creamBorder,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -849,13 +859,15 @@ class _RosterSection extends ConsumerWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'STUDENTS',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
-                color: AppColors.textMuted,
+            const Flexible(
+              child: Text(
+                'STUDENTS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                  color: AppColors.textMuted,
+                ),
               ),
             ),
             if (activeClassId != null)
@@ -1365,12 +1377,14 @@ class ClassHealthSection extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Text(
-                'See details',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.teal,
+              Flexible(
+                child: Text(
+                  'See details',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.teal,
+                  ),
                 ),
               ),
               const SizedBox(width: 2),
@@ -1531,9 +1545,11 @@ class _StudentTable extends ConsumerWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Student roster',
-                  style: Theme.of(context).textTheme.titleLarge,
+                Flexible(
+                  child: Text(
+                    'Student roster',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                 ),
                 if (activeClassId != null)
                   TextButton(
@@ -1859,13 +1875,15 @@ class _ActionColumn extends ConsumerWidget {
             children: [
               Icon(Icons.bolt_rounded, size: 14, color: AppColors.textMuted),
               SizedBox(width: 4),
-              Text(
-                'QUICK ACTIONS',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                  color: AppColors.textMuted,
+              Flexible(
+                child: Text(
+                  'QUICK ACTIONS',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ),
             ],
@@ -2321,11 +2339,13 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
                                   color: AppColors.teal,
                                 ),
                                 SizedBox(width: 7),
-                                Text(
-                                  'Assign Learning Module',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 13,
+                                Flexible(
+                                  child: Text(
+                                    'Assign Learning Module',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -2493,11 +2513,13 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
                                   color: AppColors.teal,
                                 ),
                                 SizedBox(width: 7),
-                                Text(
-                                  'Teacher Assessment & Feedback',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 13,
+                                Flexible(
+                                  child: Text(
+                                    'Teacher Assessment & Feedback',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -3632,25 +3654,29 @@ class _ClassPassCardState extends ConsumerState<_ClassPassCard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.confirmation_num_outlined,
-                        size: 15,
-                        color: AppColors.goldSoft,
-                      ),
-                      const SizedBox(width: 7),
-                      Text(
-                        'INVITATION CODE',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.6,
-                          color: Colors.white.withValues(alpha: 0.7),
+                  Flexible(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.confirmation_num_outlined,
+                          size: 15,
+                          color: AppColors.goldSoft,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 7),
+                        Flexible(
+                          child: Text(
+                            'INVITATION CODE',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   Flexible(
                     child: Text(
@@ -4483,12 +4509,14 @@ class _ChoralPlayerState extends State<_ChoralPlayer>
                                         ),
                                       ),
                                     const SizedBox(width: 8),
-                                    const Text(
-                                      'Talqeen active',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: AppColors.teal,
-                                        fontWeight: FontWeight.bold,
+                                    const Flexible(
+                                      child: Text(
+                                        'Talqeen active',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: AppColors.teal,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -4811,12 +4839,14 @@ class _SettingsTab extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    const Text(
-                      'Sound & Voice',
-                      style: TextStyle(
-                        fontSize: 16.5,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.ink,
+                    const Flexible(
+                      child: Text(
+                        'Sound & Voice',
+                        style: TextStyle(
+                          fontSize: 16.5,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.ink,
+                        ),
                       ),
                     ),
                   ],
@@ -5127,19 +5157,23 @@ class _VolumeSlider extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                Icon(icon, size: 18, color: AppColors.textMuted),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.ink,
+            Expanded(
+              child: Row(
+                children: [
+                  Icon(icon, size: 18, color: AppColors.textMuted),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.ink,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             Text(
               _getVolumeLabel(value),

@@ -259,9 +259,10 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
     );
   }
 
-  // The hunt's, Classroom Heroes' and Ayah Builder's own reward screens
-  // already carry the continue button.
+  // The hunt's, Classroom Heroes', Ayah Builder's and Magic Sand Tracer's
+  // own reward screens already carry the continue button.
   bool get _skipCompleteScreen =>
+      _activity.type == ActivityType.trace ||
       _activity.type == ActivityType.ayahBuilder ||
       _activity.type == ActivityType.creationHunt ||
       _activity.type == ActivityType.classroomHeroes ||
@@ -477,12 +478,14 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Game ${_activityIndex + 1} of $total',
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textMuted,
+                    Flexible(
+                      child: Text(
+                        'Game ${_activityIndex + 1} of $total',
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textMuted,
+                        ),
                       ),
                     ),
                     Text(

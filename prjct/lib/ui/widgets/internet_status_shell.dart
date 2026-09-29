@@ -158,12 +158,14 @@ class _InternetStatusShellState extends State<InternetStatusShell>
                             color: AppColors.tealDark,
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            'Connected to the internet',
-                            style: const TextStyle(
-                              color: AppColors.tealDark,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
+                          Flexible(
+                            child: Text(
+                              'Connected to the internet',
+                              style: const TextStyle(
+                                color: AppColors.tealDark,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ],

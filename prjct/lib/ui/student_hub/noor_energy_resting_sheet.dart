@@ -130,12 +130,14 @@ class _RestingSheetContent extends ConsumerWidget {
                         color: AppColors.gold,
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        'Refills in $resetIn',
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.gold,
+                      Flexible(
+                        child: Text(
+                          'Refills in $resetIn',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.gold,
+                          ),
                         ),
                       ),
                     ],

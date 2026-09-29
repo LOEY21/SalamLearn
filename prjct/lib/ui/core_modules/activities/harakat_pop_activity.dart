@@ -194,12 +194,14 @@ class _HarakatPopActivityState extends State<HarakatPopActivity>
                   children: [
                     const Text('🔊', style: TextStyle(fontSize: 24)),
                     const SizedBox(width: 8),
-                    Text(
-                      'Listen: "$_targetSound"',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: widget.color,
+                    Flexible(
+                      child: Text(
+                        'Listen: "$_targetSound"',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: widget.color,
+                        ),
                       ),
                     ),
                   ],

@@ -65,57 +65,60 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AnimatedBuilder(
-          animation: _shake,
-          builder: (context, child) {
-            final t = _shake.value;
-            final dx = t == 0 ? 0.0 : (t * 4).floor().isEven ? 7.0 : -7.0;
-            return Transform.translate(offset: Offset(dx, 0), child: child);
-          },
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              for (var i = 0; i < 4; i++)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  child: _PinBox(
-                    filled: i < _entry.length,
-                    error: _error,
-                    accentColor: widget.accentColor,
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 30),
-        for (final row in const [
-          ['1', '2', '3'],
-          ['4', '5', '6'],
-          ['7', '8', '9'],
-          ['', '0', '<'],
-        ])
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedBuilder(
+            animation: _shake,
+            builder: (context, child) {
+              final t = _shake.value;
+              final dx = t == 0 ? 0.0 : (t * 4).floor().isEven ? 7.0 : -7.0;
+              return Transform.translate(offset: Offset(dx, 0), child: child);
+            },
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                for (final key in row)
+                for (var i = 0; i < 4; i++)
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 9),
-                    child: key.isEmpty
-                        ? const SizedBox(width: 76, height: 76)
-                        : _PinKey(
-                            label: key,
-                            onTap: key == '<' ? _backspace : () => _tap(key),
-                          ),
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    child: _PinBox(
+                      filled: i < _entry.length,
+                      error: _error,
+                      accentColor: widget.accentColor,
+                    ),
                   ),
               ],
             ),
           ),
-      ],
+          const SizedBox(height: 30),
+          for (final row in const [
+            ['1', '2', '3'],
+            ['4', '5', '6'],
+            ['7', '8', '9'],
+            ['', '0', '<'],
+          ])
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (final key in row)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 9),
+                      child: key.isEmpty
+                          ? const SizedBox(width: 76, height: 76)
+                          : _PinKey(
+                              label: key,
+                              onTap: key == '<' ? _backspace : () => _tap(key),
+                            ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

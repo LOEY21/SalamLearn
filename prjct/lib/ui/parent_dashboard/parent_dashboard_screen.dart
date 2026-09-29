@@ -2356,16 +2356,16 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
             style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
           ),
           const SizedBox(height: 12),
-          Row(
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
-              for (final (i, label) in _ranges.indexed) ...[
-                if (i > 0) const SizedBox(width: 6),
+              for (final (i, label) in _ranges.indexed)
                 _RangePill(
                   label: label,
                   active: i == _range,
                   onTap: () => _selectRange(i),
                 ),
-              ],
             ],
           ),
           const SizedBox(height: 16),
@@ -2613,9 +2613,11 @@ class _SettingsTab extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        Text(
-                          'Sound & Voice',
-                          style: Theme.of(context).textTheme.titleLarge,
+                        Flexible(
+                          child: Text(
+                            'Sound & Voice',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
                         ),
                       ],
                     ),
@@ -2943,19 +2945,23 @@ class _VolumeSlider extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                Icon(icon, size: 16, color: AppColors.textMuted),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.ink,
+            Expanded(
+              child: Row(
+                children: [
+                  Icon(icon, size: 16, color: AppColors.textMuted),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.ink,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             Text(
               _getVolumeLabel(value),
@@ -3655,11 +3661,13 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text(
-                                      timeStr,
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.textMuted,
+                                    Flexible(
+                                      child: Text(
+                                        timeStr,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.textMuted,
+                                        ),
                                       ),
                                     ),
                                     Text(

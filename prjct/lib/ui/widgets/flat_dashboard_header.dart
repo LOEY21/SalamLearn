@@ -65,12 +65,14 @@ class FlatDashboardHeader extends StatelessWidget {
                     children: [
                       _PulsingDot(),
                       const SizedBox(width: 5),
-                      Text(
-                        statusLabel!,
-                        style: const TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.teal,
+                      Flexible(
+                        child: Text(
+                          statusLabel!,
+                          style: const TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.teal,
+                          ),
                         ),
                       ),
                     ],

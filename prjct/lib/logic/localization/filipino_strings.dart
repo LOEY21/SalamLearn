@@ -671,6 +671,7 @@ const Map<String, String> filipinoStrings = {
   'Great job! We pause our play to listen.': 'Magaling! Itinitigil natin ang paglalaro upang makinig.',
   'Great listening!': 'Magaling makinig!',
   'Great sorting!': 'Mahusay na pag-uuri!',
+  'Great tracing!': 'Magaling sumulat!',
   'Great teamwork! Helping each other makes learning better.': 'Mahusay na pagtutulungan! Ang pagtulong sa isa\'t isa ay nagpapabuti sa pag-aaral.',
   'Great! Keeping places clean is our responsibility.': 'Magaling! Ang pagpapanatiling malinis ng mga lugar ay ating pananagutan.',
   'Great! Sharing what we have is a kind action.': 'Magaling! Ang pagbabahagi ng mayroon tayo ay isang mabait na gawain.',
@@ -1936,6 +1937,20 @@ const Map<String, String> filipinoStrings = {
   'Go ahead / Please': 'Sige po / Pakiusap',
   'Fine': 'Mabuti',
   'Present': 'Narito po',
+  // Forgot PIN (emailed 6-digit code)
+  'Forgot PIN?': 'Nakalimutan ang PIN?',
+  'Create a new PIN': 'Gumawa ng bagong PIN',
+  'Enter a new 4-digit PIN': 'Maglagay ng bagong 4-digit na PIN',
+  'Enter the same PIN again': 'Ilagay muli ang parehong PIN',
+  'Verify code': 'I-verify ang code',
+  'Resend code': 'Ipadala muli ang code',
+  'PIN updated. Enter your new PIN to continue.': 'Na-update ang PIN. Ilagay ang iyong bagong PIN para magpatuloy.',
+  'Wrong code. Try again.': 'Maling code. Subukang muli.',
+  'This account has no email address.': 'Walang email address ang account na ito.',
+  'Enter the 6-digit code from your email.': 'Ilagay ang 6-digit na code mula sa iyong email.',
+  'This code has expired. Tap "Resend code".': 'Nag-expire na ang code na ito. I-tap ang "Ipadala muli ang code".',
+  'Too many wrong tries. Tap "Resend code".': 'Masyadong maraming maling subok. I-tap ang "Ipadala muli ang code".',
+  'Couldn\'t send the code. Check your internet and try again.': 'Hindi maipadala ang code. Suriin ang iyong internet at subukang muli.',
 };
 
 const Map<String, String> filipinoTemplates = {
@@ -2086,4 +2101,8 @@ const Map<String, String> filipinoTemplates = {
   '🎵 Correct stone locked: "{0}"': '🎵 Tamang bato, naka-lock: "{0}"',
   '🔊 Playback: "{0}"': '🔊 Pinapatugtog: "{0}"',
   '🔊 Pronouncing phonetic clip: "{0}"': '🔊 Binibigkas ang phonetic clip: "{0}"',
+  'Sending a code to {0}...': 'Nagpapadala ng code sa {0}...',
+  'We sent a 6-digit code to {0}': 'Nagpadala kami ng 6-digit na code sa {0}',
+  "We'll send a 6-digit code to {0}": 'Magpapadala kami ng 6-digit na code sa {0}',
+  'Resend code in {0}s': 'Ipadala muli ang code sa loob ng {0}s',
 };

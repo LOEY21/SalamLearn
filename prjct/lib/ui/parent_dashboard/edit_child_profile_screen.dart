@@ -183,12 +183,14 @@ class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 const _Label('Age'),
-                                Text(
-                                  '$_age years old',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.teal,
+                                Flexible(
+                                  child: Text(
+                                    '$_age years old',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.teal,
+                                    ),
                                   ),
                                 ),
                               ],

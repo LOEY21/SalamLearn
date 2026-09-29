@@ -355,8 +355,8 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
 
   Widget _buildBadgesGrid(List<BadgeItem> badges, List<String> unlockedBadges) {
     return SliverGrid(
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 220,
         mainAxisSpacing: 14,
         crossAxisSpacing: 14,
         childAspectRatio: 0.80,

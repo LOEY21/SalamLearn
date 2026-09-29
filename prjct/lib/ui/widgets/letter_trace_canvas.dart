@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:lottie/lottie.dart';
@@ -66,6 +68,95 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
   final _strokes = <List<Offset>>[];
   final _key = GlobalKey();
 
+  /// Which guide stroke each entry in [_strokes] was drawn for. A finger
+  /// lift doesn't finish a stroke — only reaching its finish badge does —
+  /// so one guide stroke can be traced in several pieces without shifting
+  /// every later stroke out of step (e.g. ج, whose step 3 starts right on
+  /// step 1's line).
+  final _strokeGuide = <int>[];
+
+  /// The guide stroke the learner is on: advances when its finish badge
+  /// (or a dot's only badge) is reached.
+  var _active = 0;
+
+  /// [_strokes] merged per guide stroke, in guide order — what scoring
+  /// compares against guide stroke i.
+  List<List<Offset>> _perGuide(int count) => [
+    for (var i = 0; i < count; i++)
+      [
+        for (var s = 0; s < _strokes.length; s++)
+          if (_strokeGuide[s] == i) ..._strokes[s],
+      ],
+  ];
+
+  /// Sand kicked up by the finger inside the letter, drawn by
+  /// `_TracePainter._paintSand`. Each grain's path is a pure function of
+  /// its age, so nothing is simulated per frame.
+  final _grains = <_Grain>[];
+  final _rng = math.Random();
+  var _dustTravel = 0.0;
+
+  static const _sandColors = [
+    Color(0xFFF3DDAA),
+    Color(0xFFE8C98A),
+    Color(0xFFD9AE62),
+    Color(0xFFC4934A),
+    Color(0xFFA9773A),
+  ];
+
+  /// Throws grains out from [at] — forward and sideways along the drag
+  /// from [from], or all around for a fresh touch — plus a soft dust puff
+  /// every so often. Only inside the letter's shadow.
+  void _spray(Offset at, Offset? from, Size size) {
+    final glyph = widget.glyphBuilder?.call(size);
+    if (glyph == null || !glyph.contains(at)) return;
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) return;
+    final now = DateTime.now();
+    _grains.removeWhere(
+      (g) => now.difference(g.born).inMilliseconds > g.lifeMs,
+    );
+
+    final d = from == null ? 0.0 : (at - from).distance;
+    final dir = d > 0 ? math.atan2(at.dy - from!.dy, at.dx - from.dx) : null;
+    final count = dir == null ? 14 : (d / 3).clamp(1, 8).round();
+    double jitter(double s) => (_rng.nextDouble() - .5) * s;
+    for (var i = 0; i < count; i++) {
+      final angle = dir == null
+          ? _rng.nextDouble() * 2 * math.pi
+          : dir + jitter(3.4);
+      final speed = 60 + _rng.nextDouble() * 200;
+      _grains.add((
+        at: at + Offset(jitter(10), jitter(10)),
+        v: Offset(math.cos(angle), math.sin(angle)) * speed,
+        vz: 50 + _rng.nextDouble() * 170,
+        born: now,
+        lifeMs: 450 + _rng.nextInt(450),
+        r: .7 + _rng.nextDouble() * 1.6,
+        color: _sandColors[_rng.nextInt(_sandColors.length)],
+        dust: false,
+      ));
+    }
+
+    _dustTravel += d;
+    if (dir == null || _dustTravel > 24) {
+      _dustTravel = 0;
+      _grains.add((
+        at: at,
+        v: Offset(jitter(60), jitter(60)),
+        vz: 0,
+        born: now,
+        lifeMs: 650 + _rng.nextInt(300),
+        r: 7 + _rng.nextDouble() * 5,
+        color: _sandColors[1],
+        dust: true,
+      ));
+    }
+    if (_grains.length > 320) _grains.removeRange(0, _grains.length - 320);
+  }
+
+  void _emit(Size size) =>
+      widget.onStroke(_perGuide(widget.guidePointsBuilder(size).length), size);
+
   /// Per guide stroke, per point: whether any user ink has passed within
   /// `widget.coverTolerance` of it — drives `_TracePainter`'s revealed
   /// (double-masking) layer. Recomputed only when `_strokes` actually
@@ -118,15 +209,16 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
   /// start/finish number, not just when a stroke completes.
   void _registerTouch(Offset point, Size size) {
     if (_strokes.isEmpty) return;
-    final currentStrokeIdx = _strokes.length - 1;
-    final badges = _numberedBadges(widget.guidePointsBuilder(size));
+    final currentStrokeIdx = _strokeGuide.last;
+    final guideStrokes = widget.guidePointsBuilder(size);
+    final badges = _numberedBadges(guideStrokes);
 
     for (final badge in badges) {
       if (_badgeHitAt.containsKey(badge.number)) continue;
-      
+
       // Enforce active stroke constraint: only allow hitting badges belonging to the current guide stroke
       if (badge.strokeIndex != currentStrokeIdx) continue;
-      
+
       // Enforce start-to-end constraint: if this is an end badge, the start badge must be hit first
       if (badge.isEnd) {
         final startBadgeNumber = badge.number - 1;
@@ -135,6 +227,9 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
 
       if ((point - badge.pos).distance <= 32) {
         _badgeHitAt[badge.number] = DateTime.now();
+        final finishes =
+            badge.isEnd || guideStrokes[badge.strokeIndex].length == 1;
+        if (finishes && badge.strokeIndex == _active) _active++;
       }
     }
   }
@@ -145,10 +240,14 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
 
     if (size != null) {
       final guideStrokes = widget.guidePointsBuilder(size);
-      final currentStrokeIdx = _strokes.length;
+      final currentStrokeIdx = _active;
       if (currentStrokeIdx < guideStrokes.length) {
         final guide = guideStrokes[currentStrokeIdx];
-        if (guide.length == 1) {
+        if (guide.length >= 2 && _strokeGuide.contains(currentStrokeIdx)) {
+          // Picking an unfinished stroke back up after a lift: anywhere
+          // along it is fine, but a touch far off it is stray.
+          if (guide.every((g) => (startPt - g).distance > 60)) return;
+        } else if (guide.length == 1) {
           // Single-point stroke (a diacritic dot): a touch that lands
           // nowhere near it is the learner reaching for a different dot
           // out of authored order — ignore rather than let it consume
@@ -173,16 +272,18 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
 
     setState(() {
       _strokes.add([startPt]);
+      _strokeGuide.add(_active);
       if (size != null) {
         _registerTouch(startPt, size);
         _recomputeCoveredMask(size);
+        _spray(startPt, null, size);
       }
     });
 
     // A tap (down + up with no move in between, e.g. placing a diacritic
     // dot) never fires a move event, so without this the dot renders but
     // is never scored.
-    if (size != null) widget.onStroke(_strokes, size);
+    if (size != null) _emit(size);
   }
 
   void _onPointerMove(PointerMoveEvent event) {
@@ -192,18 +293,22 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
     final currentStroke = _strokes.last;
 
     setState(() {
+      final prev = currentStroke.last;
       currentStroke.add(newPoint);
       if (size != null) {
         _registerTouch(newPoint, size);
         _recomputeCoveredMask(size);
+        _spray(newPoint, prev, size);
       }
     });
 
-    if (size != null) widget.onStroke(_strokes, size);
+    if (size != null) _emit(size);
   }
 
   void clear() => setState(() {
     _strokes.clear();
+    _strokeGuide.clear();
+    _active = 0;
     _coveredMask = [];
   });
 
@@ -246,6 +351,7 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
                         badgeHitAt: _badgeHitAt,
                         coveredMask: _coveredMask,
                         glyphBuilder: widget.glyphBuilder,
+                        grains: _grains,
                       ),
                       child: widget.passed && widget.showPassBurst
                           ? Center(
@@ -255,7 +361,8 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
                                 child: Lottie.asset(
                                   'assets/lottie/milestone_burst.json',
                                   repeat: false,
-                                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                                  errorBuilder: (_, _, _) =>
+                                      const SizedBox.shrink(),
                                 ),
                               ),
                             )
@@ -275,6 +382,19 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
 // ─── Painter ────────────────────────────────────────────────────────────
 
 typedef _Badge = ({int number, Offset pos, int strokeIndex, bool isEnd});
+
+/// One kicked-up sand grain (or, with [dust], a soft dust puff): thrown
+/// from [at] with ground velocity [v] and upward speed [vz], px/s.
+typedef _Grain = ({
+  Offset at,
+  Offset v,
+  double vz,
+  DateTime born,
+  int lifeMs,
+  double r,
+  Color color,
+  bool dust,
+});
 
 /// Numbers every guide stroke's start/finish in authored order — e.g.
 /// stroke 0 gets "1" at its start and "2" at its end, stroke 1 gets
@@ -311,8 +431,10 @@ class _TracePainter extends CustomPainter {
     required this.badgeHitAt,
     required this.coveredMask,
     this.glyphBuilder,
+    this.grains = const [],
   });
 
+  final List<_Grain> grains;
   final List<List<Offset>> Function(Size size) guideBuilder;
   final Path Function(Size size)? glyphBuilder;
   final List<List<Offset>> userStrokes;
@@ -350,7 +472,13 @@ class _TracePainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
     for (final stroke in guideStrokes) {
       if (stroke.length < 2) {
-        if (stroke.length == 1) canvas.drawCircle(stroke.first, 13, paint..style = PaintingStyle.fill);
+        if (stroke.length == 1) {
+          canvas.drawCircle(
+            stroke.first,
+            13,
+            paint..style = PaintingStyle.fill,
+          );
+        }
         continue;
       }
       final path = Path()..moveTo(stroke.first.dx, stroke.first.dy);
@@ -490,7 +618,10 @@ class _TracePainter extends CustomPainter {
 
     if (hitAt != null) {
       const popMs = 260.0;
-      final elapsed = DateTime.now().difference(hitAt).inMilliseconds.toDouble();
+      final elapsed = DateTime.now()
+          .difference(hitAt)
+          .inMilliseconds
+          .toDouble();
       final t = (elapsed / popMs).clamp(0.0, 1.0);
       scale = t < 0.45
           ? 1.0 + 0.5 * (t / 0.45)
@@ -523,12 +654,52 @@ class _TracePainter extends CustomPainter {
     tp.paint(canvas, at - Offset(tp.width / 2, tp.height / 2));
   }
 
+  /// Grains skid out and slow to a stop (drag), hopping up and falling back
+  /// (gravity) with a small shadow under them while airborne, then fade
+  /// where they land. Dust puffs drift, swell and thin out.
+  void _paintSand(Canvas canvas) {
+    const drag = 6.0, gravity = 1100.0;
+    final now = DateTime.now();
+    for (final g in grains) {
+      final t = now.difference(g.born).inMicroseconds / 1e6;
+      final life = g.lifeMs / 1000;
+      if (t < 0 || t >= life) continue;
+      final fade = t < life * .55 ? 1.0 : 1 - (t - life * .55) / (life * .45);
+      if (g.dust) {
+        canvas.drawCircle(
+          g.at + g.v * t,
+          g.r * (1 + t * 2.5),
+          Paint()
+            ..color = g.color.withValues(alpha: .28 * fade)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+        );
+        continue;
+      }
+      final ground = g.at + g.v * ((1 - math.exp(-drag * t)) / drag);
+      final h = math.max(0.0, g.vz * t - .5 * gravity * t * t);
+      if (h > 0) {
+        canvas.drawCircle(
+          ground,
+          g.r * .9,
+          Paint()
+            ..color = const Color(0xFF4A3A1E).withValues(alpha: .22 * fade),
+        );
+      }
+      canvas.drawCircle(
+        ground.translate(0, -h),
+        g.r,
+        Paint()..color = g.color.withValues(alpha: fade),
+      );
+    }
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final guideStrokes = guideBuilder(size);
     final glyph = glyphBuilder?.call(size);
     if (glyph != null) {
       _paintInGlyph(canvas, size, glyph, guideStrokes);
+      _paintSand(canvas);
       _paintDemoShadow(canvas, guideStrokes);
       _paintStrokeNumbers(canvas, guideStrokes);
       return;
@@ -613,14 +784,15 @@ class _TracePainter extends CustomPainter {
     Path glyph,
     List<List<Offset>> guideStrokes,
   ) {
-    _drawGlyph(
-      canvas,
-      glyph,
-      Paint()..color = const Color(0xFF4A3A1E).withValues(alpha: guideOpacity),
+    final bounds = Offset.zero & size;
+    canvas.saveLayer(
+      bounds,
+      Paint()..color = Color.fromRGBO(0, 0, 0, guideOpacity),
     );
+    _drawGlyph(canvas, glyph, Paint()..color = const Color(0xFF4A3A1E));
+    canvas.restore();
     final fillWidth =
         glyph.getBounds().longestSide * _fillFraction + _glyphSpread;
-    final bounds = Offset.zero & size;
     canvas.saveLayer(bounds, Paint());
     _paintGuideReveal(canvas, guideStrokes, width: fillWidth);
     canvas.drawPath(

@@ -328,19 +328,23 @@ class _VolumeSlider extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(icon, size: 16, color: AppColors.textMuted),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ink,
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(icon, size: 16, color: AppColors.textMuted),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               Text(
                 _getVolumeLabel(value),
@@ -708,13 +712,15 @@ class _DangerZone extends ConsumerWidget {
             children: [
               const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.coral),
               const SizedBox(width: 6),
-              const Text(
-                'DANGER ZONE',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.5,
-                  color: AppColors.coral,
+              const Flexible(
+                child: Text(
+                  'DANGER ZONE',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: AppColors.coral,
+                  ),
                 ),
               ),
             ],

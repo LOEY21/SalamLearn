@@ -537,12 +537,14 @@ class _HeroChip extends StatelessWidget {
         children: [
           Icon(icon, size: 12, color: fg),
           const SizedBox(width: 5),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              color: fg,
+          Flexible(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: fg,
+              ),
             ),
           ),
         ],
@@ -611,25 +613,29 @@ class _InviteCodeCardState extends State<_InviteCodeCard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.confirmation_num_outlined,
-                        size: 15,
-                        color: AppColors.goldSoft,
-                      ),
-                      const SizedBox(width: 7),
-                      Text(
-                        'INVITATION CODE',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.6,
-                          color: Colors.white.withValues(alpha: 0.7),
+                  Flexible(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.confirmation_num_outlined,
+                          size: 15,
+                          color: AppColors.goldSoft,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 7),
+                        Flexible(
+                          child: Text(
+                            'INVITATION CODE',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   Flexible(
                     child: Text(
@@ -670,11 +676,13 @@ class _InviteCodeCardState extends State<_InviteCodeCard> {
                       color: Colors.white.withValues(alpha: 0.65),
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      'Archived — this code no longer works',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.white.withValues(alpha: 0.65),
+                    Flexible(
+                      child: Text(
+                        'Archived — this code no longer works',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.white.withValues(alpha: 0.65),
+                        ),
                       ),
                     ),
                   ],

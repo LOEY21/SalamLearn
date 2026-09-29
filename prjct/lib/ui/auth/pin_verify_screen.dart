@@ -7,6 +7,7 @@ import '../../logic/auth/session.dart';
 import '../theme/app_colors.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/role_icons.dart';
+import 'forgot_pin_sheet.dart';
 
 class PinVerifyScreen extends ConsumerStatefulWidget {
   const PinVerifyScreen({super.key});
@@ -160,7 +161,36 @@ class _PinVerifyScreenState extends ConsumerState<PinVerifyScreen>
                             return ok;
                           },
                         ),
-                        const SizedBox(height: 20),
+                        if (!isLearner) ...[
+                          const SizedBox(height: 8),
+                          TextButton(
+                            key: const ValueKey('forgot-pin'),
+                            onPressed: () async {
+                              final done = await showForgotPinSheet(
+                                context,
+                                accentColor: accentColor,
+                              );
+                              if (done && context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'PIN updated. Enter your new PIN to continue.',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            child: const Text(
+                              'Forgot PIN?',
+                              style: TextStyle(
+                                color: AppColors.textMuted,
+                                fontWeight: FontWeight.w700,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
                         TextButton(
                           onPressed: () => _handleBack(redirect, role),
                           child: Text(

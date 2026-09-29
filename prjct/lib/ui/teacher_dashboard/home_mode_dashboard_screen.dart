@@ -463,12 +463,14 @@ class _StudentProfileCard extends ConsumerWidget {
                           size: 14,
                         ),
                         const SizedBox(width: 4),
-                        Text(
-                          '$streak-day streak',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textMuted,
-                            fontWeight: FontWeight.bold,
+                        Flexible(
+                          child: Text(
+                            '$streak-day streak',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textMuted,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
@@ -1547,12 +1549,14 @@ class _AggregateRow extends StatelessWidget {
                               color: trendColor,
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              trendLabel,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: trendColor,
+                            Flexible(
+                              child: Text(
+                                trendLabel,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: trendColor,
+                                ),
                               ),
                             ),
                           ],

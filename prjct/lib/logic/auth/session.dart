@@ -1115,6 +1115,24 @@ class SessionNotifier extends Notifier<SessionState> {
     }
   }
 
+  /// Email + display name of the active Parent/Teacher account — where the
+  /// PIN gate's "Forgot PIN?" code is sent.
+  ({String? email, String name}) activeGrownUpContact() {
+    if (state.activeRole == UserRole.asatidz) {
+      final id = state.activeTeacherId;
+      final account = id == null ? null : _teachers.findById(id);
+      return (email: account?.email, name: account?.fullName ?? '');
+    }
+    final id = state.activeParentId;
+    final account = id == null ? null : _parents.findById(id);
+    return (email: account?.email, name: account?.fullName ?? '');
+  }
+
+  /// "Forgot PIN?" final step, after the emailed code checked out: saves
+  /// [newPin]. The gate stays locked — the user then enters the new PIN on
+  /// the PIN screen like normal.
+  Future<void> resetForgottenPin(String newPin) => changePin(newPin);
+
   bool verifyPin(String candidate) {
     final bool ok;
     if (state.activeRole == UserRole.asatidz) {

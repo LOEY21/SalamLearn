@@ -257,12 +257,14 @@ class _StoryActivityState extends State<StoryActivity> with TickerProviderStateM
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  '🕌 Five Pillars Match',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.ink,
+                const Flexible(
+                  child: Text(
+                    '🕌 Five Pillars Match',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.ink,
+                    ),
                   ),
                 ),
                 if (!_success && _remainingPool.length != _levelConcepts.length)

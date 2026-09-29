@@ -762,7 +762,7 @@ class _HotSeatDrawingCanvasState extends ConsumerState<HotSeatDrawingCanvas>
   }
 
   Future<void> _finishAttempt() async {
-    final segments = _userStrokes;
+    final segments = _userStrokes.where((s) => s.isNotEmpty).toList();
     final sequencingErrors = segments.isEmpty ? 0 : segments.length - 1;
 
     var accuracy = 0.0;

@@ -291,17 +291,19 @@ class _MascotWelcomeOverlayState extends State<MascotWelcomeOverlay>
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Text(
-                                          isLastLine
-                                              ? 'Tap to start! 🚀'
-                                              : 'Tap to continue',
-                                          style: TextStyle(
-                                            fontFamily: 'Outfit',
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: isLastLine
-                                                ? AppColors.teal
-                                                : AppColors.textMuted,
+                                        Flexible(
+                                          child: Text(
+                                            isLastLine
+                                                ? 'Tap to start! 🚀'
+                                                : 'Tap to continue',
+                                            style: TextStyle(
+                                              fontFamily: 'Outfit',
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: isLastLine
+                                                  ? AppColors.teal
+                                                  : AppColors.textMuted,
+                                            ),
                                           ),
                                         ),
                                         const SizedBox(width: 3),

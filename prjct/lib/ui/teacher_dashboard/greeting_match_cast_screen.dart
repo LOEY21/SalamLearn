@@ -84,11 +84,13 @@ class _GreetingMatchCastScreenState extends State<GreetingMatchCastScreen> {
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close_rounded, color: Colors.white),
                   ),
-                  Text(
-                    'Greeting ${_idx + 1} / ${_castQuestions.length}',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w700,
+                  Flexible(
+                    child: Text(
+                      'Greeting ${_idx + 1} / ${_castQuestions.length}',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ],

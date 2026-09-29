@@ -46,6 +46,18 @@ void main() {
     addTearDown(tester.view.reset);
     var backs = 0;
 
+    // Frame by frame, like a device, so chained animations start on time.
+    Future<void> wait(int ms) async {
+      for (var t = 0; t < ms; t += 50) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+    }
+
+    Future<void> tap(String key) async {
+      await tester.tap(find.byKey(ValueKey(key)));
+      await tester.pump();
+    }
+
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -65,26 +77,44 @@ void main() {
     expect(find.byKey(const ValueKey('trace-play')), findsOneWidget);
     expect(find.byType(LetterTraceCanvas), findsNothing);
 
-    // Play opens How to Play; its Back returns to the start screen.
-    await tester.tap(find.byKey(const ValueKey('trace-play')));
-    await tester.pump(const Duration(milliseconds: 1500));
+    // Play opens How to Play; Let's Go only appears after a 5s read.
+    await wait(1800);
+    await tap('trace-play');
+    await wait(1500);
     expect(find.byKey(const ValueKey('trace-play')), findsNothing);
+    expect(find.byKey(const ValueKey('trace-wait')), findsOneWidget);
+    expect(find.byKey(const ValueKey('trace-go')), findsNothing);
+    await wait(4200);
     expect(find.byKey(const ValueKey('trace-go')), findsOneWidget);
     expect(find.byType(LetterTraceCanvas), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('trace-howto-back')));
-    await tester.pump();
+    // Its Back returns to the start screen.
+    await tap('trace-howto-back');
+    await wait(600);
     expect(find.byKey(const ValueKey('trace-play')), findsOneWidget);
 
-    // Play, then Let's Go, lands in the tray.
-    await tester.tap(find.byKey(const ValueKey('trace-play')));
-    await tester.pump(const Duration(milliseconds: 1500));
-    await tester.tap(find.byKey(const ValueKey('trace-go')));
-    await tester.pump(const Duration(milliseconds: 400));
+    // Play, then Let's Go, lands in the tray behind a 3·2·1.
+    await wait(1800);
+    await tap('trace-play');
+    await wait(5700);
+    await tap('trace-go');
+    await wait(600);
     expect(find.byKey(const ValueKey('trace-go')), findsNothing);
     expect(find.byType(LetterTraceCanvas), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+    await wait(2600);
+    expect(find.text('Go!'), findsOneWidget);
+    await wait(600);
+    expect(find.text('Go!'), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('trace-back')));
+    // Clear sweeps the sand: old and new canvas share the tray mid-wipe.
+    await tap('trace-clear');
+    await wait(300);
+    expect(find.byType(LetterTraceCanvas), findsNWidgets(2));
+    await wait(600);
+    expect(find.byType(LetterTraceCanvas), findsOneWidget);
+
+    await tap('trace-back');
     expect(backs, 1);
   });
 }

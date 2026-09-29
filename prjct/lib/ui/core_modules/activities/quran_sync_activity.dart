@@ -291,12 +291,14 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
                   children: [
                     const Text('🔊', style: TextStyle(fontSize: 22)),
                     const SizedBox(width: 8),
-                    Text(
-                      _playingAudio ? 'Playing...' : 'Play Supplication',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: widget.color,
+                    Flexible(
+                      child: Text(
+                        _playingAudio ? 'Playing...' : 'Play Supplication',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: widget.color,
+                        ),
                       ),
                     ),
                   ],
@@ -431,12 +433,14 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        '🪨 Phrase Blocks:',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.ink,
+                      const Flexible(
+                        child: Text(
+                          '🪨 Phrase Blocks:',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.ink,
+                          ),
                         ),
                       ),
                       if (_placedStones.any((s) => s != null))

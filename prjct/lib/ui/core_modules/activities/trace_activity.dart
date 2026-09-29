@@ -62,10 +62,44 @@ class _TraceActivityState extends State<TraceActivity>
   /// Time spent tracing this round, for the ending's summary.
   final _watch = Stopwatch();
 
-  late final _entrance = AnimationController(
+  /// Start screen's entrance: tray, mascots, logo and Play arrive in turn.
+  late final _intro = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 320),
+    duration: const Duration(milliseconds: 1700),
   )..forward();
+
+  /// How to Play's reading time before Let's Go appears.
+  late final _ready = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 5),
+  );
+
+  /// 3·2·1 over the tray (first 3s), then a brief "Go!" as play begins.
+  late final _count = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 3600),
+  )..addListener(_onCount);
+  static const _kCountSecs = 3.0, _kCountTotal = 3.6;
+  int _countShown = 0;
+
+  /// The play screen's HUD settling in around the tray.
+  late final _hudIn = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1000),
+  );
+
+  /// Sand smoothed over right to left on Clear or a new letter; runs in
+  /// step with `_buildCanvas`'s swept switch (same [_kWipe]).
+  late final _wipe = AnimationController(vsync: this, duration: _kWipe);
+  static const _kWipe = Duration(milliseconds: 700);
+
+  /// Check my trace's result ribbon; [_verdictPass] is what it shows.
+  late final _verdict = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+  bool _verdictPass = false;
+
   late final _breathe = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 2600),
@@ -180,7 +214,6 @@ class _TraceActivityState extends State<TraceActivity>
     );
   }
 
-  static const _overshoot = Cubic(0.34, 1.56, 0.64, 1.0);
   static const _passThreshold = 0.75;
   static const _autoPassThreshold = 0.97;
 
@@ -199,13 +232,19 @@ class _TraceActivityState extends State<TraceActivity>
   /// so it stays proportional no matter how big the tray ends up.
   double _boxSizeFor(Size size) => size.shortestSide * 0.78;
 
-  LetterTrace? get _trace {
-    var key = _letter;
+  LetterTrace? get _trace => _traceOf(_card);
+
+  static LetterTrace? _traceOf(FlashCard card) {
+    final parts = card.arabic.split('\n');
+    var key = (parts.length > 1 ? parts.last : card.arabic).trim();
     if (key == 'أ' || key == 'إ' || key == 'آ') key = 'ا';
     if (key == 'ة') key = 'ت';
     if (key == 'ى') key = 'ي';
     return letterTraces[key];
   }
+
+  /// This session's letters, shown pressed into the start screen's sand.
+  late final _sessionTraces = [for (final c in widget.cards) ?_traceOf(c)];
 
   /// The tray's sand, traced off `game_tray.png` and put in the tracing
   /// canvas's own 638x499 stage units (the canvas covers the sand's bounds).
@@ -283,17 +322,17 @@ class _TraceActivityState extends State<TraceActivity>
     Offset Function(double, double) at,
   ) => [for (var i = 0; i < flat.length; i += 2) at(flat[i], flat[i + 1])];
 
-  List<List<Offset>> _guideStrokes(Size size) {
-    final t = _trace;
+  List<List<Offset>> _guideStrokes(Size size) => _guideStrokesFor(_trace, size);
+
+  List<List<Offset>> _guideStrokesFor(LetterTrace? t, Size size) {
     if (t == null) return [];
     final at = _fit(t, size);
     return [for (final s in t.strokes) _points(s, at)];
   }
 
   /// The letter's own outline at the same fit as [_guideStrokes].
-  Path _glyph(Size size) {
+  Path _glyphFor(LetterTrace? t, Size size) {
     final path = Path();
-    final t = _trace;
     if (t == null) return path;
     final at = _fit(t, size);
     for (final c in t.outline) {
@@ -361,7 +400,13 @@ class _TraceActivityState extends State<TraceActivity>
         _passed = true;
       });
       _clock.stop();
+      _showVerdict(true);
     }
+  }
+
+  void _showVerdict(bool pass) {
+    _verdictPass = pass;
+    _verdict.forward(from: 0);
   }
 
   void _handleCheck() {
@@ -375,6 +420,7 @@ class _TraceActivityState extends State<TraceActivity>
       _passed = passed;
     });
     _click();
+    _showVerdict(passed);
     if (passed) _clock.stop();
     if (!passed) {
       _failedChecks++;
@@ -400,7 +446,8 @@ class _TraceActivityState extends State<TraceActivity>
         _checked = false;
         _passed = false;
       });
-      _entrance.forward(from: 0);
+      _verdict.value = 0;
+      _wipe.forward(from: 0);
       _clock.forward(from: 0);
       _say();
     }
@@ -416,6 +463,8 @@ class _TraceActivityState extends State<TraceActivity>
       _passed = false;
       _clearCounter++;
     });
+    _verdict.value = 0;
+    _wipe.forward(from: 0);
     // A pass froze the timer; clearing to try again sets it running again.
     if (!_clock.isAnimating && _clock.value < 1) _clock.forward();
   }
@@ -464,7 +513,12 @@ class _TraceActivityState extends State<TraceActivity>
     _idle.dispose();
     _enter.dispose();
     _clock.dispose();
-    _entrance.dispose();
+    _intro.dispose();
+    _ready.dispose();
+    _count.dispose();
+    _hudIn.dispose();
+    _wipe.dispose();
+    _verdict.dispose();
     _breathe.dispose();
     _wobble.dispose();
     super.dispose();
@@ -516,21 +570,43 @@ class _TraceActivityState extends State<TraceActivity>
       _playDown = false;
     });
     _enter.forward(from: 0);
+    _ready.forward(from: 0);
   }
 
   /// How to Play's Back: return to the start screen (not out of the lesson).
   void _toStart() {
     _click();
     if (_audio != null) unawaited(_audio!.stopLetter());
+    _ready.stop();
     setState(() => _screen = _Screen.start);
     _idle.repeat();
+    _intro.forward(from: 0);
   }
 
-  /// Into the tray, first letter, timer and round clock running.
+  /// Into the tray: the HUD settles in under a 3·2·1, then the first
+  /// letter's timer and the round clock start.
   void _go() {
     _click();
+    _verdict.value = 0;
+    _clock.value = 0;
     setState(() => _screen = _Screen.play);
-    _entrance.forward(from: 0);
+    _hudIn.forward(from: 0);
+    _countShown = 3;
+    _count.forward(from: 0);
+  }
+
+  bool get _counting =>
+      _count.isAnimating && _count.value * _kCountTotal < _kCountSecs;
+
+  /// Ticks each number of the countdown; at "Go!" play begins.
+  void _onCount() {
+    final secs = _count.value * _kCountTotal;
+    final n = secs < _kCountSecs ? 3 - secs.floor() : 0;
+    if (n == _countShown) return;
+    _countShown = n;
+    _click();
+    if (n != 0) return;
+    setState(() {});
     _clock.forward(from: 0);
     _watch
       ..reset()
@@ -608,13 +684,60 @@ class _TraceActivityState extends State<TraceActivity>
     ),
   );
 
+  /// Eases [child] in over [from]..[to] of [a]: fading up while it glides
+  /// in from [offset] and grows from [scale].
+  Widget _fx(
+    Animation<double> a,
+    double from,
+    double to,
+    Widget child, {
+    Offset offset = Offset.zero,
+    double scale = 1,
+    Curve curve = Curves.easeOutCubic,
+  }) {
+    if (MediaQuery.of(context).disableAnimations) return child;
+    return AnimatedBuilder(
+      animation: a,
+      builder: (context, c) {
+        final lin = ((a.value - from) / (to - from)).clamp(0.0, 1.0);
+        final t = curve.transform(lin);
+        return Opacity(
+          opacity: Curves.easeOut.transform(lin),
+          child: Transform.translate(
+            offset: offset * (1 - t),
+            child: Transform.scale(scale: scale + (1 - scale) * t, child: c),
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+
+  /// [children] as one layer of the stage, eased in together by [_fx].
+  Widget _group(
+    Animation<double> a,
+    double from,
+    double to,
+    List<Widget> children, {
+    Offset offset = Offset.zero,
+    double scale = 1,
+  }) => Positioned.fill(
+    child: _fx(
+      a,
+      from,
+      to,
+      Stack(children: children),
+      offset: offset,
+      scale: scale,
+    ),
+  );
+
   Widget _buildStart() {
     final topInset = MediaQuery.of(context).padding.top;
     final still = MediaQuery.of(context).disableAnimations;
     return Stack(
       fit: StackFit.expand,
       children: [
-        _liveBg(),
         Padding(
           padding: EdgeInsets.only(top: topInset),
           child: FittedBox(
@@ -624,36 +747,72 @@ class _TraceActivityState extends State<TraceActivity>
               child: Stack(
                 children: [
                   // Mascots stand on the plaza: a soft silhouette thrown
-                  // down-left plus a contact pool under the feet.
-                  _at(
-                    14,
-                    532,
-                    408,
-                    607,
-                    _shadow(_img('start_boy'), const Offset(-18, 12)),
-                  ),
-                  _at(
-                    447,
-                    583,
-                    390,
-                    599,
-                    _shadow(_img('start_girl'), const Offset(-18, 12)),
-                  ),
-                  _pool(38, 1112, 360, 50),
-                  _pool(470, 1156, 340, 50),
-                  _at(14, 532, 408, 607, _img('start_boy')),
-                  _at(447, 583, 390, 599, _img('start_girl')),
+                  // down-left plus a contact pool under the feet. They
+                  // stroll in from either side once the tray has landed.
+                  _group(_intro, .2, .65, offset: const Offset(-150, 0), [
+                    _at(
+                      14,
+                      532,
+                      408,
+                      607,
+                      _shadow(_img('start_boy'), const Offset(-18, 12)),
+                    ),
+                    _pool(38, 1112, 360, 50),
+                    _at(14, 532, 408, 607, _img('start_boy')),
+                  ]),
+                  _group(_intro, .3, .75, offset: const Offset(150, 0), [
+                    _at(
+                      447,
+                      583,
+                      390,
+                      599,
+                      _shadow(_img('start_girl'), const Offset(-18, 12)),
+                    ),
+                    _pool(470, 1156, 340, 50),
+                    _at(447, 583, 390, 599, _img('start_girl')),
+                  ]),
                   // Tray rests on the ground: drop shadow below and a
                   // darker contact band along its front edge.
-                  _at(
-                    27,
-                    935,
-                    800,
-                    575,
-                    _shadow(_img('start_tray'), const Offset(-10, 26)),
+                  _group(
+                    _intro,
+                    0,
+                    .5,
+                    offset: const Offset(0, 110),
+                    scale: .96,
+                    [
+                      _at(
+                        27,
+                        935,
+                        800,
+                        575,
+                        _shadow(_img('start_tray'), const Offset(-10, 26)),
+                      ),
+                      _pool(47, 1470, 760, 64),
+                      _at(27, 935, 800, 575, _img('start_tray')),
+                      // The session's letters pressed into the sand, all
+                      // tracing themselves at once once the tray lands.
+                      _at(
+                        180,
+                        1025,
+                        495,
+                        390,
+                        IgnorePointer(
+                          child: RepaintBoundary(
+                            child: ValueListenableBuilder<double>(
+                              valueListenable: _bgT,
+                              builder: (context, t, _) => CustomPaint(
+                                painter: _SessionSandPainter(
+                                  _sessionTraces,
+                                  t - 1.1,
+                                  still: still,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  _pool(47, 1470, 760, 64),
-                  _at(27, 935, 800, 575, _img('start_tray')),
                   Positioned.fill(
                     child: AnimatedBuilder(
                       animation: _idle,
@@ -666,17 +825,30 @@ class _TraceActivityState extends State<TraceActivity>
                               32 + 8 * math.sin(t),
                               694,
                               509,
-                              _img('start_logo'),
+                              _fx(
+                                _intro,
+                                .4,
+                                .85,
+                                _img('start_logo'),
+                                offset: const Offset(0, -90),
+                                scale: .82,
+                                curve: Curves.easeOutBack,
+                              ),
                             ),
                             _at(
                               110,
                               1482,
                               634,
                               265,
-                              IgnorePointer(
-                                child: CustomPaint(
-                                  painter: _SparkPainter(
-                                    .5 + .5 * math.sin(t * 2),
+                              _fx(
+                                _intro,
+                                .78,
+                                1,
+                                IgnorePointer(
+                                  child: CustomPaint(
+                                    painter: _SparkPainter(
+                                      .5 + .5 * math.sin(t * 2),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -686,27 +858,35 @@ class _TraceActivityState extends State<TraceActivity>
                               1512,
                               480,
                               205,
-                              Semantics(
-                                button: true,
-                                label: 'Play',
-                                child: GestureDetector(
-                                  key: const ValueKey('trace-play'),
-                                  behavior: HitTestBehavior.opaque,
-                                  onTapDown: (_) =>
-                                      setState(() => _playDown = true),
-                                  onTapUp: (_) =>
-                                      setState(() => _playDown = false),
-                                  onTapCancel: () =>
-                                      setState(() => _playDown = false),
-                                  onTap: _play,
-                                  child: Transform.scale(
-                                    scale: _playDown
-                                        ? .96
-                                        : 1 + .03 * math.sin(t * 2),
-                                    child: _img(
-                                      _playDown
-                                          ? 'start_play_down'
-                                          : 'start_play',
+                              _fx(
+                                _intro,
+                                .62,
+                                .95,
+                                offset: const Offset(0, 60),
+                                scale: .6,
+                                curve: Curves.easeOutBack,
+                                Semantics(
+                                  button: true,
+                                  label: 'Play',
+                                  child: GestureDetector(
+                                    key: const ValueKey('trace-play'),
+                                    behavior: HitTestBehavior.opaque,
+                                    onTapDown: (_) =>
+                                        setState(() => _playDown = true),
+                                    onTapUp: (_) =>
+                                        setState(() => _playDown = false),
+                                    onTapCancel: () =>
+                                        setState(() => _playDown = false),
+                                    onTap: _play,
+                                    child: Transform.scale(
+                                      scale: _playDown
+                                          ? .96
+                                          : 1 + .03 * math.sin(t * 2),
+                                      child: _img(
+                                        _playDown
+                                            ? 'start_play_down'
+                                            : 'start_play',
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -726,18 +906,39 @@ class _TraceActivityState extends State<TraceActivity>
     );
   }
 
+  /// The courtyard stays put while each screen cross-fades in over it.
   @override
-  Widget build(BuildContext context) {
-    switch (_screen) {
-      case _Screen.start:
-        return _buildStart();
-      case _Screen.howTo:
-        return _stage(_buildHowTo());
-      case _Screen.done:
-        return _stage(_buildDone());
-      case _Screen.play:
-        break;
-    }
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [
+      _liveBg(),
+      AnimatedSwitcher(
+        duration: const Duration(milliseconds: 450),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        layoutBuilder: (current, previous) =>
+            Stack(fit: StackFit.expand, children: [...previous, ?current]),
+        transitionBuilder: (child, a) => FadeTransition(
+          opacity: a,
+          child: ScaleTransition(
+            scale: Tween(begin: .97, end: 1.0).animate(a),
+            child: child,
+          ),
+        ),
+        child: KeyedSubtree(
+          key: ValueKey(_screen),
+          child: switch (_screen) {
+            _Screen.start => _buildStart(),
+            _Screen.howTo => _stage(_buildHowTo()),
+            _Screen.done => _stage(_buildDone()),
+            _Screen.play => _buildPlay(),
+          },
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildPlay() {
     final topInset = MediaQuery.of(context).padding.top;
     return LayoutBuilder(
       builder: (context, box) {
@@ -757,7 +958,6 @@ class _TraceActivityState extends State<TraceActivity>
         return Stack(
           fit: StackFit.expand,
           children: [
-            _liveBg(),
             Padding(
               padding: EdgeInsets.only(top: topInset),
               child: FittedBox(
@@ -773,8 +973,21 @@ class _TraceActivityState extends State<TraceActivity>
               944,
               _kSandW,
               _kSandH,
-              ClipPath(clipper: _SandClip(), child: _buildCanvas()),
+              _fx(
+                _hudIn,
+                .3,
+                .85,
+                offset: Offset(0, 110 * s),
+                AnimatedBuilder(
+                  animation: _count,
+                  builder: (context, c) =>
+                      IgnorePointer(ignoring: _counting, child: c),
+                  child: ClipPath(clipper: _SandClip(), child: _buildCanvas()),
+                ),
+              ),
             ),
+            place(126, 890, 600, 150, _verdictRibbon()),
+            Positioned.fill(child: _countdown(place)),
           ],
         );
       },
@@ -794,131 +1007,139 @@ class _TraceActivityState extends State<TraceActivity>
     final stars = _idx + (_passed ? 1 : 0);
     return Stack(
       children: [
-        _at(
-          45,
-          60,
-          105,
-          105,
-          _roundBtn(
-            'trace-back',
-            Icons.arrow_back_ios_new_rounded,
-            widget.onBack,
+        _group(_hudIn, 0, .45, offset: const Offset(0, -90), [
+          _at(
+            45,
+            60,
+            105,
+            105,
+            _roundBtn(
+              'trace-back',
+              Icons.arrow_back_ios_new_rounded,
+              widget.onBack,
+            ),
           ),
-        ),
-        _at(
-          185,
-          68,
-          205,
-          84,
-          Stack(
-            fit: StackFit.expand,
-            children: [
-              _frame('hud_stars'),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.star_rounded,
-                    size: 48,
-                    color: Color(0xFFF4B400),
-                  ),
-                  const SizedBox(width: 10),
-                  Text('$stars', style: _f(36, _kBrown)),
-                ],
-              ),
-            ],
-          ),
-        ),
-        _at(
-          585,
-          60,
-          105,
-          105,
-          _roundBtn(
-            'trace-music',
-            _music ? Icons.music_note_rounded : Icons.music_off_rounded,
-            _toggleMusic,
-          ),
-        ),
-        _at(
-          712,
-          60,
-          105,
-          105,
-          _roundBtn(
-            'trace-sound',
-            _sound ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-            _toggleSound,
-          ),
-        ),
-        Positioned.fill(
-          child: AnimatedBuilder(
-            animation: _clock,
-            builder: (context, _) {
-              final left = 1 - _clock.value;
-              final secs = (_kSeconds * left).ceil();
-              return Stack(
-                children: [
-                  _at(
-                    297,
-                    198,
-                    263,
-                    80,
-                    Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        _frame('hud_timer'),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.hourglass_bottom_rounded,
-                              size: 40,
-                              color: Color(0xFFC98A1A),
-                            ),
-                            const SizedBox(width: 18),
-                            Text(
-                              '0:${secs.toString().padLeft(2, '0')}',
-                              style: _f(36, _kBrown),
-                            ),
-                          ],
-                        ),
-                      ],
+          _at(
+            185,
+            68,
+            205,
+            84,
+            Stack(
+              fit: StackFit.expand,
+              children: [
+                _frame('hud_stars'),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.star_rounded,
+                      size: 48,
+                      color: Color(0xFFF4B400),
                     ),
-                  ),
-                  _at(
-                    215,
-                    283,
-                    422,
-                    28,
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFF3D6),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: const Color(0xFFE7A92B),
-                          width: 3,
-                        ),
+                    const SizedBox(width: 10),
+                    Text('$stars', style: _f(36, _kBrown)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          _at(
+            585,
+            60,
+            105,
+            105,
+            _roundBtn(
+              'trace-music',
+              _music ? Icons.music_note_rounded : Icons.music_off_rounded,
+              _toggleMusic,
+            ),
+          ),
+          _at(
+            712,
+            60,
+            105,
+            105,
+            _roundBtn(
+              'trace-sound',
+              _sound ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+              _toggleSound,
+            ),
+          ),
+        ]),
+        Positioned.fill(
+          child: _fx(
+            _hudIn,
+            .1,
+            .55,
+            offset: const Offset(0, -60),
+            AnimatedBuilder(
+              animation: _clock,
+              builder: (context, _) {
+                final left = 1 - _clock.value;
+                final secs = (_kSeconds * left).ceil();
+                return Stack(
+                  children: [
+                    _at(
+                      297,
+                      198,
+                      263,
+                      80,
+                      Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          _frame('hud_timer'),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.hourglass_bottom_rounded,
+                                size: 40,
+                                color: Color(0xFFC98A1A),
+                              ),
+                              const SizedBox(width: 18),
+                              Text(
+                                '0:${secs.toString().padLeft(2, '0')}',
+                                style: _f(36, _kBrown),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                      alignment: Alignment.centerLeft,
-                      child: FractionallySizedBox(
-                        widthFactor: left,
-                        heightFactor: 1,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF2FAE5B), Color(0xFF7BD37F)],
+                    ),
+                    _at(
+                      215,
+                      283,
+                      422,
+                      28,
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF3D6),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: const Color(0xFFE7A92B),
+                            width: 3,
+                          ),
+                        ),
+                        alignment: Alignment.centerLeft,
+                        child: FractionallySizedBox(
+                          widthFactor: left,
+                          heightFactor: 1,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF2FAE5B), Color(0xFF7BD37F)],
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              );
-            },
+                  ],
+                );
+              },
+            ),
           ),
         ),
         _at(
@@ -926,52 +1147,69 @@ class _TraceActivityState extends State<TraceActivity>
           335,
           438,
           187,
-          Stack(
-            fit: StackFit.expand,
-            children: [
-              _frame('hud_card'),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(56, 24, 44, 24),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text('TRACE THIS', style: _f(26, _kBrown)),
-                          Flexible(
-                            child: FittedBox(
-                              // The character itself, in the same naskh face
-                              // the sand's letter is cut from.
-                              child: Text(
-                                _letter,
-                                textDirection: TextDirection.rtl,
-                                style: const TextStyle(
-                                  fontFamily: 'ScheherazadeNew',
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 84,
-                                  height: 1.25,
-                                  color: _kBrown,
+          _fx(
+            _hudIn,
+            .15,
+            .65,
+            scale: .8,
+            curve: Curves.easeOutBack,
+            Stack(
+              fit: StackFit.expand,
+              children: [
+                _frame('hud_card'),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(56, 24, 44, 24),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text('TRACE THIS', style: _f(26, _kBrown)),
+                            Flexible(
+                              child: FittedBox(
+                                // The character itself, in the same naskh face
+                                // the sand's letter is cut from; each new
+                                // letter swaps in with a soft pop.
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 420),
+                                  switchInCurve: Curves.easeOutBack,
+                                  transitionBuilder: (c, a) => FadeTransition(
+                                    opacity: a,
+                                    child: ScaleTransition(scale: a, child: c),
+                                  ),
+                                  child: Text(
+                                    _letter,
+                                    key: ValueKey(_idx),
+                                    textDirection: TextDirection.rtl,
+                                    style: const TextStyle(
+                                      fontFamily: 'ScheherazadeNew',
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 84,
+                                      height: 1.25,
+                                      color: _kBrown,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    Semantics(
-                      button: true,
-                      label: 'Hear the letter',
-                      child: GestureDetector(
-                        key: const ValueKey('trace-say'),
-                        onTap: _say,
-                        child: _speaker(104),
+                      Semantics(
+                        button: true,
+                        label: 'Hear the letter',
+                        child: GestureDetector(
+                          key: const ValueKey('trace-say'),
+                          onTap: _say,
+                          child: _speaker(104),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         _at(
@@ -979,101 +1217,308 @@ class _TraceActivityState extends State<TraceActivity>
           772,
           732,
           80,
-          Stack(
-            fit: StackFit.expand,
-            children: [
-              _frame('hud_accuracy'),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 60),
-                child: Row(
-                  children: [
-                    Text('Accuracy', style: _f(28, _kBrown)),
-                    const SizedBox(width: 22),
-                    Expanded(
-                      child: Container(
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFE3C8),
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        alignment: Alignment.centerLeft,
-                        child: AnimatedFractionallySizedBox(
-                          duration: const Duration(milliseconds: 120),
-                          widthFactor: _accuracy.clamp(0.0, 1.0),
-                          heightFactor: 1,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(15),
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF1E8F4E), Color(0xFF3FBF6A)],
+          _fx(
+            _hudIn,
+            .25,
+            .7,
+            offset: const Offset(0, 50),
+            Stack(
+              fit: StackFit.expand,
+              children: [
+                _frame('hud_accuracy'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 60),
+                  child: Row(
+                    children: [
+                      Text('Accuracy', style: _f(28, _kBrown)),
+                      const SizedBox(width: 22),
+                      Expanded(
+                        child: Container(
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFE3C8),
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                          alignment: Alignment.centerLeft,
+                          child: AnimatedFractionallySizedBox(
+                            duration: const Duration(milliseconds: 120),
+                            widthFactor: _accuracy.clamp(0.0, 1.0),
+                            heightFactor: 1,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(15),
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF1E8F4E),
+                                    Color(0xFF3FBF6A),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 20),
-                    SizedBox(
-                      width: 76,
-                      child: Text(
-                        '${(_accuracy * 100).clamp(0, 100).round()}%',
-                        textAlign: TextAlign.right,
-                        style: _f(30, _kGreen),
+                      const SizedBox(width: 20),
+                      SizedBox(
+                        width: 76,
+                        child: Text(
+                          '${(_accuracy * 100).clamp(0, 100).round()}%',
+                          textAlign: TextAlign.right,
+                          style: _f(30, _kGreen),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+              ],
+            ),
+          ),
+        ),
+        // Tray rests on the plaza like on the start screen; it rises in
+        // with the tracing canvas laid over it (same slice and offset).
+        _group(_hudIn, .3, .85, offset: const Offset(0, 110), [
+          _at(18, 870, 820, 655, _shadow(_tray(), const Offset(-10, 26))),
+          _pool(38, 1480, 780, 64),
+          _at(18, 870, 820, 655, _tray()),
+        ]),
+        _group(_hudIn, .5, 1, offset: const Offset(0, 140), [
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 1537,
+            height: 52,
+            child: Center(child: _dots()),
+          ),
+          _at(
+            30,
+            1635,
+            258,
+            120,
+            _creamBtn('trace-clear', 'Clear', Icons.refresh_rounded, _clear),
+          ),
+          _at(
+            310,
+            1625,
+            512,
+            140,
+            // Once passed, Next breathes gently to invite the tap.
+            AnimatedBuilder(
+              animation: _breathe,
+              builder: (context, c) => Transform.scale(
+                scale: _passed ? 1 + .04 * _breathe.value : 1,
+                child: c,
               ),
-            ],
+              child: _greenBtn(
+                'trace-check',
+                _passed ? (last ? 'Done!' : 'Next') : 'Check my trace',
+                _passed ? Icons.arrow_forward_rounded : Icons.check_rounded,
+                _passed ? _next : _handleCheck,
+              ),
+            ),
           ),
-        ),
-        // Tray rests on the plaza like on the start screen.
-        _at(18, 870, 820, 655, _shadow(_tray(), const Offset(-10, 26))),
-        _pool(38, 1480, 780, 64),
-        _at(18, 870, 820, 655, _tray()),
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 1537,
-          height: 52,
-          child: Center(child: _dots()),
-        ),
-        _at(
-          30,
-          1635,
-          258,
-          120,
-          _creamBtn('trace-clear', 'Clear', Icons.refresh_rounded, _clear),
-        ),
-        _at(
-          310,
-          1625,
-          512,
-          140,
-          _greenBtn(
-            'trace-check',
-            _passed ? (last ? 'Done!' : 'Next') : 'Check my trace',
-            _passed ? Icons.arrow_forward_rounded : Icons.check_rounded,
-            _passed ? _next : _handleCheck,
-          ),
-        ),
+        ]),
       ],
     );
   }
 
+  /// 3·2·1 in a cream disc over the dimmed tray, a ring draining with each
+  /// second; then "Go!" pops and the dim lifts as tracing unlocks.
+  Widget _countdown(
+    Widget Function(double l, double t, double w, double h, Widget c) place,
+  ) => AnimatedBuilder(
+    animation: _count,
+    builder: (context, _) {
+      if (!_count.isAnimating) return const SizedBox.shrink();
+      final secs = _count.value * _kCountTotal;
+      final go = secs >= _kCountSecs;
+      final local = go
+          ? (secs - _kCountSecs) / (_kCountTotal - _kCountSecs)
+          : secs - secs.floor();
+      final pop = Curves.easeOutBack.transform((local / .35).clamp(0.0, 1.0));
+      final out = go ? local : ((local - .8) / .2).clamp(0.0, 1.0);
+      final dim = go ? 1 - local : 1.0;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          IgnorePointer(
+            ignoring: go,
+            child: ColoredBox(color: Color.fromRGBO(40, 22, 6, .38 * dim)),
+          ),
+          place(
+            276,
+            1047,
+            300,
+            300,
+            IgnorePointer(
+              child: FittedBox(
+                child: SizedBox(
+                  width: 300,
+                  height: 300,
+                  child: Opacity(
+                    opacity: 1 - out,
+                    child: Transform.scale(
+                      scale: .4 + .6 * pop + .25 * out,
+                      child: go
+                          ? Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 44,
+                                  vertical: 18,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2FAE5B),
+                                  borderRadius: BorderRadius.circular(60),
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 6,
+                                  ),
+                                ),
+                                child: Text('Go!', style: _f(96, Colors.white)),
+                              ),
+                            )
+                          : Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                DecoratedBox(decoration: _panel(150)),
+                                Padding(
+                                  padding: const EdgeInsets.all(18),
+                                  child: CircularProgressIndicator(
+                                    value: 1 - local,
+                                    strokeWidth: 12,
+                                    strokeCap: StrokeCap.round,
+                                    color: const Color(0xFFF4B400),
+                                    backgroundColor: const Color(0xFFF1DDB0),
+                                  ),
+                                ),
+                                Center(
+                                  child: Text(
+                                    '${3 - secs.floor()}',
+                                    style: _f(170, _kGreen),
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+
+  /// Check my trace's answer, over the top of the sand: a green ribbon
+  /// with a burst of light and sparkles on a pass (held until Next), or a
+  /// coral one that nudges to try again and fades on its own.
+  Widget _verdictRibbon() => IgnorePointer(
+    child: AnimatedBuilder(
+      animation: _verdict,
+      builder: (context, _) {
+        final v = _verdict.value;
+        if (v == 0 || (_verdictPass && !_passed)) {
+          return const SizedBox.shrink();
+        }
+        final pass = _verdictPass;
+        final pop = (pass ? Curves.elasticOut : Curves.easeOutBack).transform(
+          (v / (pass ? .6 : .3)).clamp(0.0, 1.0),
+        );
+        final fade = pass ? 1.0 : 1 - ((v - .75) / .25).clamp(0.0, 1.0);
+        final pct = (_accuracy * 100).clamp(0, 100).round();
+        return FittedBox(
+          child: SizedBox(
+            width: 600,
+            height: 150,
+            child: Opacity(
+              opacity: fade,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  if (pass)
+                    Positioned(
+                      left: -100,
+                      right: -100,
+                      top: -200,
+                      bottom: -200,
+                      child: CustomPaint(painter: _BurstPainter(v)),
+                    ),
+                  Transform.scale(
+                    scale: .3 + .7 * pop,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(18, 14, 38, 14),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: pass
+                                ? const [Color(0xFF3FBF6A), Color(0xFF1E8F4E)]
+                                : const [Color(0xFFFF9A7A), Color(0xFFE5603F)],
+                          ),
+                          borderRadius: BorderRadius.circular(70),
+                          border: Border.all(color: Colors.white, width: 6),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x554A2A0C),
+                              blurRadius: 18,
+                              offset: Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 92,
+                              height: 92,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white,
+                              ),
+                              child: Icon(
+                                pass
+                                    ? Icons.star_rounded
+                                    : Icons.refresh_rounded,
+                                size: 70,
+                                color: pass
+                                    ? const Color(0xFFF4B400)
+                                    : const Color(0xFFE5603F),
+                              ),
+                            ),
+                            const SizedBox(width: 20),
+                            Text(
+                              pass ? 'Great tracing!' : 'Try again!',
+                              style: _f(50, Colors.white),
+                            ),
+                            const SizedBox(width: 16),
+                            Text(
+                              '$pct%',
+                              style: _f(40, const Color(0xFFFFF3D6)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+  );
+
   /// A full-screen page laid out on the 853x1844 stage over the live
   /// courtyard.
-  Widget _stage(Widget child) => Stack(
-    fit: StackFit.expand,
-    children: [
-      _liveBg(),
-      Padding(
-        padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
-        child: FittedBox(
-          child: SizedBox(width: _kW, height: _kH, child: child),
-        ),
-      ),
-    ],
+  Widget _stage(Widget child) => Padding(
+    padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+    child: FittedBox(
+      child: SizedBox(width: _kW, height: _kH, child: child),
+    ),
   );
 
   /// The green "hear it" disc from the Trace This card.
@@ -1153,20 +1598,10 @@ class _TraceActivityState extends State<TraceActivity>
     ],
   );
 
-  /// Eases a child in (rising, fading) over [from]..[to] of [_enter].
-  Widget _rise(double from, double to, Widget child) => AnimatedBuilder(
-    animation: _enter,
-    builder: (context, c) {
-      final t = Curves.easeOutBack.transform(
-        ((_enter.value - from) / (to - from)).clamp(0.0, 1.0),
-      );
-      return Opacity(
-        opacity: t.clamp(0.0, 1.0),
-        child: Transform.translate(offset: Offset(0, 40 * (1 - t)), child: c),
-      );
-    },
-    child: child,
-  );
+  /// Eases a child in (rising, fading, settling from a touch smaller) over
+  /// [from]..[to] of [_enter].
+  Widget _rise(double from, double to, Widget child) =>
+      _fx(_enter, from, to, child, offset: const Offset(0, 56), scale: .96);
 
   /// The title plaque both new screens open with.
   Widget _plaque(String title, String sub) => Stack(
@@ -1224,7 +1659,7 @@ class _TraceActivityState extends State<TraceActivity>
                       child: Text('$n', style: _f(32, Colors.white)),
                     ),
                     const SizedBox(width: 14),
-                    Text(title, style: _f(42, _kGreen)),
+                    Flexible(child: Text(title, style: _f(42, _kGreen))),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -1318,12 +1753,74 @@ class _TraceActivityState extends State<TraceActivity>
           _rise(
             .6,
             1,
-            _greenBtn('trace-go', "Let's Go!", Icons.play_arrow_rounded, _go),
+            // A few seconds to read the steps: a filling bar first, then
+            // Let's Go pops in its place.
+            AnimatedBuilder(
+              animation: _ready,
+              builder: (context, _) => AnimatedSwitcher(
+                duration: const Duration(milliseconds: 500),
+                switchInCurve: Curves.easeOutBack,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (c, a) => FadeTransition(
+                  opacity: a,
+                  child: ScaleTransition(scale: a, child: c),
+                ),
+                child: _ready.isCompleted
+                    ? _greenBtn(
+                        'trace-go',
+                        "Let's Go!",
+                        Icons.play_arrow_rounded,
+                        _go,
+                      )
+                    : _readyBar(_ready.value),
+              ),
+            ),
           ),
         ),
       ],
     );
   }
+
+  /// How to Play's wait: "Get ready..." over a gold bar filling up.
+  Widget _readyBar(double v) => Padding(
+    key: const ValueKey('trace-wait'),
+    padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
+    child: Container(
+      padding: const EdgeInsets.fromLTRB(40, 8, 40, 14),
+      decoration: _panel(56),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Flexible(
+            child: FittedBox(
+              child: Text('Get ready...', style: _f(34, _kBrown)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            height: 20,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFE3C8),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: v,
+              heightFactor: 1,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(11),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFF4B400), Color(0xFFFFD45C)],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 
   /// The ending: congratulations, stars for the round, each letter's
   /// accuracy and the round's totals, then Continue or Replay.
@@ -1569,38 +2066,92 @@ class _TraceActivityState extends State<TraceActivity>
     ),
   );
 
+  /// Where the smoothing sweep's edge is (0..1 across the sand, moving
+  /// right to left, in writing direction) [t] of the way through.
+  static double _sweepEdge(double t) =>
+      1.08 - 1.16 * Curves.easeInOutCubic.transform(t);
+
+  /// The old sand wiped away and the fresh one revealed along the same
+  /// moving edge, so the two never overlap: the outgoing canvas keeps
+  /// what's left of the edge, the incoming one what's right of it.
+  Widget _swept(Widget child, Animation<double> a) => AnimatedBuilder(
+    animation: a,
+    child: child,
+    builder: (context, c) {
+      final out = a.status == AnimationStatus.reverse;
+      final edge = _sweepEdge(out ? 1 - a.value : a.value);
+      const soft = .06;
+      final stops = [
+        (edge - soft).clamp(0.0, 1.0),
+        (edge + soft).clamp(0.0, 1.0),
+      ];
+      return IgnorePointer(
+        ignoring: out,
+        child: ShaderMask(
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (r) => LinearGradient(
+            colors: out
+                ? const [Colors.white, Colors.transparent]
+                : const [Colors.transparent, Colors.white],
+            stops: stops,
+          ).createShader(r),
+          child: c,
+        ),
+      );
+    },
+  );
+
   Widget _buildCanvas() {
     return AnimatedBuilder(
-      animation: Listenable.merge([_entrance, _wobble]),
+      animation: _wobble,
       builder: (context, child) {
-        final e = _overshoot.transform(_entrance.value);
         final wobbleT = Curves.easeInOut.transform(_wobble.value);
         final dx = _wobble.isAnimating
             ? (wobbleT < 0.5 ? -6.0 : 6.0) * (1 - (wobbleT - 0.5).abs() * 2)
             : 0.0;
-        return Opacity(
-          opacity: e.clamp(0.0, 1.0),
-          child: Transform.translate(
-            offset: Offset(dx, 12 * (1 - e)),
-            child: child,
-          ),
-        );
+        return Transform.translate(offset: Offset(dx, 0), child: child);
       },
-      child: LetterTraceCanvas(
-        key: ValueKey('${_card.id}_${_idx}_$_clearCounter'),
-        passed: _checked && _passed,
-        failed: _checked && !_passed,
-        breathe: _breathe,
-        guidePointsBuilder: _guideStrokes,
-        onStroke: _handleStroke,
-        onDirectionViolation: () {
-          _wobble.forward(from: 0);
-        },
-        // The canvas is laid out in screen pixels: a finger anywhere inside
-        // the letter's stroke fills it in.
-        coverTolerance: 18,
-        glyphBuilder: _glyph,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          AnimatedSwitcher(
+            duration: _kWipe,
+            layoutBuilder: (current, previous) =>
+                Stack(fit: StackFit.expand, children: [...previous, ?current]),
+            transitionBuilder: _swept,
+            child: _canvas(),
+          ),
+          IgnorePointer(
+            child: AnimatedBuilder(
+              animation: _wipe,
+              builder: (context, _) => _wipe.isAnimating
+                  ? CustomPaint(painter: _SweepPainter(_sweepEdge(_wipe.value)))
+                  : const SizedBox.shrink(),
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  /// Bound to this letter's trace, so a canvas sweeping out keeps its own
+  /// letter while the next one sweeps in.
+  Widget _canvas() {
+    final t = _trace;
+    return LetterTraceCanvas(
+      key: ValueKey('${_card.id}_${_idx}_$_clearCounter'),
+      passed: _checked && _passed,
+      failed: _checked && !_passed,
+      breathe: _breathe,
+      guidePointsBuilder: (size) => _guideStrokesFor(t, size),
+      onStroke: _handleStroke,
+      onDirectionViolation: () {
+        _wobble.forward(from: 0);
+      },
+      // The canvas is laid out in screen pixels: a finger anywhere inside
+      // the letter's stroke fills it in.
+      coverTolerance: 18,
+      glyphBuilder: (size) => _glyphFor(t, size),
     );
   }
 }
@@ -1615,6 +2166,159 @@ class _SandClip extends CustomClipper<Path> {
 }
 
 enum _Screen { start, howTo, play, done }
+
+/// The start screen's sand: the session's letters one at a time, in
+/// order. Each presses into the sand, fills with gold along its strokes in
+/// writing order (a spark leading), holds, then fades for the next; after
+/// the last it starts over. [t] is seconds into the show (nothing before
+/// 0); [still] shows the first letter simply filled.
+class _SessionSandPainter extends CustomPainter {
+  _SessionSandPainter(this.traces, this.t, {this.still = false});
+
+  final List<LetterTrace> traces;
+  final double t;
+  final bool still;
+
+  /// Per letter: press in, trace, hold, fade.
+  static const _in = .4, _draw = 2.2, _hold = .8, _out = .6;
+  static const _each = _in + _draw + _hold + _out;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = traces.length;
+    if (n == 0 || (t < 0 && !still)) return;
+    final box = Rect.fromCenter(
+      center: size.center(Offset.zero),
+      width: size.width * .8,
+      height: size.height * .8,
+    );
+    if (still) {
+      _letter(canvas, traces.first, box, 1, 1, 1, 1);
+      return;
+    }
+    final i = (t / _each).floor() % n;
+    final ct = t % _each;
+    final press = Curves.easeOut.transform((ct / _in).clamp(0.0, 1.0));
+    final p = ((ct - _in) / _draw).clamp(0.0, 1.0);
+    final fade = 1 - ((ct - (_each - _out)) / _out).clamp(0.0, 1.0);
+    // As the trace finishes, the gold floods the rest of the shadow so the
+    // whole letter reads as filled, thick bowls and dots included.
+    final full = Curves.easeOut.transform(
+      ((ct - _in - _draw * .85) / (_draw * .15 + .25)).clamp(0.0, 1.0),
+    );
+    canvas.save();
+    // Settles in from a touch larger as it presses into the sand.
+    final s = 1.06 - .06 * press;
+    canvas.translate(box.center.dx, box.center.dy);
+    canvas.scale(s);
+    canvas.translate(-box.center.dx, -box.center.dy);
+    _letter(canvas, traces[i], box, p, fade, press * fade, full);
+    canvas.restore();
+  }
+
+  void _letter(
+    Canvas canvas,
+    LetterTrace tr,
+    Rect box,
+    double p,
+    double fade,
+    double ink,
+    double full,
+  ) {
+    var minX = double.infinity, maxX = -double.infinity;
+    var minY = double.infinity, maxY = -double.infinity;
+    for (final c in tr.outline) {
+      for (var i = 0; i < c.length; i += 2) {
+        minX = math.min(minX, c[i]);
+        maxX = math.max(maxX, c[i]);
+        minY = math.min(minY, c[i + 1]);
+        maxY = math.max(maxY, c[i + 1]);
+      }
+    }
+    final scale = math.min(
+      box.width / (maxX - minX),
+      box.height / (maxY - minY),
+    );
+    final off =
+        box.center - Offset((minX + maxX) / 2, (minY + maxY) / 2) * scale;
+    Offset at(double x, double y) => off + Offset(x * scale, y * scale);
+
+    final glyph = Path();
+    for (final c in tr.outline) {
+      glyph.addPolygon([
+        for (var i = 0; i < c.length; i += 2) at(c[i], c[i + 1]),
+      ], true);
+    }
+    // Pressed in: a pale lip on the lower edge, the hollow darker.
+    canvas.drawPath(
+      glyph.shift(const Offset(2.5, 3.5)),
+      Paint()..color = const Color(0xFFFFF3D0).withValues(alpha: .44 * ink),
+    );
+    canvas.drawPath(
+      glyph,
+      Paint()..color = const Color(0xFF4A3A1E).withValues(alpha: .4 * ink),
+    );
+    if (p <= 0 || fade <= 0) return;
+
+    final strokes = [
+      for (final s in tr.strokes)
+        [for (var i = 0; i < s.length; i += 2) at(s[i], s[i + 1])],
+    ];
+    final total = strokes.fold<int>(0, (a, s) => a + s.length);
+    final upto = p * total;
+    final width = math.max(maxX - minX, maxY - minY) * scale * .22;
+    final gold = Paint()
+      ..color = const Color(0xFFF4B400)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    Offset? tip;
+    // Cut to the letter itself, then faded as one layer.
+    canvas.save();
+    canvas.clipPath(glyph);
+    canvas.saveLayer(
+      glyph.getBounds(),
+      Paint()..color = Color.fromRGBO(0, 0, 0, fade),
+    );
+    var k = 0;
+    for (final s in strokes) {
+      final take = (upto - k).clamp(0, s.length).floor();
+      k += s.length;
+      if (take == 0) continue;
+      if (s.length == 1) {
+        canvas.drawCircle(s.first, width * .7, Paint()..color = gold.color);
+        tip = s.first;
+        continue;
+      }
+      canvas.drawPath(Path()..addPolygon(s.sublist(0, take), false), gold);
+      tip = s[take - 1];
+    }
+    if (full > 0) {
+      canvas.drawPath(
+        glyph,
+        Paint()..color = gold.color.withValues(alpha: full),
+      );
+    }
+    canvas.restore();
+    canvas.restore();
+
+    if (tip != null && p < 1) {
+      canvas.drawCircle(
+        tip,
+        width * .9,
+        Paint()
+          ..color = const Color(0xAAFFF3B0)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, width * .6),
+      );
+      canvas.drawCircle(tip, width * .28, Paint()..color = Colors.white);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SessionSandPainter old) =>
+      old.t != t || old.still != still || old.traces != traces;
+}
 
 /// How to Play's step 2: ب traced on a loop — the letter pressed into the
 /// sand, gold filling it from the number-1 start, a fingertip leading.
@@ -1647,8 +2351,8 @@ class _DemoPainter extends CustomPainter {
     final upto = (p * (pts.length - 1)).round();
 
     canvas.drawPath(glyph, Paint()..color = const Color(0x554A3A1E));
-    final bounds = Offset.zero & size;
-    canvas.saveLayer(bounds, Paint());
+    canvas.save();
+    canvas.clipPath(glyph);
     if (upto > 0) {
       canvas.drawPath(
         Path()..addPolygon(pts.sublist(0, upto + 1), false),
@@ -1660,7 +2364,6 @@ class _DemoPainter extends CustomPainter {
           ..strokeJoin = StrokeJoin.round,
       );
     }
-    canvas.drawPath(glyph, Paint()..blendMode = BlendMode.dstIn);
     canvas.restore();
 
     // Number 1 at the start, then the fingertip.
@@ -1698,6 +2401,119 @@ class _DemoPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DemoPainter old) => old.t != t;
+}
+
+/// Clear's smoothing pass: a soft band of fresh light sand at [edge]
+/// (0..1 across) with a ridge of grains pushed ahead of it.
+class _SweepPainter extends CustomPainter {
+  _SweepPainter(this.edge);
+
+  final double edge;
+
+  static const _grains = [
+    Color(0xFFF3DDAA),
+    Color(0xFFE8C98A),
+    Color(0xFFD9AE62),
+    Color(0xFFC4934A),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final x = edge * size.width;
+    const band = 70.0;
+    canvas.drawRect(
+      Rect.fromLTWH(x - band, 0, band * 2, size.height),
+      Paint()
+        ..shader = ui.Gradient.linear(
+          Offset(x - band, 0),
+          Offset(x + band, 0),
+          const [Color(0x00FFF1CC), Color(0x88FFF1CC), Color(0x00FFF1CC)],
+          const [0, .45, 1],
+        ),
+    );
+    double h(int i, int k) {
+      final v = math.sin(i * 12.9898 + k * 78.233) * 43758.5453;
+      return v - v.floorToDouble();
+    }
+
+    for (var i = 0; i < 90; i++) {
+      final ahead = h(i, 1);
+      canvas.drawCircle(
+        Offset(x - 6 - ahead * ahead * 34, h(i, 2) * size.height),
+        .8 + h(i, 3) * 1.8,
+        Paint()
+          ..color = _grains[i % _grains.length].withValues(
+            alpha: 1 - ahead * .7,
+          ),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SweepPainter old) => old.edge != edge;
+}
+
+/// A pass's celebration behind the ribbon: gold rays turning as they
+/// reach out, a ring of light expanding, and sparkles flung outward —
+/// all spent by the end of [v] (0..1).
+class _BurstPainter extends CustomPainter {
+  _BurstPainter(this.v);
+
+  final double v;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final out = Curves.easeOutCubic.transform(v);
+    final fade = 1 - v;
+
+    final ray = Paint()
+      ..color = const Color(0xFFFFD45C).withValues(alpha: .45 * fade);
+    for (var i = 0; i < 14; i++) {
+      final a = i * 2 * math.pi / 14 + v * .6;
+      final len = 90 + 260 * out;
+      final dir = Offset(math.cos(a), math.sin(a));
+      final side = Offset(-dir.dy, dir.dx) * 14;
+      canvas.drawPath(
+        Path()
+          ..moveTo(c.dx + dir.dx * 60, c.dy + dir.dy * 60)
+          ..lineTo(c.dx + dir.dx * len + side.dx, c.dy + dir.dy * len + side.dy)
+          ..lineTo(c.dx + dir.dx * len - side.dx, c.dy + dir.dy * len - side.dy)
+          ..close(),
+        ray,
+      );
+    }
+
+    canvas.drawCircle(
+      c,
+      70 + 300 * out,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 12 * fade + 1
+        ..color = const Color(0xFFFFF3D6).withValues(alpha: .8 * fade),
+    );
+
+    for (var i = 0; i < 16; i++) {
+      final a = i * 2 * math.pi / 16 + (i.isEven ? .2 : -.1);
+      final d = (i.isEven ? 170 : 240) * out + 50;
+      final p = c + Offset(math.cos(a), math.sin(a)) * d;
+      final r = 16 * fade + 4;
+      canvas.drawPath(
+        Path()
+          ..moveTo(p.dx, p.dy - r)
+          ..quadraticBezierTo(p.dx, p.dy, p.dx + r, p.dy)
+          ..quadraticBezierTo(p.dx, p.dy, p.dx, p.dy + r)
+          ..quadraticBezierTo(p.dx, p.dy, p.dx - r, p.dy)
+          ..quadraticBezierTo(p.dx, p.dy, p.dx, p.dy - r),
+        Paint()
+          ..color = (i % 3 == 0 ? Colors.white : const Color(0xFFF4B400))
+              .withValues(alpha: fade),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BurstPainter old) => old.v != v;
 }
 
 /// The ending's confetti: paper bits drifting down on a loop, each

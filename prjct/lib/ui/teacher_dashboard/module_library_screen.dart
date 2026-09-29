@@ -153,12 +153,14 @@ class _HeroChip extends StatelessWidget {
         children: [
           Icon(icon, size: 12, color: AppColors.tealDark),
           const SizedBox(width: 5),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.tealDark,
+          Flexible(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.tealDark,
+              ),
             ),
           ),
         ],
@@ -355,12 +357,14 @@ class _FolderList extends ConsumerWidget {
                   children: [
                     Icon(Icons.add, color: AppColors.tealDark, size: 18),
                     SizedBox(width: 8),
-                    Text(
-                      'New lesson folder',
-                      style: TextStyle(
-                        color: AppColors.tealDark,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13.5,
+                    Flexible(
+                      child: Text(
+                        'New lesson folder',
+                        style: TextStyle(
+                          color: AppColors.tealDark,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13.5,
+                        ),
                       ),
                     ),
                   ],

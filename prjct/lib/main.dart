@@ -45,10 +45,13 @@ class SalamLearnApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       routerConfig: ref.watch(routerProvider),
-      builder: (context, child) => InternetStatusShell(
-        checkInternet: ref.read(internetAccessProvider),
-        connectivityChanges: Connectivity().onConnectivityChanged,
-        child: child ?? const SizedBox.shrink(),
+      builder: (context, child) => MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.3,
+        child: InternetStatusShell(
+          checkInternet: ref.read(internetAccessProvider),
+          connectivityChanges: Connectivity().onConnectivityChanged,
+          child: child ?? const SizedBox.shrink(),
+        ),
       ),
     );
   }

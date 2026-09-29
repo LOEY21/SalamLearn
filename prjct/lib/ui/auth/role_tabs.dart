@@ -48,12 +48,17 @@ class RoleTabs extends StatelessWidget {
               children: [
                 Icon(Icons.person, size: 16, color: color),
                 const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: color,
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: color,
+                      ),
+                    ),
                   ),
                 ),
               ],

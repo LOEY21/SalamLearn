@@ -163,7 +163,7 @@ class _LessonFolderBuilderScreenState
                       crossAxisCount: 2,
                       mainAxisSpacing: 9,
                       crossAxisSpacing: 9,
-                      childAspectRatio: 1.35,
+                      mainAxisExtent: 136,
                     ),
                     itemBuilder: (context, i) {
                       final module = visibleModules[i];

@@ -28,7 +28,8 @@ class HubShell extends ConsumerStatefulWidget {
   ConsumerState<HubShell> createState() => _HubShellState();
 }
 
-class _HubShellState extends ConsumerState<HubShell> {
+class _HubShellState extends ConsumerState<HubShell>
+    with WidgetsBindingObserver {
   static const _fadeDuration = Duration(milliseconds: 140);
   double _opacity = 1;
 
@@ -40,11 +41,30 @@ class _HubShellState extends ConsumerState<HubShell> {
     // and Teacher screens keep the normal status/nav bars (see main.dart's
     // default). Restored on dispose so leaving the hub (PIN gate, role
     // switch, etc.) doesn't leave Parent/Teacher stuck in immersive mode.
+    WidgetsBinding.instance.addObserver(this);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    // Games restore edgeToEdge in their own dispose, which runs after the
+    // hub is already back on top — so re-hide the bars whenever they
+    // reappear while the hub is the visible route.
+    SystemChrome.setSystemUIChangeCallback((barsVisible) async {
+      if (barsVisible) _enterImmersive();
+    });
+  }
+
+  void _enterImmersive() {
+    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _enterImmersive();
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    SystemChrome.setSystemUIChangeCallback(null);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }

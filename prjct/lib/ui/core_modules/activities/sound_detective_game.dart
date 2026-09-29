@@ -2522,13 +2522,18 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
                             color: Colors.white,
                           ),
                           const SizedBox(width: 4),
-                          Text(
-                            'Play Again',
-                            style: _baloo(
-                              20,
-                              800,
-                              Colors.white,
-                              shadows: _kBtnShadow,
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                'Play Again',
+                                style: _baloo(
+                                  20,
+                                  800,
+                                  Colors.white,
+                                  shadows: _kBtnShadow,
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -2548,13 +2553,18 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            'Continue',
-                            style: _baloo(
-                              20,
-                              800,
-                              Colors.white,
-                              shadows: _kBtnShadow,
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                'Continue',
+                                style: _baloo(
+                                  20,
+                                  800,
+                                  Colors.white,
+                                  shadows: _kBtnShadow,
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 4),

@@ -415,12 +415,14 @@ class _HeroChip extends StatelessWidget {
         children: [
           Icon(icon, size: 12, color: AppColors.tealDark),
           const SizedBox(width: 5),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.tealDark,
+          Flexible(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.tealDark,
+              ),
             ),
           ),
         ],

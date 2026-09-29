@@ -413,12 +413,14 @@ class _ModuleDetailCard extends StatelessWidget {
                               color: trendColor,
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              trendLabel,
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                                color: trendColor,
+                            Flexible(
+                              child: Text(
+                                trendLabel,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: trendColor,
+                                ),
                               ),
                             ),
                           ],

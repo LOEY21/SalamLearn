@@ -427,56 +427,60 @@ class _LevelSection extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Opacity(
-                opacity: unlocked ? 1 : 0.5,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: complete
-                        ? AppColors.adventureGreen
-                        : unlocked
-                        ? meta.bg
-                        : const Color(0xFFF0EDE8),
-                    border: Border.all(
-                      color:
-                          (complete
-                                  ? AppColors.adventureGreen
+              Flexible(
+                child: Opacity(
+                  opacity: unlocked ? 1 : 0.5,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: complete
+                          ? AppColors.adventureGreen
+                          : unlocked
+                          ? meta.bg
+                          : const Color(0xFFF0EDE8),
+                      border: Border.all(
+                        color:
+                            (complete
+                                    ? AppColors.adventureGreen
+                                    : unlocked
+                                    ? meta.color
+                                    : const Color(0xFFDDDDDD))
+                                .withValues(alpha: 0.27),
+                        width: 2,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          complete
+                              ? '✅'
+                              : unlocked
+                              ? meta.stars
+                              : '🔒',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            'Level ${levelIndex + 1} — ${meta.label}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: complete
+                                  ? Colors.white
                                   : unlocked
                                   ? meta.color
-                                  : const Color(0xFFDDDDDD))
-                              .withValues(alpha: 0.27),
-                      width: 2,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        complete
-                            ? '✅'
-                            : unlocked
-                            ? meta.stars
-                            : '🔒',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Level ${levelIndex + 1} — ${meta.label}',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: complete
-                              ? Colors.white
-                              : unlocked
-                              ? meta.color
-                              : const Color(0xFFAAAAAA),
+                                  : const Color(0xFFAAAAAA),
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

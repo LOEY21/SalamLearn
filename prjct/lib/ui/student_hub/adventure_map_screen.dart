@@ -532,7 +532,7 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
                   opacity: chromeFade,
                   child: Transform.translate(
                     offset: Offset(0, -16 * (1 - chromeFade)),
-                    child: const SafeArea(child: AdventureMapTopBar()),
+                    child: const AdventureMapTopBar(),
                   ),
                 ),
               ),

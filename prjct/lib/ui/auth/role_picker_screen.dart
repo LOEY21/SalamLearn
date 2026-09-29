@@ -299,13 +299,15 @@ class _RoleCard extends StatelessWidget {
                             color: AppColors.textMuted,
                           ),
                           const SizedBox(width: 5),
-                          Text(
-                            tagText,
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textMuted,
-                              letterSpacing: 0.2,
+                          Flexible(
+                            child: Text(
+                              tagText,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textMuted,
+                                letterSpacing: 0.2,
+                              ),
                             ),
                           ),
                         ],

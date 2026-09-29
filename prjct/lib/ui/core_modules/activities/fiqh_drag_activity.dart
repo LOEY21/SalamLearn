@@ -357,7 +357,9 @@ class _WaterSorterGameState extends State<_WaterSorterGame> {
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
                         Text(item.emoji, style: const TextStyle(fontSize: 16)),
                         const SizedBox(width: 4),
-                        Text(item.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: accent)),
+                        Flexible(
+                          child: Text(item.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: accent)),
+                        ),
                         const SizedBox(width: 4),
                         Icon(Icons.check_circle, size: 12, color: accent),
                       ]),

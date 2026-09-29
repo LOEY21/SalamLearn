@@ -401,21 +401,25 @@ class _CastScreenState extends ConsumerState<CastScreen> {
                                           crossAxisAlignment: CrossAxisAlignment.baseline,
                                           textBaseline: TextBaseline.alphabetic,
                                           children: [
-                                            Text(
-                                              letter['word'] as String,
-                                              style: const TextStyle(
-                                                fontSize: 22,
-                                                fontWeight: FontWeight.w800,
-                                                color: Colors.white,
+                                            Flexible(
+                                              child: Text(
+                                                letter['word'] as String,
+                                                style: const TextStyle(
+                                                  fontSize: 22,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: Colors.white,
+                                                ),
                                               ),
                                             ),
                                             const SizedBox(width: 8),
-                                            Text(
-                                              letter['trans'] as String,
-                                              style: const TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.w600,
-                                                color: AppColors.gold,
+                                            Flexible(
+                                              child: Text(
+                                                letter['trans'] as String,
+                                                style: const TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppColors.gold,
+                                                ),
                                               ),
                                             ),
                                           ],

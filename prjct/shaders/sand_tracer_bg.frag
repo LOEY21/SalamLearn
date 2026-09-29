@@ -42,9 +42,9 @@ float noise(vec2 p) {
   );
 }
 
-// How far the foliage at p has moved, in image px. Each plant rocks about its
-// root on its own slow rate and phase, leaning a little further as a gust
-// builds, the tips travelling most. Leaves flutter in broad, slow patches so
+// How far the foliage at p has moved, in image px. Each palm rocks about its
+// root on its own slow rate and phase, leaning further as a gust builds, the
+// tips travelling most (bushes and ferns have no bend, so they hold still). Leaves flutter in broad, slow patches so
 // whole fronds move together instead of the art wobbling pixel by pixel.
 vec2 sway(vec2 p, vec3 aux) {
   vec3 f = texture(uField, p / kImg).rgb;
@@ -56,7 +56,7 @@ vec2 sway(vec2 p, vec3 aux) {
   float t = uTime;
   float rock = sin(w * t + ph) + 0.3 * sin(w * 1.73 * t + ph * 1.7) +
       0.15 * sin(w * 3.1 * t + ph * 2.3);
-  float ang = 0.05 * (0.3 * uGust + (0.3 + 0.45 * uGust) * 0.6 * rock);
+  float ang = 0.09 * (0.3 * uGust + (0.3 + 0.45 * uGust) * 0.6 * rock);
   vec2 d = ang * bend * vec2(-off.y, off.x);
   vec2 q = p * 0.012;
   d += vec2(
@@ -66,13 +66,15 @@ vec2 sway(vec2 p, vec3 aux) {
   return d;
 }
 
-// One cloud drifting downwind and wrapping round. rect is where it sits in
-// uClouds; its outline billows slowly, the thin edges come and go, and its
-// box's ends fade so a cloud cut by a palm or the frame has no hard edge.
+// One cloud, held still where it was painted (kCloudT is its moment in the
+// old drift, 0 = its own spot). rect is where it sits in uClouds; its box's
+// ends fade so a cloud cut by a palm or the frame has no hard edge.
+const float kCloudT = 0.0;
+
 vec4 cloud(vec2 p, vec4 rect, float speed, float seed) {
   float period = kImg.x + rect.z + 160.0;
-  float x0 = mod(rect.x + speed * uTime + rect.z + 80.0, period) - rect.z - 80.0;
-  vec2 local = p - vec2(x0, rect.y + 3.0 * sin(uTime * 0.05 + seed));
+  float x0 = mod(rect.x + speed * kCloudT + rect.z + 80.0, period) - rect.z - 80.0;
+  vec2 local = p - vec2(x0, rect.y + 3.0 * sin(kCloudT * 0.05 + seed));
   if (local.x < -10.0 || local.y < -10.0 ||
       local.x > rect.z + 10.0 || local.y > rect.w + 10.0) {
     return vec4(0.0);
@@ -80,15 +82,15 @@ vec4 cloud(vec2 p, vec4 rect, float speed, float seed) {
   float ends = smoothstep(0.0, 30.0, local.x) *
       smoothstep(0.0, 30.0, rect.z - local.x) *
       smoothstep(0.0, 10.0, local.y) * smoothstep(0.0, 10.0, rect.w - local.y);
-  float stretch = 1.0 + 0.035 * sin(uTime * 0.07 + seed * 3.0);
+  float stretch = 1.0 + 0.035 * sin(kCloudT * 0.07 + seed * 3.0);
   local.x = (local.x - rect.z * 0.5) / stretch + rect.z * 0.5;
   vec2 n = vec2(
-      noise(local * 0.03 + vec2(uTime * 0.08, seed)),
-      noise(local * 0.03 + vec2(seed, uTime * 0.07))) - 0.5;
+      noise(local * 0.03 + vec2(kCloudT * 0.08, seed)),
+      noise(local * 0.03 + vec2(seed, kCloudT * 0.07))) - 0.5;
   local += n * 5.0;
   local = clamp(local, vec2(0.0), rect.zw);
   vec4 c = texture(uClouds, (rect.xy + local) / kCloudImg);
-  float e = noise(local * 0.06 + vec2(uTime * 0.05, seed * 3.0));
+  float e = noise(local * 0.06 + vec2(kCloudT * 0.05, seed * 3.0));
   float thin = 0.3 * e;
   float a = clamp((c.a - thin) / (1.0 - thin), 0.0, 1.0) * ends;
   return c * (a / max(c.a, 0.001));

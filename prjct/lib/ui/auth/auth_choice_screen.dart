@@ -475,11 +475,13 @@ class _PasswordRequirements extends StatelessWidget {
                   color: test(password) ? AppColors.teal : AppColors.textMuted,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: test(password) ? AppColors.teal : AppColors.textMuted,
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: test(password) ? AppColors.teal : AppColors.textMuted,
+                    ),
                   ),
                 ),
               ],
@@ -516,12 +518,14 @@ class _PasswordMatchIndicator extends StatelessWidget {
             color: color,
           ),
           const SizedBox(width: 8),
-          Text(
-            match ? 'Passwords match' : 'Passwords do not match',
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-              color: color,
+          Flexible(
+            child: Text(
+              match ? 'Passwords match' : 'Passwords do not match',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
             ),
           ),
         ],
@@ -749,12 +753,14 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'How old are you?',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.ink,
+            const Flexible(
+              child: Text(
+                'How old are you?',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.ink,
+                ),
               ),
             ),
             Text(

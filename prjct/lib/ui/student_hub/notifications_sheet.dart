@@ -50,16 +50,19 @@ class NotificationsSheet extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 14, 12, 4),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Notifications',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.ink,
+                  const Flexible(
+                    child: Text(
+                      'Notifications',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.ink,
+                      ),
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 8),
                   TextButton(
                     onPressed: () =>
                         ref.read(notificationsProvider.notifier).markAllRead(),
