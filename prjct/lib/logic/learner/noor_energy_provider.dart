@@ -19,11 +19,6 @@ class NoorEnergyState {
 class NoorEnergyNotifier extends Notifier<NoorEnergyState> {
   static const _maxEnergy = 5;
 
-  // TEMP DEBUG (owner request 2026-07-12): unlimited energy for testing
-  // every level across all 7 destinations. Flip back to `false` to restore
-  // normal 5-lantern gating — no other change needed.
-  static const _debugInfiniteEnergy = true;
-
   Box<dynamic> get _settings => Hive.box<dynamic>(HiveBoxes.settings);
 
   String get _todayKey {
@@ -35,9 +30,6 @@ class NoorEnergyNotifier extends Notifier<NoorEnergyState> {
 
   @override
   NoorEnergyState build() {
-    if (_debugInfiniteEnergy) {
-      return const NoorEnergyState(current: _maxEnergy, maxEnergy: _maxEnergy);
-    }
     final lastReset = _settings.get('noorEnergyLastResetDate') as String?;
     if (lastReset != _todayKey) {
       // A new day (or first-ever launch) — refill and stamp today's date.
@@ -54,7 +46,6 @@ class NoorEnergyNotifier extends Notifier<NoorEnergyState> {
   /// yet implemented. A session-level cost per the spec, not a per-question
   /// cost.
   void consume() {
-    if (_debugInfiniteEnergy) return;
     if (state.current <= 0) return;
     final next = state.current - 1;
     state = NoorEnergyState(current: next, maxEnergy: state.maxEnergy);

@@ -127,7 +127,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Session 1'), findsOneWidget);
     expect(find.text('Session 2'), findsOneWidget);
-    expect(find.text('Not played'), findsOneWidget);
+    // Session 2 sits in a later stage Amira hasn't unlocked yet.
+    expect(find.text('Not played'), findsNothing);
+    expect(find.text('Locked'), findsWidgets);
 
     // Same progress grouped by the 7 map stages instead.
     await tester.scrollUntilVisible(
@@ -140,7 +142,7 @@ void main() {
     await tester.ensureVisible(find.text('Stage 1: Welcome to Madrasah'));
     await tester.tap(find.text('Stage 1: Welcome to Madrasah'));
     await tester.pumpAndSettle();
-    expect(find.text('1 of 5 sessions played'), findsOneWidget);
+    expect(find.textContaining('1 of 5 sessions played · '), findsOneWidget);
 
     // The top-bar back arrow returns to the list before leaving the screen.
     await tester.tap(find.byIcon(Icons.arrow_back_rounded).first);

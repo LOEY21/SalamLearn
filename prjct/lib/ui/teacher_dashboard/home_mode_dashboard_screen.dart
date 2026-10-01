@@ -9,6 +9,7 @@ import '../../data/repositories/progress_repository.dart';
 import '../../logic/teacher/home_mode_providers.dart';
 import '../../logic/teacher/teacher_providers.dart';
 import '../theme/app_colors.dart';
+import '../widgets/locked_tag.dart';
 import '../widgets/soft_card.dart';
 import 'teacher_dashboard_screen.dart'
     show masteryBarColor, MasteryPill, avatarColor;
@@ -1632,17 +1633,20 @@ class _GameSessionsCardState extends State<_GameSessionsCard> {
               padding: const EdgeInsets.all(12),
               child: Row(
                 children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppColors.neutralTint,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      game.icon,
-                      style: const TextStyle(fontSize: 20),
+                  Opacity(
+                    opacity: game.allLocked ? 0.45 : 1,
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: AppColors.neutralTint,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        game.icon,
+                        style: const TextStyle(fontSize: 20),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1664,6 +1668,7 @@ class _GameSessionsCardState extends State<_GameSessionsCard> {
                         Text(
                           roster == null
                               ? '${game.sessionsPlayed} of $total session${total == 1 ? '' : 's'} played'
+                                    '${game.lockedCount > 0 && !game.allLocked ? ' · ${game.lockedCount} locked' : ''}'
                               : '${game.studentsPlayed} of $roster student${roster == 1 ? '' : 's'} played · $total session${total == 1 ? '' : 's'}',
                           style: const TextStyle(
                             fontSize: 10.5,
@@ -1684,7 +1689,13 @@ class _GameSessionsCardState extends State<_GameSessionsCard> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  _ScoreBadge(pct: game.avgAccuracy, emptyLabel: 'Not started'),
+                  if (game.avgAccuracy == null && game.allLocked)
+                    const LockedTag()
+                  else
+                    _ScoreBadge(
+                      pct: game.avgAccuracy,
+                      emptyLabel: 'Not started',
+                    ),
                   AnimatedRotation(
                     turns: _open ? 0.5 : 0,
                     duration: const Duration(milliseconds: 200),
@@ -1736,12 +1747,15 @@ class _GameSessionsCardState extends State<_GameSessionsCard> {
                         ],
                       ),
                     ),
-                    _ScoreBadge(
-                      pct: session.avgAccuracy,
-                      emptyLabel: roster == null
-                          ? 'Not played'
-                          : 'No plays yet',
-                    ),
+                    if (session.avgAccuracy == null && session.locked)
+                      const LockedTag()
+                    else
+                      _ScoreBadge(
+                        pct: session.avgAccuracy,
+                        emptyLabel: roster == null
+                            ? 'Not played'
+                            : 'No plays yet',
+                      ),
                   ],
                 ),
               ),

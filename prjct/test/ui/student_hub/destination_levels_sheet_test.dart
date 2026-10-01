@@ -19,7 +19,7 @@ void main() {
               onPressed: () => DestinationLevelsSheet.show(
                 context,
                 destination: destination,
-                completedLessons: const <String>{},
+                completedLessons: ValueNotifier(const <String>{}),
                 noorEnergy: 5,
                 onStartLesson: (lesson, isNewLevel) {
                   started = lesson;
@@ -59,22 +59,58 @@ void main() {
     expect(find.byType(DestinationLevelsSheet), findsNothing);
   });
 
-  testWidgets('a locked destination shows the locked message, not levels', (
+  testWidgets('level 2 stays locked until every level 1 lesson is done', (
     tester,
   ) async {
-    final lockedDestination = Destination(
-      id: 999,
-      name: 'Test Peak',
-      nameAr: 'قمة الاختبار',
-      icon: '🏔️',
-      color: '#000000',
-      bg: '#FFFFFF',
-      mapX: 0,
-      mapY: 0,
-      description: 'A locked test destination.',
-      state: DestinationState.locked,
-      lessons: const [],
-    );
+    final destination = curriculum.first;
+    final perLevel = (destination.lessons.length / 3).ceil();
+    final level2First = destination.lessons[perLevel];
+    Lesson? started;
+
+    Future<void> open(Set<String> completed) async {
+      started = null;
+      await tester.pumpWidget(
+        MaterialApp(
+          key: UniqueKey(),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => DestinationLevelsSheet.show(
+                  context,
+                  destination: destination,
+                  completedLessons: ValueNotifier(completed),
+                  noorEnergy: 5,
+                  onStartLesson: (lesson, _) => started = lesson,
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.ensureVisible(
+        find.text(level2First.title, skipOffstage: false),
+      );
+      await tester.pump();
+      await tester.tap(find.text(level2First.title));
+      await tester.pump();
+    }
+
+    await open(const <String>{});
+    expect(started, isNull);
+
+    await open({for (final l in destination.lessons.take(perLevel)) l.id});
+    expect(started, same(level2First));
+  });
+
+  testWidgets('marks a lesson completed while the sheet is still open', (
+    tester,
+  ) async {
+    final destination = curriculum.first;
+    final completed = ValueNotifier(const <String>{});
 
     await tester.pumpWidget(
       MaterialApp(
@@ -83,8 +119,8 @@ void main() {
             builder: (context) => ElevatedButton(
               onPressed: () => DestinationLevelsSheet.show(
                 context,
-                destination: lockedDestination,
-                completedLessons: const <String>{},
+                destination: destination,
+                completedLessons: completed,
                 noorEnergy: 5,
                 onStartLesson: (_, _) {},
               ),
@@ -94,11 +130,14 @@ void main() {
         ),
       ),
     );
-
     await tester.tap(find.text('open'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('✓ Completed'), findsNothing);
 
-    expect(find.text('Complete earlier destinations first!'), findsOneWidget);
+    completed.value = {destination.lessons.first.id};
+    await tester.pump();
+
+    expect(find.text('✓ Completed'), findsOneWidget);
   });
 }

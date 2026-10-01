@@ -78,9 +78,14 @@ class ProgressRepository {
       isClassroomMode: isClassroomMode,
     );
     // Streak first: dashboards recompute on the progress box's change
-    // event, and should read the streak this record just earned.
-    await _bumpStreak(learnerId);
-    await _progress.put(record.id, record);
+    // event, and should read the streak this record just earned. Both puts
+    // start before either is awaited — Hive applies them in memory at call
+    // time — so a caller reading right after this (the level sheet reopening
+    // as the lesson closes) already sees the lesson as completed.
+    final streakSaved = _bumpStreak(learnerId);
+    final progressSaved = _progress.put(record.id, record);
+    await streakSaved;
+    await progressSaved;
     // Push now instead of waiting for the next SyncManager run, so a
     // parent/teacher on another device sees it live. Not awaited — an
     // offline Firestore write only completes once the server acks it.

@@ -8,6 +8,7 @@ import '../../data/models/progress_record.dart';
 import '../../data/repositories/class_repository.dart';
 import '../../data/repositories/progress_repository.dart';
 import '../progress_providers.dart';
+import '../learner/unlock_rules.dart';
 import '../parent/game_grades.dart';
 import 'teacher_providers.dart';
 
@@ -246,12 +247,16 @@ class HomeSession {
     required this.detail,
     required this.studentsPlayed,
     required this.avgAccuracy,
+    this.locked = false,
   });
 
   final String label;
   final String detail;
   final int studentsPlayed;
   final double? avgAccuracy;
+
+  /// Not yet unlocked for this learner — only set in the Individual view.
+  final bool locked;
 }
 
 /// A game or a stage (map destination) with its sessions, rolled up from
@@ -274,6 +279,10 @@ class HomeProgressGroup {
   final double? avgAccuracy;
 
   int get sessionsPlayed => sessions.where((s) => s.studentsPlayed > 0).length;
+
+  int get lockedCount => sessions.where((s) => s.locked).length;
+
+  bool get allLocked => sessions.isNotEmpty && lockedCount == sessions.length;
 }
 
 Map<String, List<ProgressRecord>> _homeRecordsByLesson(
@@ -297,6 +306,7 @@ HomeProgressGroup _group({
   required String icon,
   required List<(Lesson, String label, String detail)> sessions,
   required Map<String, List<ProgressRecord>> byLesson,
+  bool Function(Lesson lesson)? isLocked,
 }) {
   final all = [for (final (lesson, _, _) in sessions) ...?byLesson[lesson.id]];
   return HomeProgressGroup(
@@ -314,6 +324,7 @@ HomeProgressGroup _group({
               .toSet()
               .length,
           avgAccuracy: _avgAccuracy(byLesson[lesson.id] ?? const []),
+          locked: isLocked?.call(lesson) ?? false,
         ),
     ],
   );
@@ -327,7 +338,10 @@ String _gameName(Lesson lesson) {
 /// The 12 games in map order, each with its sessions, from [records] —
 /// one learner's history for the Individual view or the whole roster's for
 /// the Aggregate view. Only records with a lessonId map to a session.
-List<HomeProgressGroup> homeModeGamesFor(Iterable<ProgressRecord> records) {
+List<HomeProgressGroup> homeModeGamesFor(
+  Iterable<ProgressRecord> records, {
+  bool Function(Lesson lesson)? isLocked,
+}) {
   final byLesson = _homeRecordsByLesson(records);
   return [
     for (final game in curriculumGames())
@@ -335,6 +349,7 @@ List<HomeProgressGroup> homeModeGamesFor(Iterable<ProgressRecord> records) {
         name: castGameNames[game.type] ?? game.name,
         icon: game.icon,
         byLesson: byLesson,
+        isLocked: isLocked,
         sessions: [
           for (final s in game.sessions)
             (s.lesson, sessionLabel(s.lesson), s.destination.name),
@@ -344,7 +359,10 @@ List<HomeProgressGroup> homeModeGamesFor(Iterable<ProgressRecord> records) {
 }
 
 /// The 7 map stages (destinations), each with the sessions played there.
-List<HomeProgressGroup> homeModeStagesFor(Iterable<ProgressRecord> records) {
+List<HomeProgressGroup> homeModeStagesFor(
+  Iterable<ProgressRecord> records, {
+  bool Function(Lesson lesson)? isLocked,
+}) {
   final byLesson = _homeRecordsByLesson(records);
   return [
     for (final (i, destination) in curriculum.indexed)
@@ -352,6 +370,7 @@ List<HomeProgressGroup> homeModeStagesFor(Iterable<ProgressRecord> records) {
         name: 'Stage ${i + 1}: ${destination.name}',
         icon: destination.icon,
         byLesson: byLesson,
+        isLocked: isLocked,
         sessions: [
           for (final lesson in destination.lessons)
             (lesson, _gameName(lesson), sessionLabel(lesson)),
@@ -385,5 +404,14 @@ final homeModeLearnerGroupsProvider =
     Provider.family<List<HomeProgressGroup>, (String, bool)>((ref, args) {
       final (learnerId, byStage) = args;
       final history = ref.watch(homeModeHistoryProvider(learnerId));
-      return byStage ? homeModeStagesFor(history) : homeModeGamesFor(history);
+      final completed = ProgressRepository().completedLessonIds(learnerId);
+      bool isLocked(Lesson lesson) => !isLessonUnlocked(
+        learnerId,
+        curriculum.firstWhere((d) => d.lessons.contains(lesson)),
+        lesson,
+        completed,
+      );
+      return byStage
+          ? homeModeStagesFor(history, isLocked: isLocked)
+          : homeModeGamesFor(history, isLocked: isLocked);
     });

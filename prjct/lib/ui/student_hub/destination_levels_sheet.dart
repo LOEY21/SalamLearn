@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
@@ -8,9 +9,8 @@ import '../theme/app_colors.dart';
 /// `src/screens/learner/lesson/DestinationModal.tsx` — the bottom sheet
 /// shown when a learner taps a destination node on the adventure map. Splits
 /// a destination's lessons into 3 "levels" (Beginner/Practice/Mastery),
-/// gates each level/lesson by the teacher's `maxLevel`/`maxLessons`
-/// assignment (not by completion — nothing auto-unlocks from finishing a
-/// prior lesson), and hands off straight to `onStartLesson` on tap — there
+/// unlocks them in order (a level opens once the previous level is fully
+/// complete, and each lesson once the one before it is done), and hands off straight to `onStartLesson` on tap — there
 /// is no intermediate "Start Activity" confirmation screen, matching the
 /// source exactly.
 ///
@@ -18,8 +18,6 @@ import '../theme/app_colors.dart';
 /// (`cubic-bezier(0.34, 1.56, 0.64, 1)`) — same curve/name precedent as
 /// `_overshoot` in `adventure_map_screen.dart`.
 const _overshoot = Cubic(0.34, 1.56, 0.64, 1.0);
-
-const _debugUnlockAllLevels = true;
 
 class _LevelMeta {
   const _LevelMeta({
@@ -97,11 +95,13 @@ class DestinationLevelsSheet extends StatelessWidget {
   /// Presents this sheet over [context], matching the source's overlay
   /// (semi-transparent backdrop, tap-outside-to-close, sheet sliding up with
   /// an overshoot ease) without inheriting Flutter's built-in
-  /// `showModalBottomSheet` entrance curve.
+  /// `showModalBottomSheet` entrance curve. [completedLessons] is live: the
+  /// sheet rebuilds the moment a lesson finishes, so its "Completed" mark
+  /// shows without closing and reopening the sheet.
   static Future<void> show(
     BuildContext context, {
     required Destination destination,
-    required Set<String> completedLessons,
+    required ValueListenable<Set<String>> completedLessons,
     required int noorEnergy,
     required void Function(Lesson lesson, bool isNewLevel) onStartLesson,
     int maxLevel = 3,
@@ -114,13 +114,16 @@ class DestinationLevelsSheet extends StatelessWidget {
       barrierColor: Colors.black.withValues(alpha: 0.5),
       transitionDuration: const Duration(milliseconds: 300),
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
-        return DestinationLevelsSheet(
-          destination: destination,
-          completedLessons: completedLessons,
-          noorEnergy: noorEnergy,
-          onStartLesson: onStartLesson,
-          maxLevel: maxLevel,
-          maxLessons: maxLessons,
+        return ValueListenableBuilder<Set<String>>(
+          valueListenable: completedLessons,
+          builder: (context, completed, _) => DestinationLevelsSheet(
+            destination: destination,
+            completedLessons: completed,
+            noorEnergy: noorEnergy,
+            onStartLesson: onStartLesson,
+            maxLevel: maxLevel,
+            maxLessons: maxLessons,
+          ),
         );
       },
       transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
@@ -154,10 +157,6 @@ class DestinationLevelsSheet extends StatelessWidget {
   }
 
   bool _isLevelUnlocked(int levelIdx) {
-    if (_debugUnlockAllLevels) return true;
-    if (destination.state == DestinationState.locked) {
-      return false;
-    }
     if (levelIdx == 0) return true;
     // Sequential level unlock: Level unlocks when the previous level is complete.
     return _isLevelComplete(_levels, levelIdx - 1);
@@ -167,7 +166,8 @@ class DestinationLevelsSheet extends StatelessWidget {
   /// `null` means every lesson in that level is open. Only the top
   /// teacher-allowed level ([maxLevel] - 1) can carry a cap; any level
   /// below it that [_isLevelUnlocked] already admits is fully open.
-  int? _lessonCapFor(int levelIdx) => levelIdx == maxLevel - 1 ? maxLessons : null;
+  int? _lessonCapFor(int levelIdx) =>
+      levelIdx == maxLevel - 1 ? maxLessons : null;
 
   bool _isLevelComplete(List<List<Lesson>> levels, int levelIdx) {
     final group = levelIdx < levels.length
@@ -180,8 +180,6 @@ class DestinationLevelsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isLocked =
-        !_debugUnlockAllLevels && destination.state == DestinationState.locked;
     final levels = _levels;
     final destColor = _hexColor(destination.color);
     final destBg = _hexColor(destination.bg);
@@ -313,7 +311,7 @@ class DestinationLevelsSheet extends StatelessWidget {
                   ),
 
                   // Noor energy note.
-                  if (!isLocked && noorEnergy <= 0)
+                  if (noorEnergy <= 0)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
                       child: Container(
@@ -349,31 +347,29 @@ class DestinationLevelsSheet extends StatelessWidget {
                   Flexible(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(20, 14, 20, 36),
-                      child: isLocked
-                          ? _LockedMessage(color: destColor)
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                for (var li = 0; li < levels.length; li++) ...[
-                                  if (li > 0) const SizedBox(height: 16),
-                                  _LevelSection(
-                                    meta: _levelMeta[li < 2 ? li : 2],
-                                    levelIndex: li,
-                                    group: levels[li],
-                                    unlocked: _isLevelUnlocked(li),
-                                    lessonCap: _lessonCapFor(li),
-                                    complete: _isLevelComplete(levels, li),
-                                    isNew: _isLevelNew(levels, li),
-                                    noorEnergy: noorEnergy,
-                                    completedLessons: completedLessons,
-                                    onStartLesson: (lesson, isNewLevel) {
-                                      _close(context);
-                                      onStartLesson(lesson, isNewLevel);
-                                    },
-                                  ),
-                                ],
-                              ],
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (var li = 0; li < levels.length; li++) ...[
+                            if (li > 0) const SizedBox(height: 16),
+                            _LevelSection(
+                              meta: _levelMeta[li < 2 ? li : 2],
+                              levelIndex: li,
+                              group: levels[li],
+                              unlocked: _isLevelUnlocked(li),
+                              lessonCap: _lessonCapFor(li),
+                              complete: _isLevelComplete(levels, li),
+                              isNew: _isLevelNew(levels, li),
+                              noorEnergy: noorEnergy,
+                              completedLessons: completedLessons,
+                              onStartLesson: (lesson, isNewLevel) {
+                                _close(context);
+                                onStartLesson(lesson, isNewLevel);
+                              },
                             ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -416,7 +412,7 @@ class _LevelSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final noEnergy = isNew && noorEnergy <= 0;
+    final noEnergy = noorEnergy <= 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -541,8 +537,7 @@ class _LevelSection extends StatelessWidget {
                   final done = completedLessons.contains(lesson.id);
                   final lessonUnlocked =
                       unlocked &&
-                      (_debugUnlockAllLevels ||
-                          idx == 0 ||
+                      (idx == 0 ||
                           completedLessons.contains(group[idx - 1].id));
                   final canStart = lessonUnlocked && (done || !noEnergy);
                   final energyBlocked = lessonUnlocked && !done && noEnergy;
@@ -699,24 +694,46 @@ class _LessonCard extends StatelessWidget {
                           activity.icon,
                           style: const TextStyle(fontSize: 12),
                         ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFDECC8),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '+${lesson.xp} XP',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.gold,
+                      // Some lessons' own color is the same green as the
+                      // "done" styling, so completion is also spelled out.
+                      if (completed)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.adventureGreen,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            '✓ Completed',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFDECC8),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '+${lesson.xp} XP',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.gold,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ],
@@ -795,49 +812,6 @@ class _LessonTrailing extends StatelessWidget {
     return const Opacity(
       opacity: 0.4,
       child: Text('🔒', style: TextStyle(fontSize: 16)),
-    );
-  }
-}
-
-class _LockedMessage extends StatelessWidget {
-  const _LockedMessage({required this.color});
-
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        // Source uses a dashed border here; Flutter's BoxDecoration has no
-        // built-in dashed style (would need a custom painter), so this is a
-        // solid border of the same color/width as the closest idiomatic fit.
-        border: Border.all(color: color.withValues(alpha: 0.27), width: 3),
-      ),
-      child: Column(
-        children: [
-          const Text('🔒', style: TextStyle(fontSize: 48)),
-          const SizedBox(height: 10),
-          const Text(
-            'Complete earlier destinations first!',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF333333),
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Finish the lessons before this one to unlock this destination 🌟',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: Color(0xFF888888)),
-          ),
-        ],
-      ),
     );
   }
 }

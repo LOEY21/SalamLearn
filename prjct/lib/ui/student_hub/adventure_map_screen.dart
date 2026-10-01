@@ -5,9 +5,12 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive/hive.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../data/curriculum_data.dart';
+import '../../data/local/hive_boxes.dart';
+import '../../data/models/progress_record.dart';
 import '../../data/models/curriculum/curriculum_models.dart';
 import '../../data/repositories/class_repository.dart';
 import '../../data/repositories/progress_repository.dart';
@@ -15,6 +18,8 @@ import '../../logic/auth/session.dart';
 import '../../logic/learner/hub_tab_provider.dart';
 import '../../logic/learner/map_zoom_provider.dart';
 import '../../logic/learner/noor_energy_provider.dart';
+import '../../logic/learner/tutorial_progress_provider.dart';
+import '../../logic/learner/unlock_rules.dart';
 import '../../logic/recent_module_provider.dart';
 import '../core_modules/lesson_player_screen.dart';
 import '../core_modules/module_registry.dart';
@@ -68,7 +73,7 @@ Color _hexColor(String hex) {
 /// pills, mascot, speech bubble): `cubic-bezier(0.34, 1.56, 0.64, 1)`.
 const _overshoot = Cubic(0.34, 1.56, 0.64, 1.0);
 
-const _debugUnlockAllModules = true;
+const _debugUnlockAllModules = false;
 
 enum _NodeState { locked, available, current, completed }
 
@@ -193,17 +198,16 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
 
   bool _tutorialActive = false;
 
-  /// Plays the mascot tutorial every time the Home tab becomes active —
-  /// once on first landing here (called from `initState`), and again on
-  /// every later switch back from Backpack/Profile (see the `ref.listen`
-  /// on `activeHubTabIndexProvider` in `build`). `_tutorialActive` just
-  /// stops two overlays stacking if a replay is triggered while one is
-  /// already up; it isn't a "seen" flag, so this is never permanently
-  /// skipped.
+  /// Plays the mascot tutorial for a learner who hasn't finished it yet
+  /// (`tutorialSeenProvider`, persisted per learner) — tried on first
+  /// landing here (`initState`) and on every switch back to the Home tab,
+  /// so a new learner still gets it if the first attempt was missed.
+  /// `_tutorialActive` stops two overlays stacking.
   void _playTutorial() {
     if (_tutorialActive) return;
     final learner = ref.read(sessionProvider).learner;
     if (learner == null) return;
+    if (ref.read(tutorialSeenProvider)) return;
     _tutorialActive = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -215,7 +219,10 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
           context,
           learnerName: learner.name,
           isGirl: learner.avatar == 'girl_mascot',
-          onFinished: () => _tutorialActive = false,
+          onFinished: () {
+            _tutorialActive = false;
+            ref.read(tutorialSeenProvider.notifier).markSeen();
+          },
         );
       });
     });
@@ -228,57 +235,20 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
     super.dispose();
   }
 
-  /// Same rule `StudentHubScreen` used before this screen replaced it, with
-  /// its always-true fallthrough bug fixed: a module only unlocks when the
-  /// debug override is on, or a teacher has actually assigned it (per class
-  /// homework or this student's own assignment list) — otherwise it's
-  /// locked, matching the "Locked by ustadzah" messaging learners already
-  /// know from the old
+  /// Stage lock per the shared [isStageUnlocked] rule (previous stage
+  /// complete, or teacher-assigned), unless a debug/teacher override is on.
   bool _isModuleAssigned(String moduleId) {
     if (_debugUnlockAllModules) return true;
-    final override = ref.watch(progressionOverrideProvider);
-    if (override) return true;
-
-    // 1. Sequential unlocking:
-    final completed = _completedLessons;
-    final index = coreModules.indexWhere((m) => m.id == moduleId);
-    if (index <= 0) return true; // First module is always unlocked
-
-    // Check if previous module is completed
-    final prevModule = coreModules[index - 1];
-    final dest = curriculum.firstWhere(
-      (d) => d.id == prevModule.destinationId,
-      orElse: () => curriculum.first,
+    if (ref.watch(progressionOverrideProvider)) return true;
+    final module = coreModules.firstWhere((m) => m.id == moduleId);
+    final destination = curriculum.firstWhere(
+      (d) => d.id == module.destinationId,
     );
-    final isPrevCompleted = dest.lessons.every(
-      (lesson) => completed.contains(lesson.id),
+    return isStageUnlocked(
+      ref.watch(sessionProvider).learner?.id,
+      destination,
+      _completedLessons,
     );
-    if (isPrevCompleted) return true;
-
-    // 2. Teacher assignment override (unlocks the module early):
-    final learner = ref.watch(sessionProvider).learner;
-    if (learner == null) return false;
-    final learnerId = learner.id;
-    if (learnerId == null) return false;
-
-    final enrollments = ClassRepository().byLearnerId(learnerId);
-    final enrolledClassIds = enrollments.map((e) => e.classId).toSet();
-
-    for (final classId in enrolledClassIds) {
-      final classAssignments = ClassRepository().assignmentsFor(
-        classId: classId,
-        learnerId: null,
-      );
-      if (classAssignments.any((a) => moduleForAssignment(a.moduleId)?.id == moduleId)) return true;
-
-      final personalAssignments = ClassRepository().assignmentsFor(
-        classId: classId,
-        learnerId: learnerId,
-      );
-      if (personalAssignments.any((a) => moduleForAssignment(a.moduleId)?.id == moduleId)) return true;
-    }
-
-    return false;
   }
 
   /// How far (1–3) a teacher has allowed [moduleId] to be played into.
@@ -376,15 +346,31 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
   /// When the player closes a lesson, this is called again so the user always
   /// lands back on the level selection — never on the bare map.
   void _openLevelSheet(ModuleInfo module, Destination destination) {
+    // Live completion set: any progress write while the sheet is up (the
+    // lesson that just closed landing a moment later) re-marks it at once.
+    final completed = ValueNotifier(_completedLessons);
+    final progressWrites = Hive.box<ProgressRecord>(
+      HiveBoxes.progress,
+    ).watch().listen((_) {
+      if (mounted) completed.value = _completedLessons;
+    });
     DestinationLevelsSheet.show(
       context,
       destination: destination,
-      completedLessons: _completedLessons,
+      completedLessons: completed,
       maxLevel: _maxLevelFor(module.id),
       maxLessons: _maxLessonsFor(module.id),
       noorEnergy: ref.read(noorEnergyProvider).current,
       onStartLesson: (lesson, isNewLevel) {
-        ref.read(noorEnergyProvider.notifier).consume();
+        // Replaying a finished lesson is free; a new one costs one Noor.
+        if (!_completedLessons.contains(lesson.id)) {
+          final energy = ref.read(noorEnergyProvider.notifier);
+          if (!ref.read(noorEnergyProvider).hasEnergy) {
+            showNoorEnergyRestingSheet(context);
+            return;
+          }
+          energy.consume();
+        }
         ref.read(recentModuleProvider.notifier).interactWith(module.id);
         Navigator.of(context, rootNavigator: true).push(
           MaterialPageRoute<void>(
@@ -401,17 +387,15 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
           ),
         );
       },
-    );
+    ).whenComplete(() {
+      progressWrites.cancel();
+      completed.dispose();
+    });
   }
 
   void _onNodeTap(ModuleInfo module, bool isAssigned) {
     if (!isAssigned) {
       _showLockedDialog(module.title);
-      return;
-    }
-    final energy = ref.read(noorEnergyProvider);
-    if (!_debugUnlockAllModules && !energy.hasEnergy) {
-      showNoorEnergyRestingSheet(context);
       return;
     }
     final destination = curriculum.firstWhere(
@@ -863,13 +847,8 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
   }
 
   void _syncContinuousAnimations({required _NodeState? previousState}) {
-    final alive = widget.state != _NodeState.locked;
-    if (alive && !_shine.isAnimating) {
-      _shine.repeat();
-    } else if (!alive && _shine.isAnimating) {
-      _shine.stop();
-      _shine.value = 0;
-    }
+    // Lit nodes use it for glow/twinkles, locked ones for the padlock sway.
+    if (!_shine.isAnimating) _shine.repeat();
 
     final wantsPulse = widget.state == _NodeState.current;
     if (wantsPulse && !_pulse.isAnimating) {
@@ -936,7 +915,7 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     final art = Semantics(
       button: true,
       label: locked
-          ? '${widget.module.title} module, locked by teacher'
+          ? '${widget.module.title} module, locked'
           : '${widget.module.title} module',
       child: GestureDetector(
         key: ValueKey('node-badge-${widget.module.id}'),
@@ -1023,7 +1002,14 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
                     child: _Twinkle(shine: _shine, phase: i / 3),
                   ),
               if (locked)
-                Positioned(top: tileTop - 6, child: const _LockChip()),
+                Positioned(
+                  bottom: iconBottom + iconBox * 0.12,
+                  child: _Padlock(
+                    shine: _shine,
+                    wobble: _wobble,
+                    size: iconBox * 0.56,
+                  ),
+                ),
               if (widget.state == _NodeState.completed)
                 Positioned(
                   bottom: tileH / 2 + iconBox * 0.7,
@@ -1223,22 +1209,137 @@ class _Twinkle extends StatelessWidget {
   }
 }
 
-class _LockChip extends StatelessWidget {
-  const _LockChip();
+/// Chunky gold padlock hung over a locked checkpoint. Sways gently on the
+/// node's [shine] loop and rattles hard on the tap [wobble], so a locked
+/// stage still feels alive instead of just greyed out.
+class _Padlock extends StatelessWidget {
+  const _Padlock({
+    required this.shine,
+    required this.wobble,
+    required this.size,
+  });
+
+  final Animation<double> shine;
+  final Animation<double> wobble;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 22,
-      height: 22,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        color: Color(0xFF7A8B85),
-        boxShadow: [BoxShadow(color: Color(0x40000000), blurRadius: 4)],
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: Listenable.merge([shine, wobble]),
+        child: RepaintBoundary(
+          child: CustomPaint(
+            size: Size(size, size * 1.18),
+            painter: const _PadlockPainter(),
+          ),
+        ),
+        builder: (context, child) {
+          final sway = 0.07 * math.sin(shine.value * 2 * math.pi);
+          final w = wobble.value;
+          final rattle = 0.4 * math.sin(w * math.pi * 5) * (1 - w);
+          return Transform.rotate(
+            angle: sway + rattle,
+            alignment: Alignment.topCenter,
+            child: child,
+          );
+        },
       ),
-      child: const Icon(Icons.lock_rounded, color: Colors.white, size: 13),
     );
   }
+}
+
+class _PadlockPainter extends CustomPainter {
+  const _PadlockPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final bodyTop = h * 0.42;
+    final body = RRect.fromLTRBR(0, bodyTop, w, h, Radius.circular(w * 0.24));
+
+    // Shackle: dark outline stroke, then a steel stroke with a highlight.
+    final shackle = Path()
+      ..moveTo(w * 0.27, bodyTop + 2)
+      ..lineTo(w * 0.27, h * 0.3)
+      ..arcToPoint(
+        Offset(w * 0.73, h * 0.3),
+        radius: Radius.circular(w * 0.23),
+      )
+      ..lineTo(w * 0.73, bodyTop + 2);
+    canvas.drawPath(
+      shackle,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = w * 0.2
+        ..strokeCap = StrokeCap.round
+        ..color = const Color(0xFF4B3A26),
+    );
+    canvas.drawPath(
+      shackle,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = w * 0.11
+        ..strokeCap = StrokeCap.round
+        ..shader = const LinearGradient(
+          colors: [Color(0xFFF4F7F8), Color(0xFF9AA6AC)],
+        ).createShader(Rect.fromLTWH(w * 0.2, 0, w * 0.6, bodyTop)),
+    );
+
+    // Soft drop shadow, then the gold body with a dark rim.
+    canvas.drawRRect(
+      body.shift(Offset(0, h * 0.05)),
+      Paint()
+        ..color = const Color(0x55000000)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
+    canvas.drawRRect(
+      body,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFFFE27A), Color(0xFFF2B233), Color(0xFFD98A12)],
+          stops: [0, 0.55, 1],
+        ).createShader(body.outerRect),
+    );
+    canvas.drawRRect(
+      body,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = w * 0.07
+        ..color = const Color(0xFF7A4A0E),
+    );
+    // Glossy highlight along the top of the body.
+    canvas.drawRRect(
+      RRect.fromLTRBR(
+        w * 0.16,
+        bodyTop + h * 0.06,
+        w * 0.84,
+        bodyTop + h * 0.13,
+        Radius.circular(w * 0.05),
+      ),
+      Paint()..color = const Color(0x8CFFFFFF),
+    );
+
+    // Keyhole.
+    final keyhole = Paint()..color = const Color(0xFF5A330A);
+    final kc = Offset(w / 2, bodyTop + (h - bodyTop) * 0.45);
+    canvas.drawCircle(kc, w * 0.1, keyhole);
+    canvas.drawPath(
+      Path()
+        ..moveTo(kc.dx - w * 0.05, kc.dy)
+        ..lineTo(kc.dx + w * 0.05, kc.dy)
+        ..lineTo(kc.dx + w * 0.08, kc.dy + h * 0.2)
+        ..lineTo(kc.dx - w * 0.08, kc.dy + h * 0.2)
+        ..close(),
+      keyhole,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PadlockPainter oldDelegate) => false;
 }
 
 class _DoneChip extends StatelessWidget {
@@ -1294,17 +1395,34 @@ class _NodeLabel extends StatelessWidget {
             ),
           ],
         ),
-        child: Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w800,
-            height: 1.1,
-            color: locked ? const Color(0xFF7A8B85) : const Color(0xFF2E2A24),
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (locked) ...[
+              const Icon(
+                Icons.lock_rounded,
+                size: 10,
+                color: Color(0xFFB9811A),
+              ),
+              const SizedBox(width: 3),
+            ],
+            Flexible(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  height: 1.1,
+                  color: locked
+                      ? const Color(0xFF7A8B85)
+                      : const Color(0xFF2E2A24),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

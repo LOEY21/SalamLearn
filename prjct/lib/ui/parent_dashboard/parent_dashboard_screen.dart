@@ -16,6 +16,7 @@ import '../../data/models/progress_record.dart';
 import '../../data/remote/firestore_mirror.dart';
 import '../../data/repositories/class_repository.dart';
 import '../../logic/auth/session.dart';
+import '../../logic/learner/unlock_rules.dart';
 import '../../logic/parent/analytics_providers.dart';
 import '../../logic/parent/children_providers.dart';
 import '../../logic/parent/game_grades.dart';
@@ -31,6 +32,7 @@ import '../widgets/change_pin_card.dart';
 import '../widgets/email_verification_card.dart';
 import '../widgets/flat_dashboard_header.dart';
 import '../widgets/learner_avatar.dart';
+import '../widgets/locked_tag.dart';
 import '../widgets/mock_icons.dart';
 import '../widgets/soft_card.dart';
 import '../widgets/top_tab_bar.dart';
@@ -1557,19 +1559,20 @@ List<List<Lesson>> _splitIntoLevels(List<Lesson> lessons) {
 }
 
 /// Sequential level unlock, same rule `DestinationLevelsSheet` uses in the
-/// Learner Hub: the whole destination must not be locked, level 0 is always
+/// Learner Hub: the stage must be unlocked ([isStageUnlocked]), level 0 is always
 /// open, and every level after that opens once the previous one's lessons
 /// are all completed. Doesn't account for a teacher's per-lesson
 /// `maxLevel`/`maxLessons` assignment cap (that lives in a different data
 /// source not wired into the parent dashboard) — this is the learner's own
 /// unlock progress, which is what a parent is checking here.
 bool _isLevelUnlocked(
+  String? learnerId,
   Destination destination,
   List<List<Lesson>> levels,
   int levelIndex,
   Set<String> completedLessons,
 ) {
-  if (destination.state == DestinationState.locked) return false;
+  if (!isStageUnlocked(learnerId, destination, completedLessons)) return false;
   if (levelIndex == 0) return true;
   final previous = levels[levelIndex - 1];
   return previous.every((l) => completedLessons.contains(l.id));
@@ -1788,7 +1791,13 @@ class _AdventureDetailScreen extends ConsumerWidget {
                         completedLessons: completedLessons,
                         results: results,
                         learnerName: learnerName,
+                        lockedMessage: li == 0
+                            ? 'Locked — finish the stage before this one to unlock it.'
+                            : 'Locked — finish the level above to unlock this one.',
                         unlocked: _isLevelUnlocked(
+                          ref.watch(
+                            sessionProvider.select((s) => s.learner?.id),
+                          ),
                           destination,
                           levels,
                           li,
@@ -1850,6 +1859,7 @@ class _AdventureLevelSection extends StatefulWidget {
     required this.results,
     required this.learnerName,
     required this.unlocked,
+    required this.lockedMessage,
   });
 
   final _AdventureLevelMeta meta;
@@ -1858,6 +1868,7 @@ class _AdventureLevelSection extends StatefulWidget {
   final Map<String, ProgressRecord> results;
   final String learnerName;
   final bool unlocked;
+  final String lockedMessage;
 
   @override
   State<_AdventureLevelSection> createState() => _AdventureLevelSectionState();
@@ -1964,16 +1975,16 @@ class _AdventureLevelSectionState extends State<_AdventureLevelSection> {
               ),
             ),
             if (!widget.unlocked)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
                 child: Row(
                   children: [
-                    Icon(Icons.lock, size: 14, color: AppColors.textMuted),
-                    SizedBox(width: 7),
+                    const Icon(Icons.lock, size: 14, color: AppColors.textMuted),
+                    const SizedBox(width: 7),
                     Expanded(
                       child: Text(
-                        'Locked — finish the level above to unlock this one.',
-                        style: TextStyle(
+                        widget.lockedMessage,
+                        style: const TextStyle(
                           fontSize: 11,
                           color: AppColors.textMuted,
                         ),
@@ -2632,11 +2643,13 @@ class _GameGroupCard extends StatefulWidget {
     required this.game,
     required this.results,
     required this.learnerName,
+    required this.isLocked,
   });
 
   final GameGroup game;
   final Map<String, ProgressRecord> results;
   final String learnerName;
+  final bool Function(Lesson lesson, Destination destination) isLocked;
 
   @override
   State<_GameGroupCard> createState() => _GameGroupCardState();
@@ -2653,6 +2666,10 @@ class _GameGroupCardState extends State<_GameGroupCard> {
         if (widget.results[s.lesson.id] case final r?) r,
     ];
     final total = game.sessions.length;
+    final lockedCount = game.sessions
+        .where((s) => widget.isLocked(s.lesson, s.destination))
+        .length;
+    final allLocked = lockedCount == total;
     final average = played.isEmpty
         ? null
         : played.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) /
@@ -2675,17 +2692,20 @@ class _GameGroupCardState extends State<_GameGroupCard> {
               padding: const EdgeInsets.all(12),
               child: Row(
                 children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppColors.cream,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      game.icon,
-                      style: const TextStyle(fontSize: 19),
+                  Opacity(
+                    opacity: allLocked ? 0.45 : 1,
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: AppColors.cream,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        game.icon,
+                        style: const TextStyle(fontSize: 19),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -2705,7 +2725,8 @@ class _GameGroupCardState extends State<_GameGroupCard> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${played.length} of $total session${total == 1 ? '' : 's'} played',
+                          '${played.length} of $total session${total == 1 ? '' : 's'} played'
+                          '${lockedCount > 0 && !allLocked ? ' · $lockedCount locked' : ''}',
                           style: const TextStyle(
                             fontSize: 10.5,
                             color: AppColors.textMuted,
@@ -2729,6 +2750,8 @@ class _GameGroupCardState extends State<_GameGroupCard> {
                   const SizedBox(width: 8),
                   if (average != null)
                     _GradeChip(scorePct: average)
+                  else if (allLocked)
+                    const LockedTag()
                   else
                     const Text(
                       'Not started',
@@ -2759,6 +2782,7 @@ class _GameGroupCardState extends State<_GameGroupCard> {
                 destination: session.destination,
                 record: widget.results[session.lesson.id],
                 learnerName: widget.learnerName,
+                locked: widget.isLocked(session.lesson, session.destination),
               ),
         ],
       ),
@@ -2772,10 +2796,12 @@ class _ProgressGroupsSection extends StatefulWidget {
   const _ProgressGroupsSection({
     required this.results,
     required this.learnerName,
+    required this.isLocked,
   });
 
   final Map<String, ProgressRecord> results;
   final String learnerName;
+  final bool Function(Lesson lesson, Destination destination) isLocked;
 
   @override
   State<_ProgressGroupsSection> createState() => _ProgressGroupsSectionState();
@@ -2857,6 +2883,7 @@ class _ProgressGroupsSectionState extends State<_ProgressGroupsSection> {
             game: group,
             results: widget.results,
             learnerName: widget.learnerName,
+            isLocked: widget.isLocked,
           ),
       ],
     );
@@ -2870,6 +2897,7 @@ class _SessionRow extends StatelessWidget {
     required this.destination,
     required this.record,
     required this.learnerName,
+    required this.locked,
   });
 
   final GameGroup game;
@@ -2877,6 +2905,7 @@ class _SessionRow extends StatelessWidget {
   final Destination destination;
   final ProgressRecord? record;
   final String learnerName;
+  final bool locked;
 
   @override
   Widget build(BuildContext context) {
@@ -2936,7 +2965,9 @@ class _SessionRow extends StatelessWidget {
                 size: 16,
                 color: AppColors.textMuted,
               ),
-            ] else
+            ] else if (locked)
+              const LockedTag()
+            else
               const Text(
                 'Not played yet',
                 style: TextStyle(
@@ -4546,6 +4577,12 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                       _ProgressGroupsSection(
                         results: results,
                         learnerName: learner?.name ?? 'Your child',
+                        isLocked: (lesson, destination) => !isLessonUnlocked(
+                          learnerId,
+                          destination,
+                          lesson,
+                          ref.watch(parentCompletedLessonsProvider),
+                        ),
                       ),
                       if (classroomRecords.isNotEmpty) ...[
                         const SizedBox(height: 14),
