@@ -49,6 +49,7 @@ const signoutBtn = document.getElementById("signout-btn");
 const loadingOverlay = document.getElementById("loading-overlay");
 const loadingMessage = document.getElementById("loading-message");
 const toastContainer = document.getElementById("toast-container");
+let currentLearners = [];
 
 function showLoading(message) {
   loadingMessage.textContent = message || "Please wait...";
@@ -828,6 +829,8 @@ async function loadAllData() {
         fetchAll("trashbin"),
       ]);
 
+    currentLearners = learners;
+
     renderDashboard({
       parents, teachers, learners, classes, enrollments, progress,
     });
@@ -1287,6 +1290,32 @@ document.getElementById("form-learner").addEventListener("submit", async (event)
   const age = data.get("age") === "custom" ? Number(data.get("ageCustom")) : Number(data.get("age"));
   if (!age || age < 1) {
     showFormError(form, "Please enter a valid age.");
+    return;
+  }
+  const username = (data.get("username") || "").trim();
+  if (!username) {
+    showFormError(form, "Username is required.");
+    return;
+  }
+  const gradeLevel = (data.get("gradeLevel") || "").trim() || "Grade 1";
+
+  // Check for duplicate username
+  const usernameNorm = username.toLowerCase();
+  if (currentLearners.some((l) => (l.username || "").toLowerCase() === usernameNorm)) {
+    showFormError(form, `Username "${username}" is already taken.`);
+    return;
+  }
+
+  // Check for duplicate student (same Name, Age, and Grade level)
+  const nameNorm = name.toLowerCase().replace(/\s+/g, " ").trim();
+  const gradeNorm = gradeLevel.toLowerCase().replace(/\s+/g, " ").trim();
+  const duplicate = currentLearners.find((l) => {
+    const lNameNorm = (l.name || "").toLowerCase().replace(/\s+/g, " ").trim();
+    const lGradeNorm = (l.gradeLevel || "Grade 1").toLowerCase().replace(/\s+/g, " ").trim();
+    return lNameNorm === nameNorm && Number(l.age) === age && lGradeNorm === gradeNorm;
+  });
+  if (duplicate) {
+    showFormError(form, `A student named "${name}" with age ${age} and ${gradeLevel} already exists.`);
     return;
   }
   submitBtn.disabled = true;
@@ -1974,12 +2003,16 @@ function showClassStudents(classRow, enrollments, learners) {
     studentsListHtml = `<p class="empty-row" style="text-align: center; color: var(--text-muted); padding: 20px 0;">No students enrolled in this class yet.</p>`;
   } else {
     const classEnrollments = enrollments.filter((e) => e.classId === classRow.id);
-    const enrolledLearners = classEnrollments
-      .map((e) => {
-        const learner = learners.find((l) => l.id === e.learnerId);
-        return learner ? { ...learner, enrolledAt: e.enrolledAt } : null;
-      })
-      .filter(Boolean);
+    const seenLearnerIds = new Set();
+    const enrolledLearners = [];
+    for (const e of classEnrollments) {
+      if (!e.learnerId || seenLearnerIds.has(e.learnerId)) continue;
+      seenLearnerIds.add(e.learnerId);
+      const learner = learners.find((l) => l.id === e.learnerId);
+      if (learner) {
+        enrolledLearners.push({ ...learner, enrolledAt: e.enrolledAt });
+      }
+    }
     studentsListHtml = `
       <div class="table-wrap">
         <table>
@@ -2071,6 +2104,10 @@ function showClassStudents(classRow, enrollments, learners) {
     enrollBtn.addEventListener("click", async () => {
       const learnerId = select.value;
       if (!learnerId) return;
+      if (enrolledIds.has(learnerId)) {
+        showToast("Student is already enrolled in this class", "error");
+        return;
+      }
       enrollBtn.disabled = true;
       try {
         const docId = `${classRow.id}_${learnerId}`;

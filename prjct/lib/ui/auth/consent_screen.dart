@@ -269,7 +269,10 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen>
                         side: const BorderSide(color: AppColors.creamBorder),
                       ),
                       onPressed: SystemNavigator.pop,
-                      child: const Text('Decline'),
+                      child: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Decline'),
+                      ),
                     ),
                   ),
                 ),
@@ -288,7 +291,10 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen>
                               if (context.mounted) context.go('/roles');
                             }
                           : null,
-                      child: const Text('I agree'),
+                      child: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('I agree'),
+                      ),
                     ),
                   ),
                 ),

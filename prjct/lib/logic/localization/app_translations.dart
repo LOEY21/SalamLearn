@@ -50,7 +50,7 @@ class AppTranslations {
       if (m == null) continue;
       return replacement.replaceAllMapped(
         RegExp(r'\{(\d+)\}'),
-        (r) => _lookup(m.group(int.parse(r.group(1)!) + 1) ?? ''),
+        (r) => _translateFil(m.group(int.parse(r.group(1)!) + 1) ?? ''),
       );
     }
     return text;

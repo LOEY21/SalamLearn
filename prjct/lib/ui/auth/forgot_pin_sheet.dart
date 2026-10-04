@@ -72,12 +72,6 @@ class _ForgotPinSheetState extends ConsumerState<ForgotPinSheet> {
       ref.read(sessionProvider.notifier).activeGrownUpContact();
 
   @override
-  void initState() {
-    super.initState();
-    _send();
-  }
-
-  @override
   void dispose() {
     _resendTimer?.cancel();
     _codeC.dispose();
@@ -266,6 +260,32 @@ class _ForgotPinSheetState extends ConsumerState<ForgotPinSheet> {
   }
 
   Widget _buildCodeStep() {
+    // Nothing is emailed until the grown-up asks for it.
+    if (_sentAt == null) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 340),
+        child: SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: FilledButton.icon(
+            key: const ValueKey('forgot-pin-send'),
+            style: FilledButton.styleFrom(backgroundColor: widget.accentColor),
+            onPressed: _sending ? null : _send,
+            icon: _sending
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.4,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.email_outlined),
+            label: const Text('Send code'),
+          ),
+        ),
+      );
+    }
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 340),
       child: Column(

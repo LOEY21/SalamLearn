@@ -109,12 +109,28 @@ class ProgressRepository {
       _progress.values.where((p) => p.learnerId == learnerId).toList()
         ..sort((a, b) => b.completedAt.compareTo(a.completedAt));
 
-  /// Every `lessonId` this learner has finished, across all destinations —
-  /// feeds the Adventure Map's real per-lesson/per-level unlock gating in
-  /// `destination_levels_sheet.dart` (replaces the previous hardcoded empty
-  /// placeholder set).
-  Set<String> completedLessonIds(String learnerId) => _progress.values
-      .where((p) => p.learnerId == learnerId && p.lessonId != null)
+  /// Every `lessonId` this learner has finished in the Main Game (Adventure Map) —
+  /// by default excludes teacher-assigned homework and classroom mode play so
+  /// homework completions do not automatically mark main game map levels as done.
+  Set<String> completedLessonIds(
+    String learnerId, {
+    bool includeAssigned = false,
+  }) =>
+      _progress.values
+          .where((p) =>
+              p.learnerId == learnerId &&
+              p.lessonId != null &&
+              (includeAssigned || (!p.assignedByTeacher && !p.isClassroomMode)))
+          .map((p) => p.lessonId!)
+          .toSet();
+
+  /// Every `lessonId` this learner has finished specifically as assigned homework.
+  Set<String> completedHomeworkLessonIds(String learnerId) => _progress.values
+      .where((p) =>
+          p.learnerId == learnerId &&
+          p.lessonId != null &&
+          p.assignedByTeacher &&
+          !p.isClassroomMode)
       .map((p) => p.lessonId!)
       .toSet();
 
@@ -241,6 +257,33 @@ Future<void> _bumpStreak(String learnerId) async {
   }
 
   int currentStreak(String learnerId) => _streaks.get(learnerId)?.currentStreak ?? 0;
+
+  /// The streak a learner has right now: their run if they played today or
+  /// yesterday, 0 once a day has been missed (or they never played).
+  int activeStreak(String learnerId) {
+    final s = _streaks.get(learnerId);
+    if (s == null) return 0;
+    return _daysSince(s.lastPlayedDate) <= 1 ? s.currentStreak : 0;
+  }
+
+  /// What the streak becomes once [learnerId] plays today — the same rule
+  /// [_bumpStreak] stores (same day: unchanged; next day: +1; else 1).
+  int streakAfterPlayingToday(String learnerId) {
+    final s = _streaks.get(learnerId);
+    if (s == null) return 1;
+    return switch (_daysSince(s.lastPlayedDate)) {
+      0 => s.currentStreak,
+      1 => s.currentStreak + 1,
+      _ => 1,
+    };
+  }
+
+  static int _daysSince(DateTime date) {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day)
+        .difference(DateTime(date.year, date.month, date.day))
+        .inDays;
+  }
 
   Future<void> awardBadge(String learnerId, String badgeId) async {
     final key = '$learnerId:$badgeId';

@@ -1546,7 +1546,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
           Text(
             text,
             textDirection: TextDirection.rtl,
-            style: _arabic(34, _cream, 1.45),
+            style: _arabic(34, _cream, 1.65),
           ),
           if (lit)
             Positioned(
@@ -1953,7 +1953,15 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                   child: _svg(_svgCross, 13),
                 ),
                 const SizedBox(width: 10),
-                Text('Oops! Try again!', style: _baloo(17, 800, Colors.white)),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Oops! Try again!',
+                      style: _baloo(17, 800, Colors.white),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

@@ -1168,9 +1168,12 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
                   : '/verify-email?redirect=${Uri.encodeComponent(target)}';
               context.go(nextPath);
             },
-            child: const Text(
-              'Create account',
-              style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
+            child: const FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'Create account',
+                style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
+              ),
             ),
           ),
         ),

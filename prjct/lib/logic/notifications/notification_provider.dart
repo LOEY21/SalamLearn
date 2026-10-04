@@ -48,11 +48,7 @@ class NotificationsNotifier extends Notifier<List<NotificationItem>> {
   @override
   List<NotificationItem> build() {
     final streak = ref.watch(learnerStreakProvider);
-    final newBadges = ref
-        .watch(unlockedBadgesProvider)
-        .where((b) => !UnlockedBadgesNotifier.seed.contains(b))
-        .toList()
-        .reversed;
+    final newBadges = ref.watch(unlockedBadgesProvider).reversed;
 
     final badgeNotifications = [
       for (final name in newBadges)

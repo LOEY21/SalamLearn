@@ -1,27 +1,36 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
 
+import '../../data/curriculum_data.dart';
 import '../../data/local/hive_boxes.dart';
+import '../../data/repositories/progress_repository.dart';
+import '../auth/session.dart';
 
-/// Total XP the active learner has earned, persisted under the `settings`
-/// Hive box (same box `SessionNotifier` uses for `lastSyncedAt` and
-/// friends) — no dedicated Hive box or typed model needed for a single
-/// running integer. Backs the Adventure Map TopBar's stars/XP pill.
+/// Total XP the active learner has earned: the XP of every lesson they've
+/// actually finished (only a first completion is recorded, matching how
+/// the lesson player awards it). Derived from their own progress records,
+/// so a new child starts at 0 and never inherits another child's XP.
+/// Backs the Adventure Map top bar's stars/XP pill and the Me tab.
 class LearnerXpNotifier extends Notifier<int> {
-  Box<dynamic> get _settings => Hive.box<dynamic>(HiveBoxes.settings);
-
   @override
-  int build() => _settings.get('learnerXp') as int? ?? 0;
-
-  /// Called at the `awardingBadges` step of a module's DFD-simulator flow
-  /// (see `module_placeholder_screen.dart`'s `_runDfdSimulation`), one step
-  /// before the flow reaches `finished`.
-  void addXp(int amount) {
-    final next = state + amount;
-    state = next;
-    _settings.put('learnerXp', next);
+  int build() {
+    final learnerId = ref.watch(sessionProvider.select((s) => s.learner?.id));
+    if (learnerId == null || !Hive.isBoxOpen(HiveBoxes.progress)) return 0;
+    final done = ProgressRepository().completedLessonIds(learnerId);
+    return xpForLessons(done);
   }
+
+  /// Called as a lesson finishes, just before its progress record is
+  /// written, so the pill updates at once.
+  void addXp(int amount) => state = state + amount;
 }
+
+/// Sum of the curriculum XP for the given finished lesson ids.
+int xpForLessons(Set<String> lessonIds) => [
+  for (final d in curriculum)
+    for (final l in d.lessons)
+      if (lessonIds.contains(l.id)) l.xp,
+].fold(0, (a, b) => a + b);
 
 final learnerXpProvider = NotifierProvider<LearnerXpNotifier, int>(
   LearnerXpNotifier.new,

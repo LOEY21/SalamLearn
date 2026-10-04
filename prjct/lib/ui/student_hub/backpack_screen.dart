@@ -1,14 +1,18 @@
-import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lottie/lottie.dart';
 
 import '../../data/student_badges.dart';
 import '../../logic/recent_module_provider.dart';
 import '../theme/app_colors.dart';
+import 'hub_world.dart';
 
+/// The learner's badge collection: a slice of the Adventure Map as the
+/// header, then the badges standing on wooden shelves in a cabinet —
+/// earned ones in full colour, locked ones as greyed silhouettes.
 class BackpackScreen extends ConsumerStatefulWidget {
   const BackpackScreen({super.key});
 
@@ -17,7 +21,7 @@ class BackpackScreen extends ConsumerStatefulWidget {
 }
 
 class _BackpackScreenState extends ConsumerState<BackpackScreen> {
-  int _selectedTab = 0; // 0 = Milestones, 1 = Streaks
+  BadgeCategory _category = BadgeCategory.milestone;
 
   @override
   void initState() {
@@ -34,824 +38,139 @@ class _BackpackScreenState extends ConsumerState<BackpackScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final unlockedBadges = ref.watch(unlockedBadgesProvider);
-    final earnedTotalCount = allStudentBadges
-        .where((b) => isBadgeUnlocked(b, unlockedBadges))
+    final unlocked = ref.watch(unlockedBadgesProvider);
+    final earnedCount = allStudentBadges
+        .where((b) => isBadgeUnlocked(b, unlocked))
         .length;
+    final shelfBadges = _category == BadgeCategory.milestone
+        ? milestoneBadges
+        : streakBadges;
 
     return Scaffold(
-      backgroundColor: AppColors.neutralTint,
-      body: SafeArea(
-        top: false,
-        child: CustomScrollView(
-          slivers: [
-            // Hero Header
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(18, 38, 18, 0),
-              sliver: SliverToBoxAdapter(
-                child: _buildHeroHeader(earnedTotalCount, allStudentBadges.length),
+      backgroundColor: HubWorld.parchment,
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: _BackpackHeader(
+              earned: earnedCount,
+              total: allStudentBadges.length,
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+            sliver: SliverToBoxAdapter(
+              child: _CategoryTabs(
+                selected: _category,
+                onSelect: (c) => setState(() => _category = c),
               ),
             ),
-
-            // Tab Selector
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-              sliver: SliverToBoxAdapter(child: _buildTabSelector()),
+          ),
+          SliverPadding(
+            // Clears the floating bottom nav (HubShell uses extendBody).
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 150),
+            sliver: SliverToBoxAdapter(
+              child: _BadgeCabinet(
+                badges: shelfBadges,
+                unlocked: unlocked,
+                onOpen: (badge, earned) =>
+                    showBadgeDetailSheet(context, badge, earned: earned),
+              ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-            // Dynamic Tab Contents
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
-              sliver: switch (_selectedTab) {
-                0 => _buildBadgesGrid(milestoneBadges, unlockedBadges),
-                _ => _buildBadgesGrid(streakBadges, unlockedBadges),
-              },
+// ─── Header ──────────────────────────────────────────────────────────────────
+
+class _BackpackHeader extends StatelessWidget {
+  const _BackpackHeader({required this.earned, required this.total});
+
+  final int earned;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = total == 0 ? 0.0 : (earned / total).clamp(0.0, 1.0);
+    return MapSceneHeader(
+      height: 236,
+      image: HubWorld.backpackArt,
+      focusX: 0.35,
+      focusY: 0,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                const _BobbingBackpack(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Digital Backpack',
+                        style: hubText(
+                          26,
+                          Colors.white,
+                          height: 1.1,
+                          shadows: hubTextShadow,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$earned of $total badges earned',
+                        style: hubText(
+                          15,
+                          HubWorld.onScene,
+                          weight: 600,
+                          shadows: hubTextShadow,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 14),
+            _WoodProgressBar(value: progress),
           ],
         ),
       ),
     );
   }
-
-  Widget _buildHeroHeader(int earnedCount, int totalCount) {
-    final gradientColors = _tabGradient(_selectedTab);
-    final progressFraction = totalCount > 0
-        ? (earnedCount / totalCount).clamp(0.0, 1.0)
-        : 0.0;
-
-    return AnimatedContainer(
-      key: const Key('backpack-hero-tile'),
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeOut,
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-      clipBehavior: Clip.none,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: gradientColors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: gradientColors.first.withValues(alpha: 0.35),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // Background blobs
-          Positioned(
-            right: -30,
-            top: -30,
-            child: CircleAvatar(
-              radius: 70,
-              backgroundColor: Colors.white.withValues(alpha: 0.08),
-            ),
-          ),
-          Positioned(
-            left: -20,
-            bottom: -40,
-            child: CircleAvatar(
-              radius: 60,
-              backgroundColor: Colors.white.withValues(alpha: 0.05),
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const _IdleTiltChest(),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Digital Backpack',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 20,
-                          ),
-                        ),
-                        Text(
-                          'Level 3 Explorer',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.8),
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.adventurePurple,
-                      borderRadius: BorderRadius.circular(99),
-                      border: Border.all(color: Colors.white24),
-                    ),
-                    child: Text(
-                      '$earnedCount / $totalCount',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          '$earnedCount of $totalCount badges earned',
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${(progressFraction * 100).round()}% Completed',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.8),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  // Drifting coins/sparkles rising from the open chest.
-                  const Positioned(
-                    left: 20,
-                    bottom: -4,
-                    child: _FloatingCoin(
-                      emoji: '🪙',
-                      dx: -14,
-                      delay: Duration.zero,
-                    ),
-                  ),
-                  const Positioned(
-                    left: 110,
-                    bottom: -4,
-                    child: _FloatingCoin(
-                      emoji: '🪙',
-                      dx: 10,
-                      delay: Duration(milliseconds: 1100),
-                    ),
-                  ),
-                  const Positioned(
-                    left: 170,
-                    bottom: -4,
-                    child: _FloatingCoin(
-                      emoji: '✨',
-                      dx: -6,
-                      delay: Duration(milliseconds: 2200),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(99),
-                child: LinearProgressIndicator(
-                  value: progressFraction,
-                  minHeight: 8,
-                  backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  valueColor: const AlwaysStoppedAnimation(AppColors.gold),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabSelector() {
-    return Container(
-      height: 50,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [AppColors.surface, AppColors.cream],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.creamBorder, width: 2),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x154A3A1E),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(4),
-      child: Stack(
-        children: [
-          // Sliding indicator background pill
-          Positioned.fill(
-            child: AnimatedAlign(
-              alignment: Alignment(-1.0 + _selectedTab * 2.0, 0.0),
-              duration: const Duration(milliseconds: 320),
-              curve: const Cubic(0.34, 1.56, 0.64, 1.0), // Playful bounce
-              child: FractionallySizedBox(
-                widthFactor: 0.49,
-                heightFactor: 0.95,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOut,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: _tabGradient(_selectedTab)),
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _tabGradient(_selectedTab).first.withValues(alpha: 0.25),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // The tabs Row
-          Row(
-            children: [
-              _buildTabItem(0, Icons.emoji_events_rounded, 'Milestones'),
-              _buildTabItem(1, Icons.local_fire_department_rounded, 'Streaks'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<Color> _tabGradient(int tab) => switch (tab) {
-    0 => const [AppColors.teal, AppColors.mintGreen],
-    _ => const [AppColors.coral, AppColors.gold],
-  };
-
-  Widget _buildTabItem(int index, IconData icon, String label) {
-    final active = _selectedTab == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _selectedTab = index),
-        child: Container(
-          color: Colors.transparent, // Expand tap target
-          alignment: Alignment.center,
-          child: AnimatedScale(
-            scale: active ? 1.06 : 1.0,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    icon,
-                    size: 16,
-                    color: active ? Colors.white : AppColors.textMuted,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: active ? Colors.white : AppColors.textMuted,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBadgesGrid(List<BadgeItem> badges, List<String> unlockedBadges) {
-    return SliverGrid(
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 220,
-        mainAxisSpacing: 14,
-        crossAxisSpacing: 14,
-        childAspectRatio: 0.80,
-      ),
-      delegate: SliverChildBuilderDelegate((context, index) {
-        final badge = badges[index];
-        final earned = isBadgeUnlocked(badge, unlockedBadges);
-        return _buildBadgeCard(badge, earned);
-      }, childCount: badges.length),
-    );
-  }
-
-  Widget _buildBadgeCard(BadgeItem badge, bool earned) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: earned
-              ? badge.color.withValues(alpha: 0.40)
-              : AppColors.creamBorder,
-          width: 1.5,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x062C2C2A),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(24),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(24),
-          onTap: () => _showBadgeDetails(context, badge, earned),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            child: Column(
-              children: [
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: earned
-                          ? badge.color.withValues(alpha: 0.14)
-                          : AppColors.creamDark.withValues(alpha: 0.6),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: earned ? badge.color : const Color(0xFFCFC7B4),
-                        width: 2.5,
-                      ),
-                    ),
-                    padding: const EdgeInsets.all(8),
-                    child: Center(
-                      child: earned
-                          ? _buildLottieOrIconForBadge(badge, size: 48)
-                          : const Icon(
-                              Icons.lock_outline_rounded,
-                              color: Color(0xFFB9B2A2),
-                              size: 28,
-                            ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  badge.name,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.ink,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  badge.requirement,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textMuted,
-                    height: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: earned ? AppColors.mint : AppColors.neutralTint,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                  child: Text(
-                    earned ? 'Earned' : 'Locked',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: earned ? AppColors.teal : AppColors.textMuted,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showBadgeDetails(BuildContext context, BadgeItem badge, bool earned) {
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'BadgeDetails',
-      barrierColor: Colors.black.withValues(alpha: 0.55),
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, anim1, anim2) {
-        return const SizedBox.shrink();
-      },
-      transitionBuilder: (context, anim1, anim2, child) {
-        final scale = Tween<double>(
-          begin: 0.85,
-          end: 1.0,
-        ).animate(CurvedAnimation(parent: anim1, curve: Curves.easeOutBack));
-        final opacity = Tween<double>(
-          begin: 0.0,
-          end: 1.0,
-        ).animate(CurvedAnimation(parent: anim1, curve: Curves.easeOut));
-
-        return ScaleTransition(
-          scale: scale,
-          child: FadeTransition(
-            opacity: opacity,
-            child: Dialog(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 340),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 20,
-                      offset: Offset(0, 10),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 26,
-                ),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Badge category tag
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: badge.color.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: badge.color.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Text(
-                          '${badge.category.title} (${badge.category.subtitle})',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: badge.color,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          if (earned)
-                            _CelebratingGlow(color: badge.color)
-                          else
-                            Container(
-                              width: 130,
-                              height: 130,
-                              decoration: const BoxDecoration(
-                                color: AppColors.neutralTint,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          Container(
-                            width: 96,
-                            height: 96,
-                            decoration: BoxDecoration(
-                              color: earned
-                                  ? badge.color.withValues(alpha: 0.15)
-                                  : AppColors.creamDark,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: earned
-                                    ? badge.color
-                                    : const Color(0xFFCFC7B4),
-                                width: 3.5,
-                              ),
-                              boxShadow: earned
-                                  ? [
-                                      BoxShadow(
-                                        color: badge.color.withValues(
-                                          alpha: 0.25,
-                                        ),
-                                        blurRadius: 12,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                            child: earned
-                                ? Center(
-                                    child: _buildLottieOrIconForBadge(
-                                      badge,
-                                      size: 64,
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons.lock_outline_rounded,
-                                    color: Color(0xFFB9B2A2),
-                                    size: 40,
-                                  ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      Text(
-                        badge.name,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      // Requirement card
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.cream,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.creamBorder),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'REQUIREMENT',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                color: badge.color,
-                                letterSpacing: 0.4,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              badge.requirement,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.ink,
-                                height: 1.35,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (!earned) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.goldTint,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '+${badge.xp} XP Reward',
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.gold,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: earned ? AppColors.mint : AppColors.neutralTint,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                        child: Text(
-                          earned ? 'EARNED ✓' : 'LOCKED 🔒',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w900,
-                            color: earned ? AppColors.teal : AppColors.textMuted,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildLottieOrIconForBadge(BadgeItem badge, {double size = 48}) {
-    if (badge.lottieAsset != null) {
-      return Stack(
-        alignment: Alignment.center,
-        children: [
-          Lottie.asset(
-            badge.lottieAsset!,
-            width: size * 1.3,
-            height: size * 1.3,
-            fit: BoxFit.contain,
-          ),
-          Text(
-            badge.emoji,
-            style: TextStyle(fontSize: size * 0.46),
-          ),
-        ],
-      );
-    }
-    return Text(
-      badge.emoji,
-      style: TextStyle(fontSize: size * 0.6),
-    );
-  }
 }
 
-/// The chest emoji badge, idle-tilting ±4° on the shared 3400ms ambient
-/// rhythm used across the Adventure Map's current-destination node.
-class _IdleTiltChest extends StatefulWidget {
-  const _IdleTiltChest();
+/// The nav's backpack art, gently bobbing like the map's current node.
+class _BobbingBackpack extends StatefulWidget {
+  const _BobbingBackpack();
 
   @override
-  State<_IdleTiltChest> createState() => _IdleTiltChestState();
+  State<_BobbingBackpack> createState() => _BobbingBackpackState();
 }
 
-class _IdleTiltChestState extends State<_IdleTiltChest>
+class _BobbingBackpackState extends State<_BobbingBackpack>
     with SingleTickerProviderStateMixin {
-  late final _controller = AnimationController(
+  late final _c = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 3400),
-  )..repeat(reverse: true);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final t = Curves.easeInOut.transform(_controller.value);
-        return Transform.rotate(angle: (t * 2 - 1) * 0.07, child: child);
-      },
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.18),
-          shape: BoxShape.circle,
-        ),
-        child: const Text('🧰', style: TextStyle(fontSize: 24)),
-      ),
-    );
-  }
-}
-
-/// A single coin/sparkle drifting up out of the chest and fading, looping
-/// forever with a per-instance start delay — same rhythm family as the
-/// Adventure Map's `_Sparkle`.
-class _FloatingCoin extends StatefulWidget {
-  const _FloatingCoin({
-    required this.emoji,
-    required this.dx,
-    required this.delay,
-  });
-
-  final String emoji;
-  final double dx;
-  final Duration delay;
-
-  @override
-  State<_FloatingCoin> createState() => _FloatingCoinState();
-}
-
-class _FloatingCoinState extends State<_FloatingCoin>
-    with SingleTickerProviderStateMixin {
-  late final _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 3200),
   );
-  Timer? _startTimer;
 
   @override
-  void initState() {
-    super.initState();
-    _startTimer = Timer(widget.delay, () {
-      if (mounted) _controller.repeat();
-    });
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (hubMotionOn(context)) {
+      if (!_c.isAnimating) _c.repeat(reverse: true);
+    } else {
+      _c.stop();
+    }
   }
-
-  @override
-  void dispose() {
-    _startTimer?.cancel();
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          final t = _controller.value;
-          final opacity = t < 0.15
-              ? t / 0.15
-              : t < 0.85
-              ? 1.0
-              : (1 - t) / 0.15;
-          return Opacity(
-            opacity: opacity.clamp(0.0, 1.0) * 0.85,
-            child: Transform.translate(
-              offset: Offset(widget.dx * t, -70 * t),
-              child: Transform.rotate(
-                angle: t * 3.5,
-                child: Text(
-                  widget.emoji,
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _CelebratingGlow extends StatefulWidget {
-  const _CelebratingGlow({required this.color});
-  final Color color;
-
-  @override
-  State<_CelebratingGlow> createState() => _CelebratingGlowState();
-}
-
-class _CelebratingGlowState extends State<_CelebratingGlow>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 4),
-  )..repeat();
 
   @override
   void dispose() {
@@ -864,24 +183,670 @@ class _CelebratingGlowState extends State<_CelebratingGlow>
     return AnimatedBuilder(
       animation: _c,
       builder: (context, child) {
-        return Transform.rotate(
-          angle: _c.value * 2 * math.pi,
-          child: Container(
-            width: 140,
-            height: 140,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: SweepGradient(
-                colors: [
-                  widget.color.withValues(alpha: 0.0),
-                  widget.color.withValues(alpha: 0.35),
-                  widget.color.withValues(alpha: 0.0),
+        final t = Curves.easeInOut.transform(_c.value);
+        return Transform.translate(
+          offset: Offset(0, -4 * t),
+          child: Transform.rotate(angle: (t - 0.5) * 0.08, child: child),
+        );
+      },
+      child: Image.asset(
+        'assets/images/adventure_map/tab_backpack.png',
+        width: 78,
+        height: 78,
+        excludeFromSemantics: true,
+      ),
+    );
+  }
+}
+
+class _WoodProgressBar extends StatelessWidget {
+  const _WoodProgressBar({required this.value});
+
+  final double value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 18,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: HubWorld.wood,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: AppColors.goldSoft, width: 1.2),
+      ),
+      child: LayoutBuilder(
+        builder: (context, c) => Stack(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeOutQuart,
+              width: value == 0 ? 0 : math.max(10, c.maxWidth * value),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(99),
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [HubWorld.goldLight, AppColors.gold],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Category tabs ───────────────────────────────────────────────────────────
+
+class _CategoryTabs extends StatelessWidget {
+  const _CategoryTabs({required this.selected, required this.onSelect});
+
+  final BadgeCategory selected;
+  final ValueChanged<BadgeCategory> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tab(BadgeCategory c, IconData icon, String label) {
+      final active = c == selected;
+      return Expanded(
+        child: ChunkyButton(
+          onTap: active ? null : () => onSelect(c),
+          face: active ? AppColors.gold : Colors.white,
+          edge: active ? HubWorld.goldDeep : HubWorld.edge,
+          border: active ? null : AppColors.creamBorder,
+          radius: 18,
+          depth: active ? 4 : 5,
+          padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
+          semanticLabel: label,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: active ? HubWorld.wood : HubWorld.inkSoft,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: hubText(
+                    16,
+                    active ? HubWorld.wood : HubWorld.inkSoft,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        tab(BadgeCategory.milestone, Icons.emoji_events_rounded, 'Milestones'),
+        const SizedBox(width: 12),
+        tab(BadgeCategory.streak, Icons.local_fire_department_rounded, 'Streaks'),
+      ],
+    );
+  }
+}
+
+// ─── Cabinet + shelves ───────────────────────────────────────────────────────
+
+class _BadgeCabinet extends StatelessWidget {
+  const _BadgeCabinet({
+    required this.badges,
+    required this.unlocked,
+    required this.onOpen,
+  });
+
+  final List<BadgeItem> badges;
+  final List<String> unlocked;
+  final void Function(BadgeItem badge, bool earned) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return QuestPanel(
+      padding: const EdgeInsets.fromLTRB(10, 16, 10, 8),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final perShelf = c.maxWidth >= 720
+              ? 5
+              : c.maxWidth >= 520
+              ? 4
+              : 3;
+          final shelves = <List<BadgeItem>>[
+            for (var i = 0; i < badges.length; i += perShelf)
+              badges.sublist(i, math.min(i + perShelf, badges.length)),
+          ];
+          return Column(
+            children: [
+              for (final shelf in shelves) ...[
+                // Equal-height slots: medals line up along the top and
+                // "Earned/Locked" along the bottom, whatever the name length.
+                IntrinsicHeight(
+                  child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < perShelf; i++)
+                      Expanded(
+                        child: i < shelf.length
+                            ? _ShelfBadge(
+                                badge: shelf[i],
+                                earned: isBadgeUnlocked(shelf[i], unlocked),
+                                onTap: () => onOpen(
+                                  shelf[i],
+                                  isBadgeUnlocked(shelf[i], unlocked),
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                  ],
+                  ),
+                ),
+                const _ShelfPlank(),
+                const SizedBox(height: 14),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ShelfPlank extends StatelessWidget {
+  const _ShelfPlank();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          height: 10,
+          decoration: const BoxDecoration(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(3)),
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [HubWorld.woodLight, HubWorld.woodMid],
+            ),
+          ),
+        ),
+        Container(
+          height: 6,
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          decoration: const BoxDecoration(
+            color: HubWorld.wood,
+            borderRadius: BorderRadius.vertical(bottom: Radius.circular(4)),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x404A3A1E),
+                blurRadius: 6,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ShelfBadge extends StatefulWidget {
+  const _ShelfBadge({
+    required this.badge,
+    required this.earned,
+    required this.onTap,
+  });
+
+  final BadgeItem badge;
+  final bool earned;
+  final VoidCallback onTap;
+
+  @override
+  State<_ShelfBadge> createState() => _ShelfBadgeState();
+}
+
+class _ShelfBadgeState extends State<_ShelfBadge> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final earned = widget.earned;
+    return Semantics(
+      button: true,
+      label: '${widget.badge.shortName.tr}, ${earned ? 'Earned'.tr : 'Locked'.tr}',
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _down = true),
+        onTapUp: (_) => setState(() => _down = false),
+        onTapCancel: () => setState(() => _down = false),
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _down ? 0.93 : 1,
+          duration: const Duration(milliseconds: 110),
+          curve: Curves.easeOut,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Column(
+              children: [
+                BadgeMedallion(badge: widget.badge, earned: earned, size: 74),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: Text(
+                    widget.badge.shortName,
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: hubText(
+                      13.5,
+                      earned ? AppColors.ink : HubWorld.inkSoft,
+                      weight: 750,
+                      height: 1.15,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      earned ? Icons.check_circle_rounded : Icons.lock_rounded,
+                      size: 13,
+                      color: earned ? AppColors.teal : HubWorld.inkSoft,
+                    ),
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(
+                        earned ? 'Earned' : 'Locked',
+                        overflow: TextOverflow.ellipsis,
+                        style: hubText(
+                          12,
+                          earned ? AppColors.teal : HubWorld.inkSoft,
+                          weight: 700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A badge's illustrated medal: full colour when earned, a faded grey
+/// silhouette with a padlock when still locked.
+class BadgeMedallion extends StatelessWidget {
+  const BadgeMedallion({
+    super.key,
+    required this.badge,
+    required this.earned,
+    required this.size,
+  });
+
+  final BadgeItem badge;
+  final bool earned;
+  final double size;
+
+  static const _greyscale = ColorFilter.matrix([
+    0.33, 0.33, 0.33, 0, 0, //
+    0.33, 0.33, 0.33, 0, 0, //
+    0.33, 0.33, 0.33, 0, 0, //
+    0, 0, 0, 1, 0,
+  ]);
+
+  @override
+  Widget build(BuildContext context) {
+    final art = Image.asset(
+      badge.artAsset,
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      semanticLabel: badge.name,
+    );
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          if (earned)
+            _GlowingArt(badge: badge, size: size, art: art)
+          else
+            Opacity(
+              opacity: 0.4,
+              child: ColorFiltered(colorFilter: _greyscale, child: art),
+            ),
+          if (!earned)
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: Container(
+                width: size * 0.34,
+                height: size * 0.34,
+                decoration: BoxDecoration(
+                  color: HubWorld.wood,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.goldSoft, width: 1.5),
+                ),
+                child: Icon(
+                  Icons.lock_rounded,
+                  size: size * 0.19,
+                  color: AppColors.goldSoft,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// An earned medal lit like real metal: a soft halo in the badge's own
+/// colour cast from its silhouette and breathing slowly, the art lifted a
+/// touch brighter, and a streak of light gleaming across it every few
+/// seconds (each badge on its own beat). Static halo only when the OS asks
+/// for reduced motion.
+class _GlowingArt extends StatefulWidget {
+  const _GlowingArt({
+    required this.badge,
+    required this.size,
+    required this.art,
+  });
+
+  final BadgeItem badge;
+  final double size;
+  final Widget art;
+
+  @override
+  State<_GlowingArt> createState() => _GlowingArtState();
+}
+
+class _GlowingArtState extends State<_GlowingArt>
+    with SingleTickerProviderStateMixin {
+  // One 5s cycle: the halo breathes through it, the gleam crosses in its
+  // first ~0.9s.
+  late final _cycle = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 5000),
+    value: (widget.badge.id.hashCode % 97) / 97,
+  );
+
+  static const _brighten = ColorFilter.matrix([
+    1.08, 0, 0, 0, 8, //
+    0, 1.08, 0, 0, 8, //
+    0, 0, 1.08, 0, 8, //
+    0, 0, 0, 1, 0,
+  ]);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (hubMotionOn(context)) {
+      if (!_cycle.isAnimating) _cycle.repeat();
+    } else {
+      _cycle.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _cycle.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = widget.size;
+    final glow = Color.lerp(widget.badge.color, AppColors.goldSoft, 0.45)!;
+    final halo = ImageFiltered(
+      imageFilter: ImageFilter.blur(sigmaX: size * 0.11, sigmaY: size * 0.11),
+      child: ColorFiltered(
+        colorFilter: ColorFilter.mode(glow, BlendMode.srcIn),
+        child: widget.art,
+      ),
+    );
+    final lit = ColorFiltered(colorFilter: _brighten, child: widget.art);
+
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _cycle,
+        builder: (context, _) {
+          final t = _cycle.value;
+          final breath = 0.5 + 0.5 * math.sin(t * math.pi * 2);
+          final gleam = t < 0.18 ? t / 0.18 : null;
+          return Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Transform.scale(
+                scale: 1.12,
+                child: Opacity(opacity: 0.55 + 0.3 * breath, child: halo),
+              ),
+              if (gleam == null)
+                lit
+              else
+                // Light only lands where the medal is painted (srcATop).
+                ShaderMask(
+                  blendMode: BlendMode.srcATop,
+                  shaderCallback: (rect) => LinearGradient(
+                    begin: Alignment(-1.0 + 4 * gleam - 1, -1),
+                    end: Alignment(1.0 + 4 * gleam - 1, 1),
+                    colors: const [
+                      Color(0x00FFFFFF),
+                      Color(0x8CFFFBE8),
+                      Color(0x00FFFFFF),
+                    ],
+                    stops: const [0.35, 0.5, 0.65],
+                  ).createShader(rect),
+                  child: lit,
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ─── Detail sheet ────────────────────────────────────────────────────────────
+
+/// Bottom sheet explaining one badge: what it is, how to earn it, and its
+/// reward. Shared by the Backpack shelves.
+Future<void> showBadgeDetailSheet(
+  BuildContext context,
+  BadgeItem badge, {
+  required bool earned,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black.withValues(alpha: 0.5),
+    builder: (context) => _BadgeDetailSheet(badge: badge, earned: earned),
+  );
+}
+
+class _BadgeDetailSheet extends StatelessWidget {
+  const _BadgeDetailSheet({required this.badge, required this.earned});
+
+  final BadgeItem badge;
+  final bool earned;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: QuestPanel(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: HubWorld.lockedRim,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: 150,
+                    height: 150,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        if (earned && hubMotionOn(context))
+                          _RotatingGlow(color: badge.color),
+                        BadgeMedallion(
+                          badge: badge,
+                          earned: earned,
+                          size: 112,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    badge.name,
+                    textAlign: TextAlign.center,
+                    style: hubText(23, AppColors.ink, height: 1.15),
+                  ),
+                  const SizedBox(height: 8),
+                  WoodChip(label: badge.category.title),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.creamBorder, width: 1.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'How to earn it',
+                          style: hubText(14, HubWorld.woodMid),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          badge.requirement,
+                          style: hubText(
+                            15.5,
+                            AppColors.ink,
+                            weight: 600,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        earned ? Icons.check_circle_rounded : Icons.star_rounded,
+                        color: earned ? AppColors.teal : AppColors.gold,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          earned ? 'Earned' : '+${badge.xp} XP Reward',
+                          style: hubText(
+                            17,
+                            earned ? AppColors.teal : HubWorld.goldDeep,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ChunkyButton(
+                      onTap: () => Navigator.of(context).pop(),
+                      face: AppColors.teal,
+                      edge: AppColors.tealDark,
+                      radius: 18,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      child: Center(
+                        child: Text('Close', style: hubText(18, Colors.white)),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
-        );
-      },
+        ),
+      ),
+    );
+  }
+}
+
+class _RotatingGlow extends StatefulWidget {
+  const _RotatingGlow({required this.color});
+
+  final Color color;
+
+  @override
+  State<_RotatingGlow> createState() => _RotatingGlowState();
+}
+
+class _RotatingGlowState extends State<_RotatingGlow>
+    with SingleTickerProviderStateMixin {
+  late final _c = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 6),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RotationTransition(
+      turns: _c,
+      child: Container(
+        width: 150,
+        height: 150,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: SweepGradient(
+            colors: [
+              widget.color.withValues(alpha: 0),
+              AppColors.gold.withValues(alpha: 0.45),
+              widget.color.withValues(alpha: 0),
+              AppColors.gold.withValues(alpha: 0.45),
+              widget.color.withValues(alpha: 0),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

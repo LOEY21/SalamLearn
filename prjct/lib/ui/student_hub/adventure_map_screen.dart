@@ -73,9 +73,9 @@ Color _hexColor(String hex) {
 /// pills, mascot, speech bubble): `cubic-bezier(0.34, 1.56, 0.64, 1)`.
 const _overshoot = Cubic(0.34, 1.56, 0.64, 1.0);
 
-const _debugUnlockAllModules = false;
+const _debugUnlockAllModules = true;
 
-enum _NodeState { locked, available, current, completed }
+enum _NodeState { locked, available, current }
 
 class AdventureMapScreen extends ConsumerStatefulWidget {
   const AdventureMapScreen({super.key});
@@ -92,10 +92,10 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
   // every zoom level.
   final _viewer = TransformationController();
   static const _maxZoom = 3.0;
-  // Resting balance point: zoomed in enough to read as a tall scrollable
-  // journey (not the whole 7-destination map flattened onto one screen),
-  // without over-cropping the background video.
-  static const _baseMapHeight = 1300.0;
+  // The map art (still image and video alike) is 1080x3060. Sizing from
+  // that before the video reports its own ratio means nothing resizes or
+  // jumps when it does.
+  static const _artAspectRatio = 1080 / 3060;
 
   /// Set once the background video reports its real decoded size (width /
   /// height) — lets the map track the video's own aspect ratio instead of
@@ -104,10 +104,8 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
   /// previous map's dimensions.
   double? _videoAspectRatio;
 
-  double _mapHeightFor(double width) {
-    final ratio = _videoAspectRatio;
-    return ratio != null ? width / ratio : _baseMapHeight;
-  }
+  double _mapHeightFor(double width) =>
+      width / (_videoAspectRatio ?? _artAspectRatio);
 
   /// Top bar / bottom nav hide only while two fingers are pinching, and
   /// come back as soon as the pinch ends (as the map eases back to 1x).
@@ -115,9 +113,34 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
     ref.read(mapZoomProvider.notifier).set(hidden ? 0.0 : 1.0);
   }
 
+  /// Redraws the map whenever a lesson is saved, so stage unlocks and the
+  /// finished-stage medal appear without leaving the Home tab.
+  StreamSubscription<BoxEvent>? _progressWrites;
+
+  /// Stages already known to be finished; anything newly finished since is
+  /// queued in [_pendingCelebrations] for its one-time burst.
+  Set<int>? _finishedSeen;
+  final _pendingCelebrations = <int>{};
+
+  /// Level sheets / lesson players currently on top of the map — the burst
+  /// waits until this is back to 0 so the child actually sees it.
+  int _covers = 0;
+
+  void _uncover() {
+    _covers--;
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+    if (Hive.isBoxOpen(HiveBoxes.progress)) {
+      _progressWrites = Hive.box<ProgressRecord>(
+        HiveBoxes.progress,
+      ).watch().listen((_) {
+        if (mounted) setState(() {});
+      });
+    }
     _snapBack =
         AnimationController(
           vsync: this,
@@ -230,6 +253,7 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
 
   @override
   void dispose() {
+    _progressWrites?.cancel();
     _snapBack.dispose();
     _viewer.dispose();
     super.dispose();
@@ -295,18 +319,19 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
     return false;
   }
 
-  /// No real progress-tracking backend exists yet (placeholder phase, per
-  /// this repo's standing constraint) — modules ahead of the current one in
-  /// `coreModules`' fixed order read as "completed", matching the approved
-  /// preview's green-checkmark nodes, without inventing a new provider.
   _NodeState _stateFor(ModuleInfo module, String currentId, bool assigned) {
     if (!assigned) return _NodeState.locked;
     if (module.id == currentId) return _NodeState.current;
-    final currentIndex = coreModules.indexWhere((m) => m.id == currentId);
-    final thisIndex = coreModules.indexWhere((m) => m.id == module.id);
-    return thisIndex < currentIndex
-        ? _NodeState.completed
-        : _NodeState.available;
+    return _NodeState.available;
+  }
+
+  /// Every lesson in the stage is done — drives the finished-stage medal,
+  /// star crown and gold label (real progress, not map order).
+  static bool _isStageFinished(int destinationId, Set<String> completed) {
+    final lessons = curriculum
+        .firstWhere((d) => d.id == destinationId)
+        .lessons;
+    return lessons.isNotEmpty && lessons.every((l) => completed.contains(l.id));
   }
 
   void _showLockedDialog(String moduleTitle) {
@@ -349,6 +374,7 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
     // Live completion set: any progress write while the sheet is up (the
     // lesson that just closed landing a moment later) re-marks it at once.
     final completed = ValueNotifier(_completedLessons);
+    _covers++;
     final progressWrites = Hive.box<ProgressRecord>(
       HiveBoxes.progress,
     ).watch().listen((_) {
@@ -362,17 +388,20 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
       maxLessons: _maxLessonsFor(module.id),
       noorEnergy: ref.read(noorEnergyProvider).current,
       onStartLesson: (lesson, isNewLevel) {
-        // Replaying a finished lesson is free; a new one costs one Noor.
+        // Out of Noor Energy blocks every lesson, finished ones included.
+        // While lanterns remain, replaying a finished lesson is free and a
+        // new one costs one Noor.
+        if (!ref.read(noorEnergyProvider).hasEnergy) {
+          showNoorEnergyRestingSheet(context);
+          return;
+        }
         if (!_completedLessons.contains(lesson.id)) {
-          final energy = ref.read(noorEnergyProvider.notifier);
-          if (!ref.read(noorEnergyProvider).hasEnergy) {
-            showNoorEnergyRestingSheet(context);
-            return;
-          }
-          energy.consume();
+          ref.read(noorEnergyProvider.notifier).consume();
         }
         ref.read(recentModuleProvider.notifier).interactWith(module.id);
-        Navigator.of(context, rootNavigator: true).push(
+        _covers++;
+        Navigator.of(context, rootNavigator: true)
+            .push(
           MaterialPageRoute<void>(
             builder: (_) => LessonPlayerScreen(
               lesson: lesson,
@@ -385,11 +414,13 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
               },
             ),
           ),
-        );
+        )
+            .whenComplete(_uncover);
       },
     ).whenComplete(() {
       progressWrites.cancel();
       completed.dispose();
+      _uncover();
     });
   }
 
@@ -408,6 +439,15 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
   Widget build(BuildContext context) {
     final currentId = ref.watch(recentModuleProvider) ?? coreModules.first.id;
     final learnerAvatar = ref.watch(sessionProvider).learner?.avatar;
+    final completedLessons = _completedLessons;
+    final finished = {
+      for (final m in coreModules)
+        if (_isStageFinished(m.destinationId, completedLessons))
+          m.destinationId,
+    };
+    final seen = _finishedSeen ??= finished;
+    _pendingCelebrations.addAll(finished.difference(seen));
+    _finishedSeen = finished;
     final chromeFade = ref.watch(mapZoomProvider);
     final anchors = ref.watch(tutorialAnchorsProvider);
     ref.listen(activeHubTabIndexProvider, (prev, next) {
@@ -419,14 +459,9 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
       body: LayoutBuilder(
         builder: (context, constraints) {
           final mapHeight = _mapHeightFor(constraints.maxWidth);
-          // Once the video's real aspect ratio is known, its natural
-          // height is used as-is (no cropping) so it shows at original
-          // size — the old floor-to-viewport-height trick only still
-          // applies before that, to avoid a flash of bare cream space
-          // below the fallback-sized placeholder.
-          final effectiveMapHeight = _videoAspectRatio != null
-              ? mapHeight
-              : math.max(mapHeight, constraints.maxHeight);
+          // The art's natural height (no cropping), the same before and
+          // after the video loads, so the map never resizes under you.
+          final effectiveMapHeight = mapHeight;
           _viewport = constraints.biggest;
           _mapHeight = effectiveMapHeight;
           _placeInitialView(effectiveMapHeight, constraints.maxHeight);
@@ -488,6 +523,15 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
                             _isModuleAssigned(module.id),
                           ),
                           overdue: _isModuleOverdue(module.id),
+                          finished: finished.contains(module.destinationId),
+                          celebrate:
+                              _covers == 0 &&
+                              _pendingCelebrations.contains(
+                                module.destinationId,
+                              ),
+                          onCelebrated: () => _pendingCelebrations.remove(
+                            module.destinationId,
+                          ),
                           entranceDelay: Duration(milliseconds: 40 + i * 50),
                           onTap: () =>
                               _onNodeTap(module, _isModuleAssigned(module.id)),
@@ -583,23 +627,36 @@ class _MapVideoBackgroundState extends State<_MapVideoBackground> {
 
   @override
   Widget build(BuildContext context) {
+    // The still map stays underneath and the video fades in over it once
+    // its first frame is ready — no hard cut from picture to video.
     return ColoredBox(
       color: AppColors.cream,
-      child: _ready
-          ? ClipRect(
-              child: FittedBox(
-                fit: BoxFit.fitWidth,
-                child: SizedBox(
-                  width: _controller.value.size.width,
-                  height: _controller.value.size.height,
-                  child: VideoPlayer(_controller),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/images/adventure_map/map_background.png',
+            fit: BoxFit.cover,
+          ),
+          if (_ready)
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: 450),
+              curve: Curves.easeOut,
+              builder: (context, t, child) => Opacity(opacity: t, child: child),
+              child: ClipRect(
+                child: FittedBox(
+                  fit: BoxFit.fitWidth,
+                  child: SizedBox(
+                    width: _controller.value.size.width,
+                    height: _controller.value.size.height,
+                    child: VideoPlayer(_controller),
+                  ),
                 ),
               ),
-            )
-          : Image.asset(
-              'assets/images/adventure_map/map_background.png',
-              fit: BoxFit.cover,
             ),
+        ],
+      ),
     );
   }
 }
@@ -764,6 +821,9 @@ class _MapNode extends StatefulWidget {
     required this.overdue,
     required this.entranceDelay,
     required this.onTap,
+    this.finished = false,
+    this.celebrate = false,
+    this.onCelebrated,
     this.anchorKey,
   });
 
@@ -776,6 +836,14 @@ class _MapNode extends StatefulWidget {
   final bool overdue;
   final Duration entranceDelay;
   final VoidCallback onTap;
+
+  /// Every lesson in this stage is done.
+  final bool finished;
+
+  /// Play the one-time finished burst now (the stage just got finished and
+  /// the map is visible); [onCelebrated] fires once it has started.
+  final bool celebrate;
+  final VoidCallback? onCelebrated;
 
   /// Attached only to the current-lesson node so the first-run mascot
   /// tutorial can spotlight its real on-screen rect — see [TutorialAnchors].
@@ -806,6 +874,11 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     vsync: this,
     duration: const Duration(milliseconds: 320),
   );
+  // One-shot "stage finished" burst: medal pop, star crown, gold sparks.
+  // Rests at 1 (fully shown) so finished stages look settled on load.
+  // Created in initState, not lazily: unfinished nodes never touch it, and
+  // first creating a controller inside dispose() throws mid-unmount.
+  late final AnimationController _burst;
   Timer? _entranceTimer;
   // Only the one-shot entrance/wobble rebuild the node's widget tree; the
   // looping glow and twinkles animate inside their own cached subtrees so
@@ -823,12 +896,27 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _burst = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+      value: 1,
+    );
     _entranceTimer = Timer(widget.entranceDelay, () {
       if (mounted) _entrance.forward();
     });
     // Offset each checkpoint's phase so they don't all shine in lockstep.
     _shine.value = (widget.module.destinationId % 7) / 7;
     _syncContinuousAnimations(previousState: null);
+    if (widget.celebrate) _celebrate();
+  }
+
+  void _celebrate() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onCelebrated?.call();
+      if (MediaQuery.of(context).disableAnimations) return;
+      _burst.forward(from: 0);
+    });
   }
 
   @override
@@ -844,6 +932,7 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     if (oldWidget.state != widget.state) {
       _syncContinuousAnimations(previousState: oldWidget.state);
     }
+    if (widget.celebrate && !oldWidget.celebrate) _celebrate();
   }
 
   void _syncContinuousAnimations({required _NodeState? previousState}) {
@@ -866,6 +955,7 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     _pulse.dispose();
     _shine.dispose();
     _wobble.dispose();
+    _burst.dispose();
     super.dispose();
   }
 
@@ -990,7 +1080,7 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
                     child: iconImage,
                   ),
                 ),
-              if (!locked)
+              if (!locked && !widget.finished)
                 for (final (i, (dx, dy)) in const [
                   (-0.42, 0.12),
                   (0.40, 0.28),
@@ -1010,12 +1100,29 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
                     size: iconBox * 0.56,
                   ),
                 ),
-              if (widget.state == _NodeState.completed)
-                Positioned(
-                  bottom: tileH / 2 + iconBox * 0.7,
-                  right: 6,
-                  child: const _DoneChip(),
+              if (widget.finished) ...[
+                Positioned.fill(
+                  child: _FinishBurst(
+                    burst: _burst,
+                    center: Offset(width / 2, height - iconBottom - iconBox / 2),
+                  ),
                 ),
+                Positioned(
+                  top: height - iconBottom - iconBox - 16,
+                  left: 0,
+                  right: 0,
+                  child: _StarCrown(
+                    key: ValueKey('stage-finished-${widget.module.id}'),
+                    burst: _burst,
+                    shine: _shine,
+                  ),
+                ),
+                Positioned(
+                  bottom: tileH / 2 + iconBox * 0.62,
+                  right: 0,
+                  child: _DoneMedal(burst: _burst),
+                ),
+              ],
               if (widget.overdue && !locked)
                 Positioned(
                   bottom: tileH / 2 + iconBox * 0.7,
@@ -1032,6 +1139,7 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
                       title: widget.module.title,
                       locked: locked,
                       isCurrent: isCurrent,
+                      finished: widget.finished,
                     ),
                   ),
                 ),
@@ -1342,22 +1450,161 @@ class _PadlockPainter extends CustomPainter {
   bool shouldRepaint(covariant _PadlockPainter oldDelegate) => false;
 }
 
-class _DoneChip extends StatelessWidget {
-  const _DoneChip();
+/// Gold medal with a white check on a finished stage's checkpoint. Pops in
+/// (overshoot) at the start of the finish [burst]; static at rest.
+class _DoneMedal extends StatelessWidget {
+  const _DoneMedal({required this.burst});
+
+  final Animation<double> burst;
+
+  static final _pop = CurveTween(
+    curve: const Interval(0, 0.45, curve: Curves.easeOutBack),
+  );
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 18,
-      height: 18,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: AppColors.teal,
-        border: Border.all(color: Colors.white, width: 1.5),
+    return IgnorePointer(
+      child: ScaleTransition(
+        scale: burst.drive(_pop),
+        child: Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFFFFE38A), AppColors.gold],
+            ),
+            border: Border.all(color: Colors.white, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF8A5A00).withValues(alpha: 0.45),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Icon(Icons.check_rounded, color: Colors.white, size: 15),
+        ),
       ),
-      child: const Icon(Icons.check_rounded, color: Colors.white, size: 12),
     );
   }
+}
+
+/// Three gold stars arched over a finished stage. Each pops in, staggered,
+/// during the finish [burst]; at rest only a slow shimmer on the shared
+/// [shine] loop (opacity/scale, its own repaint boundary).
+class _StarCrown extends StatelessWidget {
+  const _StarCrown({super.key, required this.burst, required this.shine});
+
+  final Animation<double> burst;
+  final Animation<double> shine;
+
+  static const _stars = [(13.0, 5.0), (19.0, 0.0), (13.0, 5.0)];
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: Listenable.merge([burst, shine]),
+          builder: (context, _) {
+            final glint = math.sin(shine.value * math.pi * 2) * 0.5 + 0.5;
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final (i, (size, drop)) in _stars.indexed)
+                  Padding(
+                    padding: EdgeInsets.only(top: drop),
+                    child: Transform.scale(
+                      scale:
+                          Curves.easeOutBack.transform(
+                            ((burst.value - 0.15 - 0.12 * i) / 0.4).clamp(
+                              0.0,
+                              1.0,
+                            ),
+                          ) *
+                          (i == 1 ? 1 + 0.06 * glint : 1),
+                      child: Icon(
+                        Icons.star_rounded,
+                        size: size,
+                        color: Color.lerp(
+                          AppColors.gold,
+                          const Color(0xFFFFE38A),
+                          i == 1 ? glint : 0.3,
+                        ),
+                        shadows: const [
+                          Shadow(
+                            color: Color(0x998A5A00),
+                            offset: Offset(0, 1),
+                            blurRadius: 1,
+                          ),
+                          Shadow(color: Color(0xAAFFD36B), blurRadius: 6),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Gold and white sparks bursting out of the checkpoint once, the moment a
+/// stage is finished. Paints nothing at rest.
+class _FinishBurst extends StatelessWidget {
+  const _FinishBurst({required this.burst, required this.center});
+
+  final Animation<double> burst;
+  final Offset center;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _FinishBurstPainter(burst: burst, center: center),
+        ),
+      ),
+    );
+  }
+}
+
+class _FinishBurstPainter extends CustomPainter {
+  _FinishBurstPainter({required this.burst, required this.center})
+    : super(repaint: burst);
+
+  final Animation<double> burst;
+  final Offset center;
+
+  static const _colors = [Color(0xFFFFD36B), Colors.white, Color(0xFFFFE9A8)];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final t = ((burst.value - 0.1) / 0.75).clamp(0.0, 1.0);
+    if (t <= 0 || t >= 1) return;
+    final travel = Curves.easeOutCubic.transform(t);
+    final paint = Paint();
+    for (var i = 0; i < 10; i++) {
+      final angle = i / 10 * math.pi * 2 + (i.isEven ? 0.15 : -0.1);
+      final reach = (i.isEven ? 42.0 : 32.0) * travel + 8;
+      paint.color = _colors[i % 3].withValues(alpha: 1 - t);
+      canvas.drawCircle(
+        center + Offset(math.cos(angle), math.sin(angle)) * reach,
+        2.8 - 1.2 * t,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FinishBurstPainter old) =>
+      old.center != center;
 }
 
 /// Destination name pill under a map node's badge — small enough to stay
@@ -1369,22 +1616,28 @@ class _NodeLabel extends StatelessWidget {
     required this.title,
     required this.locked,
     required this.isCurrent,
+    this.finished = false,
   });
 
   final String title;
   final bool locked;
   final bool isCurrent;
+  final bool finished;
 
   @override
   Widget build(BuildContext context) {
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 88),
+      constraints: const BoxConstraints(maxWidth: 120),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: locked ? 0.75 : 0.95),
-          borderRadius: BorderRadius.circular(999),
-          border: isCurrent
+          color: finished
+              ? const Color(0xFFFFF6D8)
+              : Colors.white.withValues(alpha: locked ? 0.75 : 0.95),
+          // 12, not 999: still a full pill on one line, but a long (e.g.
+          // Filipino) name wraps onto more lines instead of being cut off.
+          borderRadius: BorderRadius.circular(12),
+          border: isCurrent || finished
               ? Border.all(color: AppColors.gold, width: 1.5)
               : null,
           boxShadow: [
@@ -1406,10 +1659,18 @@ class _NodeLabel extends StatelessWidget {
               ),
               const SizedBox(width: 3),
             ],
+            if (finished) ...[
+              const Icon(
+                Icons.check_circle_rounded,
+                size: 11,
+                color: AppColors.teal,
+              ),
+              const SizedBox(width: 3),
+            ],
             Flexible(
               child: Text(
                 title,
-                maxLines: 1,
+                maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -1566,7 +1827,9 @@ class _MascotAvatarState extends State<_MascotAvatar>
                     final t = _overshoot.transform(v / 0.6);
                     dy = -24 + 28 * t;
                     scale = 0.7 + 0.38 * t;
-                    opacity = t;
+                    // The overshoot curve passes 1 (that's the bounce), but
+                    // an opacity above 1 asserts and breaks the whole hub.
+                    opacity = t.clamp(0.0, 1.0);
                   } else if (v < 0.8) {
                     final t = (v - 0.6) / 0.2;
                     dy = 4 - 6 * t;

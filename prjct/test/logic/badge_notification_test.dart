@@ -2,10 +2,18 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:salamlearn/data/models/learner_profile.dart';
+import 'package:salamlearn/logic/auth/session.dart';
 import 'package:salamlearn/logic/notifications/notification_provider.dart';
 import 'package:salamlearn/logic/recent_module_provider.dart';
 
 import '../test_helpers/hive_test_setup.dart';
+
+class _Learner extends SessionNotifier {
+  @override
+  SessionState build() =>
+      SessionState(learner: LearnerProfile(name: 'Amina', age: 6, id: 'amina'));
+}
 
 void main() {
   late Directory tempDir;
@@ -14,7 +22,9 @@ void main() {
   tearDown(() async => tearDownTestHive(tempDir));
 
   test('earning a badge or streak adds an unread Backpack notification', () {
-    final container = ProviderContainer();
+    final container = ProviderContainer(
+      overrides: [sessionProvider.overrideWith(_Learner.new)],
+    );
     addTearDown(container.dispose);
 
     expect(
@@ -30,7 +40,8 @@ void main() {
     expect(badge.read, isFalse);
     expect(badge.opensBackpack, isTrue);
 
-    final streak = items.firstWhere((n) => n.id == 'streak-6');
+    // A new child's first day of play: a 1-day streak.
+    final streak = items.firstWhere((n) => n.id == 'streak-1');
     expect(streak.read, isFalse);
     expect(streak.opensBackpack, isTrue);
 

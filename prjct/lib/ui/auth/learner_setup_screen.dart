@@ -186,10 +186,13 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
-          title: Text(
-            _step == 0
-                ? 'Basic Info'
-                : (_step == 1 ? 'Profile Details' : 'Choose Your Companion'),
+          title: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              _step == 0
+                  ? 'Basic Info'
+                  : (_step == 1 ? 'Profile Details' : 'Choose Your Companion'),
+            ),
           ),
           backgroundColor: Colors.white,
           foregroundColor: AppColors.ink,
@@ -516,12 +519,14 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Flexible(
-                      child: Text(
-                        'Next: Profile Details',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w800,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Next: Profile Details',
+                          style: TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ),
@@ -581,11 +586,14 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                         ),
                       ),
                       onPressed: () => setState(() => _step = 0),
-                      child: const Text(
-                        'Back',
-                        style: TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w700,
+                      child: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Back',
+                          style: TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ),
@@ -646,7 +654,7 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                 Expanded(
                   child: _AvatarSelectionCard(
                     imagePath: 'assets/images/boy_mascot_full_body.png',
-                    label: 'Amir (Boy Mascot)',
+                    label: 'Amir (Boy)',
                     isSelected: _avatar == 'boy_mascot',
                     themeColor: AppColors.teal,
                     floatAnimation: _mascotFloatController,
@@ -657,7 +665,7 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                 Expanded(
                   child: _AvatarSelectionCard(
                     imagePath: 'assets/images/girl_mascot_full_body.png',
-                    label: 'Zara (Girl Mascot)',
+                    label: 'Zara (Girl)',
                     isSelected: _avatar == 'girl_mascot',
                     themeColor: AppColors.gold,
                     floatAnimation: _mascotFloatController,
@@ -684,11 +692,14 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                         ),
                       ),
                       onPressed: () => setState(() => _step = 1),
-                      child: const Text(
-                        'Back',
-                        style: TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w700,
+                      child: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Back',
+                          style: TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ),
@@ -707,11 +718,14 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
                         ),
                       ),
                       onPressed: _submitting ? null : _submitProfile,
-                      child: const Text(
-                        'Create Profile',
-                        style: TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w800,
+                      child: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Create Profile',
+                          style: TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ),

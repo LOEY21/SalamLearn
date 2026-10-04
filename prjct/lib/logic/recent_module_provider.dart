@@ -1,4 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive/hive.dart';
+
+import '../data/local/hive_boxes.dart';
+import '../data/repositories/progress_repository.dart';
+import 'auth/session.dart';
 
 class RecentModuleNotifier extends Notifier<String?> {
   @override
@@ -13,11 +18,23 @@ final recentModuleProvider = NotifierProvider<RecentModuleNotifier, String?>(
   RecentModuleNotifier.new,
 );
 
+/// The active learner's real day streak (0 for a new child, and back to 0
+/// once a day is missed).
 class LearnerStreakNotifier extends Notifier<int> {
   @override
-  int build() => 5;
+  int build() {
+    final learnerId = ref.watch(sessionProvider.select((s) => s.learner?.id));
+    if (learnerId == null || !Hive.isBoxOpen(HiveBoxes.streaks)) return 0;
+    return ProgressRepository().activeStreak(learnerId);
+  }
 
-  void increment() => state = state + 1;
+  /// A lesson was just finished today: the streak that play earns (the
+  /// progress write right after stores the same value).
+  void increment() {
+    final learnerId = ref.read(sessionProvider).learner?.id;
+    if (learnerId == null || !Hive.isBoxOpen(HiveBoxes.streaks)) return;
+    state = ProgressRepository().streakAfterPlayingToday(learnerId);
+  }
 }
 
 final learnerStreakProvider =
@@ -35,21 +52,24 @@ final learnerCompletedTodayProvider =
   LearnerCompletedTodayNotifier.new,
 );
 
+/// Badges the active learner has really earned, oldest first — saved per
+/// learner as `BadgeAward`s, so a new child starts with none.
 class UnlockedBadgesNotifier extends Notifier<List<String>> {
-  /// Mock badges the learner starts with — anything beyond these was earned
-  /// this session and gets a "go see it" notification.
-  static const seed = [
-    'First Steps Badge',
-    'Desert Calligrapher Badge',
-    'Curious Spark Badge (3-Day Streak)',
-  ];
-
   @override
-  List<String> build() => seed;
+  List<String> build() {
+    final learnerId = ref.watch(sessionProvider.select((s) => s.learner?.id));
+    if (learnerId == null || !Hive.isBoxOpen(HiveBoxes.badges)) return const [];
+    final awards = ProgressRepository().badgesFor(learnerId)
+      ..sort((a, b) => a.earnedAt.compareTo(b.earnedAt));
+    return [for (final a in awards) a.badgeId];
+  }
 
   void unlockBadge(String badge) {
-    if (!state.contains(badge)) {
-      state = [...state, badge];
+    if (state.contains(badge)) return;
+    state = [...state, badge];
+    final learnerId = ref.read(sessionProvider).learner?.id;
+    if (learnerId != null && Hive.isBoxOpen(HiveBoxes.badges)) {
+      ProgressRepository().awardBadge(learnerId, badge);
     }
   }
 }
@@ -66,7 +86,12 @@ final unlockedBadgesProvider =
 /// visit to that tab.
 class SeenBadgeCountNotifier extends Notifier<int> {
   @override
-  int build() => ref.read(unlockedBadgesProvider).length;
+  int build() {
+    // Fresh per learner: switching child shouldn't carry the last one's
+    // "seen" count.
+    ref.watch(sessionProvider.select((s) => s.learner?.id));
+    return ref.read(unlockedBadgesProvider).length;
+  }
 
   void markSeen(int count) {
     if (count > state) state = count;

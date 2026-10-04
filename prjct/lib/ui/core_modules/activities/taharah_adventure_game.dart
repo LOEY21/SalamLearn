@@ -1833,11 +1833,19 @@ class _CleanOrDirtyState extends State<_CleanOrDirty> {
               right: 14,
               top: 150,
               bottom: 30,
-              child: Center(
-                child: Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  style: _baloo(33, brown, height: 1.15),
+              // Wraps at the tile width, then shrinks to fit when the
+              // (Filipino) label runs to more lines than the slot holds.
+              child: LayoutBuilder(
+                builder: (context, c) => FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: SizedBox(
+                    width: c.maxWidth,
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style: _baloo(33, brown, height: 1.15),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -4776,11 +4784,17 @@ class _WudhuState extends State<_Wudhu> {
           padding: const EdgeInsets.fromLTRB(18, 0, 16, 2),
           child: Row(
             children: [
-              Text(
-                'Wudhu Progress',
-                style: _baloo(14, const Color(0xFF173F8E)),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Wudhu Progress',
+                    style: _baloo(14, const Color(0xFF173F8E)),
+                  ),
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               for (var i = 0; i < _steps.length; i++) ...[
                 if (i > 0) const SizedBox(width: 7),
                 AnimatedContainer(

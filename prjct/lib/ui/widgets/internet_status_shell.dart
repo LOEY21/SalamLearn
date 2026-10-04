@@ -114,12 +114,15 @@ class _InternetStatusShellState extends State<InternetStatusShell>
                       key: Key('offline-internet-line'),
                       height: 24,
                       child: Center(
-                        child: Text(
-                          'No internet connection',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'No internet connection',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ),

@@ -580,6 +580,8 @@ class _WheelPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (labels.isEmpty) return;
+
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
     final segmentAngle = 2 * pi / labels.length;
@@ -595,27 +597,73 @@ class _WheelPainter extends CustomPainter {
         paint,
       );
 
-      final labelAngle = startAngle + segmentAngle / 2;
-      final labelOffset = Offset(
-        center.dx + cos(labelAngle) * radius * 0.62,
-        center.dy + sin(labelAngle) * radius * 0.62,
+      // Radial divider line
+      final linePaint = Paint()
+        ..color = Colors.white.withValues(alpha: 0.4)
+        ..strokeWidth = 1.5
+        ..style = PaintingStyle.stroke;
+      canvas.drawLine(
+        center,
+        Offset(
+          center.dx + cos(startAngle) * radius,
+          center.dy + sin(startAngle) * radius,
+        ),
+        linePaint,
       );
+
+      // Draw text rotated radially along the segment bisector
+      final labelAngle = startAngle + segmentAngle / 2;
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(labelAngle);
+
+      final maxTextWidth = radius * 0.62;
+      final fontSize =
+          labels.length > 12 ? 9.5 : (labels.length > 6 ? 10.5 : 12.0);
       final painter = TextPainter(
         text: TextSpan(
           text: labels[i],
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
+            fontSize: fontSize,
+            fontWeight: FontWeight.w800,
+            shadows: const [
+              Shadow(
+                color: Colors.black45,
+                blurRadius: 3,
+                offset: Offset(0, 1),
+              ),
+            ],
           ),
         ),
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        ellipsis: '…',
         textDirection: TextDirection.ltr,
-      )..layout();
-      painter.paint(
-        canvas,
-        labelOffset - Offset(painter.width / 2, painter.height / 2),
-      );
+      )..layout(maxWidth: maxTextWidth);
+
+      // Start text after the center hub with safe padding from the rim
+      final startX = radius * 0.22 + (maxTextWidth - painter.width) / 2;
+      painter.paint(canvas, Offset(startX, -painter.height / 2));
+      canvas.restore();
     }
+
+    // Outer wheel border
+    final rimPaint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke;
+    canvas.drawCircle(center, radius - 2, rimPaint);
+
+    // Center hub circle
+    final hubRadius = radius * 0.16;
+    final hubPaint = Paint()..color = Colors.white;
+    canvas.drawCircle(center, hubRadius, hubPaint);
+    final hubRimPaint = Paint()
+      ..color = AppColors.creamBorder
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+    canvas.drawCircle(center, hubRadius, hubRimPaint);
   }
 
   @override

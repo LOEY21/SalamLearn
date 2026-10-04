@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart' hide Text, TextSpan;
-import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../data/models/class_section.dart';
 import '../../data/models/lesson_folder.dart';
@@ -13,12 +13,7 @@ import '../widgets/soft_card.dart';
 /// FR-6.8 Custom Lesson Builder — entry screen listing the active class's
 /// saved lesson folders (each an ordered sequence of existing curriculum
 /// modules), with a way to create a new one. Reached from the teacher
-/// dashboard's Home-tab "Class tools" grid (see
-/// `teacher_dashboard_screen.dart`'s `_ActionColumn`).
-///
-/// Flat appbar + mint hero-chip + SoftCard rows, matching the approved
-/// top-tab dashboard mock (dumps/module_library_redesign_mock.html)
-/// rather than the old teal AppBar on a cream background.
+/// dashboard's Home-tab "Class tools" grid.
 class ModuleLibraryScreen extends ConsumerWidget {
   const ModuleLibraryScreen({super.key});
 
@@ -36,7 +31,9 @@ class ModuleLibraryScreen extends ConsumerWidget {
             const Divider(height: 1, color: AppColors.creamBorder),
             Expanded(
               child: activeClass == null
-                  ? _NoClassState(onCreateClass: () => context.go('/teacher/classes'))
+                  ? _NoClassState(
+                      onCreateClass: () => context.go('/teacher/classes'),
+                    )
                   : _FolderList(classId: activeClass.id),
             ),
           ],
@@ -114,7 +111,8 @@ class _LibraryChips extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final folderCount = ref.watch(classLessonFoldersProvider(section.id)).length;
+    final folderCount =
+        ref.watch(classLessonFoldersProvider(section.id)).length;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
@@ -225,7 +223,8 @@ class _FolderList extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete folder?'),
-        content: Text('"${folder.name}" will be removed. This can\'t be undone.'),
+        content:
+            Text('"${folder.name}" will be removed. This can\'t be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -377,3 +376,5 @@ class _FolderList extends ConsumerWidget {
     );
   }
 }
+
+

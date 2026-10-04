@@ -133,7 +133,7 @@ class _CastGamesStageState extends ConsumerState<CastGamesStage> {
                   ),
                   subtitle: Text(
                     '${s.destinationName} · ${s.lessonTitle}',
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   trailing: const Icon(
@@ -202,7 +202,7 @@ class _CastGamesStageState extends ConsumerState<CastGamesStage> {
               Expanded(
                 child: Text(
                   locked ? 'Spin the Hot Seat first' : 'for $student',
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 11,
@@ -569,7 +569,7 @@ class _GameCard extends StatelessWidget {
               bottom: 8,
               child: Text(
                 game.name,
-                maxLines: 2,
+                maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 13,

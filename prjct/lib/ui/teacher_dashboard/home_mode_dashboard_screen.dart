@@ -814,34 +814,36 @@ class _StudentWeeklyChart extends StatelessWidget {
           const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'WEEKLY PROGRESS',
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textMuted,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'WEEKLY PROGRESS',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textMuted,
+                      ),
                     ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Minutes practiced per day at home',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: AppColors.textMuted,
-                      fontWeight: FontWeight.w500,
+                    SizedBox(height: 2),
+                    Text(
+                      'Minutes practiced per day at home',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        color: AppColors.textMuted,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               Icon(Icons.bar_chart_rounded, color: AppColors.teal, size: 16),
             ],
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            height: 102,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 102),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -854,59 +856,66 @@ class _StudentWeeklyChart extends StatelessWidget {
                 final isToday = i == 4;
 
                 final targetHeight = seconds == 0 ? 6.0 : height;
-                return TweenAnimationBuilder<double>(
-                  tween: Tween<double>(
-                    begin: seconds == 0 ? 6.0 : 0.0,
-                    end: targetHeight,
-                  ),
-                  duration: const Duration(milliseconds: 900),
-                  curve: Curves.easeOutCubic,
-                  builder: (context, animatedHeight, child) {
-                    final animatedMinutes = seconds == 0
-                        ? 0
-                        : (minutes * (animatedHeight / targetHeight)).round();
-                    return Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          seconds == 0 ? '' : '${animatedMinutes}m',
-                          style: const TextStyle(
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.tealDark,
+                // Equal slot per day so full names ("Miyerkules") can't push
+                // the row past the card; the label shrinks to its slot.
+                return Expanded(
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(
+                      begin: seconds == 0 ? 6.0 : 0.0,
+                      end: targetHeight,
+                    ),
+                    duration: const Duration(milliseconds: 900),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, animatedHeight, child) {
+                      final animatedMinutes = seconds == 0
+                          ? 0
+                          : (minutes * (animatedHeight / targetHeight)).round();
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            seconds == 0 ? '' : '${animatedMinutes}m',
+                            style: const TextStyle(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.tealDark,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          width: 24,
-                          height: animatedHeight,
-                          decoration: seconds == 0
-                              ? BoxDecoration(
-                                  border: Border.all(
-                                    color: AppColors.creamDark,
-                                    width: 1.5,
+                          const SizedBox(height: 4),
+                          Container(
+                            width: 24,
+                            height: animatedHeight,
+                            decoration: seconds == 0
+                                ? BoxDecoration(
+                                    border: Border.all(
+                                      color: AppColors.creamDark,
+                                      width: 1.5,
+                                    ),
+                                    borderRadius: BorderRadius.circular(6),
+                                  )
+                                : BoxDecoration(
+                                    color: AppColors.teal,
+                                    borderRadius: BorderRadius.circular(6),
                                   ),
-                                  borderRadius: BorderRadius.circular(6),
-                                )
-                              : BoxDecoration(
-                                  color: AppColors.teal,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          weekdayNames[day.weekday % 7],
-                          style: TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.bold,
-                            color: isToday
-                                ? AppColors.teal
-                                : AppColors.textMuted,
                           ),
-                        ),
-                      ],
-                    );
-                  },
+                          const SizedBox(height: 6),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              weekdayNames[day.weekday % 7],
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                color: isToday
+                                    ? AppColors.teal
+                                    : AppColors.textMuted,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 );
               }),
             ),
@@ -1656,7 +1665,7 @@ class _GameSessionsCardState extends State<_GameSessionsCard> {
                       children: [
                         Text(
                           game.name,
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontWeight: FontWeight.w800,

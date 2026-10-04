@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:salamlearn/logic/auth/session.dart';
 import 'package:salamlearn/logic/learner/learner_xp_provider.dart';
 import 'package:salamlearn/logic/learner/noor_energy_provider.dart';
 import 'package:salamlearn/ui/student_hub/adventure_map_top_bar.dart';
@@ -23,13 +24,21 @@ class _FakeNoorEnergyNotifier extends NoorEnergyNotifier {
   NoorEnergyState build() => const NoorEnergyState(current: 5, maxEnergy: 5);
 }
 
+/// No learner signed in: streak/badges resolve to "nothing yet" without
+/// touching Hive — the same thing a brand-new child sees.
+class _FakeSessionNotifier extends SessionNotifier {
+  @override
+  SessionState build() => const SessionState();
+}
+
 void main() {
-  testWidgets('shows streak, XP, and Noor Energy values', (tester) async {
+  testWidgets('a new child shows no streak and no XP', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           learnerXpProvider.overrideWith(_FakeLearnerXpNotifier.new),
           noorEnergyProvider.overrideWith(_FakeNoorEnergyNotifier.new),
+          sessionProvider.overrideWith(_FakeSessionNotifier.new),
         ],
         child: const MaterialApp(
           home: Scaffold(body: AdventureMapTopBar()),
@@ -37,8 +46,32 @@ void main() {
       ),
     );
 
-    expect(find.text('5'), findsOneWidget); // default streak from learnerStreakProvider
-    expect(find.text('0'), findsOneWidget); // default XP (nothing earned yet)
-    expect(find.textContaining('5'), findsWidgets); // Noor Energy 5/5 somewhere
+    // A new child: no streak and no XP yet.
+    expect(find.text('0'), findsNWidgets(2));
   });
+
+  // Regression: an unlit lantern used to create its flicker controller
+  // inside dispose(), which threw mid-unmount and left the hub red-screened
+  // the next time it opened (parent dashboard -> Open Learner Hub).
+  testWidgets('spent lanterns unmount cleanly', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          learnerXpProvider.overrideWith(_FakeLearnerXpNotifier.new),
+          noorEnergyProvider.overrideWith(_SpentNoorEnergyNotifier.new),
+          sessionProvider.overrideWith(_FakeSessionNotifier.new),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: AdventureMapTopBar()),
+        ),
+      ),
+    );
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+  });
+}
+
+class _SpentNoorEnergyNotifier extends NoorEnergyNotifier {
+  @override
+  NoorEnergyState build() => const NoorEnergyState(current: 2, maxEnergy: 5);
 }

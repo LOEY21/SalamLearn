@@ -195,10 +195,13 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
     }
     if (matches.length > 1) {
       if (mounted) {
+        final details = matches
+            .map((m) => '${m.name} (Age ${m.age}, ${m.gradeLevel})')
+            .join('; ');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Multiple learners named "$name" found — ask the parent to confirm.',
+              'Multiple learners named "$name" found: $details. Please ask the parent to confirm.',
             ),
           ),
         );
@@ -207,8 +210,18 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
     }
     final learner = matches.first;
     if (learner.id == null) return;
+    if (ClassRepository().isEnrolled(classId: widget.classId, learnerId: learner.id!)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('"${learner.name}" is already enrolled in this class.'),
+          ),
+        );
+      }
+      return;
+    }
     ClassRepository()
-        .enroll(classId: widget.classId, learnerId: learner.id!)
+        .enrollAndPush(classId: widget.classId, learnerId: learner.id!)
         .then((_) {
           _refresh();
           _firstNameC.clear();

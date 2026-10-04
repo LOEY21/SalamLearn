@@ -643,7 +643,17 @@ void main() {
       );
 
       expect(find.text('5 day streak'), findsOneWidget);
-      expect(find.byIcon(Icons.local_fire_department), findsOneWidget);
+      final flame = tester.widget<StreakFlame>(find.byType(StreakFlame));
+      expect(flame.lit, isTrue);
+    });
+
+    testWidgets('shows the unlit flame at 0 days', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: StreakTracker(streakDays: 0))),
+      );
+
+      final flame = tester.widget<StreakFlame>(find.byType(StreakFlame));
+      expect(flame.lit, isFalse);
     });
   });
 
@@ -741,14 +751,13 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
 
       expect(find.text('Notifications'), findsOneWidget);
-      expect(find.text('My Avatar'), findsOneWidget);
       expect(find.text('Switch Account'), findsOneWidget);
       expect(find.text('Requires parent PIN'), findsOneWidget);
     });
   });
 
   group('BackpackScreen', () {
-    testWidgets('shows earned and locked badges with a progress pill', (
+    testWidgets('shows the badge count and locked badges on the shelves', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -756,10 +765,8 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('2 / 4'), findsOneWidget);
-      expect(find.text('First Steps'), findsOneWidget);
-      expect(find.text('Earned'), findsNWidgets(2));
-      expect(find.text('Locked'), findsNWidgets(2));
+      expect(find.textContaining('of 16 badges earned'), findsOneWidget);
+      expect(find.text('Locked'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
   });

@@ -188,6 +188,23 @@ class SyncManager {
     }
   }
 
+  /// Student Hub's homework refresh — the learner side never runs a full
+  /// [syncNow], so without this a teacher's new assignment (or a class the
+  /// child was enrolled in from another device) never reaches the hub.
+  /// Pulls the learner's enrollments first, since assignments are looked
+  /// up per enrolled class. Best-effort: offline just keeps what's local.
+  Future<void> pullLearnerHomework(String learnerId) async {
+    try {
+      for (final e in await _mirror.fetchEnrollmentsForLearner(learnerId)) {
+        if (e.classId.isEmpty) continue;
+        await _classes.enroll(classId: e.classId, learnerId: learnerId);
+      }
+    } catch (e) {
+      debugPrint('SyncManager: pulling learner enrollments failed: $e');
+    }
+    await _pullLearnerAssignments(learnerId);
+  }
+
   Future<void> _pullLearnerAssignments(String learnerId) async {
     try {
       final enrollments = _classes.byLearnerId(learnerId);
@@ -279,6 +296,15 @@ class SyncManager {
 
   void dispose() => _subscription?.cancel();
 }
+
+/// One homework pull per learner while the hub's homework UI is showing;
+/// invalidate it to pull again. A plain [SyncManager] (not
+/// [syncManagerProvider]) — this only reads, so it doesn't need the
+/// connectivity watcher.
+final learnerHomeworkPullProvider = FutureProvider.autoDispose
+    .family<void, String>(
+      (ref, learnerId) => SyncManager().pullLearnerHomework(learnerId),
+    );
 
 final syncManagerProvider = Provider<SyncManager>((ref) {
   final manager = SyncManager(ref: ref);

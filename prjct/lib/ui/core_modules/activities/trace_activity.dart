@@ -1593,7 +1593,12 @@ class _TraceActivityState extends State<TraceActivity>
           children: [
             Icon(icon, size: 48, color: _kBrown),
             const SizedBox(width: 10),
-            Text(label, style: _f(36, _kBrown)),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(label, style: _f(36, _kBrown)),
+              ),
+            ),
           ],
         ),
       );
@@ -1651,30 +1656,40 @@ class _TraceActivityState extends State<TraceActivity>
             child: art,
           ),
           const SizedBox(width: 28),
+          // Longer (Filipino) copy wraps at the panel width, then the block
+          // shrinks to fit the fixed panel height instead of overflowing.
           Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 54,
-                      height: 54,
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Color(0xFFF4B400),
+            child: LayoutBuilder(
+              builder: (context, c) => FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: SizedBox(
+                  width: c.maxWidth,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 54,
+                            height: 54,
+                            alignment: Alignment.center,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xFFF4B400),
+                            ),
+                            child: Text('$n', style: _f(32, Colors.white)),
+                          ),
+                          const SizedBox(width: 14),
+                          Flexible(child: Text(title, style: _f(42, _kGreen))),
+                        ],
                       ),
-                      child: Text('$n', style: _f(32, Colors.white)),
-                    ),
-                    const SizedBox(width: 14),
-                    Flexible(child: Text(title, style: _f(42, _kGreen))),
-                  ],
+                      const SizedBox(height: 12),
+                      Text(text, style: body),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                Text(text, style: body),
-              ],
+              ),
             ),
           ),
         ],
@@ -1883,18 +1898,25 @@ class _TraceActivityState extends State<TraceActivity>
           borderRadius: BorderRadius.circular(26),
           border: Border.all(color: const Color(0xFFF1DDB0), width: 3),
         ),
+        padding: const EdgeInsets.only(top: 6, bottom: 12),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              letter,
-              textDirection: TextDirection.rtl,
-              style: const TextStyle(
-                fontFamily: 'ScheherazadeNew',
-                fontWeight: FontWeight.w700,
-                fontSize: 64,
-                height: 1.2,
-                color: _kBrown,
+            // Natural line height (no `height:` squeeze) so deep bowls like
+            // خ ح ج stay inside their own box instead of painting over the
+            // score; FittedBox shrinks any glyph taller than the slot.
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  letter,
+                  textDirection: TextDirection.rtl,
+                  style: const TextStyle(
+                    fontFamily: 'ScheherazadeNew',
+                    fontWeight: FontWeight.w700,
+                    fontSize: 64,
+                    color: _kBrown,
+                  ),
+                ),
               ),
             ),
             Text(

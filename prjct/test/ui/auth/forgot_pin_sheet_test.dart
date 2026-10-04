@@ -64,6 +64,13 @@ void main() {
     await tester.pumpWidget(host(mailer));
     await tester.pump();
 
+    // Opening the sheet must not email anything on its own.
+    expect(mailer.to, isNull);
+    expect(find.byKey(const ValueKey('forgot-pin-code')), findsNothing);
+
+    await tester.tap(find.text('Send code'));
+    await tester.pump();
+
     expect(mailer.to, 'parent@example.com');
     expect(mailer.code, matches(RegExp(r'^\d{6}$')));
     expect(find.textContaining('p*****@example.com'), findsOneWidget);
@@ -92,7 +99,10 @@ void main() {
   testWidgets('shows an error when the email cannot be sent', (tester) async {
     await tester.pumpWidget(host(_FakeMailer(ok: false)));
     await tester.pump();
+    await tester.tap(find.text('Send code'));
+    await tester.pump();
     expect(find.textContaining("Couldn't send the code"), findsOneWidget);
-    expect(find.text('Resend code'), findsOneWidget);
+    // Still on the send button so the grown-up can retry.
+    expect(find.text('Send code'), findsOneWidget);
   });
 }

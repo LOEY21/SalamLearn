@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart' hide Text, TextSpan;
-import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../data/curriculum_data.dart';
 import '../../data/models/curriculum/curriculum_models.dart';
@@ -180,3 +179,25 @@ const Map<ActivityType, ActivityTypeStyle> activityTypeStyles = {
     bg: AppColors.mint,
   ),
 };
+
+/// Game art asset path per activity type (`assets/images/game_icons/`),
+/// matching the game icons used on the Adventure Map.
+String? gameIconAssetFor(ActivityType type) {
+  final name = switch (type) {
+    ActivityType.pronounce => 'greeting_match',
+    ActivityType.creationHunt => 'creation_hunt',
+    ActivityType.trace => 'magic_sand_tracer',
+    ActivityType.soundDetective => 'sound_detective',
+    ActivityType.quranEtiquette => 'quran_etiquette',
+    ActivityType.labelMaker => 'label_maker',
+    ActivityType.ayahBuilder => 'ayah_builder',
+    ActivityType.sirahStory => 'sirah_story',
+    ActivityType.classroomHeroes => 'classroom_heroes',
+    ActivityType.taharahAdventure => 'taharah_adventure',
+    ActivityType.fivePillars => 'five_pillars',
+    ActivityType.goodDeedTree => 'good_deed_tree',
+    _ => null,
+  };
+  return name == null ? null : 'assets/images/game_icons/$name.webp';
+}
+

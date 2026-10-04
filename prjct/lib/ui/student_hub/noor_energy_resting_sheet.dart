@@ -6,13 +6,11 @@ import '../../logic/learner/noor_energy_provider.dart';
 import '../theme/app_colors.dart';
 import 'noor_energy_info_sheet.dart';
 
-/// How long until the next local-midnight reset, formatted as "Xh Ym" (or
-/// just "Ym" once under an hour) — the reset itself is date-string based
-/// (see `NoorEnergyNotifier._todayKey`), so "midnight" is the accurate
-/// moment to count down to, not an arbitrary countdown timer of our own.
+/// How long until the next 4-hour refill window opens, formatted as
+/// "Xh Ym" (or just "Ym" once under an hour) — the same boundary
+/// `NoorEnergyNotifier` refills on (see `NoorEnergyNotifier.nextRefill`).
 String formatTimeUntilReset(DateTime now) {
-  final nextMidnight = DateTime(now.year, now.month, now.day + 1);
-  final remaining = nextMidnight.difference(now);
+  final remaining = NoorEnergyNotifier.nextRefill(now).difference(now);
   final hours = remaining.inHours;
   final minutes = remaining.inMinutes % 60;
   if (hours <= 0) return '${minutes}m';
@@ -41,7 +39,7 @@ class _RestingSheetContent extends ConsumerWidget {
     final resetIn = formatTimeUntilReset(DateTime.now());
 
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         child: Container(
           padding: const EdgeInsets.all(3),
@@ -82,8 +80,8 @@ class _RestingSheetContent extends ConsumerWidget {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Every lantern is out for today. They\'ll light back up '
-                  'with a brand new day.',
+                  'Every lantern is out for now. They\'ll all light back up '
+                  'in a few hours.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,

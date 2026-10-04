@@ -8,6 +8,7 @@ import '../../logic/learner/learner_xp_provider.dart';
 import '../../logic/learner/noor_energy_provider.dart';
 import '../../logic/recent_module_provider.dart';
 import '../theme/app_colors.dart';
+import '../widgets/streak_tracker.dart';
 import 'noor_energy_info_sheet.dart';
 import 'tutorial/tutorial_anchors.dart';
 
@@ -35,11 +36,7 @@ class AdventureMapTopBar extends ConsumerWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.local_fire_department,
-                  size: 16,
-                  color: AppColors.coral,
-                ),
+                StreakFlame(lit: streak > 0, size: 18),
                 const SizedBox(width: 4),
                 Text(
                   '$streak',
@@ -57,7 +54,12 @@ class AdventureMapTopBar extends ConsumerWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.star_rounded, size: 16, color: AppColors.gold),
+                Image.asset(
+                  'assets/images/xp_star.webp',
+                  width: 18,
+                  height: 18,
+                  excludeFromSemantics: true,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   '$xp',
@@ -176,14 +178,17 @@ class _Lantern extends StatefulWidget {
 
 class _LanternState extends State<_Lantern>
     with SingleTickerProviderStateMixin {
-  late final _flicker = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2200),
-  );
+  // Created in initState, not lazily: unlit lanterns never touch it, and
+  // first creating a controller inside dispose() throws mid-unmount.
+  late final AnimationController _flicker;
 
   @override
   void initState() {
     super.initState();
+    _flicker = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    );
     if (widget.lit) _flicker.repeat(reverse: true);
   }
 

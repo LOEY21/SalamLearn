@@ -25,14 +25,16 @@ void main() {
     expect(container.read(learnerXpProvider), 0);
   });
 
-  test('addXp increases the total and persists it to Hive', () {
+  test('addXp updates the total at once, without an app-wide XP key', () {
     final container = ProviderContainer();
     addTearDown(container.dispose);
 
     container.read(learnerXpProvider.notifier).addXp(50);
 
     expect(container.read(learnerXpProvider), 50);
-    expect(Hive.box<dynamic>(HiveBoxes.settings).get('learnerXp'), 50);
+    // XP is per child (from their finished lessons), never one shared key
+    // a new child would inherit.
+    expect(Hive.box<dynamic>(HiveBoxes.settings).get('learnerXp'), isNull);
   });
 
   test('addXp accumulates across multiple calls', () {

@@ -306,9 +306,12 @@ class _ModuleDetailCard extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
               ),
             ),
-            const Text(
-              'No activity yet',
-              style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+            const Flexible(
+              child: Text(
+                'No activity yet',
+                textAlign: TextAlign.end,
+                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+              ),
             ),
           ],
         ),

@@ -8,7 +8,14 @@ import '../theme/app_colors.dart';
 /// Which async auth action [AuthLoadingOverlay] is covering — drives its
 /// accent color, icon, and copy. Add a case here rather than a bespoke
 /// one-off overlay if a new action needs this treatment.
-enum AuthLoadingAction { signIn, logout, erase, switchProfile, switchClass }
+enum AuthLoadingAction {
+  signIn,
+  logout,
+  erase,
+  deleteChild,
+  switchProfile,
+  switchClass,
+}
 
 class _ActionStyle {
   const _ActionStyle({
@@ -51,6 +58,14 @@ _ActionStyle _styleFor(AuthLoadingAction action) {
         icon: Icons.delete_outline_rounded,
         heading: 'Deleting account…',
         subtitle: 'This may take a moment',
+      );
+    case AuthLoadingAction.deleteChild:
+      return const _ActionStyle(
+        accent: AppColors.coral,
+        haloAccent: AppColors.coral,
+        icon: Icons.person_remove_rounded,
+        heading: 'Deleting profile…',
+        subtitle: 'Removing their progress',
       );
     case AuthLoadingAction.switchProfile:
       return const _ActionStyle(
@@ -103,7 +118,12 @@ VoidCallback showAuthLoadingOverlay(AuthLoadingAction action) {
   final overlayState = rootNavigatorKey.currentState!.overlay!;
   late final OverlayEntry entry;
   entry = OverlayEntry(
-    builder: (_) => AuthLoadingOverlay(action: action),
+    // Root-overlay entries sit outside every Scaffold, so text needs its own
+    // Material or it falls back to the yellow-underline debug style.
+    builder: (_) => Material(
+      type: MaterialType.transparency,
+      child: AuthLoadingOverlay(action: action),
+    ),
   );
   overlayState.insert(entry);
   return () {

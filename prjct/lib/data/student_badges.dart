@@ -49,6 +49,9 @@ class BadgeItem {
   final String? lottieAsset;
 
   String get shortName => name.replaceAll(' Badge', '');
+
+  /// Illustrated medal art, one per badge, named after [id].
+  String get artAsset => 'assets/images/badges/$id.webp';
 }
 
 /// All 16 student badges across Milestone and Streak categories.

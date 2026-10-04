@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/models/learner_profile.dart';
 import '../../logic/auth/session.dart';
 import '../theme/app_colors.dart';
+import '../widgets/auth_loading_overlay.dart';
 import '../widgets/soft_card.dart';
 
 /// Dedicated "Edit Child Profile" screen — split out of the Manage Profile
@@ -117,15 +118,23 @@ class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.coral),
             onPressed: () async {
-              await ref.read(sessionProvider.notifier).deleteLearner(learnerId);
-              if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
+              Navigator.of(dialogContext).pop();
+              // Full-screen "Deleting profile…" while it's removed (held for
+              // at least a beat so it never just flickers), then land on
+              // the Parent Dashboard's Profile tab.
+              final messenger = ScaffoldMessenger.of(context);
+              final router = GoRouter.of(context);
+              await runWithAuthLoadingOverlay(
+                AuthLoadingAction.deleteChild,
+                () =>
+                    ref.read(sessionProvider.notifier).deleteLearner(learnerId),
+              );
+              router.go('/parent?tab=1');
+              messenger.showSnackBar(
                 SnackBar(
                   content: Text('${learner.name}\'s profile was deleted'),
                 ),
               );
-              context.go('/parent');
             },
             child: const Text('Delete'),
           ),
@@ -146,7 +155,10 @@ class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
       child: Scaffold(
         backgroundColor: AppColors.neutralTint,
         appBar: AppBar(
-          title: const Text('Edit Child Profile'),
+          title: const FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text('Edit Child Profile'),
+          ),
           backgroundColor: Colors.white,
           foregroundColor: AppColors.ink,
           elevation: 0,

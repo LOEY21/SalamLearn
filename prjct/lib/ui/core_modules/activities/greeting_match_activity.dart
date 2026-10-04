@@ -1760,10 +1760,12 @@ class _PromptCard extends StatelessWidget {
             Text(
               question.arabic,
               textDirection: TextDirection.rtl,
+              // ScheherazadeNew's harakat and descenders reach well past a
+              // ~1.0 line box; 1.65 keeps them off the meaning line below.
               style: const TextStyle(
                 fontFamily: _kArabicFont,
                 fontSize: 54,
-                height: 1.05,
+                height: 1.65,
                 fontWeight: FontWeight.w700,
                 color: Color(0xFF2E1D0B),
               ),
@@ -1851,7 +1853,7 @@ class _ChoiceButton extends StatelessWidget {
                       style: TextStyle(
                         fontFamily: _kArabicFont,
                         fontSize: 52,
-                        height: 1.15,
+                        height: 1.65,
                         fontWeight: FontWeight.w700,
                         color: ink,
                         shadows: shadows,

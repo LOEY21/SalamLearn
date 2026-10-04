@@ -34,4 +34,51 @@ void main() {
       await pending;
     },
   );
+
+  test(
+    'homework completion is kept separate from main game map completion',
+    () async {
+      final repo = ProgressRepository();
+
+      // Complete a lesson as homework (assignedByTeacher = true)
+      await repo.writeProgress(
+        learnerId: 'learner-1',
+        moduleId: '1',
+        strokeAccuracyPct: 95,
+        sequencingErrors: 0,
+        timeOnTaskSeconds: 45,
+        lessonId: 'hw-lesson-1',
+        assignedByTeacher: true,
+      );
+
+      // Complete a lesson in main game map (assignedByTeacher = false)
+      await repo.writeProgress(
+        learnerId: 'learner-1',
+        moduleId: '1',
+        strokeAccuracyPct: 90,
+        sequencingErrors: 1,
+        timeOnTaskSeconds: 60,
+        lessonId: 'main-map-lesson-1',
+        assignedByTeacher: false,
+      );
+
+      // Main game map should ONLY have main-map-lesson-1
+      expect(
+        repo.completedLessonIds('learner-1'),
+        {'main-map-lesson-1'},
+      );
+
+      // Homework should ONLY have hw-lesson-1
+      expect(
+        repo.completedHomeworkLessonIds('learner-1'),
+        {'hw-lesson-1'},
+      );
+
+      // Including assigned returns both
+      expect(
+        repo.completedLessonIds('learner-1', includeAssigned: true),
+        {'hw-lesson-1', 'main-map-lesson-1'},
+      );
+    },
+  );
 }

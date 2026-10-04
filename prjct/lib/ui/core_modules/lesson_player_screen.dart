@@ -29,6 +29,7 @@ import 'activities/sirah_story_game.dart';
 import 'activities/taharah_adventure_game.dart';
 import 'lesson_complete_screen.dart';
 import 'game_ui_audio.dart';
+import 'module_registry.dart';
 
 /// Parses the model's `#RRGGBB` hex strings into a [Color] — same
 /// convention as `destination_levels_sheet.dart`'s `_hexColor`.
@@ -58,6 +59,7 @@ class LessonPlayerScreen extends ConsumerStatefulWidget {
     this.uiAudio,
     this.classroomPlay = false,
     this.classroomLearnerId,
+    this.assignedByTeacher = false,
   });
 
   final Lesson lesson;
@@ -77,6 +79,10 @@ class LessonPlayerScreen extends ConsumerStatefulWidget {
   /// saved for them as a Classroom Mode record, which feeds the Class
   /// Health Index.
   final String? classroomLearnerId;
+
+  /// True when played as assigned homework from the Student Hub (or teacher assignment),
+  /// keeping homework completion separate from main Adventure Game Map completion.
+  final bool assignedByTeacher;
 
   @override
   ConsumerState<LessonPlayerScreen> createState() => _LessonPlayerScreenState();
@@ -135,9 +141,13 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
     _alreadyCompleted =
         widget.classroomPlay ||
         learnerId != null &&
-            ProgressRepository()
-                .completedLessonIds(learnerId)
-                .contains(widget.lesson.id);
+            (widget.assignedByTeacher
+                ? ProgressRepository()
+                    .completedHomeworkLessonIds(learnerId)
+                    .contains(widget.lesson.id)
+                : ProgressRepository()
+                    .completedLessonIds(learnerId)
+                    .contains(widget.lesson.id));
   }
 
   // Pause the stopwatch while backgrounded so time-on-task reflects actual
@@ -206,10 +216,23 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       ref
           .read(unlockedBadgesProvider.notifier)
           .unlockBadge('First Steps Badge');
-      final earnedBadge = badgeForLessonTitle(widget.lesson.title);
-      if (earnedBadge != null) {
-        ref.read(unlockedBadgesProvider.notifier).unlockBadge(earnedBadge.name);
+      _writeProgressRecord();
+
+      // Only award game-specific milestone badge if all sessions of this specific game are completed.
+      final learnerId = ref.read(sessionProvider).learner?.id;
+      if (learnerId != null) {
+        final completedIds = ProgressRepository().completedLessonIds(learnerId)
+          ..add(widget.lesson.id);
+        if (areAllGameSessionsCompleted(widget.lesson, completedIds)) {
+          final earnedBadge = badgeForLessonTitle(widget.lesson.title);
+          if (earnedBadge != null) {
+            ref
+                .read(unlockedBadgesProvider.notifier)
+                .unlockBadge(earnedBadge.name);
+          }
+        }
       }
+
       final currentStreak = ref.read(learnerStreakProvider);
       if (currentStreak >= 3) {
         ref
@@ -226,7 +249,6 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
             .read(unlockedBadgesProvider.notifier)
             .unlockBadge('Monthly Star Seeker (30-Day Milestone)');
       }
-      _writeProgressRecord();
       setState(() {
         _xpEarned = next;
         _finished = true;
@@ -309,6 +331,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       sequencingErrors: _errorsTotal,
       timeOnTaskSeconds: _stopwatch.elapsed.inSeconds,
       lessonId: widget.lesson.id,
+      assignedByTeacher: widget.assignedByTeacher,
     );
   }
 
@@ -581,7 +604,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
     // without a distinct key Flutter reuses the previous activity's State
     // — its card-index/done-set/etc — instead of starting the new activity
     // fresh.
-    return switch (activity.type) {
+    final content = switch (activity.type) {
       ActivityType.trace => TraceActivity(
         key: ValueKey(activity.id),
         cards: activity.cards!,
@@ -719,5 +742,8 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         onComplete: onComplete,
       ),
     };
+    // Games lay out on fixed design canvases that FittedBox scales to the
+    // screen, so the device font-size setting only overflows their text.
+    return MediaQuery.withNoTextScaling(child: content);
   }
 }

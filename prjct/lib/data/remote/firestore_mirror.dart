@@ -483,6 +483,21 @@ class FirestoreMirror {
     }).toList();
   }
 
+  Future<List<Enrollment>> fetchEnrollmentsForLearner(String learnerId) async {
+    final snapshot = await _db
+        .collection(HiveBoxes.enrollments)
+        .where('learnerId', isEqualTo: learnerId)
+        .get();
+    return snapshot.docs.map((doc) {
+      final data = doc.data();
+      return Enrollment(
+        classId: data['classId'] as String? ?? '',
+        learnerId: data['learnerId'] as String? ?? '',
+        enrolledAt: DateTime.tryParse(data['enrolledAt'] as String? ?? '') ?? DateTime.now(),
+      );
+    }).toList();
+  }
+
   Future<List<AssignedModule>> fetchAssignmentsForClass(String classId) async {
     final snapshot = await _db
         .collection(HiveBoxes.assignedModules)

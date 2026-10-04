@@ -3,6 +3,7 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../widgets/route_entrance.dart';
 import '../../logic/auth/session.dart';
 import '../theme/app_colors.dart';
 import '../widgets/pin_pad.dart';
@@ -29,7 +30,15 @@ class _PinVerifyScreenState extends ConsumerState<PinVerifyScreen>
     super.dispose();
   }
 
-  void _handleBack(String? redirect, UserRole role) {
+  bool _leaving = false;
+
+  Future<void> _handleBack(String? redirect, UserRole role) async {
+    // Wait out this screen's own entrance first (see routeEntranceDone),
+    // and ignore repeat taps while waiting.
+    if (_leaving) return;
+    _leaving = true;
+    await routeEntranceDone(context);
+    if (!mounted) return;
     if (redirect != null) {
       // This screen only ever shows when an account already exists
       // (`hasPin` is true — see the router's admin gate) — there's no

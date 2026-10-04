@@ -196,8 +196,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/pin/setup', builder: (_, _) => const PinSetupScreen()),
       GoRoute(path: '/pin/verify', builder: (_, _) => const PinVerifyScreen()),
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) =>
-            HubShell(navigationShell: navigationShell),
+        pageBuilder: (context, state, navigationShell) =>
+            _hubArrivalPage(state, HubShell(navigationShell: navigationShell)),
         branches: [
           StatefulShellBranch(
             routes: [
@@ -292,6 +292,37 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+/// Entering the Student Hub: the world fades in while settling from a
+/// slight zoom, like a camera arriving over the map (ease-out, no bounce).
+/// A plain short fade when the OS asks for reduced motion.
+CustomTransitionPage<void> _hubArrivalPage(GoRouterState state, Widget child) {
+  return CustomTransitionPage(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: const Duration(milliseconds: 600),
+    reverseTransitionDuration: const Duration(milliseconds: 200),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      if (MediaQuery.of(context).disableAnimations) {
+        return FadeTransition(opacity: animation, child: child);
+      }
+      final settle = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      );
+      return FadeTransition(
+        opacity: CurvedAnimation(
+          parent: animation,
+          curve: const Interval(0, 0.6, curve: Curves.easeOut),
+        ),
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 1.05, end: 1).animate(settle),
+          child: child,
+        ),
+      );
+    },
+  );
+}
 
 /// Crossfade page transition (no slide) — the platform default (a
 /// full-screen slide) fought with the onboarding shell's persistent

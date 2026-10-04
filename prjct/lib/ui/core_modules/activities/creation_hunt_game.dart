@@ -927,10 +927,12 @@ class _CreationHuntGameState extends State<CreationHuntGame>
           const Text('👆', style: TextStyle(fontSize: 15)),
           const SizedBox(width: 9),
           Flexible(
-            child: Text(
-              'Tap anywhere to begin',
-              maxLines: 1,
-              style: _t(16, FontWeight.w700, _cream),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'Tap anywhere to begin',
+                style: _t(16, FontWeight.w700, _cream),
+              ),
             ),
           ),
         ],
@@ -950,10 +952,12 @@ class _CreationHuntGameState extends State<CreationHuntGame>
         ),
         const SizedBox(width: 10),
         Flexible(
-          child: Text(
-            'Setting out on the hunt',
-            maxLines: 1,
-            style: _t(15, FontWeight.w600, _cream),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              'Setting out on the hunt',
+              style: _t(15, FontWeight.w600, _cream),
+            ),
           ),
         ),
       ],
@@ -978,7 +982,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
 
   Widget _howToBody() {
     const panelW = 1.02 * _kW;
-    const panelH = panelW * 1267 / 1241;
+    const panelH = panelW; // blank board art is square (1254 x 1254)
     const huntW = 0.50 * _kW;
     const huntH = huntW / 2;
     const btnW = panelW * 0.63;
@@ -1060,14 +1064,57 @@ class _CreationHuntGameState extends State<CreationHuntGame>
                     clipBehavior: Clip.none,
                     children: [
                       Image.asset(
-                        '$_kA/howto_panel.png',
+                        '$_kA/howto_panel_blank.png',
                         width: panelW,
                         height: panelH,
                         fit: BoxFit.fill,
                       ),
+                      // Copy is drawn live (not baked into the art) so it
+                      // follows the app language. Boxes are the blank
+                      // board's plank and four rows, in its 1254px art.
+                      Positioned(
+                        left: panelW * 0.26,
+                        top: panelH * 0.095,
+                        width: panelW * 0.48,
+                        height: panelH * 0.105,
+                        child: const _OutlinedLabel(
+                          'How to play',
+                          size: 30,
+                          fill: Color(0xFFFFF6E3),
+                          stroke: Color(0xFF5A2E12),
+                        ),
+                      ),
+                      for (final (i, line) in [
+                        'Look closely at the scene and tap what you spot.',
+                        'Tap the things Allah created — a gold ring means '
+                            'you found one.',
+                        'Things people made show a red X. Try another one.',
+                        'Stuck? Tap the lamp for a hint. Find all $_total '
+                            'to finish.',
+                      ].indexed)
+                        Positioned(
+                          left: panelW * 0.305,
+                          top: panelH * (0.245 + i * 0.168),
+                          width: panelW * 0.565,
+                          height: panelH * 0.12,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: _PanelCopy(
+                              child: Text(
+                                line,
+                                style: _t(
+                                  15.5,
+                                  FontWeight.w800,
+                                  const Color(0xFF3B1F0E),
+                                  height: 1.15,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       Positioned(
                         left: panelW / 2 - btnW / 2,
-                        top: panelH * 0.815,
+                        top: panelH * 0.865,
                         width: btnW,
                         height: btnW / 3,
                         child: _fxWrap(
@@ -1076,8 +1123,8 @@ class _CreationHuntGameState extends State<CreationHuntGame>
                             delay: _kStartDelay,
                             child: _pressImage(
                               pressed: _startPressed,
-                              up: '$_kA/btn_start_up.png',
-                              down: '$_kA/btn_start_down.png',
+                              up: '$_kA/btn_start_blank_up.png',
+                              down: '$_kA/btn_start_blank_down.png',
                               width: btnW,
                               height: btnW / 3,
                               pressedScale: 0.94,
@@ -1085,7 +1132,23 @@ class _CreationHuntGameState extends State<CreationHuntGame>
                                   setState(() => _startPressed = true),
                               onUp: () => setState(() => _startPressed = false),
                               onTap: _begin,
-                              semantics: 'Start the hunt',
+                              semantics: 'Start the hunt'.tr,
+                              label: Padding(
+                                // Between the two leaves, on the pill's
+                                // optical centre (the art has a drop shadow).
+                                padding: const EdgeInsets.fromLTRB(
+                                  btnW * 0.2,
+                                  btnW / 3 * 0.3,
+                                  btnW * 0.2,
+                                  btnW / 3 * 0.26,
+                                ),
+                                child: const _OutlinedLabel(
+                                  'Start the hunt',
+                                  size: 24,
+                                  fill: Colors.white,
+                                  stroke: Color(0xFF1D6B12),
+                                ),
+                              ),
                             ),
                           ),
                           (t, c) => IgnorePointer(
@@ -1180,10 +1243,18 @@ class _CreationHuntGameState extends State<CreationHuntGame>
     required VoidCallback onUp,
     required VoidCallback onTap,
     required String semantics,
+    Widget? label,
   }) {
+    final art = Image.asset(
+      pressed ? down : up,
+      width: width,
+      height: height,
+      fit: BoxFit.fill,
+    );
     return Semantics(
       button: true,
       label: semantics,
+      excludeSemantics: label != null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => onDown(),
@@ -1194,12 +1265,9 @@ class _CreationHuntGameState extends State<CreationHuntGame>
           scale: pressed ? pressedScale : 1,
           duration: const Duration(milliseconds: 80),
           curve: _easeOut,
-          child: Image.asset(
-            pressed ? down : up,
-            width: width,
-            height: height,
-            fit: BoxFit.fill,
-          ),
+          child: label == null
+              ? art
+              : Stack(children: [art, Positioned.fill(child: label)]),
         ),
       ),
     );
@@ -2319,10 +2387,12 @@ class _CreationHuntGameState extends State<CreationHuntGame>
               child: _cheerIn(
                 2.2,
                 Center(
-                  child: Text(
-                    'Tap anywhere to continue to next lesson',
-                    maxLines: 1,
-                    style: _t(14, FontWeight.w700, _cream),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Tap anywhere to continue to next lesson',
+                      style: _t(14, FontWeight.w700, _cream),
+                    ),
                   ),
                 ),
               ),
@@ -2671,6 +2741,55 @@ BorderRadius _radiusFor(CreationHuntRadius r, double w, double h) {
         topRight: const Radius.circular(8),
         bottomLeft: const Radius.circular(8),
       );
+  }
+}
+
+/// A one-line game label with a thick outline, like the lettering that
+/// used to be baked into the art; shrinks to fit a longer translation.
+class _OutlinedLabel extends StatelessWidget {
+  const _OutlinedLabel(
+    this.text, {
+    required this.size,
+    required this.fill,
+    required this.stroke,
+  });
+
+  final String text;
+  final double size;
+  final Color fill;
+  final Color stroke;
+
+  @override
+  Widget build(BuildContext context) {
+    // No colour on the shared base: a TextStyle can't carry both a colour
+    // and a foreground paint.
+    final base = TextStyle(
+      fontFamily: _kFont,
+      fontSize: size,
+      fontWeight: FontWeight.w800,
+      height: 1,
+    );
+    return Center(
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Stack(
+          children: [
+            Text(
+              text,
+              maxLines: 1,
+              style: base.copyWith(
+                foreground: Paint()
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = size * 0.22
+                  ..strokeJoin = StrokeJoin.round
+                  ..color = stroke,
+              ),
+            ),
+            Text(text, maxLines: 1, style: base.copyWith(color: fill)),
+          ],
+        ),
+      ),
+    );
   }
 }
 

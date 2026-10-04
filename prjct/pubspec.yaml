@@ -146,6 +146,8 @@ flutter:
     - assets/audio/sirah_story/fil/al_amin/
     - assets/images/
     - assets/images/adventure_map/
+    - assets/images/badges/
+    - assets/images/game_icons/
     - assets/images/ayah_builder/
     - assets/images/classroom_heroes/
     - assets/images/classroom_heroes/bg/

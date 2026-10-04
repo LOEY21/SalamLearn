@@ -1271,6 +1271,20 @@ class SessionNotifier extends Notifier<SessionState> {
       throw StateError('An unlocked parent account is required to add a child');
     }
     await requireInternetForAccountCreation();
+    final normName = name.trim().toLowerCase();
+    final normGrade = gradeLevel.trim().toLowerCase();
+    try {
+      final remoteMatches = await FirestoreMirror().findLearnersByName(name);
+      final hasDuplicate = remoteMatches.any((l) =>
+          l.name.trim().toLowerCase() == normName &&
+          l.age == age &&
+          l.gradeLevel.trim().toLowerCase() == normGrade);
+      if (hasDuplicate) {
+        throw StateError('A learner named "$name" with age $age and $gradeLevel already exists.');
+      }
+    } catch (e) {
+      if (e is StateError) rethrow;
+    }
     final profile = await _learners.register(
       parentId: parentId,
       name: name,

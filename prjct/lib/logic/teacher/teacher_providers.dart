@@ -329,6 +329,18 @@ final classRosterProvider = Provider.family<List<Map<String, dynamic>>, String>(
       'errorCount': summary.errorCount,
       'mastery': _masteryFor(summary.accuracyPct),
       'assignedModules': assignments,
+      'assignmentsDetail': [
+        for (final a in rawAssignments)
+          {
+            'id': a.id,
+            'moduleId': a.moduleId,
+            'module': _moduleTitle(a.moduleId),
+            'dueDate': '${a.dueDate.day}/${a.dueDate.month}/${a.dueDate.year}',
+            'dueDateRaw': a.dueDate,
+            'maxLevel': a.maxLevel,
+            'maxLessons': a.maxLessons,
+          },
+      ],
       // Raw (moduleId, dueDate, maxLevel, maxLessons) tuples — used by the
       // learner Adventure Map to flag overdue nodes and gate level/lesson
       // access; the formatted `assignedModules` strings above are
@@ -360,6 +372,9 @@ final classHomeworkProvider = Provider<List<Map<String, dynamic>>>((ref) {
       .assignmentsFor(classId: section.id, learnerId: null)
       .map(
         (a) => {
+          'id': a.id,
+          'classId': a.classId,
+          'moduleId': a.moduleId,
           'module': _moduleTitle(a.moduleId),
           'dueDate': '${a.dueDate.day}/${a.dueDate.month}/${a.dueDate.year}',
           'dueDateRaw': a.dueDate,

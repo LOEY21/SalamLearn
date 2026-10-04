@@ -99,6 +99,20 @@ final allGames = [
   return null;
 }
 
+/// Resolves a given [id] (which may be a lesson ID, destination slug, or
+/// destination ID) to a known curriculum [Lesson].
+Lesson resolveLessonForId(String id) {
+  final match = gameForId(id);
+  if (match != null) return match.lesson;
+  final destinationId = moduleForAssignment(id)?.destinationId;
+  if (destinationId != null) {
+    for (final game in allGames) {
+      if (game.destination.id == destinationId) return game.lesson;
+    }
+  }
+  return allGames.first.lesson;
+}
+
 /// The Adventure Map node an assignment belongs to, or null if [moduleId]
 /// names nothing in the curriculum.
 ModuleInfo? moduleForAssignment(String moduleId) {
@@ -162,3 +176,15 @@ final Map<String, List<Lesson>> gameSessions = {
         if (gameNameOf(g.lesson) == name) g.lesson,
     ],
 };
+
+/// Returns true if all sessions of the specific game that [lesson] belongs to
+/// are included in [completedLessonIds].
+bool areAllGameSessionsCompleted(
+  Lesson lesson,
+  Set<String> completedLessonIds,
+) {
+  final gameName = gameNameOf(lesson);
+  final sessions = gameSessions[gameName] ?? [lesson];
+  if (sessions.isEmpty) return false;
+  return sessions.every((s) => completedLessonIds.contains(s.id));
+}

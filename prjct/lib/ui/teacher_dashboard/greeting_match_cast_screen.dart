@@ -139,14 +139,15 @@ class _GreetingMatchCastScreenState extends State<GreetingMatchCastScreen> {
                     ],
                   ),
                 ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 16,
+                runSpacing: 10,
                 children: [
                   OutlinedButton(
                     onPressed: _idx == 0 ? null : _previous,
                     child: const Text('Previous'),
                   ),
-                  const SizedBox(width: 16),
                   ElevatedButton(
                     onPressed: _revealed ? null : _reveal,
                     style: ElevatedButton.styleFrom(
@@ -154,7 +155,6 @@ class _GreetingMatchCastScreenState extends State<GreetingMatchCastScreen> {
                     ),
                     child: const Text('Reveal'),
                   ),
-                  const SizedBox(width: 16),
                   OutlinedButton(
                     onPressed: _idx + 1 >= _castQuestions.length ? null : _next,
                     child: const Text('Next'),

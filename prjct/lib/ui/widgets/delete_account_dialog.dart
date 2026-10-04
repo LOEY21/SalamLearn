@@ -75,6 +75,7 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      scrollable: true,
       icon: const Icon(
         Icons.warning_amber_rounded,
         color: AppColors.coral,

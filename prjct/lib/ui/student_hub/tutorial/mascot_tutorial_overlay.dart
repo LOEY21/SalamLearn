@@ -332,53 +332,59 @@ class _MascotTutorialOverlayState extends ConsumerState<MascotTutorialOverlay>
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _advance,
-        child: Stack(
-          children: [
-            AnimatedBuilder(
-              animation: Listenable.merge([_transition, _ringPulse]),
-              builder: (context, _) {
-                final t = Curves.easeInOut.transform(_transition.value);
-                final rect = _rectTween?.transform(t);
-                final alpha = _alphaTween?.transform(t) ?? _dimAlpha;
-                return CustomPaint(
-                  size: Size.infinite,
-                  painter: _SpotlightPainter(
-                    rect: rect,
-                    dimAlpha: alpha,
-                    pulseT: _ringPulse.value,
-                  ),
-                );
-              },
-            ),
-            _buildMascot(size, step),
-            _buildBubble(size, step),
-            if (showSkip)
-              Positioned(
-                right: 16,
-                bottom: size.height * 0.135,
-                child: GestureDetector(
-                  onTap: _finish,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 7,
+        // Root-overlay entries sit outside every Scaffold, so text needs
+        // its own Material or it falls back to the yellow-underline
+        // debug style.
+        child: Material(
+          type: MaterialType.transparency,
+          child: Stack(
+            children: [
+              AnimatedBuilder(
+                animation: Listenable.merge([_transition, _ringPulse]),
+                builder: (context, _) {
+                  final t = Curves.easeInOut.transform(_transition.value);
+                  final rect = _rectTween?.transform(t);
+                  final alpha = _alphaTween?.transform(t) ?? _dimAlpha;
+                  return CustomPaint(
+                    size: Size.infinite,
+                    painter: _SpotlightPainter(
+                      rect: rect,
+                      dimAlpha: alpha,
+                      pulseT: _ringPulse.value,
                     ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                    child: Text('Skip ▸',
-                      style: TextStyle(
-                        fontFamily: 'Outfit',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textMuted,
+                  );
+                },
+              ),
+              _buildMascot(size, step),
+              _buildBubble(size, step),
+              if (showSkip)
+                Positioned(
+                  right: 16,
+                  bottom: size.height * 0.135,
+                  child: GestureDetector(
+                    onTap: _finish,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: Text('Skip ▸',
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textMuted,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -783,15 +789,16 @@ class _TapPulseState extends State<_TapPulse>
             mainAxisSize: MainAxisSize.min,
             children: [
               Flexible(
-                child: Text(
-                  widget.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textMuted,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    widget.label,
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textMuted,
+                    ),
                   ),
                 ),
               ),

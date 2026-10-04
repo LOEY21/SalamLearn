@@ -37,4 +37,12 @@ void main() {
     final sky = gameSessions["Allah's Creation Hunt"]![1];
     expect(sessionLabelOf(sky), 'Session 2 (Sky)');
   });
+
+  test('resolveLessonForId resolves lesson IDs, destination slugs and unknown IDs', () {
+    final firstLesson = allGames.first.lesson;
+    expect(resolveLessonForId(firstLesson.id).id, firstLesson.id);
+    expect(resolveLessonForId('village-of-salaam').id, firstLesson.id);
+    expect(resolveLessonForId('1').id, firstLesson.id);
+    expect(resolveLessonForId('unknown-id').id, firstLesson.id);
+  });
 }

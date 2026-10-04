@@ -140,4 +140,82 @@ void main() {
 
     expect(find.text('✓ Completed'), findsOneWidget);
   });
+
+  testWidgets('with no Noor Energy left, finished lessons are blocked too', (
+    tester,
+  ) async {
+    final destination = curriculum.first;
+    final firstLesson = destination.lessons.first;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => DestinationLevelsSheet.show(
+                context,
+                destination: destination,
+                completedLessons: ValueNotifier({firstLesson.id}),
+                noorEnergy: 0,
+                onStartLesson: (_, _) {},
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(
+      find.text('Noor Energy is resting — come back tomorrow to play again!'),
+      findsOneWidget,
+    );
+    // The finished lesson shows the resting Noor moon, not its 'done' star.
+    expect(find.byKey(ValueKey('lesson-done-${firstLesson.id}')), findsNothing);
+    expect(find.byKey(ValueKey('lesson-noor-${firstLesson.id}')), findsOneWidget);
+  });
+
+  testWidgets(
+    'finishing the first game of a level marks only that game done — the '
+    'next one (Creation Hunt, whose own colour is the "done" green) stays '
+    'unplayed',
+    (tester) async {
+      final destination = curriculum.firstWhere((d) => d.id == 2);
+      final greeting = destination.lessons[0];
+      final hunt = destination.lessons[1];
+      expect(greeting.id, 'dest2-s1');
+      expect(hunt.id, 'dest2-s2');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => DestinationLevelsSheet.show(
+                  context,
+                  destination: destination,
+                  completedLessons: ValueNotifier({greeting.id}),
+                  noorEnergy: 5,
+                  onStartLesson: (_, _) {},
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(find.text('✓ Completed'), findsOneWidget);
+      expect(find.byKey(ValueKey('lesson-done-${greeting.id}')), findsOneWidget);
+      expect(find.byKey(ValueKey('lesson-done-${hunt.id}')), findsNothing);
+      expect(find.byKey(ValueKey('lesson-play-${hunt.id}')), findsOneWidget);
+    },
+  );
 }

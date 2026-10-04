@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
 
@@ -280,7 +281,69 @@ class ClassRepository {
       maxLessons: maxLessons,
     );
     await _assignments.put(assignment.id, assignment);
+    // Best-effort — uploads right away so the learner's device can pull it
+    // without waiting for the teacher to tap Sync; the next full sync
+    // retries if this fails (e.g. offline).
+    try {
+      await FirestoreMirror().pushAssignedModule(assignment);
+    } catch (e) {
+      debugPrint('ClassRepository.assignModule: push failed: $e');
+    }
     return assignment;
+  }
+
+  /// Updates an existing take-home module assignment (due date, module, level cap).
+  Future<AssignedModule?> updateAssignment({
+    required String id,
+    required String moduleId,
+    required DateTime dueDate,
+    int? maxLevel,
+    int? maxLessons,
+  }) async {
+    final existing = _assignments.get(id);
+    if (existing == null) return null;
+    final updated = AssignedModule(
+      id: existing.id,
+      classId: existing.classId,
+      learnerId: existing.learnerId,
+      moduleId: moduleId,
+      dueDate: dueDate,
+      assignedAt: existing.assignedAt,
+      maxLevel: maxLevel ?? existing.maxLevel,
+      maxLessons: maxLessons ?? existing.maxLessons,
+    );
+    await _assignments.put(updated.id, updated);
+    try {
+      await FirestoreMirror().pushAssignedModule(updated);
+    } catch (e) {
+      debugPrint('ClassRepository.updateAssignment: push failed: $e');
+    }
+    return updated;
+  }
+
+  /// Deletes a take-home module assignment from both local Hive and remote Firestore.
+  Future<void> deleteAssignment(String assignmentId) async {
+    try {
+      await FirestoreMirror().deleteDoc(HiveBoxes.assignedModules, assignmentId);
+    } catch (_) {}
+    await _assignments.delete(assignmentId);
+  }
+
+  /// Enrolls a learner and uploads the enrollment right away. Firestore is
+  /// the source of truth for rosters — the live enrollment listeners on
+  /// both the teacher and parent side delete any local enrollment that
+  /// isn't there, so a local-only enrollment silently disappears (and
+  /// takes the learner's homework with it).
+  Future<void> enrollAndPush({
+    required String classId,
+    required String learnerId,
+  }) async {
+    final enrollment = await enroll(classId: classId, learnerId: learnerId);
+    try {
+      await FirestoreMirror().pushEnrollment(enrollment);
+    } catch (e) {
+      debugPrint('ClassRepository.enrollAndPush: push failed: $e');
+    }
   }
 
   /// Assignments for a class, optionally filtered to one learner (pass

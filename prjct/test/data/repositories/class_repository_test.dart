@@ -76,4 +76,51 @@ void main() {
       expect(repo.findByInvitationCode(section.invitationCode)?.id, section.id);
     });
   });
+
+  group('ClassRepository homework assignments', () {
+    test('assignModule, updateAssignment, and deleteAssignment work correctly', () async {
+      final repo = ClassRepository();
+      final section = await repo.create(
+        teacherId: 'teacher-1',
+        gradeLevel: 'Grade 1',
+        section: 'A',
+      );
+
+      final initialDue = DateTime(2026, 10, 10);
+      final assignment = await repo.assignModule(
+        classId: section.id,
+        moduleId: 'arabic_letters',
+        dueDate: initialDue,
+      );
+
+      expect(assignment.id, isNotEmpty);
+      expect(assignment.moduleId, 'arabic_letters');
+      expect(assignment.dueDate, initialDue);
+
+      var list = repo.assignmentsFor(classId: section.id, learnerId: null);
+      expect(list.length, 1);
+      expect(list.first.id, assignment.id);
+      expect(list.first.moduleId, 'arabic_letters');
+
+      final updatedDue = DateTime(2026, 10, 20);
+      final updated = await repo.updateAssignment(
+        id: assignment.id,
+        moduleId: 'wudhu_steps',
+        dueDate: updatedDue,
+      );
+
+      expect(updated, isNotNull);
+      expect(updated!.moduleId, 'wudhu_steps');
+      expect(updated.dueDate, updatedDue);
+
+      list = repo.assignmentsFor(classId: section.id, learnerId: null);
+      expect(list.length, 1);
+      expect(list.first.moduleId, 'wudhu_steps');
+      expect(list.first.dueDate, updatedDue);
+
+      await repo.deleteAssignment(assignment.id);
+      list = repo.assignmentsFor(classId: section.id, learnerId: null);
+      expect(list, isEmpty);
+    });
+  });
 }

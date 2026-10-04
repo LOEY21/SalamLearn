@@ -4,6 +4,7 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../data/models/curriculum/curriculum_models.dart';
 import '../theme/app_colors.dart';
+import 'hub_world.dart';
 
 /// Ported 1:1 from Wireframe 0.3's
 /// `src/screens/learner/lesson/DestinationModal.tsx` — the bottom sheet
@@ -157,9 +158,7 @@ class DestinationLevelsSheet extends StatelessWidget {
   }
 
   bool _isLevelUnlocked(int levelIdx) {
-    if (levelIdx == 0) return true;
-    // Sequential level unlock: Level unlocks when the previous level is complete.
-    return _isLevelComplete(_levels, levelIdx - 1);
+    return true;
   }
 
   /// How many lessons within level [levelIdx] are unlocked, in order —
@@ -181,8 +180,10 @@ class DestinationLevelsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final levels = _levels;
-    final destColor = _hexColor(destination.color);
-    final destBg = _hexColor(destination.bg);
+    final total = destination.lessons.length;
+    final done = destination.lessons
+        .where((l) => completedLessons.contains(l.id))
+        .length;
 
     return GestureDetector(
       onTap: () => _close(context),
@@ -194,181 +195,209 @@ class DestinationLevelsSheet extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.85,
+              maxHeight: MediaQuery.of(context).size.height * 0.88,
             ),
-            child: Material(
-              color: const Color(0xFFFFF7E9),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
+            // Same build as the bottom nav / QuestPanel: dark-wood frame,
+            // parchment board, thin gold inner line.
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(3, 3, 3, 0),
+              decoration: const BoxDecoration(
+                color: HubWorld.wood,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Drag handle.
-                  const Padding(
-                    padding: EdgeInsets.only(top: 12),
-                    child: SizedBox(
-                      width: 44,
-                      height: 5,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Color(0xFFDDDDDD),
-                          borderRadius: BorderRadius.all(Radius.circular(3)),
-                        ),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(27),
+                ),
+                child: Material(
+                  color: HubWorld.parchment,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _StageHeader(
+                        destination: destination,
+                        done: done,
+                        total: total,
+                        onClose: () => _close(context),
                       ),
-                    ),
-                  ),
-
-                  // Header.
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
-                    decoration: const BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(color: Color(0xFFF0EDE8), width: 2),
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 60,
-                          height: 60,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: destBg,
-                            border: Border.all(color: destColor, width: 3),
-                            borderRadius: BorderRadius.circular(18),
-                            boxShadow: [
-                              BoxShadow(
-                                color: destColor.withValues(alpha: 0.27),
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
+                      if (noorEnergy <= 0) const _NoorRestingNote(),
+                      Flexible(
+                        child: SingleChildScrollView(
+                          padding: EdgeInsets.fromLTRB(
+                            16,
+                            14,
+                            16,
+                            24 + MediaQuery.of(context).padding.bottom,
                           ),
-                          child: Text(
-                            destination.icon,
-                            style: TextStyle(
-                              fontSize: destination.icon.length <= 2 ? 26 : 32,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Text(
-                                destination.name,
-                                style: const TextStyle(
-                                  fontSize: 21,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF111111),
-                                  height: 1.1,
+                              for (var li = 0; li < levels.length; li++) ...[
+                                if (li > 0) const SizedBox(height: 18),
+                                _LevelSection(
+                                  meta: _levelMeta[li < 2 ? li : 2],
+                                  levelIndex: li,
+                                  group: levels[li],
+                                  unlocked: _isLevelUnlocked(li),
+                                  lessonCap: _lessonCapFor(li),
+                                  complete: _isLevelComplete(levels, li),
+                                  isNew: _isLevelNew(levels, li),
+                                  noorEnergy: noorEnergy,
+                                  completedLessons: completedLessons,
+                                  onStartLesson: (lesson, isNewLevel) {
+                                    _close(context);
+                                    onStartLesson(lesson, isNewLevel);
+                                  },
                                 ),
-                              ),
-                              const SizedBox(height: 1),
-                              Text(
-                                destination.nameAr,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: destColor,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                destination.description,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Color(0xFF888888),
-                                ),
-                              ),
+                              ],
                             ],
                           ),
                         ),
-                        GestureDetector(
-                          onTap: () => _close(context),
-                          child: Container(
-                            width: 34,
-                            height: 34,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF0EDE8),
-                              borderRadius: BorderRadius.circular(11),
-                            ),
-                            child: const Text(
-                              '✕',
-                              style: TextStyle(
-                                fontSize: 17,
-                                color: Color(0xFF888888),
-                              ),
-                            ),
-                          ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A band of the map painting with the stage's checkpoint medallion, name,
+/// Arabic name and real progress — the sheet opens "inside" the map.
+class _StageHeader extends StatelessWidget {
+  const _StageHeader({
+    required this.destination,
+    required this.done,
+    required this.total,
+    required this.onClose,
+  });
+
+  final Destination destination;
+  final int done;
+  final int total;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final destColor = _hexColor(destination.color);
+    final checkpoint = destination.id >= 1 && destination.id <= 7
+        ? 'assets/images/adventure_map/checkpoint_${destination.id}.png'
+        : null;
+
+    return MapSceneHeader(
+      height: 150,
+      // Later stages sit higher up the painted path.
+      focusY: (1 - (destination.id - 1) / 3).clamp(-1.0, 1.0),
+      child: Stack(
+        children: [
+          // Drag handle.
+          Positioned(
+            top: 8,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 10,
+            right: 10,
+            child: _CloseButton(onTap: onClose),
+          ),
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 22, 16, 14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  // Checkpoint medallion: the same art as the map node.
+                  Container(
+                    width: 78,
+                    height: 78,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: HubWorld.parchment,
+                      border: Border.all(color: AppColors.goldSoft, width: 3),
+                      boxShadow: [
+                        BoxShadow(
+                          color: destColor.withValues(alpha: 0.55),
+                          blurRadius: 16,
+                        ),
+                        const BoxShadow(
+                          color: Color(0x66000000),
+                          blurRadius: 6,
+                          offset: Offset(0, 3),
                         ),
                       ],
                     ),
+                    child: checkpoint != null
+                        ? Image.asset(checkpoint, fit: BoxFit.contain)
+                        : Center(
+                            child: Text(
+                              destination.icon,
+                              style: const TextStyle(fontSize: 34),
+                            ),
+                          ),
                   ),
-
-                  // Noor energy note.
-                  if (noorEnergy <= 0)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 8,
+                  const SizedBox(width: 14),
+                  // The map band is a fixed height: the text wraps at its
+                  // width, then shrinks to fit rather than being cut off.
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, c) => FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.bottomLeft,
+                        child: SizedBox(
+                          width: c.maxWidth,
+                          child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          destination.name,
+                          style: hubText(
+                            22,
+                            HubWorld.onScene,
+                            height: 1.05,
+                            shadows: hubTextShadow,
+                          ),
                         ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFDECC8),
-                          borderRadius: BorderRadius.circular(14),
+                        Text(
+                          destination.nameAr,
+                          textDirection: TextDirection.rtl,
+                          style: const TextStyle(
+                            fontFamily: 'ScheherazadeNew',
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: HubWorld.goldLight,
+                            height: 1.5,
+                            shadows: hubTextShadow,
+                          ),
                         ),
-                        child: const Row(
-                          children: [
-                            Text('✨', style: TextStyle(fontSize: 16)),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Noor Energy is resting — you can replay '
-                                'completed lessons!',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFFC9A227),
-                                ),
-                              ),
-                            ),
-                          ],
+                        const SizedBox(height: 4),
+                        WoodChip(
+                          label: '$done / $total games',
+                          icon: const Icon(
+                            Icons.star_rounded,
+                            size: 15,
+                            color: HubWorld.goldLight,
+                          ),
                         ),
-                      ),
-                    ),
-
-                  // Levels.
-                  Flexible(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 36),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          for (var li = 0; li < levels.length; li++) ...[
-                            if (li > 0) const SizedBox(height: 16),
-                            _LevelSection(
-                              meta: _levelMeta[li < 2 ? li : 2],
-                              levelIndex: li,
-                              group: levels[li],
-                              unlocked: _isLevelUnlocked(li),
-                              lessonCap: _lessonCapFor(li),
-                              complete: _isLevelComplete(levels, li),
-                              isNew: _isLevelNew(levels, li),
-                              noorEnergy: noorEnergy,
-                              completedLessons: completedLessons,
-                              onStartLesson: (lesson, isNewLevel) {
-                                _close(context);
-                                onStartLesson(lesson, isNewLevel);
-                              },
-                            ),
-                          ],
-                        ],
+                      ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -376,7 +405,83 @@ class DestinationLevelsSheet extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CloseButton extends StatelessWidget {
+  const _CloseButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // 48dp tap target around a 34dp wooden disc.
+    return Semantics(
+      button: true,
+      label: 'Close'.tr,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: HubWorld.wood.withValues(alpha: 0.85),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.goldSoft, width: 1.5),
+              ),
+              child: const Icon(
+                Icons.close_rounded,
+                size: 19,
+                color: HubWorld.onScene,
+              ),
+            ),
+          ),
         ),
+      ),
+    );
+  }
+}
+
+/// Shown while every lantern is out: the Noor moon, dimmed, and why.
+class _NoorRestingNote extends StatelessWidget {
+  const _NoorRestingNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.fromLTRB(10, 8, 14, 8),
+      decoration: BoxDecoration(
+        color: HubWorld.night,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.goldSoft, width: 1.2),
+      ),
+      child: Row(
+        children: [
+          const Opacity(
+            opacity: 0.55,
+            child: Image(
+              image: AssetImage('assets/images/noor_energy_moon.png'),
+              width: 30,
+              height: 30,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Noor Energy is resting — come back tomorrow to play again!',
+              style: hubText(13, HubWorld.onScene, weight: 700, height: 1.25),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -413,166 +518,208 @@ class _LevelSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final noEnergy = noorEnergy <= 0;
+    final doneCount = group.where((l) => completedLessons.contains(l.id)).length;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Level header.
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Opacity(
-                  opacity: unlocked ? 1 : 0.5,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: complete
-                          ? AppColors.adventureGreen
-                          : unlocked
-                          ? meta.bg
-                          : const Color(0xFFF0EDE8),
-                      border: Border.all(
-                        color:
-                            (complete
-                                    ? AppColors.adventureGreen
-                                    : unlocked
-                                    ? meta.color
-                                    : const Color(0xFFDDDDDD))
-                                .withValues(alpha: 0.27),
-                        width: 2,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          complete
-                              ? '✅'
-                              : unlocked
-                              ? meta.stars
-                              : '🔒',
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            'Level ${levelIndex + 1} — ${meta.label}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: complete
-                                  ? Colors.white
-                                  : unlocked
-                                  ? meta.color
-                                  : const Color(0xFFAAAAAA),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              if (unlocked && !complete && noEnergy) ...[
-                const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8E4FF),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Text(
-                    '⚡ needs Noor',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.adventurePurple,
-                    ),
-                  ),
-                ),
-              ],
-              if (complete) ...[
-                const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFDCF0E6),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Text(
-                    'Complete!',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.teal,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
+        _LevelHeader(
+          meta: meta,
+          levelIndex: levelIndex,
+          unlocked: unlocked,
+          complete: complete,
+          needsNoor: unlocked && !complete && noEnergy,
+          doneCount: doneCount,
+          total: group.length,
         ),
+        const SizedBox(height: 10),
+        for (var idx = 0; idx < group.length; idx++) ...[
+          if (idx > 0) const SizedBox(height: 10),
+          Builder(
+            builder: (context) {
+              final lesson = group[idx];
+              final done = completedLessons.contains(lesson.id);
+              const lessonUnlocked = true;
+              const energyBlocked = false;
 
-        // Lessons in level.
-        Column(
-          children: [
-            for (var idx = 0; idx < group.length; idx++) ...[
-              if (idx > 0) const SizedBox(height: 8),
-              Builder(
-                builder: (context) {
-                  final lesson = group[idx];
-                  final done = completedLessons.contains(lesson.id);
-                  final lessonUnlocked =
-                      unlocked &&
-                      (idx == 0 ||
-                          completedLessons.contains(group[idx - 1].id));
-                  final canStart = lessonUnlocked && (done || !noEnergy);
-                  final energyBlocked = lessonUnlocked && !done && noEnergy;
-
-                  return _LessonCard(
-                    lesson: lesson,
-                    index: idx,
-                    completed: done,
-                    unlocked: lessonUnlocked,
-                    energyBlocked: energyBlocked,
-                    onStart: () {
-                      if (canStart) {
-                        onStartLesson(lesson, isNew && !done);
-                      } else if (lessonUnlocked && !done && noEnergy) {
-                        // Will be blocked by the caller (matches source:
-                        // still routed through onStartLesson so the caller
-                        // decides how to surface the energy block).
-                        onStartLesson(lesson, true);
-                      }
-                    },
-                  );
+              return _LessonCard(
+                lesson: lesson,
+                completed: done,
+                unlocked: lessonUnlocked,
+                energyBlocked: energyBlocked,
+                onStart: () {
+                  onStartLesson(lesson, isNew && !done);
                 },
-              ),
-            ],
-          ],
-        ),
+              );
+            },
+          ),
+        ],
       ],
     );
   }
 }
 
+/// "Level 1 — Beginner" signboard: difficulty stars, the level's progress
+/// pips, and its state (complete / needs Noor / locked).
+class _LevelHeader extends StatelessWidget {
+  const _LevelHeader({
+    required this.meta,
+    required this.levelIndex,
+    required this.unlocked,
+    required this.complete,
+    required this.needsNoor,
+    required this.doneCount,
+    required this.total,
+  });
+
+  final _LevelMeta meta;
+  final int levelIndex;
+  final bool unlocked;
+  final bool complete;
+  final bool needsNoor;
+  final int doneCount;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final ink = unlocked ? HubWorld.wood : HubWorld.inkSoft;
+    return Row(
+      children: [
+        // Difficulty stars (1–3), greyed while the level is locked.
+        for (var s = 0; s <= levelIndex.clamp(0, 2); s++)
+          Icon(
+            Icons.star_rounded,
+            size: 18,
+            color: unlocked ? AppColors.gold : HubWorld.lockedRing,
+          ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            'Level ${levelIndex + 1} — ${meta.label}',
+            style: hubText(16, ink, weight: 800, height: 1.2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        if (complete)
+          _StatusPill(
+            label: 'Complete!',
+            icon: Icons.check_rounded,
+            face: AppColors.adventureGreen,
+            ink: Colors.white,
+          )
+        else if (!unlocked)
+          const Icon(Icons.lock_rounded, size: 17, color: HubWorld.inkSoft)
+        else if (needsNoor)
+          _StatusPill(
+            label: '⚡ needs Noor',
+            face: HubWorld.night,
+            ink: HubWorld.onScene,
+          )
+        else
+          // Progress pips: one per game in this level.
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < total; i++)
+                Container(
+                  width: 9,
+                  height: 9,
+                  margin: const EdgeInsets.only(left: 4),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: i < doneCount
+                        ? AppColors.adventureGreen
+                        : HubWorld.parchmentDeep,
+                    border: Border.all(
+                      color: i < doneCount
+                          ? AppColors.adventureGreen
+                          : HubWorld.lockedRing,
+                      width: 1.5,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        const Spacer(),
+      ],
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({
+    required this.label,
+    required this.face,
+    required this.ink,
+    this.icon,
+  });
+
+  final String label;
+  final Color face;
+  final Color ink;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: face,
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 13, color: ink),
+            const SizedBox(width: 3),
+          ],
+          Text(label, style: hubText(11.5, ink, weight: 750, height: 1.2)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Game art per activity type (`assets/images/game_icons/`), so a game
+/// looks the same in every stage; `null` falls back to the lesson emoji.
+String? _gameIconFor(Lesson lesson) {
+  if (lesson.activities.isEmpty) return null;
+  final name = switch (lesson.activities.first.type) {
+    ActivityType.pronounce => 'greeting_match',
+    ActivityType.creationHunt => 'creation_hunt',
+    ActivityType.trace => 'magic_sand_tracer',
+    ActivityType.soundDetective => 'sound_detective',
+    ActivityType.quranEtiquette => 'quran_etiquette',
+    ActivityType.labelMaker => 'label_maker',
+    ActivityType.ayahBuilder => 'ayah_builder',
+    ActivityType.sirahStory => 'sirah_story',
+    ActivityType.classroomHeroes => 'classroom_heroes',
+    ActivityType.taharahAdventure => 'taharah_adventure',
+    ActivityType.fivePillars => 'five_pillars',
+    ActivityType.goodDeedTree => 'good_deed_tree',
+    _ => null,
+  };
+  return name == null ? null : 'assets/images/game_icons/$name.webp';
+}
+
+const _greyscale = ColorFilter.matrix([
+  0.33, 0.33, 0.33, 0, 0, //
+  0.33, 0.33, 0.33, 0, 0, //
+  0.33, 0.33, 0.33, 0, 0, //
+  0, 0, 0, 1, 0,
+]);
+
+/// One game: big art first (show, don't tell), title, reward, and a state
+/// marker. State is carried by fill and marker, never by hue — every brand
+/// colour is also some lesson's colour:
+/// - finished: solid mint face + green frame + green check seal + star;
+/// - ready: parchment face + gold play button;
+/// - Noor resting: parchment face + dimmed moon;
+/// - locked: sunken face, greyed art, padlock.
 class _LessonCard extends StatelessWidget {
   const _LessonCard({
     required this.lesson,
-    required this.index,
     required this.completed,
     required this.unlocked,
     required this.energyBlocked,
@@ -580,7 +727,6 @@ class _LessonCard extends StatelessWidget {
   });
 
   final Lesson lesson;
-  final int index;
   final bool completed;
   final bool unlocked;
   final bool energyBlocked;
@@ -588,230 +734,200 @@ class _LessonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lessonColor = _hexColor(lesson.color);
-    final borderColor = unlocked && completed
-        ? AppColors.adventureGreen
-        : unlocked
-        ? lessonColor
-        : const Color(0xFFDDDDDD);
-    final bgColor = unlocked && completed
-        ? const Color(0xFFDCF0E6)
-        : unlocked
-        ? Colors.white
-        : const Color(0xFFF5F2EE);
+    final done = unlocked && completed;
+    final iconAsset = _gameIconFor(lesson);
 
-    Widget content = Opacity(
-      opacity: unlocked ? 1 : 0.6,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: bgColor,
-          border: Border.all(color: borderColor, width: 3),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: !unlocked
-              ? null
-              : [
-                  BoxShadow(
-                    color: (completed ? AppColors.adventureGreen : lessonColor)
-                        .withValues(alpha: 0.27),
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-        ),
-        child: Row(
-          children: [
-            // Index-or-checkmark badge.
-            Container(
-              width: 28,
-              height: 28,
-              alignment: Alignment.center,
+    Widget art = iconAsset != null
+        ? Image.asset(iconAsset, width: 64, height: 64, fit: BoxFit.contain)
+        : SizedBox(
+            width: 64,
+            height: 64,
+            child: Center(
+              child: Text(lesson.icon, style: const TextStyle(fontSize: 34)),
+            ),
+          );
+    if (!unlocked) {
+      art = Opacity(
+        opacity: 0.45,
+        child: ColorFiltered(colorFilter: _greyscale, child: art),
+      );
+    }
+
+    final artWithSeal = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        art,
+        if (done)
+          Positioned(
+            right: -4,
+            bottom: -2,
+            child: Container(
+              width: 24,
+              height: 24,
               decoration: BoxDecoration(
-                color: unlocked && completed
-                    ? AppColors.adventureGreen
-                    : unlocked
-                    ? lessonColor
-                    : const Color(0xFFDDDDDD),
-                borderRadius: BorderRadius.circular(9),
+                color: AppColors.adventureGreen,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
               ),
-              child: Text(
-                unlocked && completed ? '✓' : '${index + 1}',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
+              child: const Icon(
+                Icons.check_rounded,
+                size: 15,
+                color: Colors.white,
               ),
             ),
-            const SizedBox(width: 10),
-
-            // Icon chip.
-            Container(
-              width: 42,
-              height: 42,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: completed
-                    ? const Color(0xFFDCF0E6)
-                    : lessonColor.withValues(alpha: 0.13),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Text(
-                unlocked ? lesson.icon : '🔒',
-                style: const TextStyle(fontSize: 22),
-              ),
-            ),
-            const SizedBox(width: 10),
-
-            // Title + activity icons + XP pill.
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    lesson.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      height: 1.2,
-                      color: completed
-                          ? AppColors.teal
-                          : unlocked
-                          ? const Color(0xFF111111)
-                          : const Color(0xFFAAAAAA),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 5,
-                    runSpacing: 4,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      for (final activity in lesson.activities)
-                        Text(
-                          activity.icon,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      // Some lessons' own color is the same green as the
-                      // "done" styling, so completion is also spelled out.
-                      if (completed)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.adventureGreen,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Text(
-                            '✓ Completed',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                        )
-                      else
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFDECC8),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '+${lesson.xp} XP',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.gold,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            // Trailing indicator.
-            _LessonTrailing(
-              completed: completed,
-              energyBlocked: energyBlocked,
-              unlocked: unlocked,
-              lessonColor: lessonColor,
-            ),
-          ],
-        ),
-      ),
+          ),
+      ],
     );
 
-    return SizedBox(
-      width: double.infinity,
-      child: GestureDetector(
-        onTap: unlocked ? onStart : null,
-        behavior: HitTestBehavior.opaque,
-        child: content,
-      ),
+    final body = Row(
+      children: [
+        artWithSeal,
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // No line cap: long Filipino titles wrap and the card grows.
+              Text(
+                lesson.title,
+                style: hubText(
+                  15.5,
+                  done
+                      ? AppColors.tealDark
+                      : unlocked
+                      ? AppColors.ink
+                      : HubWorld.inkSoft,
+                  weight: 750,
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 5),
+              if (done)
+                _StatusPill(
+                  label: '✓ Completed',
+                  face: AppColors.adventureGreen,
+                  ink: Colors.white,
+                )
+              else
+                _StatusPill(
+                  label: '+${lesson.xp} XP',
+                  face: unlocked ? AppColors.goldTint : HubWorld.parchmentDeep,
+                  ink: unlocked ? HubWorld.goldDeep : HubWorld.inkSoft,
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        _LessonMarker(
+          lessonId: lesson.id,
+          completed: done,
+          // Replays cost Noor too, so resting wins over the done star.
+          energyBlocked: energyBlocked,
+          unlocked: unlocked,
+        ),
+      ],
+    );
+
+    if (!unlocked) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: HubWorld.parchmentDeep,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: HubWorld.lockedRim, width: 2),
+        ),
+        child: body,
+      );
+    }
+
+    return ChunkyButton(
+      onTap: onStart,
+      semanticLabel: lesson.title,
+      face: done ? const Color(0xFFDCF0E6) : Colors.white,
+      edge: done ? AppColors.adventureGreen : HubWorld.edge,
+      border: done ? AppColors.adventureGreen : null,
+      radius: 20,
+      depth: 5,
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      child: body,
     );
   }
 }
 
-class _LessonTrailing extends StatelessWidget {
-  const _LessonTrailing({
+class _LessonMarker extends StatelessWidget {
+  const _LessonMarker({
+    required this.lessonId,
     required this.completed,
     required this.energyBlocked,
     required this.unlocked,
-    required this.lessonColor,
   });
 
+  final String lessonId;
   final bool completed;
   final bool energyBlocked;
   final bool unlocked;
-  final Color lessonColor;
 
   @override
   Widget build(BuildContext context) {
-    if (completed) {
-      return const Text('🌟', style: TextStyle(fontSize: 20));
-    }
     if (energyBlocked) {
-      return const Text('✨', style: TextStyle(fontSize: 18));
-    }
-    if (unlocked) {
-      return Container(
-        width: 30,
-        height: 30,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: lessonColor,
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: [
-            BoxShadow(
-              color: lessonColor.withValues(alpha: 0.53),
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: const Text(
-          '›',
-          style: TextStyle(
-            fontSize: 17,
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
+      return Opacity(
+        key: ValueKey('lesson-noor-$lessonId'),
+        opacity: 0.5,
+        child: const Image(
+          image: AssetImage('assets/images/noor_energy_moon.png'),
+          width: 34,
+          height: 34,
         ),
       );
     }
-    return const Opacity(
-      opacity: 0.4,
-      child: Text('🔒', style: TextStyle(fontSize: 16)),
+    if (completed) {
+      return Icon(
+        Icons.star_rounded,
+        key: ValueKey('lesson-done-$lessonId'),
+        size: 34,
+        color: AppColors.gold,
+        shadows: const [Shadow(color: Color(0x668A5A00), offset: Offset(0, 2))],
+      );
+    }
+    if (unlocked) {
+      return Container(
+        key: ValueKey('lesson-play-$lessonId'),
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [HubWorld.goldLight, AppColors.gold],
+          ),
+          border: Border.all(color: HubWorld.goldDeep, width: 2),
+          boxShadow: const [
+            BoxShadow(color: HubWorld.goldDeep, offset: Offset(0, 3)),
+          ],
+        ),
+        child: const Icon(
+          Icons.play_arrow_rounded,
+          size: 26,
+          color: Colors.white,
+        ),
+      );
+    }
+    return Container(
+      key: ValueKey('lesson-locked-$lessonId'),
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        color: HubWorld.wood,
+        shape: BoxShape.circle,
+        border: Border.all(color: AppColors.goldSoft, width: 1.5),
+      ),
+      child: const Icon(
+        Icons.lock_rounded,
+        size: 17,
+        color: AppColors.goldSoft,
+      ),
     );
   }
 }

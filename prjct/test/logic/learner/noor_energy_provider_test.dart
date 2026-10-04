@@ -79,4 +79,20 @@ void main() {
       expect(container2.read(noorEnergyProvider).current, 3);
     },
   );
+
+  test('refills at the start of every 4-hour window', () {
+    expect(
+      NoorEnergyNotifier.nextRefill(DateTime(2026, 10, 2, 0, 0)),
+      DateTime(2026, 10, 2, 4),
+    );
+    expect(
+      NoorEnergyNotifier.nextRefill(DateTime(2026, 10, 2, 13, 59)),
+      DateTime(2026, 10, 2, 16),
+    );
+    // Last window of the day rolls over to midnight.
+    expect(
+      NoorEnergyNotifier.nextRefill(DateTime(2026, 10, 2, 22, 30)),
+      DateTime(2026, 10, 3),
+    );
+  });
 }

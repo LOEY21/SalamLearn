@@ -1138,26 +1138,32 @@ class _ClassPulseCard extends ConsumerWidget {
                     size: Size(ringSize, ringSize),
                     painter: _MasteryRingPainter(progress: t),
                   ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${(t * 100).round()}%',
-                        style: TextStyle(
-                          fontSize: ringSize * 0.22,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
-                        ),
+                  Padding(
+                    padding: EdgeInsets.all(ringSize * 0.15),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${(t * 100).round()}%',
+                            style: TextStyle(
+                              fontSize: ringSize * 0.22,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          Text(
+                            'Avg. mastery',
+                            style: TextStyle(
+                              fontSize: ringSize * 0.09,
+                              color: AppColors.textMuted,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        'Avg. mastery',
-                        style: TextStyle(
-                          fontSize: ringSize * 0.09,
-                          color: AppColors.textMuted,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),
@@ -2067,66 +2073,6 @@ class _ActionTile extends StatelessWidget {
   }
 }
 
-/// Icon-forward grid tile (phone Home tab) — a 2x2 grid replaces the old
-/// vertical tool list for a more scannable, less list-heavy composition,
-/// with the same tinted icon chip + press-scale feedback as [_ActionTile].
-class _ActionGridTile extends StatelessWidget {
-  const _ActionGridTile({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.iconBg,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final Color color;
-  final Color iconBg;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return _PressScale(
-      builder: (context, setPressed) => GestureDetector(
-        onTapDown: (_) => setPressed(true),
-        onTapCancel: () => setPressed(false),
-        onTapUp: (_) => setPressed(false),
-        onTap: onTap,
-        child: SoftCard(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: iconBg,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                alignment: Alignment.center,
-                child: Icon(icon, size: 19, color: color),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 void showStudentDetails(
   BuildContext context,
@@ -2180,6 +2126,8 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
     );
 
     final assigned = currentStudent['assignedModules'] as List<dynamic>? ?? [];
+    final assignedDetails =
+        currentStudent['assignmentsDetail'] as List<dynamic>? ?? [];
     final name = currentStudent['name'] as String;
     final mastery = currentStudent['mastery'] as String;
 
@@ -2431,29 +2379,83 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
                                 ),
                               ),
                               const SizedBox(height: 6),
-                              for (final item in assigned)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 5),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.assignment_turned_in,
-                                        size: 14,
-                                        color: AppColors.teal,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          item as String,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: AppColors.ink,
+                              if (assignedDetails.isNotEmpty)
+                                for (final item in assignedDetails)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.assignment_turned_in,
+                                          size: 14,
+                                          color: AppColors.teal,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            '${item['module']} (Due: ${item['dueDate']})',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.ink,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ],
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.edit_outlined,
+                                            size: 16,
+                                            color: AppColors.teal,
+                                          ),
+                                          tooltip: 'Edit Assignment',
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          onPressed:
+                                              () => _editStudentAssignment(
+                                                item as Map<String, dynamic>,
+                                              ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.delete_outline_rounded,
+                                            size: 16,
+                                            color: AppColors.coral,
+                                          ),
+                                          tooltip: 'Delete Assignment',
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          onPressed:
+                                              () => _deleteStudentAssignment(
+                                                item as Map<String, dynamic>,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                              else
+                                for (final item in assigned)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 5),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.assignment_turned_in,
+                                          size: 14,
+                                          color: AppColors.teal,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            item as String,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.ink,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
                             ],
                           ],
                         ),
@@ -2505,6 +2507,94 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
         ),
       ),
     );
+  }
+
+  Future<void> _editStudentAssignment(Map<String, dynamic> item) async {
+    final assignmentId = item['id'] as String?;
+    if (assignmentId == null) return;
+    final initialModuleId =
+        item['moduleId'] as String? ?? allGames.first.lesson.id;
+    final initialDueDate =
+        item['dueDateRaw'] as DateTime? ??
+        DateTime.now().add(const Duration(days: 3));
+
+    await showDialog<void>(
+      context: context,
+      builder:
+          (dialogCtx) => _EditHomeworkDialog(
+            title: 'Edit Student Assignment',
+            initialModuleId: initialModuleId,
+            initialDueDate: initialDueDate,
+            onSave: (newModuleId, newDueDate) async {
+              await ClassRepository().updateAssignment(
+                id: assignmentId,
+                moduleId: newModuleId,
+                dueDate: newDueDate,
+              );
+              ref.invalidate(teacherRosterProvider);
+              final classId = ref.read(teacherClassControllerProvider)?.id;
+              if (classId != null) {
+                ref.invalidate(classRosterProvider(classId));
+              }
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Updated assignment to "${assignmentTitle(newModuleId)}"',
+                    ),
+                  ),
+                );
+              }
+            },
+          ),
+    );
+  }
+
+  Future<void> _deleteStudentAssignment(Map<String, dynamic> item) async {
+    final assignmentId = item['id'] as String?;
+    if (assignmentId == null) return;
+    final moduleName = item['module'] as String? ?? 'assignment';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogCtx) => AlertDialog(
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              color: AppColors.coral,
+              size: 36,
+            ),
+            title: const Text('Delete Assignment?'),
+            content: Text(
+              'Are you sure you want to remove the assignment for "$moduleName"?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: AppColors.coral),
+                onPressed: () => Navigator.of(dialogCtx).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+    );
+
+    if (confirmed == true) {
+      await ClassRepository().deleteAssignment(assignmentId);
+      ref.invalidate(teacherRosterProvider);
+      final classId = ref.read(teacherClassControllerProvider)?.id;
+      if (classId != null) {
+        ref.invalidate(classRosterProvider(classId));
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Removed "$moduleName"')),
+        );
+      }
+    }
   }
 
   Future<void> _confirmRemoveFromClass(
@@ -4060,6 +4150,8 @@ class _WheelPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (labels.isEmpty) return;
+
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
     final segmentAngle = 2 * pi / labels.length;
@@ -4075,27 +4167,73 @@ class _WheelPainter extends CustomPainter {
         paint,
       );
 
-      final labelAngle = startAngle + segmentAngle / 2;
-      final labelOffset = Offset(
-        center.dx + cos(labelAngle) * radius * 0.62,
-        center.dy + sin(labelAngle) * radius * 0.62,
+      // Radial divider line
+      final linePaint = Paint()
+        ..color = Colors.white.withValues(alpha: 0.4)
+        ..strokeWidth = 1.5
+        ..style = PaintingStyle.stroke;
+      canvas.drawLine(
+        center,
+        Offset(
+          center.dx + cos(startAngle) * radius,
+          center.dy + sin(startAngle) * radius,
+        ),
+        linePaint,
       );
+
+      // Draw text rotated radially along the segment bisector
+      final labelAngle = startAngle + segmentAngle / 2;
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(labelAngle);
+
+      final maxTextWidth = radius * 0.62;
+      final fontSize =
+          labels.length > 12 ? 9.5 : (labels.length > 6 ? 10.5 : 12.0);
       final painter = TextPainter(
         text: TextSpan(
           text: labels[i],
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
+            fontSize: fontSize,
+            fontWeight: FontWeight.w800,
+            shadows: const [
+              Shadow(
+                color: Colors.black45,
+                blurRadius: 3,
+                offset: Offset(0, 1),
+              ),
+            ],
           ),
         ),
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        ellipsis: '…',
         textDirection: TextDirection.ltr,
-      )..layout();
-      painter.paint(
-        canvas,
-        labelOffset - Offset(painter.width / 2, painter.height / 2),
-      );
+      )..layout(maxWidth: maxTextWidth);
+
+      // Start text after the center hub with safe padding from the rim
+      final startX = radius * 0.22 + (maxTextWidth - painter.width) / 2;
+      painter.paint(canvas, Offset(startX, -painter.height / 2));
+      canvas.restore();
     }
+
+    // Outer wheel border
+    final rimPaint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke;
+    canvas.drawCircle(center, radius - 2, rimPaint);
+
+    // Center hub circle
+    final hubRadius = radius * 0.16;
+    final hubPaint = Paint()..color = Colors.white;
+    canvas.drawCircle(center, hubRadius, hubPaint);
+    final hubRimPaint = Paint()
+      ..color = AppColors.creamBorder
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+    canvas.drawCircle(center, hubRadius, hubRimPaint);
   }
 
   @override
@@ -4639,6 +4777,24 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
                         ],
                       ),
                     ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        size: 20,
+                        color: AppColors.teal,
+                      ),
+                      tooltip: 'Edit module / due date',
+                      onPressed: () => _showEditHomework(context, hw),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete_outline_rounded,
+                        size: 20,
+                        color: AppColors.coral,
+                      ),
+                      tooltip: 'Delete homework',
+                      onPressed: () => _confirmDeleteHomework(context, hw),
+                    ),
                   ],
                 ),
               ),
@@ -4646,6 +4802,92 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
         ],
       ],
     );
+  }
+
+  Future<void> _showEditHomework(
+    BuildContext context,
+    Map<String, dynamic> hw,
+  ) async {
+    final assignmentId = hw['id'] as String?;
+    if (assignmentId == null) return;
+    final initialModuleId =
+        hw['moduleId'] as String? ?? allGames.first.lesson.id;
+    final initialDueDate =
+        hw['dueDateRaw'] as DateTime? ??
+        DateTime.now().add(const Duration(days: 3));
+
+    await showDialog<void>(
+      context: context,
+      builder:
+          (dialogCtx) => _EditHomeworkDialog(
+            title: 'Edit Class Homework',
+            initialModuleId: initialModuleId,
+            initialDueDate: initialDueDate,
+            onSave: (newModuleId, newDueDate) async {
+              await ClassRepository().updateAssignment(
+                id: assignmentId,
+                moduleId: newModuleId,
+                dueDate: newDueDate,
+              );
+              ref.invalidate(classHomeworkProvider);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Updated homework to "${assignmentTitle(newModuleId)}"',
+                    ),
+                  ),
+                );
+              }
+            },
+          ),
+    );
+  }
+
+  Future<void> _confirmDeleteHomework(
+    BuildContext context,
+    Map<String, dynamic> hw,
+  ) async {
+    final assignmentId = hw['id'] as String?;
+    if (assignmentId == null) return;
+    final moduleTitle = hw['module'] as String? ?? 'this module';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogCtx) => AlertDialog(
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              color: AppColors.coral,
+              size: 36,
+            ),
+            title: const Text('Delete Homework?'),
+            content: Text(
+              'Are you sure you want to remove the homework assignment for "$moduleTitle"?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: AppColors.coral),
+                onPressed: () => Navigator.of(dialogCtx).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+    );
+
+    if (confirmed == true) {
+      await ClassRepository().deleteAssignment(assignmentId);
+      ref.invalidate(classHomeworkProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Removed "$moduleTitle" from homework')),
+        );
+      }
+    }
   }
 }
 
@@ -5407,13 +5649,18 @@ class _GameSessionPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final game = gameNameOf(gameForId(lessonId)?.lesson ?? allGames.first.lesson);
-    final sessions = gameSessions[game]!;
+    final currentLesson = resolveLessonForId(lessonId);
+    final game = gameNameOf(currentLesson);
+    final sessions = gameSessions[game] ?? [currentLesson];
+    final selectedLessonId = sessions.any((l) => l.id == lessonId)
+        ? lessonId
+        : currentLesson.id;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DropdownButtonFormField<String>(
-          initialValue: game,
+          value: gameSessions.containsKey(game) ? game : gameSessions.keys.first,
           isExpanded: true,
           decoration: InputDecoration(
             labelText: 'Select Game'.tr,
@@ -5428,14 +5675,19 @@ class _GameSessionPicker extends StatelessWidget {
               ),
           ],
           onChanged: (v) {
-            if (v != null && v != game) onChanged(gameSessions[v]!.first.id);
+            if (v != null && v != game) {
+              final newGameSessions = gameSessions[v];
+              if (newGameSessions != null && newGameSessions.isNotEmpty) {
+                onChanged(newGameSessions.first.id);
+              }
+            }
           },
         ),
         const SizedBox(height: 10),
         DropdownButtonFormField<String>(
           // Rebuilt per game so it resets to the new game's first session.
           key: ValueKey(game),
-          initialValue: lessonId,
+          value: selectedLessonId,
           isExpanded: true,
           decoration: InputDecoration(
             labelText: 'Select Session'.tr,
@@ -5460,3 +5712,157 @@ class _GameSessionPicker extends StatelessWidget {
     );
   }
 }
+
+class _EditHomeworkDialog extends StatefulWidget {
+  const _EditHomeworkDialog({
+    required this.title,
+    required this.initialModuleId,
+    required this.initialDueDate,
+    required this.onSave,
+  });
+
+  final String title;
+  final String initialModuleId;
+  final DateTime initialDueDate;
+  final Future<void> Function(String newModuleId, DateTime newDueDate) onSave;
+
+  @override
+  State<_EditHomeworkDialog> createState() => _EditHomeworkDialogState();
+}
+
+class _EditHomeworkDialogState extends State<_EditHomeworkDialog> {
+  late String _selectedModule = resolveLessonForId(widget.initialModuleId).id;
+  late DateTime _dueDate = widget.initialDueDate;
+  bool _saving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: Material(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.edit_note_rounded,
+                      color: AppColors.teal,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        widget.title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      onPressed: () => Navigator.of(context).pop(),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Change Module / Session',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                _GameSessionPicker(
+                  lessonId: _selectedModule,
+                  onChanged: (v) => setState(() => _selectedModule = v),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Due Date: ${_dueDate.day}/${_dueDate.month}/${_dueDate.year}',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        final d = await showDatePicker(
+                          context: context,
+                          initialDate:
+                              _dueDate.isBefore(DateTime.now())
+                                  ? DateTime.now()
+                                  : _dueDate,
+                          firstDate: DateTime.now().subtract(
+                            const Duration(days: 30),
+                          ),
+                          lastDate: DateTime.now().add(
+                            const Duration(days: 90),
+                          ),
+                        );
+                        if (d != null) setState(() => _dueDate = d);
+                      },
+                      child: const Text('Change Date'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed:
+                          _saving ? null : () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.teal,
+                      ),
+                      onPressed:
+                          _saving
+                              ? null
+                              : () async {
+                                setState(() => _saving = true);
+                                await widget.onSave(_selectedModule, _dueDate);
+                                if (mounted) Navigator.of(context).pop();
+                              },
+                      child:
+                          _saving
+                              ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                              : const Text('Save Changes'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+

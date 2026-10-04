@@ -30,7 +30,7 @@ class _InfoSheetContent extends ConsumerWidget {
     final resetIn = formatTimeUntilReset(DateTime.now());
 
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         child: Container(
           padding: const EdgeInsets.all(3),
@@ -140,20 +140,26 @@ class _InfoSheetContent extends ConsumerWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          _Stat(
-                            label: 'Lit now',
-                            value: '${energy.current}',
-                            color: AppColors.teal,
+                          Expanded(
+                            child: _Stat(
+                              label: 'Lit now',
+                              value: '${energy.current}',
+                              color: AppColors.teal,
+                            ),
                           ),
-                          _Stat(
-                            label: 'Used today',
-                            value: '$used',
-                            color: AppColors.coral,
+                          Expanded(
+                            child: _Stat(
+                              label: 'Used',
+                              value: '$used',
+                              color: AppColors.coral,
+                            ),
                           ),
-                          _Stat(
-                            label: 'Refills in',
-                            value: resetIn,
-                            color: AppColors.gold,
+                          Expanded(
+                            child: _Stat(
+                              label: 'Refills in',
+                              value: resetIn,
+                              color: AppColors.gold,
+                            ),
                           ),
                         ],
                       ),
@@ -176,7 +182,7 @@ class _InfoSheetContent extends ConsumerWidget {
                   title: 'All 5 refill together',
                   body:
                       'Lanterns don\'t trickle back one at a time — they '
-                      'all relight at once when a new day starts.',
+                      'all relight at once every 4 hours.',
                 ),
                 const SizedBox(height: 10),
                 _InfoRow(
@@ -217,6 +223,7 @@ class _Stat extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           label,
+          textAlign: TextAlign.center,
           style: const TextStyle(
             fontSize: 10.5,
             fontWeight: FontWeight.w700,

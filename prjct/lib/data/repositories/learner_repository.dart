@@ -26,6 +26,15 @@ class LearnerRepository {
     if (findByUsername(username) != null) {
       throw StateError('Username is already taken');
     }
+    final normName = name.trim().toLowerCase();
+    final normGrade = gradeLevel.trim().toLowerCase();
+    final duplicate = _box.values.any((l) =>
+        l.name.trim().toLowerCase() == normName &&
+        l.age == age &&
+        l.gradeLevel.trim().toLowerCase() == normGrade);
+    if (duplicate) {
+      throw StateError('A learner with this name, age, and grade level already exists');
+    }
     String? passwordHash;
     String? passwordSalt;
     if (password != null) {

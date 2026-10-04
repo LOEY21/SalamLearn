@@ -1572,10 +1572,7 @@ bool _isLevelUnlocked(
   int levelIndex,
   Set<String> completedLessons,
 ) {
-  if (!isStageUnlocked(learnerId, destination, completedLessons)) return false;
-  if (levelIndex == 0) return true;
-  final previous = levels[levelIndex - 1];
-  return previous.every((l) => completedLessons.contains(l.id));
+  return true;
 }
 
 /// Comprehensive drill-down for one adventure — every level, and every game
@@ -3308,11 +3305,19 @@ class _TrendChartCard extends ConsumerStatefulWidget {
 
 class _TrendChartCardState extends ConsumerState<_TrendChartCard>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _draw = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1000),
-  )..forward();
+  // Created in initState, not lazily: an empty chart never touches it, and
+  // first creating a controller inside dispose() throws mid-unmount.
+  late final AnimationController _draw;
   int _range = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _draw = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..forward();
+  }
 
   static const _ranges = ['7 days', '30 days', 'Term'];
   // ponytail: "Term" has no curriculum-defined length yet, so it's
@@ -3430,6 +3435,9 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
                   for (var i = 0; i < n; i += step) i,
                   if (n > 0) n - 1,
                 }.toList()..sort();
+                // Each label gets the gap to its neighbour (not a fixed 28px)
+                // so full day names fit, shrinking only on very narrow charts.
+                final slotW = (dx * step).clamp(28.0, 64.0).clamp(0.0, width);
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -3455,14 +3463,20 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
                         children: [
                           for (final i in labelIndices)
                             Positioned(
-                              left: (points[i].dx - 14).clamp(0.0, width - 28),
-                              width: 28,
-                              child: Text(
-                                entries[i].label,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  fontSize: 9,
-                                  color: AppColors.textMuted,
+                              left: (points[i].dx - slotW / 2).clamp(
+                                0.0,
+                                width - slotW,
+                              ),
+                              width: slotW,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  entries[i].label,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 9,
+                                    color: AppColors.textMuted,
+                                  ),
                                 ),
                               ),
                             ),
