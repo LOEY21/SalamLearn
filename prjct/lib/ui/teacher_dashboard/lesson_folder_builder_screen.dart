@@ -8,12 +8,22 @@ import '../../data/repositories/lesson_folder_repository.dart';
 import '../../logic/auth/session.dart';
 import '../../logic/teacher/teacher_providers.dart';
 import '../theme/app_colors.dart';
+import '../widgets/child_profile_form.dart'
+    show
+        ChildFieldLabel,
+        ChildFormBottomBar,
+        ChildFormButton,
+        ChildTextField,
+        scaledExtent;
+import '../widgets/hub_kit.dart';
 import 'cast_games.dart';
 import 'module_library_data.dart';
 
 /// FR-6.8 Custom Lesson Builder — pick pre-existing modules from the 12
 /// curriculum games, sequence them into an ordered timeline, and save the
 /// sequence into a named folder. Reached from `module_library_screen.dart`.
+/// Built on the hub kit's sub-page frame; the timeline sits beside the
+/// library from tablet-landscape widths.
 class LessonFolderBuilderScreen extends ConsumerStatefulWidget {
   const LessonFolderBuilderScreen({super.key, this.folderId});
 
@@ -27,6 +37,9 @@ class LessonFolderBuilderScreen extends ConsumerStatefulWidget {
 class _LessonFolderBuilderScreenState
     extends ConsumerState<LessonFolderBuilderScreen> {
   final _nameC = TextEditingController();
+  // Rebuilds on focus change so the example hint clears as soon as the
+  // field is tapped, not only once the teacher starts typing.
+  late final _nameFocus = FocusNode()..addListener(() => setState(() {}));
   final List<String> _order = [];
   final Set<ActivityType> _expandedGames = {castGames.first.type};
 
@@ -45,6 +58,7 @@ class _LessonFolderBuilderScreenState
   @override
   void dispose() {
     _nameC.dispose();
+    _nameFocus.dispose();
     super.dispose();
   }
 
@@ -113,9 +127,9 @@ class _LessonFolderBuilderScreenState
     }
     ref.invalidate(classLessonFoldersProvider(classId));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lesson folder saved!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Lesson folder saved!')));
       context.pop();
     }
   }
@@ -124,178 +138,79 @@ class _LessonFolderBuilderScreenState
   Widget build(BuildContext context) {
     final isEditing = widget.folderId != null;
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _BuilderAppBar(
-              title: isEditing ? 'Edit Lesson Folder' : 'Build Lesson Folder',
-              onBack: () => context.pop(),
-              selectedCount: _order.length,
-            ),
-            const Divider(height: 1, color: AppColors.creamBorder),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-                children: [
-                  const _SectionLabel('Folder name'),
-                  TextField(
-                    controller: _nameC,
-                    decoration: InputDecoration(
-                      hintText: 'e.g. Week 4: Wudhu'.tr,
-                      filled: true,
-                      fillColor: AppColors.neutralTint,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            const BorderSide(color: AppColors.creamBorder),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: AppColors.teal,
-                          width: 1.4,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const _SectionLabel('Module Library (12 Games)'),
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      'Browse the 12 curriculum games below. Expand a game to select its sessions for your lesson timeline.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ),
-                  for (final game in castGames)
-                    _GameAccordion(
-                      game: game,
-                      expanded: _expandedGames.contains(game.type),
-                      selectedRefs: _order,
-                      onToggleExpand: () {
-                        setState(() {
-                          if (_expandedGames.contains(game.type)) {
-                            _expandedGames.remove(game.type);
-                          } else {
-                            _expandedGames.add(game.type);
-                          }
-                        });
-                      },
-                      onToggleSession: _toggle,
-                      onToggleAll: () => _toggleAllInGame(game),
-                    ),
-                  const _SectionLabel('Timeline (drag to reorder)'),
-                  _Timeline(
-                    order: _order,
-                    onReorder: _reorder,
-                    onRemove: _remove,
-                  ),
-                  const SizedBox(height: 90),
-                ],
-              ),
-            ),
-          ],
+    return HubSubpage(
+      header: HubSubpageHeader(
+        title: isEditing ? 'Edit Lesson Folder' : 'Build Lesson Folder',
+        subtitle: 'Pick sessions from the 12 games, then put them in order.',
+        onBack: () => context.pop(),
+        bottom: Align(
+          alignment: Alignment.centerLeft,
+          child: _SelectedCountPill(count: _order.length),
         ),
       ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-          child: SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: FilledButton(
-              onPressed: _save,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.teal,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              child: const FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  'Save lesson folder',
-                  style:
-                      TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BuilderAppBar extends StatelessWidget {
-  const _BuilderAppBar({
-    required this.title,
-    required this.onBack,
-    required this.selectedCount,
-  });
-
-  final String title;
-  final VoidCallback onBack;
-  final int selectedCount;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 18, 4),
-      child: Row(
+      bottomBar: ChildFormBottomBar(
         children: [
-          Material(
-            color: AppColors.neutralTint,
-            borderRadius: BorderRadius.circular(11),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(11),
-              onTap: onBack,
-              child: const SizedBox(
-                width: 34,
-                height: 34,
-                child: Icon(
-                  Icons.arrow_back_rounded,
-                  size: 18,
-                  color: AppColors.ink,
-                ),
+          ChildFormButton(
+            label: 'Save lesson folder',
+            icon: Icons.check_rounded,
+            onPressed: _save,
+          ),
+        ],
+      ),
+      body: HubTabBody(
+        left: [
+          const ChildFieldLabel('Folder name'),
+          ChildTextField(
+            controller: _nameC,
+            focusNode: _nameFocus,
+            hint: _nameFocus.hasFocus ? null : 'e.g. Week 4: Wudhu',
+            textCapitalization: TextCapitalization.sentences,
+          ),
+          const SizedBox(height: 8),
+          const HubSectionLabel('Module library · 12 games'),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 0, 4, 12),
+            child: Text(
+              'Open a game to pick its sessions for your lesson timeline.',
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.4,
+                color: AppColors.inkSoft,
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'CUSTOM LESSON BUILDER',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.2,
-                    color: AppColors.ink,
-                  ),
-                ),
-              ],
+          for (final game in castGames)
+            _GameAccordion(
+              game: game,
+              expanded: _expandedGames.contains(game.type),
+              selectedRefs: _order,
+              onToggleExpand: () {
+                setState(() {
+                  if (_expandedGames.contains(game.type)) {
+                    _expandedGames.remove(game.type);
+                  } else {
+                    _expandedGames.add(game.type);
+                  }
+                });
+              },
+              onToggleSession: _toggle,
+              onToggleAll: () => _toggleAllInGame(game),
+            ),
+        ],
+        right: [
+          const HubSectionLabel('Timeline'),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 0, 4, 12),
+            child: Text(
+              'Press and hold a session, then drag it to reorder.',
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.4,
+                color: AppColors.inkSoft,
+              ),
             ),
           ),
-          const SizedBox(width: 8),
-          _SelectedCountPill(count: selectedCount),
+          _Timeline(order: _order, onReorder: _reorder, onRemove: _remove),
         ],
       ),
     );
@@ -320,49 +235,9 @@ class _SelectedCountPill extends StatelessWidget {
       curve: Curves.elasticOut,
       builder: (context, scale, child) =>
           Transform.scale(scale: scale, child: child),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.mint,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: AppColors.mintBorder),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.check_circle_rounded, size: 12, color: AppColors.teal),
-            const SizedBox(width: 5),
-            Text(
-              '$count selected',
-              style: const TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w800,
-                color: AppColors.tealDark,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 18, bottom: 10),
-      child: Text(
-        text.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.5,
-          color: AppColors.textMuted,
-        ),
+      child: HubHeaderChip(
+        icon: Icons.check_circle_rounded,
+        label: '$count selected',
       ),
     );
   }
@@ -389,191 +264,192 @@ class _GameAccordion extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = activityTypeStyles[game.type]!;
     final totalSessions = game.sessions.length;
-    final selectedCount =
-        game.sessions.where((s) => selectedRefs.contains(s.ref)).length;
+    final selectedCount = game.sessions
+        .where((s) => selectedRefs.contains(s.ref))
+        .length;
     final allSelected = selectedCount == totalSessions && totalSessions > 0;
+    final iconAsset = gameIconAssetFor(game.type);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: selectedCount > 0
-                ? AppColors.teal.withValues(alpha: 0.6)
-                : AppColors.creamBorder,
-            width: selectedCount > 0 ? 1.4 : 1.0,
+            color: selectedCount > 0 ? AppColors.teal : AppColors.creamBorder,
+            width: selectedCount > 0 ? 1.6 : 1.2,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
         ),
-        child: Column(
-          children: [
-            InkWell(
-              key: ValueKey('game-accordion-${game.type.name}'),
-              borderRadius: BorderRadius.circular(16),
-              onTap: onToggleExpand,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    // Adventure map game icon thumbnail
-                    Builder(
-                      builder: (context) {
-                        final iconAsset = gameIconAssetFor(game.type);
-                        return Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            color: style.bg,
-                          ),
-                          alignment: Alignment.center,
-                          padding: const EdgeInsets.all(4),
-                          child: iconAsset != null
-                              ? Image.asset(iconAsset, fit: BoxFit.contain)
-                              : Text(
-                                  game.emoji,
-                                  style: const TextStyle(fontSize: 22),
-                                ),
-                        );
-                      },
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            game.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.ink,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '$totalSessions session${totalSessions == 1 ? '' : 's'} · ${style.label}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textMuted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (selectedCount > 0)
+        child: Material(
+          type: MaterialType.transparency,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              InkWell(
+                key: ValueKey('game-accordion-${game.type.name}'),
+                onTap: onToggleExpand,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+                  child: Row(
+                    children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        margin: const EdgeInsets.only(right: 8),
+                        width: 46,
+                        height: 46,
                         decoration: BoxDecoration(
-                          color: AppColors.mint,
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: AppColors.mintBorder),
+                          borderRadius: BorderRadius.circular(14),
+                          color: style.bg,
                         ),
-                        child: Text(
-                          '$selectedCount of $totalSessions added',
-                          style: const TextStyle(
-                            fontSize: 10.5,
+                        alignment: Alignment.center,
+                        padding: const EdgeInsets.all(5),
+                        child: iconAsset != null
+                            ? Image.asset(iconAsset, fit: BoxFit.contain)
+                            : Text(
+                                game.emoji,
+                                style: const TextStyle(fontSize: 22),
+                              ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            HubFitText(
+                              game.name,
+                              style: const TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.ink,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '$totalSessions session${totalSessions == 1 ? '' : 's'} · ${style.label}',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.inkSoft,
+                              ),
+                            ),
+                            if (selectedCount > 0) ...[
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.mint,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  '$selectedCount of $totalSessions added',
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.tealDark,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      AnimatedRotation(
+                        turns: expanded ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        child: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 26,
+                          color: AppColors.inkSoft,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (expanded) ...[
+                const Divider(height: 1, color: AppColors.creamBorder),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 8, 2),
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    children: [
+                      Text(
+                        'Sessions (${game.sessions.length})',
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 44),
+                          foregroundColor: AppColors.teal,
+                          textStyle: const TextStyle(
+                            fontSize: 13.5,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.tealDark,
                           ),
                         ),
-                      ),
-                    Icon(
-                      expanded
-                          ? Icons.keyboard_arrow_up_rounded
-                          : Icons.keyboard_arrow_down_rounded,
-                      color: AppColors.textMuted,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (expanded) ...[
-              const Divider(height: 1, color: AppColors.creamBorder),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
-                child: Row(
-                  children: [
-                    Text(
-                      'SESSIONS (${game.sessions.length})',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                    const Spacer(),
-                    TextButton.icon(
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
+                        onPressed: onToggleAll,
+                        icon: Icon(
+                          allSelected
+                              ? Icons.remove_circle_outline
+                              : Icons.add_circle_outline,
+                          size: 18,
                         ),
-                        minimumSize: const Size(0, 28),
-                        foregroundColor: AppColors.teal,
+                        label: Text(allSelected ? 'Remove all' : 'Select all'),
                       ),
-                      onPressed: onToggleAll,
-                      icon: Icon(
-                        allSelected
-                            ? Icons.remove_circle_outline
-                            : Icons.add_circle_outline,
-                        size: 14,
-                      ),
-                      label: Text(
-                        allSelected ? 'Remove all' : 'Select all',
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: game.sessions.length,
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
-                    mainAxisExtent: 136,
+                    ],
                   ),
-                  itemBuilder: (context, i) {
-                    final session = game.sessions[i];
-                    final orderIndex = selectedRefs.indexOf(session.ref);
-                    return _ModuleTile(
-                      module: session,
-                      added: orderIndex != -1,
-                      orderIndex: orderIndex == -1 ? null : orderIndex,
-                      onTap: () => onToggleSession(session),
-                    );
-                  },
                 ),
-              ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Tiles size to their text; columns drop as space or
+                      // text size runs out.
+                      final scaled = scaledExtent(
+                        context,
+                        constraints.maxWidth,
+                      );
+                      final columns = scaled >= 520
+                          ? 3
+                          : scaled >= 280
+                          ? 2
+                          : 1;
+                      const gap = 8.0;
+                      final tileWidth =
+                          (constraints.maxWidth - gap * (columns - 1)) /
+                          columns;
+                      return Wrap(
+                        spacing: gap,
+                        runSpacing: gap,
+                        children: [
+                          for (final session in game.sessions)
+                            SizedBox(
+                              width: tileWidth,
+                              child: _ModuleTile(
+                                module: session,
+                                added: selectedRefs.contains(session.ref),
+                                orderIndex: selectedRefs.contains(session.ref)
+                                    ? selectedRefs.indexOf(session.ref)
+                                    : null,
+                                onTap: () => onToggleSession(session),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -618,6 +494,7 @@ class _ModuleTileState extends State<_ModuleTile> {
     final added = widget.added;
     final orderIndex = widget.orderIndex;
     final style = activityTypeStyles[module.activity.type]!;
+    final iconAsset = gameIconAssetFor(module.activity.type);
 
     return GestureDetector(
       onTapDown: (_) => _setPressed(true),
@@ -638,7 +515,7 @@ class _ModuleTileState extends State<_ModuleTile> {
               curve: Curves.easeOut,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: added ? AppColors.mint : Colors.white,
+                color: added ? AppColors.mint : AppColors.surface,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: added ? AppColors.teal : AppColors.creamBorder,
@@ -656,72 +533,49 @@ class _ModuleTileState extends State<_ModuleTile> {
               ),
               child: Stack(
                 children: [
-                  // Card height is fixed by the grid: longer (Filipino)
-                  // titles wrap, then the block shrinks to fit.
-                  LayoutBuilder(
-                    builder: (context, c) => FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.topLeft,
-                      child: SizedBox(
-                        width: c.maxWidth,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Builder(
-                              builder: (context) {
-                                final iconAsset =
-                                    gameIconAssetFor(module.activity.type);
-                                return AnimatedContainer(
-                                  duration: const Duration(milliseconds: 220),
-                                  curve: Curves.easeOut,
-                                  width: 32,
-                                  height: 32,
-                                  decoration: BoxDecoration(
-                                    color: added ? Colors.white : style.bg,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: iconAsset != null
-                                      ? Padding(
-                                          padding: const EdgeInsets.all(4),
-                                          child: Image.asset(
-                                            iconAsset,
-                                            fit: BoxFit.contain,
-                                          ),
-                                        )
-                                      : Icon(
-                                          style.icon,
-                                          size: 16,
-                                          color: style.color,
-                                        ),
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              module.activity.title,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${module.destinationName} · ${style.label}',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: AppColors.textMuted,
-                              ),
-                            ),
-                          ],
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOut,
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: added ? Colors.white : style.bg,
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        alignment: Alignment.center,
+                        child: iconAsset != null
+                            ? Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: Image.asset(
+                                  iconAsset,
+                                  fit: BoxFit.contain,
+                                ),
+                              )
+                            : Icon(style.icon, size: 18, color: style.color),
+                      ),
+                      const SizedBox(height: 10),
+                      HubFitText(
+                        module.activity.title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          height: 1.3,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink,
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 3),
+                      HubFitText(
+                        '${module.destinationName} · ${style.label}',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          height: 1.3,
+                          color: AppColors.inkSoft,
+                        ),
+                      ),
+                    ],
                   ),
                   Positioned(
                     top: 0,
@@ -735,8 +589,8 @@ class _ModuleTileState extends State<_ModuleTile> {
                         duration: const Duration(milliseconds: 180),
                         curve: Curves.easeOut,
                         child: Container(
-                          width: 20,
-                          height: 20,
+                          width: 22,
+                          height: 22,
                           decoration: BoxDecoration(
                             color: style.color,
                             shape: BoxShape.circle,
@@ -744,7 +598,7 @@ class _ModuleTileState extends State<_ModuleTile> {
                           alignment: Alignment.center,
                           child: const Icon(
                             Icons.check,
-                            size: 13,
+                            size: 14,
                             color: Colors.white,
                           ),
                         ),
@@ -763,19 +617,22 @@ class _ModuleTileState extends State<_ModuleTile> {
                         duration: const Duration(milliseconds: 180),
                         curve: Curves.easeOut,
                         child: Container(
-                          width: 18,
-                          height: 18,
+                          width: 20,
+                          height: 20,
                           decoration: BoxDecoration(
                             color: AppColors.gold,
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: BorderRadius.circular(7),
                           ),
                           alignment: Alignment.center,
-                          child: Text(
-                            '${(orderIndex ?? 0) + 1}',
-                            style: const TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.ink,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '${(orderIndex ?? 0) + 1}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.ink,
+                              ),
                             ),
                           ),
                         ),
@@ -806,25 +663,17 @@ class _Timeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (order.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.creamBorder, width: 1.4),
-        ),
-        child: const Text(
-          'Tap modules above to add them here, then drag to reorder.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-        ),
+      return const HubEmptyState(
+        icon: Icons.view_timeline_outlined,
+        title: 'Nothing here yet',
+        message: 'Tap sessions in the library to add them here.',
       );
     }
 
     return ReorderableListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
       itemCount: order.length,
       onReorder: onReorder,
       itemBuilder: (context, i) {
@@ -833,11 +682,14 @@ class _Timeline extends StatelessWidget {
         return Padding(
           key: ValueKey(ref),
           padding: const EdgeInsets.only(bottom: 8),
-          child: _TimelineRowEntrance(
-            child: _TimelineRow(
-              index: i,
-              module: module,
-              onRemove: () => onRemove(ref),
+          child: ReorderableDelayedDragStartListener(
+            index: i,
+            child: _TimelineRowEntrance(
+              child: _TimelineRow(
+                index: i,
+                module: module,
+                onRemove: () => onRemove(ref),
+              ),
             ),
           ),
         );
@@ -902,98 +754,101 @@ class _TimelineRow extends StatelessWidget {
     final style = module == null
         ? null
         : activityTypeStyles[module!.activity.type];
+    final iconAsset = module == null
+        ? null
+        : gameIconAssetFor(module!.activity.type);
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.creamBorder, width: 1.4),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.creamBorder, width: 1.2),
       ),
-      child: Row(
-        children: [
-          const Icon(Icons.drag_indicator, color: AppColors.creamBorder),
-          const SizedBox(width: 6),
-          Container(
-            width: 22,
-            height: 22,
-            decoration: BoxDecoration(
-              color: AppColors.gold,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              '${index + 1}',
-              style: const TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w800,
-                color: AppColors.ink,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Builder(
-            builder: (context) {
-              final iconAsset = module == null
-                  ? null
-                  : gameIconAssetFor(module!.activity.type);
-              return Container(
-                width: 28,
-                height: 28,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Narrow rows / large text keep just the number and the title;
+          // the whole row still long-press drags.
+          final compact = scaledExtent(context, constraints.maxWidth) < 330;
+          return Row(
+            children: [
+              if (!compact) ...[
+                const Icon(Icons.drag_indicator, color: AppColors.inkSoft),
+                const SizedBox(width: 6),
+              ],
+              Container(
+                width: 26,
+                height: 26,
                 decoration: BoxDecoration(
-                  color: style?.bg ?? AppColors.mint,
-                  borderRadius: BorderRadius.circular(9),
+                  color: AppColors.gold,
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 alignment: Alignment.center,
-                child: iconAsset != null
-                    ? Padding(
-                        padding: const EdgeInsets.all(3),
-                        child: Image.asset(
-                          iconAsset,
-                          fit: BoxFit.contain,
-                        ),
-                      )
-                    : Icon(
-                        style?.icon ?? Icons.help_outline,
-                        size: 14,
-                        color: style?.color ?? AppColors.textMuted,
-                      ),
-              );
-            },
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  module?.activity.title ?? 'Module no longer available',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                if (module != null)
-                  Text(
-                    style?.label ?? '',
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '${index + 1}',
                     style: const TextStyle(
-                      fontSize: 10.5,
-                      color: AppColors.textMuted,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.ink,
                     ),
                   ),
+                ),
+              ),
+              if (!compact) ...[
+                const SizedBox(width: 10),
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: style?.bg ?? AppColors.mint,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: iconAsset != null
+                      ? Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Image.asset(iconAsset, fit: BoxFit.contain),
+                        )
+                      : Icon(
+                          style?.icon ?? Icons.help_outline,
+                          size: 18,
+                          color: style?.color ?? AppColors.inkSoft,
+                        ),
+                ),
               ],
-            ),
-          ),
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: onRemove,
-            child: const Padding(
-              padding: EdgeInsets.all(4),
-              child: Icon(Icons.close, size: 16, color: AppColors.coral),
-            ),
-          ),
-        ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    HubFitText(
+                      module?.activity.title ?? 'Module no longer available',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    if (module != null)
+                      HubFitText(
+                        style?.label ?? '',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.inkSoft,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Remove'.tr,
+                onPressed: onRemove,
+                icon: const Icon(Icons.close_rounded, color: AppColors.coral),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

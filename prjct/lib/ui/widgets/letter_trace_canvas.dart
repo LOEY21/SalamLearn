@@ -240,7 +240,26 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
 
     if (size != null) {
       final guideStrokes = widget.guidePointsBuilder(size);
-      final currentStrokeIdx = _active;
+      var currentStrokeIdx = _active;
+      // Moving on before reaching this stroke's finish badge (e.g. tapping
+      // ب's dot just short of the body's end): a touch nearer the next
+      // stroke's start than to anywhere on this one goes to that stroke.
+      // Folding it into this one would leave the next stroke unscored;
+      // scoring docks the unfinished stroke on its own.
+      final next = currentStrokeIdx + 1;
+      if (_strokeGuide.contains(currentStrokeIdx) &&
+          next < guideStrokes.length &&
+          guideStrokes[currentStrokeIdx].isNotEmpty &&
+          guideStrokes[next].isNotEmpty) {
+        final toNext = (startPt - guideStrokes[next].first).distance;
+        final toCurrent = guideStrokes[currentStrokeIdx]
+            .map((g) => (startPt - g).distance)
+            .reduce(math.min);
+        if (toNext <= (guideStrokes[next].length == 1 ? 40 : 60) &&
+            toNext < toCurrent) {
+          _active = currentStrokeIdx = next;
+        }
+      }
       if (currentStrokeIdx < guideStrokes.length) {
         final guide = guideStrokes[currentStrokeIdx];
         if (guide.length >= 2 && _strokeGuide.contains(currentStrokeIdx)) {

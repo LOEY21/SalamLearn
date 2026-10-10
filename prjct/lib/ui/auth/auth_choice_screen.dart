@@ -1389,7 +1389,11 @@ class _ActivateViewState extends State<_ActivateView> {
       _alreadyActivated = false;
     });
     try {
-      if (await FirestoreMirror().isTeacherActivated(email.toLowerCase())) {
+      final mirror = FirestoreMirror();
+      if (await mirror.isTeacherActivated(
+            FirebaseAuthGateway.teacherAuthEmail(email),
+          ) ||
+          await mirror.isTeacherActivated(email.toLowerCase())) {
         if (mounted) {
           setState(() {
             _sending = false;
@@ -1398,7 +1402,7 @@ class _ActivateViewState extends State<_ActivateView> {
         }
         return;
       }
-      await FirebaseAuthGateway().sendPasswordResetEmail(email);
+      await FirebaseAuthGateway().sendTeacherPasswordResetEmail(email);
       if (mounted) {
         setState(() {
           _sending = false;
@@ -1506,7 +1510,36 @@ class _ActivateViewState extends State<_ActivateView> {
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
             ),
-          ] else
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.goldTint,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.mark_email_unread_outlined,
+                    size: 18,
+                    color: AppColors.gold,
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "Don't see it? Check your Spam or Junk folder. It can take a few minutes to arrive.",
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.ink,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             TextButton(
               onPressed: _send,
               child: const Text(
@@ -1514,6 +1547,7 @@ class _ActivateViewState extends State<_ActivateView> {
                 style: TextStyle(color: AppColors.teal),
               ),
             ),
+          ],
         ],
       ),
     );
@@ -1741,7 +1775,10 @@ class _GrownupSignInFormState extends ConsumerState<_GrownupSignInForm> {
   Future<void> _showForgotPasswordDialog() async {
     final sentEmail = await showDialog<String>(
       context: context,
-      builder: (_) => _ForgotPasswordDialog(initialEmail: _emailC.text.trim()),
+      builder: (_) => _ForgotPasswordDialog(
+        initialEmail: _emailC.text.trim(),
+        teacher: widget.role == UserRole.asatidz,
+      ),
     );
     if (sentEmail == null || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1767,9 +1804,13 @@ class _GrownupSignInFormState extends ConsumerState<_GrownupSignInForm> {
 /// own confirmation snackbar (`Navigator` can't show a `ScaffoldMessenger`
 /// snackbar reliably from inside a dialog route), or with nothing on cancel.
 class _ForgotPasswordDialog extends StatefulWidget {
-  const _ForgotPasswordDialog({required this.initialEmail});
+  const _ForgotPasswordDialog({
+    required this.initialEmail,
+    required this.teacher,
+  });
 
   final String initialEmail;
+  final bool teacher;
 
   @override
   State<_ForgotPasswordDialog> createState() => _ForgotPasswordDialogState();
@@ -1797,7 +1838,10 @@ class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
       _error = null;
     });
     try {
-      await FirebaseAuthGateway().sendPasswordResetEmail(email);
+      final gateway = FirebaseAuthGateway();
+      widget.teacher
+          ? await gateway.sendTeacherPasswordResetEmail(email)
+          : await gateway.sendPasswordResetEmail(email);
       if (mounted) Navigator.of(context).pop(email);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;

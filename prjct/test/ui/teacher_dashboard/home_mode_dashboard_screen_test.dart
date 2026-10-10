@@ -43,10 +43,9 @@ void main() {
     );
     await Hive.box<ClassSection>(HiveBoxes.classes).put(section.id, section);
 
-    await Hive.box<LearnerProfile>(HiveBoxes.learners).put(
-      learnerId,
-      LearnerProfile(id: learnerId, name: 'Amira', age: 6),
-    );
+    await Hive.box<LearnerProfile>(
+      HiveBoxes.learners,
+    ).put(learnerId, LearnerProfile(id: learnerId, name: 'Amira', age: 6));
 
     await Hive.box<Enrollment>(HiveBoxes.enrollments).put(
       '${section.id}:$learnerId',
@@ -95,60 +94,66 @@ void main() {
     await tearDownTestHive(tempDir);
   });
 
-  testWidgets('individual view shows the accuracy ring and games with sessions', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          teacherClassControllerProvider.overrideWith(
-            () => _FakeTeacherClassController(section),
-          ),
-        ],
-        child: const MaterialApp(home: HomeModeDashboardScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'individual view shows the accuracy ring and games with sessions',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            teacherClassControllerProvider.overrideWith(
+              () => _FakeTeacherClassController(section),
+            ),
+          ],
+          child: const MaterialApp(home: HomeModeDashboardScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    // Opens on the list of all students; tapping one shows their detail.
-    expect(find.text('ALL STUDENTS · 1'), findsOneWidget);
-    expect(find.textContaining('90% accuracy'), findsOneWidget);
-    await tester.tap(find.text('Amira'));
-    await tester.pumpAndSettle();
+      // Opens on the list of all students; tapping one shows their detail.
+      expect(find.text('All students · 1'), findsOneWidget);
+      expect(find.textContaining('90% accuracy'), findsOneWidget);
+      await tester.tap(find.text('Amira'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('All students'), findsOneWidget);
-    expect(find.text('90%'), findsWidgets); // accuracy ring average
-    expect(find.byType(CircularProgressIndicator), findsWidgets);
+      expect(find.text('All students'), findsOneWidget);
+      expect(find.text('90%'), findsWidgets); // accuracy ring average
+      expect(find.byType(CircularProgressIndicator), findsWidgets);
 
-    // Games list: tapping a game shows its sessions with this student's score.
-    expect(find.text('Amira · PROGRESS'), findsOneWidget);
-    await tester.ensureVisible(find.text('Greeting Match'));
-    await tester.tap(find.text('Greeting Match'));
-    await tester.pumpAndSettle();
-    expect(find.text('Session 1'), findsOneWidget);
-    expect(find.text('Session 2'), findsOneWidget);
-    // Session 2 sits in a later stage Amira hasn't unlocked yet.
-    expect(find.text('Not played'), findsNothing);
-    expect(find.text('Locked'), findsWidgets);
+      // Games list: tapping a game shows its sessions with this student's score.
+      await tester.dragUntilVisible(
+        find.text('Amira · Progress'),
+        find.byType(ListView).first,
+        const Offset(0, -200),
+      );
+      expect(find.text('Amira · Progress'), findsOneWidget);
+      await tester.ensureVisible(find.text('Greeting Match'));
+      await tester.tap(find.text('Greeting Match'));
+      await tester.pumpAndSettle();
+      expect(find.text('Session 1'), findsOneWidget);
+      expect(find.text('Session 2'), findsOneWidget);
+      // Session 2 sits in a later stage Amira hasn't unlocked yet.
+      expect(find.text('Not played'), findsNothing);
+      expect(find.text('Locked'), findsWidgets);
 
-    // Same progress grouped by the 7 map stages instead.
-    await tester.scrollUntilVisible(
-      find.text('7 Stages'),
-      -200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.text('7 Stages'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Stage 1: Welcome to Madrasah'));
-    await tester.tap(find.text('Stage 1: Welcome to Madrasah'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('1 of 5 sessions played · '), findsOneWidget);
+      // Same progress grouped by the 7 map stages instead.
+      await tester.dragUntilVisible(
+        find.text('7 Stages'),
+        find.byType(ListView).first,
+        const Offset(0, 200),
+      );
+      await tester.tap(find.text('7 Stages'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Stage 1: Welcome to Madrasah'));
+      await tester.tap(find.text('Stage 1: Welcome to Madrasah'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('1 of 5 sessions played · '), findsOneWidget);
 
-    // The top-bar back arrow returns to the list before leaving the screen.
-    await tester.tap(find.byIcon(Icons.arrow_back_rounded).first);
-    await tester.pumpAndSettle();
-    expect(find.text('ALL STUDENTS · 1'), findsOneWidget);
-  });
+      // The top-bar back arrow returns to the list before leaving the screen.
+      await tester.tap(find.byIcon(Icons.arrow_back_rounded).first);
+      await tester.pumpAndSettle();
+      expect(find.text('All students · 1'), findsOneWidget);
+    },
+  );
 
   testWidgets('searching filters the student list', (tester) async {
     await tester.pumpWidget(
@@ -173,43 +178,49 @@ void main() {
     expect(find.text('No student matches "zzz".'), findsOneWidget);
   });
 
-  testWidgets('aggregate view shows the tinted stat blocks and games with sessions', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          teacherClassControllerProvider.overrideWith(
-            () => _FakeTeacherClassController(section),
-          ),
-        ],
-        child: const MaterialApp(home: HomeModeDashboardScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'aggregate view shows the tinted stat blocks and games with sessions',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            teacherClassControllerProvider.overrideWith(
+              () => _FakeTeacherClassController(section),
+            ),
+          ],
+          child: const MaterialApp(home: HomeModeDashboardScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Aggregate'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Aggregate'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('PLAY RATE'), findsOneWidget);
-    expect(find.text('AVG ACCURACY'), findsOneWidget);
-    expect(find.text('CLASS PROGRESS'), findsOneWidget);
-    expect(find.text('1 of 1 student played · 2 sessions'), findsOneWidget);
+      expect(find.text('Play rate'), findsOneWidget);
+      expect(find.text('Avg accuracy'), findsOneWidget);
+      expect(find.text('Class progress'), findsOneWidget);
+      await tester.dragUntilVisible(
+        find.text('1 of 1 student played · 2 sessions'),
+        find.byType(ListView).first,
+        const Offset(0, -200),
+      );
+      expect(find.text('1 of 1 student played · 2 sessions'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Greeting Match'));
-    await tester.tap(find.text('Greeting Match'));
-    await tester.pumpAndSettle();
-    expect(find.text('Welcome to Madrasah · 1/1 played'), findsOneWidget);
-    expect(find.text('No plays yet'), findsOneWidget);
+      await tester.ensureVisible(find.text('Greeting Match'));
+      await tester.tap(find.text('Greeting Match'));
+      await tester.pumpAndSettle();
+      expect(find.text('Welcome to Madrasah · 1/1 played'), findsOneWidget);
+      expect(find.text('No plays yet'), findsOneWidget);
 
-    await tester.scrollUntilVisible(
-      find.text('7 Stages'),
-      -200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.text('7 Stages'));
-    await tester.pumpAndSettle();
-    expect(find.text('Stage 1: Welcome to Madrasah'), findsOneWidget);
-    expect(find.text('1 of 1 student played · 5 sessions'), findsOneWidget);
-  });
+      await tester.dragUntilVisible(
+        find.text('7 Stages'),
+        find.byType(ListView).first,
+        const Offset(0, 200),
+      );
+      await tester.tap(find.text('7 Stages'));
+      await tester.pumpAndSettle();
+      expect(find.text('Stage 1: Welcome to Madrasah'), findsOneWidget);
+      expect(find.text('1 of 1 student played · 5 sessions'), findsOneWidget);
+    },
+  );
 }

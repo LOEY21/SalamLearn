@@ -53,14 +53,19 @@ class _ClassRefreshTick extends Notifier<int> {
   void bump() => state++;
 }
 
-final _classRefreshProvider = NotifierProvider<_ClassRefreshTick, int>(_ClassRefreshTick.new);
+final _classRefreshProvider = NotifierProvider<_ClassRefreshTick, int>(
+  _ClassRefreshTick.new,
+);
 
 /// The class a specific learner is currently enrolled in (Manage Profile
 /// tab's "Class" section, FR-6.1's invitation-code join) — `null` if not
 /// enrolled in any class yet. Takes the first match if a learner somehow
 /// ended up in more than one (the data model doesn't enforce exclusivity,
 /// but the join UI only ever adds one at a time in the common case).
-final learnerClassProvider = Provider.family<ClassSection?, String>((ref, learnerId) {
+final learnerClassProvider = Provider.family<ClassSection?, String>((
+  ref,
+  learnerId,
+) {
   ref.watch(_classRefreshProvider);
   final enrollments = ClassRepository().byLearnerId(learnerId);
   if (enrollments.isEmpty) return null;
@@ -69,18 +74,23 @@ final learnerClassProvider = Provider.family<ClassSection?, String>((ref, learne
 
 /// Call after successfully joining a class via invitation code, so every
 /// widget reading [learnerClassProvider] recomputes.
-void refreshLearnerClass(WidgetRef ref) => ref.read(_classRefreshProvider.notifier).bump();
+void refreshLearnerClass(WidgetRef ref) =>
+    ref.read(_classRefreshProvider.notifier).bump();
 
 /// Listens to Firestore enrollment changes for the parent's learners and
 /// syncs to Hive in real time. Bumps [_classRefreshProvider] on every change
 /// so the parent dashboard reflects admin-web enroll/unenroll immediately.
-final parentEnrollmentSyncProvider = StreamProvider.autoDispose<void>((ref) async* {
+final parentEnrollmentSyncProvider = StreamProvider.autoDispose<void>((
+  ref,
+) async* {
   final learners = ref.watch(parentLearnersProvider);
   final learnerIds = learners.map((l) => l.id).whereType<String>().toList();
   if (learnerIds.isEmpty) return;
 
   final enrollmentsBox = Hive.box<Enrollment>(HiveBoxes.enrollments);
-  await for (final remoteIds in FirestoreMirror().watchEnrollmentsForLearners(learnerIds)) {
+  await for (final remoteIds in FirestoreMirror().watchEnrollmentsForLearners(
+    learnerIds,
+  )) {
     final local = enrollmentsBox.values
         .where((e) => learnerIds.contains(e.learnerId))
         .map((e) => '${e.classId}_${e.learnerId}')
@@ -98,7 +108,11 @@ final parentEnrollmentSyncProvider = StreamProvider.autoDispose<void>((ref) asyn
       if (enrollmentsBox.get(key) != null) continue;
       await enrollmentsBox.put(
         key,
-        Enrollment(classId: classId, learnerId: learnerId, enrolledAt: DateTime.now()),
+        Enrollment(
+          classId: classId,
+          learnerId: learnerId,
+          enrolledAt: DateTime.now(),
+        ),
       );
     }
 
@@ -110,9 +124,27 @@ final parentEnrollmentSyncProvider = StreamProvider.autoDispose<void>((ref) asyn
       await enrollmentsBox.delete('$classId:$learnerId');
     }
 
-    if (added.isNotEmpty || removed.isNotEmpty) {
-      ref.read(_classRefreshProvider.notifier).bump();
+    // A teacher enroll (by Student ID) happens on the teacher's device, so
+    // this device has the enrollment but not the class — without the class
+    // `learnerClassProvider` resolves to null and the dashboard still says
+    // "Not in a class yet".
+    final classes = ClassRepository();
+    for (final e in enrollmentsBox.values.where(
+      (e) => learnerIds.contains(e.learnerId),
+    )) {
+      if (classes.findById(e.classId) != null) continue;
+      try {
+        final remote = await FirestoreMirror().fetchClassById(e.classId);
+        if (remote != null) await classes.saveFromRemote(remote);
+      } catch (_) {
+        // Best-effort — offline just retries on the next snapshot.
+      }
     }
+
+    // Unconditional: on a shared device the teacher already wrote the
+    // enrollment to Hive, so `added` is empty but `learnerClassProvider`
+    // still holds its stale cached null.
+    ref.read(_classRefreshProvider.notifier).bump();
 
     yield null;
   }

@@ -31,7 +31,28 @@ class LearnerProfile extends HiveObject {
   final String? passwordSalt;
   final String gradeLevel;
   final DateTime? createdAt;
+
+  String? get studentId => id == null ? null : studentIdFor(id!);
 }
+
+/// The 8-digit Student ID ("1234-5678") a teacher enrolls a learner with.
+/// Derived from the learner's doc id (FNV-1a) rather than stored, so every
+/// learner — old, parent-made or admin-made — has one with no migration.
+/// Masked to 32 bits each step so the web build (JS doubles) matches.
+// ponytail: 8 digits from a 32-bit hash, collisions possible at scale —
+// `findAllByStudentId` callers already handle 2+ matches.
+String studentIdFor(String learnerId) {
+  var h = 0x811c9dc5;
+  for (final c in learnerId.codeUnits) {
+    h ^= c;
+    h = (((h << 24) & 0xFFFFFFFF) + h * 403) & 0xFFFFFFFF;
+  }
+  final digits = (h % 100000000).toString().padLeft(8, '0');
+  return '${digits.substring(0, 4)}-${digits.substring(4)}';
+}
+
+/// Strips spaces/dashes so "1234 5678", "12345678" and "1234-5678" all match.
+String normalizeStudentId(String input) => input.replaceAll(RegExp(r'\D'), '');
 
 /// Hand-written Hive adapter (no build_runner — see Phase 1 plan notes:
 /// `hive_generator`'s pinned analyzer range conflicts with the

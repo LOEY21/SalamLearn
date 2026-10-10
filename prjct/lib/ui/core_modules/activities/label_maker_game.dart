@@ -41,7 +41,7 @@ class _Word {
   final String ar;
   final String en;
 
-  /// Spoken Arabic word, played on each new prompt, Replay and word-wall taps.
+  /// Spoken Arabic word, played on each new prompt, speaker and word-wall taps.
   final String audio;
 
   /// Where the placed label's pin touches the object.
@@ -471,8 +471,6 @@ class _LabelMakerGameState extends State<LabelMakerGame>
       'board_title',
       'board_dock',
       'board_label',
-      'btn_replay',
-      'btn_replay_down',
       'btn_speaker',
       'btn_speaker_down',
       'star',
@@ -1046,18 +1044,11 @@ class _LabelMakerGameState extends State<LabelMakerGame>
             children: [
               card(
                 1,
-                'Tap Replay to\nhear the Arabic word',
+                'Tap the speaker to\nhear the Arabic word',
                 Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Image.asset('$_kA/btn_replay.png', width: 84, height: 84),
-                      const SizedBox(width: 14),
-                      Transform.scale(
-                        scale: 1 + .06 * wave.abs(),
-                        child: small(_Badge(word: word), 250, 88),
-                      ),
-                    ],
+                  child: Transform.scale(
+                    scale: 1 + .06 * wave.abs(),
+                    child: small(_Badge(word: word), 250, 88),
                   ),
                 ),
               ),
@@ -1260,6 +1251,29 @@ class _LabelMakerGameState extends State<LabelMakerGame>
             builder: (context, _, _) => const SizedBox.expand(),
           ),
         ),
+        // Every object still waiting for a label gets a soft glowing frame,
+        // so the painted room's objects stand out from the scenery.
+        for (var i = 0; i < words.length; i++)
+          if (!_placed.contains(i) && i != _hover)
+            for (final r in words[i].rects)
+              Positioned.fromRect(
+                rect: r.inflate(4),
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: const Color(0x1AFFFFFF),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: const Color(0xD9FFFFFF),
+                        width: 3,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(color: Color(0x80FFD23F), blurRadius: 14),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
         if (_finished)
           Positioned.fill(
             child: IgnorePointer(
@@ -1501,17 +1515,6 @@ class _LabelMakerGameState extends State<LabelMakerGame>
             child: Row(
               children: [
                 SizedBox(
-                  width: 84,
-                  height: 84,
-                  child: _ImgBtn(
-                    key: const ValueKey('lm-replay'),
-                    up: 'btn_replay',
-                    down: 'btn_replay_down',
-                    onTap: done || _count != null ? () {} : _say,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                SizedBox(
                   width: _Badge.w,
                   height: _Badge.h,
                   child: done
@@ -1547,11 +1550,16 @@ class _LabelMakerGameState extends State<LabelMakerGame>
                                   setState(() => _hover = null);
                                 }
                               },
+                              // Tapping the speaker replays the word;
+                              // dragging it labels the object.
                               child: Listener(
                                 onPointerDown: (_) => _setBadgeDown(true),
                                 onPointerUp: (_) => _setBadgeDown(false),
                                 onPointerCancel: (_) => _setBadgeDown(false),
-                                child: badge,
+                                child: GestureDetector(
+                                  onTap: _count == null ? _say : null,
+                                  child: badge,
+                                ),
                               ),
                             ),
                           ),

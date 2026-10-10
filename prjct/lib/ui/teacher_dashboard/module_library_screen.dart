@@ -3,207 +3,71 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
-import '../../data/models/class_section.dart';
 import '../../data/models/lesson_folder.dart';
 import '../../data/repositories/lesson_folder_repository.dart';
 import '../../logic/teacher/teacher_providers.dart';
 import '../theme/app_colors.dart';
-import '../widgets/soft_card.dart';
+import '../widgets/hub_kit.dart';
 
 /// FR-6.8 Custom Lesson Builder — entry screen listing the active class's
 /// saved lesson folders (each an ordered sequence of existing curriculum
 /// modules), with a way to create a new one. Reached from the teacher
-/// dashboard's Home-tab "Class tools" grid.
+/// dashboard's Home-tab "Class tools". Built on the hub kit's sub-page
+/// frame, matching the Teacher Hub.
 class ModuleLibraryScreen extends ConsumerWidget {
   const ModuleLibraryScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activeClass = ref.watch(teacherClassControllerProvider);
+    final folderCount = activeClass == null
+        ? 0
+        : ref.watch(classLessonFoldersProvider(activeClass.id)).length;
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _LibraryAppBar(onBack: () => context.pop()),
-            if (activeClass != null) _LibraryChips(section: activeClass),
-            const Divider(height: 1, color: AppColors.creamBorder),
-            Expanded(
-              child: activeClass == null
-                  ? _NoClassState(
-                      onCreateClass: () => context.go('/teacher/classes'),
-                    )
-                  : _FolderList(classId: activeClass.id),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LibraryAppBar extends StatelessWidget {
-  const _LibraryAppBar({required this.onBack});
-
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 18, 4),
-      child: Row(
-        children: [
-          Material(
-            color: AppColors.neutralTint,
-            borderRadius: BorderRadius.circular(11),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(11),
-              onTap: onBack,
-              child: const SizedBox(
-                width: 34,
-                height: 34,
-                child: Icon(
-                  Icons.arrow_back_rounded,
-                  size: 18,
-                  color: AppColors.ink,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'CUSTOM LESSON BUILDER',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
-                    color: AppColors.textMuted,
+    return HubSubpage(
+      header: HubSubpageHeader(
+        title: 'Module Library',
+        subtitle:
+            'Sequence curriculum modules into lesson folders to '
+            'present in class.',
+        onBack: () => context.pop(),
+        bottom: activeClass == null
+            ? null
+            : Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  HubHeaderChip(
+                    icon: Icons.groups_outlined,
+                    label: activeClass.name,
                   ),
-                ),
-                Text(
-                  'Module Library',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.2,
-                    color: AppColors.ink,
+                  HubHeaderChip(
+                    icon: Icons.folder_copy_outlined,
+                    label: '$folderCount folder${folderCount == 1 ? '' : 's'}',
                   ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LibraryChips extends ConsumerWidget {
-  const _LibraryChips({required this.section});
-
-  final ClassSection section;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final folderCount =
-        ref.watch(classLessonFoldersProvider(section.id)).length;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: [
-          _HeroChip(icon: Icons.groups_outlined, value: section.name),
-          _HeroChip(
-            icon: Icons.folder_copy_outlined,
-            value: '$folderCount folder${folderCount == 1 ? '' : 's'}',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HeroChip extends StatelessWidget {
-  const _HeroChip({required this.icon, required this.value});
-
-  final IconData icon;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.mint,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.mintBorder),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: AppColors.tealDark),
-          const SizedBox(width: 5),
-          Flexible(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-                color: AppColors.tealDark,
+                ],
               ),
-            ),
-          ),
-        ],
       ),
-    );
-  }
-}
-
-class _NoClassState extends StatelessWidget {
-  const _NoClassState({required this.onCreateClass});
-
-  final VoidCallback onCreateClass;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.folder_open_outlined,
-              size: 40,
-              color: AppColors.textMuted,
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Create a class first',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Lesson folders are scoped to one class at a time.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
-            ),
-            const SizedBox(height: 18),
-            FilledButton(
-              onPressed: onCreateClass,
-              style: FilledButton.styleFrom(backgroundColor: AppColors.teal),
-              child: const Text('Go to Classroom'),
-            ),
-          ],
-        ),
+      body: HubListBody(
+        children: [
+          if (activeClass == null)
+            HubEmptyState(
+              icon: Icons.folder_open_outlined,
+              title: 'Create a class first',
+              message: 'Lesson folders are scoped to one class at a time.',
+              action: FilledButton(
+                onPressed: () => context.go('/teacher/classes'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.teal,
+                  minimumSize: const Size(64, 48),
+                  shape: const StadiumBorder(),
+                ),
+                child: const Text('Go to Classroom'),
+              ),
+            )
+          else
+            _FolderList(classId: activeClass.id),
+        ],
       ),
     );
   }
@@ -223,8 +87,9 @@ class _FolderList extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete folder?'),
-        content:
-            Text('"${folder.name}" will be removed. This can\'t be undone.'),
+        content: Text(
+          '"${folder.name}" will be removed. This can\'t be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -247,128 +112,96 @@ class _FolderList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final folders = ref.watch(classLessonFoldersProvider(classId));
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const HubSectionLabel('Lesson folders'),
         if (folders.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              'No lesson folders yet. Sequence a few modules into one below '
-              'to speed up how you present class content.',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
-            ),
+          const HubEmptyState(
+            icon: Icons.folder_copy_outlined,
+            title: 'Start your first folder',
+            message:
+                'No lesson folders yet. Sequence a few modules into one below '
+                'to speed up how you present class content.',
           )
         else
-          for (final folder in folders)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 9),
-              child: SoftCard(
-                padding: const EdgeInsets.all(13),
-                radius: 16,
-                onTap: () => context.push(
-                  '/teacher/module-library/builder?folderId=${folder.id}',
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: AppColors.goldTint,
-                        borderRadius: BorderRadius.circular(13),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Icon(
-                        Icons.folder_copy_outlined,
-                        color: AppColors.gold,
-                        size: 19,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+          HubRowSheet(
+            children: [
+              for (final folder in folders)
+                InkWell(
+                  onTap: () => context.push(
+                    '/teacher/module-library/builder?folderId=${folder.id}',
+                  ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 60),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 10, 6, 10),
+                      child: Row(
                         children: [
-                          Text(
-                            folder.name,
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w800,
+                          const Icon(
+                            Icons.folder_copy_outlined,
+                            color: AppColors.gold,
+                            size: 22,
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                HubFitText(
+                                  folder.name,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.ink,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${folder.itemRefs.length} module'
+                                  '${folder.itemRefs.length == 1 ? '' : 's'}',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.inkSoft,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${folder.itemRefs.length} module'
-                            '${folder.itemRefs.length == 1 ? '' : 's'}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textMuted,
+                          IconButton(
+                            tooltip: 'Delete folder'.tr,
+                            onPressed: () =>
+                                _confirmDelete(context, ref, folder),
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              size: 22,
+                              color: AppColors.coral,
                             ),
+                          ),
+                          const Icon(
+                            Icons.chevron_right_rounded,
+                            size: 22,
+                            color: AppColors.inkSoft,
                           ),
                         ],
                       ),
                     ),
-                    Material(
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(9),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(9),
-                        onTap: () => _confirmDelete(context, ref, folder),
-                        child: const SizedBox(
-                          width: 30,
-                          height: 30,
-                          child: Icon(
-                            Icons.delete_outline,
-                            size: 15,
-                            color: AppColors.coral,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const Icon(
-                      Icons.chevron_right_rounded,
-                      size: 18,
-                      color: AppColors.textMuted,
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: () => context.push('/teacher/module-library/builder'),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 15),
-                decoration: BoxDecoration(
-                  color: AppColors.mint,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.teal, width: 1.6),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.add, color: AppColors.tealDark, size: 18),
-                    SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        'New lesson folder',
-                        style: TextStyle(
-                          color: AppColors.tealDark,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13.5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            ],
+          ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: () => context.push('/teacher/module-library/builder'),
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('New lesson folder'),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.teal,
+            minimumSize: const Size(64, 52),
+            shape: const StadiumBorder(),
+            textStyle: const TextStyle(
+              fontSize: 15.5,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ),
@@ -376,5 +209,3 @@ class _FolderList extends ConsumerWidget {
     );
   }
 }
-
-

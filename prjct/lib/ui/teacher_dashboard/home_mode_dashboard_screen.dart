@@ -9,6 +9,8 @@ import '../../data/repositories/progress_repository.dart';
 import '../../logic/teacher/home_mode_providers.dart';
 import '../../logic/teacher/teacher_providers.dart';
 import '../theme/app_colors.dart';
+import '../widgets/child_profile_form.dart' show displayText, scaledExtent;
+import '../widgets/hub_kit.dart';
 import '../widgets/locked_tag.dart';
 import '../widgets/soft_card.dart';
 import 'teacher_dashboard_screen.dart'
@@ -21,9 +23,9 @@ import 'teacher_dashboard_screen.dart'
 /// end to end, so solo Student Hub/Adventure Map play and live classroom
 /// data can never mix in either direction.
 ///
-/// Same flat-appbar + hero-chip visual language as
-/// `ClassroomManagementScreen`/`ClassDetailScreen` — a segmented
-/// Individual/Aggregate toggle stands in for those screens' chip row.
+/// Built on the hub kit's sub-page frame; an Individual/Aggregate switch
+/// sits in the header. Student detail and the aggregate view split into
+/// two columns from tablet-landscape widths up.
 class HomeModeDashboardScreen extends ConsumerStatefulWidget {
   const HomeModeDashboardScreen({super.key});
 
@@ -59,200 +61,48 @@ class _HomeModeDashboardScreenState
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) _goBack();
       },
-      child: Scaffold(
-        backgroundColor: AppColors.surface,
-        body: SafeArea(
-          child: Column(
-            children: [
-              _HomeModeAppBar(onBack: _goBack),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
-                child: _ViewToggle(
-                  view: _view,
-                  onChanged: (v) => setState(() => _view = v),
-                ),
-              ),
-              const Divider(height: 1, color: AppColors.creamBorder),
-              Expanded(
-                child: section == null
-                    ? const _NoClassState()
-                    : _PanelRise(
-                        key: ValueKey('${_view}_${_selectedLearnerId}'),
-                        child: _view == _HomeModeView.individual
-                            ? _IndividualView(
-                                classId: section.id,
-                                selectedLearnerId: _selectedLearnerId,
-                                onSelect: (id) =>
-                                    setState(() => _selectedLearnerId = id),
-                                query: _query,
-                                onQueryChanged: (q) =>
-                                    setState(() => _query = q),
-                                byStage: _byStage,
-                                onByStageChanged: (v) =>
-                                    setState(() => _byStage = v),
-                              )
-                            : _AggregateView(
-                                classId: section.id,
-                                byStage: _byStage,
-                                onByStageChanged: (v) =>
-                                    setState(() => _byStage = v),
-                              ),
+      child: HubSubpage(
+        header: HubSubpageHeader(
+          title: 'Home Mode Insights',
+          subtitle:
+              'Solo practice at home — kept separate from classroom play.',
+          onBack: _goBack,
+          bottom: HubSegmented(
+            labels: const ['Individual', 'Aggregate'],
+            active: _view.index,
+            onChanged: (i) => setState(() => _view = _HomeModeView.values[i]),
+          ),
+        ),
+        body: section == null
+            ? const HubListBody(
+                children: [
+                  HubEmptyState(
+                    icon: Icons.home_outlined,
+                    title: 'No class selected',
+                    message:
+                        'Create or select a class from the Classroom tab first.',
+                  ),
+                ],
+              )
+            : HubPanelRise(
+                key: ValueKey('${_view}_$_selectedLearnerId'),
+                child: _view == _HomeModeView.individual
+                    ? _IndividualView(
+                        classId: section.id,
+                        selectedLearnerId: _selectedLearnerId,
+                        onSelect: (id) =>
+                            setState(() => _selectedLearnerId = id),
+                        query: _query,
+                        onQueryChanged: (q) => setState(() => _query = q),
+                        byStage: _byStage,
+                        onByStageChanged: (v) => setState(() => _byStage = v),
+                      )
+                    : _AggregateView(
+                        classId: section.id,
+                        byStage: _byStage,
+                        onByStageChanged: (v) => setState(() => _byStage = v),
                       ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeModeAppBar extends StatelessWidget {
-  const _HomeModeAppBar({required this.onBack});
-
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 18, 4),
-      child: Row(
-        children: [
-          Material(
-            color: AppColors.neutralTint,
-            borderRadius: BorderRadius.circular(11),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(11),
-              onTap: onBack,
-              child: const SizedBox(
-                width: 34,
-                height: 34,
-                child: Icon(
-                  Icons.arrow_back_rounded,
-                  size: 18,
-                  color: AppColors.ink,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'HOME MODE INSIGHTS',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-                Text(
-                  'Home Performance',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.2,
-                    color: AppColors.ink,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Pill toggle matching `RoleTabs`' teal-outline/teal-fill treatment
-/// (`ui/auth/role_tabs.dart`) rather than a Material `SegmentedButton`, so
-/// this screen reads as the same design system as the PIN gate and every
-/// other hand-styled control in the app.
-class _ViewToggle extends StatelessWidget {
-  const _ViewToggle({required this.view, required this.onChanged});
-
-  final _HomeModeView view;
-  final ValueChanged<_HomeModeView> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 40,
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.teal, width: 1.2),
-      ),
-      child: Row(
-        children: [
-          _segment(_HomeModeView.individual, 'Individual'),
-          _segment(_HomeModeView.aggregate, 'Aggregate'),
-        ],
-      ),
-    );
-  }
-
-  Widget _segment(_HomeModeView value, String label) {
-    final active = view == value;
-    final color = active ? Colors.white : AppColors.teal;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => onChanged(value),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: active ? AppColors.teal : Colors.transparent,
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
-                color: color,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NoClassState extends StatelessWidget {
-  const _NoClassState();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.home_outlined, size: 40, color: AppColors.textMuted),
-            SizedBox(height: 12),
-            Text(
-              'No class selected',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 15,
-                color: AppColors.ink,
-              ),
-            ),
-            SizedBox(height: 4),
-            Text(
-              'Create or select a class from the Classroom tab first.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -289,11 +139,15 @@ class _IndividualView extends ConsumerWidget {
     final roster = ref.watch(classRosterProvider(classId));
 
     if (roster.isEmpty) {
-      return const _EmptyBody(
-        icon: Icons.groups_outlined,
-        title: 'No students yet',
-        message:
-            'Enroll students into this class to see their Home Mode history.',
+      return const HubListBody(
+        children: [
+          HubEmptyState(
+            icon: Icons.groups_outlined,
+            title: 'No students yet',
+            message:
+                'Enroll students into this class to see their Home Mode history.',
+          ),
+        ],
       );
     }
 
@@ -312,56 +166,55 @@ class _IndividualView extends ConsumerWidget {
             ),
           );
 
-      return ListView(
-        padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
+      return HubListBody(
         children: [
           TextFormField(
             initialValue: query,
             onChanged: onQueryChanged,
             textInputAction: TextInputAction.search,
+            style: const TextStyle(fontSize: 15.5),
             decoration: InputDecoration(
-              hintText: 'Search student',
-              prefixIcon: const Icon(Icons.search_rounded, size: 20),
-              isDense: true,
+              hintText: 'Search student'.tr,
+              prefixIcon: const Icon(Icons.search_rounded, size: 22),
               filled: true,
-              fillColor: AppColors.neutralTint,
+              fillColor: AppColors.surface,
+              contentPadding: const EdgeInsets.symmetric(vertical: 14),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(999),
                 borderSide: const BorderSide(color: AppColors.creamBorder),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: AppColors.creamBorder),
+                borderRadius: BorderRadius.circular(999),
+                borderSide: const BorderSide(
+                  color: AppColors.creamBorder,
+                  width: 1.4,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(999),
+                borderSide: const BorderSide(color: AppColors.teal, width: 1.8),
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          Text(
+          const SizedBox(height: 6),
+          HubSectionLabel(
             needle.isEmpty
-                ? 'ALL STUDENTS · ${roster.length}'
-                : '${students.length} OF ${roster.length} STUDENTS',
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-              color: AppColors.textMuted,
-            ),
+                ? 'All students · ${roster.length}'
+                : '${students.length} of ${roster.length} students',
           ),
-          const SizedBox(height: 10),
           if (students.isEmpty)
             SoftCard(
+              radius: 18,
+              padding: const EdgeInsets.all(18),
               child: Text(
                 'No student matches "${query.trim()}".',
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.textMuted,
-                ),
+                style: const TextStyle(fontSize: 14, color: AppColors.inkSoft),
               ),
             )
           else
             for (final s in students)
               Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(bottom: 10),
                 child: _StudentListTile(
                   learnerId: s['learnerId'] as String,
                   name: s['name'] as String,
@@ -374,27 +227,30 @@ class _IndividualView extends ConsumerWidget {
 
     final activeId = selected['learnerId'] as String;
     final activeName = selected['name'] as String;
+    final groups = ref.watch(
+      homeModeLearnerGroupsProvider((activeId, byStage)),
+    );
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 6, 18, 24),
-      children: [
+    return HubTabBody(
+      left: [
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
             onPressed: () => onSelect(null),
-            icon: const Icon(Icons.arrow_back_rounded, size: 16),
+            icon: const Icon(Icons.arrow_back_rounded, size: 18),
             label: const Text('All students'),
             style: TextButton.styleFrom(
               foregroundColor: AppColors.teal,
+              minimumSize: const Size(0, 44),
               textStyle: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
         ),
-        const SizedBox(height: 4),
-        _StaggerFadeIn(
+        const SizedBox(height: 6),
+        HubStaggerFadeIn(
           delay: const Duration(milliseconds: 35),
           child: _StudentProfileCard(
             learnerId: activeId,
@@ -402,45 +258,34 @@ class _IndividualView extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 14),
-        _StaggerFadeIn(
+        HubStaggerFadeIn(
           delay: const Duration(milliseconds: 70),
           child: _StudentWeeklyChart(
             learnerId: activeId,
             history: ref.watch(homeModeHistoryProvider(activeId)),
           ),
         ),
-        const SizedBox(height: 18),
-        _StaggerFadeIn(
+      ],
+      right: [
+        HubStaggerFadeIn(
           delay: const Duration(milliseconds: 105),
           child: _GroupHeading(
-            title: '$activeName · PROGRESS',
+            title: '$activeName · Progress',
             byStage: byStage,
             onChanged: onByStageChanged,
           ),
         ),
-        const SizedBox(height: 10),
-        for (final group in ref.watch(
-          homeModeLearnerGroupsProvider((activeId, byStage)),
-        ))
-          _StaggerFadeIn(
+        for (final group in groups)
+          HubStaggerFadeIn(
+            key: ValueKey(group.name),
             delay: const Duration(milliseconds: 105),
             child: _GameSessionsCard(group: group),
           ),
-        const SizedBox(height: 22),
-        const _StaggerFadeIn(
+        const HubStaggerFadeIn(
           delay: Duration(milliseconds: 140),
-          child: Text(
-            'COMPLETION HISTORY',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-              color: AppColors.textMuted,
-            ),
-          ),
+          child: HubSectionLabel('Completion history'),
         ),
-        const SizedBox(height: 10),
-        _StaggerFadeIn(
+        HubStaggerFadeIn(
           delay: const Duration(milliseconds: 140),
           child: _HistoryCard(learnerId: activeId),
         ),
@@ -448,6 +293,12 @@ class _IndividualView extends ConsumerWidget {
     );
   }
 }
+
+String _masteryForAccuracy(double accuracy) => accuracy >= 80
+    ? 'High'
+    : accuracy >= 50
+    ? 'Medium'
+    : 'Needs help';
 
 /// One student in the list: home accuracy, playtime, sessions and mastery
 /// at a glance; tapping opens their full Home Mode detail.
@@ -471,43 +322,31 @@ class _StudentListTile extends ConsumerWidget {
               history.length;
     final minutes =
         history.fold<int>(0, (sum, r) => sum + r.timeOnTaskSeconds) ~/ 60;
-    final mastery = avgAccuracy >= 80
-        ? 'High'
-        : avgAccuracy >= 50
-        ? 'Medium'
-        : 'Needs help';
+    final mastery = _masteryForAccuracy(avgAccuracy);
 
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.creamBorder),
-          ),
-          child: Row(
+    return SoftCard(
+      radius: 18,
+      onTap: onTap,
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = scaledExtent(context, constraints.maxWidth) < 330;
+          final pill = history.isEmpty ? null : MasteryPill(mastery: mastery);
+          return Row(
             children: [
               Container(
-                width: 40,
-                height: 40,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: history.isEmpty
                       ? AppColors.creamDark
                       : avatarColor(mastery),
-                  borderRadius: BorderRadius.circular(12),
+                  shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
                 child: Text(
                   name.isEmpty ? '?' : name[0].toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                  style: displayText(18, weight: 800, color: Colors.white),
                 ),
               ),
               const SizedBox(width: 12),
@@ -515,13 +354,11 @@ class _StudentListTile extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    HubFitText(
                       name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15.5,
                         color: AppColors.ink,
                       ),
                     ),
@@ -532,25 +369,26 @@ class _StudentListTile extends ConsumerWidget {
                           : '${avgAccuracy.round()}% accuracy · ${minutes}m · '
                                 '${history.length} session${history.length == 1 ? '' : 's'}',
                       style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textMuted,
+                        fontSize: 13,
+                        color: AppColors.inkSoft,
                       ),
                     ),
+                    if (compact && pill != null) ...[
+                      const SizedBox(height: 6),
+                      pill,
+                    ],
                   ],
                 ),
               ),
-              if (history.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                MasteryPill(mastery: mastery),
-              ],
+              if (!compact && pill != null) ...[const SizedBox(width: 8), pill],
               const Icon(
                 Icons.chevron_right_rounded,
-                size: 20,
-                color: AppColors.textMuted,
+                size: 24,
+                color: AppColors.inkSoft,
               ),
             ],
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -580,107 +418,97 @@ class _StudentProfileCard extends ConsumerWidget {
         ? 0.0
         : history.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) /
               history.length;
-
-    String overallMastery = 'Needs help';
-    if (avgAccuracy >= 80) {
-      overallMastery = 'High';
-    } else if (avgAccuracy >= 50) {
-      overallMastery = 'Medium';
-    }
+    final overallMastery = _masteryForAccuracy(avgAccuracy);
 
     return SoftCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      radius: 20,
+      padding: const EdgeInsets.all(18),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Narrow cards / large text: the ring moves down beside the stats
+          // so a long name keeps the width of the card.
+          final compact = scaledExtent(context, constraints.maxWidth) < 360;
+          final ring = _AccuracyRing(accuracyPct: avgAccuracy);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: avatarColor(overallMastery),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  studentName.isEmpty ? '?' : studentName[0].toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      studentName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15.5,
-                        color: AppColors.ink,
-                      ),
+              Row(
+                children: [
+                  Container(
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: avatarColor(overallMastery),
+                      shape: BoxShape.circle,
                     ),
-                    const SizedBox(height: 3),
-                    Row(
+                    alignment: Alignment.center,
+                    child: Text(
+                      studentName.isEmpty ? '?' : studentName[0].toUpperCase(),
+                      style: displayText(22, weight: 800, color: Colors.white),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
-                          Icons.local_fire_department_rounded,
-                          color: AppColors.gold,
-                          size: 14,
-                        ),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            '$streak-day streak',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textMuted,
-                              fontWeight: FontWeight.bold,
+                        HubFitText(studentName, style: displayText(20)),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.local_fire_department_rounded,
+                              color: AppColors.gold,
+                              size: 18,
                             ),
-                          ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                '$streak-day streak',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.inkSoft,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                  if (!compact) ...[const SizedBox(width: 12), ring],
+                ],
               ),
-              const SizedBox(width: 12),
-              _AccuracyRing(accuracyPct: avgAccuracy),
+              const SizedBox(height: 14),
+              const Divider(height: 1, color: AppColors.creamBorder),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 24,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (compact) ring,
+                  _HeroStat(
+                    value: '${playtimeMinutes}m',
+                    label: 'Home playtime',
+                  ),
+                  _HeroStat(
+                    value: '${avgAccuracy.round()}% match',
+                    label: 'Avg accuracy',
+                  ),
+                ],
+              ),
             ],
-          ),
-          const SizedBox(height: 14),
-          const Divider(height: 1, color: AppColors.creamBorder),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _HeroStat(
-                  value: '${playtimeMinutes}m',
-                  label: 'HOME PLAYTIME',
-                ),
-              ),
-              Expanded(
-                child: _HeroStat(
-                  value: '${avgAccuracy.round()}% match',
-                  label: 'AVG ACCURACY',
-                ),
-              ),
-            ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 }
 
-/// Accuracy donut replacing the old two flat mint/gold stat boxes — puts
-/// the single most important number (average stroke accuracy) front and
-/// center as a ring rather than buried in a label/value pair.
+/// Accuracy donut — puts the single most important number (average stroke
+/// accuracy) front and center.
 class _AccuracyRing extends StatelessWidget {
   const _AccuracyRing({required this.accuracyPct});
 
@@ -688,44 +516,51 @@ class _AccuracyRing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const size = 64.0;
     final targetValue = (accuracyPct / 100).clamp(0.0, 1.0);
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0.0, end: targetValue),
       duration: const Duration(milliseconds: 900),
-      curve: Curves.easeOutCubic,
+      curve: Curves.easeOutQuart,
       builder: (context, val, child) {
         return SizedBox(
-          width: 56,
-          height: 56,
+          width: size,
+          height: size,
           child: Stack(
             alignment: Alignment.center,
             children: [
               const SizedBox(
-                width: 56,
-                height: 56,
+                width: size,
+                height: size,
                 child: CircularProgressIndicator(
                   value: 1,
-                  strokeWidth: 6,
+                  strokeWidth: 7,
                   color: AppColors.creamDark,
                 ),
               ),
               SizedBox(
-                width: 56,
-                height: 56,
+                width: size,
+                height: size,
                 child: CircularProgressIndicator(
                   value: val,
-                  strokeWidth: 6,
+                  strokeWidth: 7,
                   strokeCap: StrokeCap.round,
                   backgroundColor: Colors.transparent,
                   color: AppColors.teal,
                 ),
               ),
-              Text(
-                '${(val * 100).round()}%',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.tealDark,
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '${(val * 100).round()}%',
+                    style: displayText(
+                      16,
+                      weight: 800,
+                      color: AppColors.tealDark,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -746,22 +581,15 @@ class _HeroStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w800,
-            color: AppColors.ink,
-          ),
-        ),
+        Text(value, style: displayText(18, weight: 800)),
         Text(
           label,
           style: const TextStyle(
-            fontSize: 9.5,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textMuted,
-            letterSpacing: 0.3,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: AppColors.inkSoft,
           ),
         ),
       ],
@@ -807,43 +635,20 @@ class _StudentWeeklyChart extends StatelessWidget {
     final weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     return SoftCard(
-      padding: const EdgeInsets.all(16),
+      radius: 20,
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'WEEKLY PROGRESS',
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Minutes practiced per day at home',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        color: AppColors.textMuted,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.bar_chart_rounded, color: AppColors.teal, size: 16),
-            ],
+          Text('Weekly progress', style: displayText(18)),
+          const SizedBox(height: 2),
+          const Text(
+            'Minutes practiced per day at home',
+            style: TextStyle(fontSize: 13, color: AppColors.inkSoft),
           ),
           const SizedBox(height: 16),
           ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 102),
+            constraints: const BoxConstraints(minHeight: 110),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -852,7 +657,7 @@ class _StudentWeeklyChart extends StatelessWidget {
                 final seconds = dailySeconds[i];
                 final minutes = seconds / 60;
                 final ratio = seconds / maxScale;
-                final height = (ratio * 60).clamp(6.0, 60.0);
+                final height = (ratio * 64).clamp(6.0, 64.0);
                 final isToday = i == 4;
 
                 final targetHeight = seconds == 0 ? 6.0 : height;
@@ -865,7 +670,7 @@ class _StudentWeeklyChart extends StatelessWidget {
                       end: targetHeight,
                     ),
                     duration: const Duration(milliseconds: 900),
-                    curve: Curves.easeOutCubic,
+                    curve: Curves.easeOutQuart,
                     builder: (context, animatedHeight, child) {
                       final animatedMinutes = seconds == 0
                           ? 0
@@ -873,17 +678,20 @@ class _StudentWeeklyChart extends StatelessWidget {
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            seconds == 0 ? '' : '${animatedMinutes}m',
-                            style: const TextStyle(
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.tealDark,
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              seconds == 0 ? '' : '${animatedMinutes}m',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.tealDark,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 4),
                           Container(
-                            width: 24,
+                            width: 26,
                             height: animatedHeight,
                             decoration: seconds == 0
                                 ? BoxDecoration(
@@ -891,11 +699,11 @@ class _StudentWeeklyChart extends StatelessWidget {
                                       color: AppColors.creamDark,
                                       width: 1.5,
                                     ),
-                                    borderRadius: BorderRadius.circular(6),
+                                    borderRadius: BorderRadius.circular(7),
                                   )
                                 : BoxDecoration(
                                     color: AppColors.teal,
-                                    borderRadius: BorderRadius.circular(6),
+                                    borderRadius: BorderRadius.circular(7),
                                   ),
                           ),
                           const SizedBox(height: 6),
@@ -904,11 +712,13 @@ class _StudentWeeklyChart extends StatelessWidget {
                             child: Text(
                               weekdayNames[day.weekday % 7],
                               style: TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                fontWeight: isToday
+                                    ? FontWeight.w800
+                                    : FontWeight.w600,
                                 color: isToday
                                     ? AppColors.teal
-                                    : AppColors.textMuted,
+                                    : AppColors.inkSoft,
                               ),
                             ),
                           ),
@@ -937,9 +747,11 @@ class _HistoryCard extends ConsumerWidget {
 
     if (history.isEmpty) {
       return const SoftCard(
+        radius: 18,
+        padding: EdgeInsets.all(18),
         child: Text(
           'Nothing completed at home yet.',
-          style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+          style: TextStyle(fontSize: 14, color: AppColors.inkSoft),
         ),
       );
     }
@@ -959,6 +771,7 @@ class _HistoryCard extends ConsumerWidget {
     String? lastBucket;
 
     return SoftCard(
+      radius: 20,
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -972,17 +785,16 @@ class _HistoryCard extends ConsumerWidget {
                 if (!showHeader) return const SizedBox.shrink();
                 return Padding(
                   padding: EdgeInsets.only(
-                    left: 12,
-                    top: i == 0 ? 8 : 12,
+                    left: 16,
+                    top: i == 0 ? 8 : 14,
                     bottom: 4,
                   ),
                   child: Text(
-                    bucket.toUpperCase(),
+                    bucket,
                     style: const TextStyle(
-                      fontSize: 9.5,
+                      fontSize: 13.5,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                      color: AppColors.textMuted,
+                      color: AppColors.ink,
                     ),
                   ),
                 );
@@ -992,7 +804,11 @@ class _HistoryCard extends ConsumerWidget {
             if (i != recent.length - 1 &&
                 bucketFor(recent[i + 1].completedAt) ==
                     bucketFor(recent[i].completedAt))
-              const Divider(height: 1, color: AppColors.creamBorder),
+              const Divider(
+                height: 1,
+                indent: 16,
+                color: AppColors.creamBorder,
+              ),
           ],
         ],
       ),
@@ -1010,46 +826,32 @@ class _HistoryRow extends StatelessWidget {
     final date = record.completedAt;
     final moduleName = destinationNameForModuleId(record.moduleId);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      // Score and date drop under the name when they don't fit beside it.
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 6,
         children: [
-          Container(
-            width: 6,
-            height: 6,
-            margin: const EdgeInsets.only(right: 10),
-            decoration: const BoxDecoration(
-              color: AppColors.mintGreen,
-              shape: BoxShape.circle,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              moduleName,
-              style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-            decoration: BoxDecoration(
-              color: AppColors.mint,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              '${record.strokeAccuracyPct.round()}%',
-              style: const TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w800,
-                color: AppColors.tealDark,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
           Text(
-            '${date.month}/${date.day}',
-            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+            moduleName,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.ink,
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ScoreBadge(pct: record.strokeAccuracyPct, emptyLabel: ''),
+              const SizedBox(width: 10),
+              Text(
+                '${date.month}/${date.day}',
+                style: const TextStyle(fontSize: 13, color: AppColors.inkSoft),
+              ),
+            ],
           ),
         ],
       ),
@@ -1109,17 +911,16 @@ class _AggregateView extends ConsumerWidget {
         ? 0
         : (totalHomeSeconds ~/ 60) ~/ enrollments.length;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
-      children: [
+    return HubTabBody(
+      left: [
         if (weakest != null) ...[
-          _StaggerFadeIn(
+          HubStaggerFadeIn(
             delay: Duration.zero,
             child: _MisconceptionBanner(module: weakest),
           ),
           const SizedBox(height: 16),
         ],
-        _StaggerFadeIn(
+        HubStaggerFadeIn(
           delay: const Duration(milliseconds: 35),
           child: _ClassStatsRow(
             playRatePct: playRatePct,
@@ -1128,28 +929,30 @@ class _AggregateView extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 16),
-        _StaggerFadeIn(
+        HubStaggerFadeIn(
+          delay: const Duration(milliseconds: 50),
+          child: _ClassActivityPeaksChart(classId: classId),
+        ),
+        const SizedBox(height: 8),
+      ],
+      right: [
+        HubStaggerFadeIn(
           delay: const Duration(milliseconds: 70),
           child: _GroupHeading(
-            title: 'CLASS PROGRESS',
+            title: 'Class progress',
             byStage: byStage,
             onChanged: onByStageChanged,
           ),
         ),
-        const SizedBox(height: 10),
         for (final (i, group) in groups.indexed)
-          _StaggerFadeIn(
+          HubStaggerFadeIn(
+            key: ValueKey(group.name),
             delay: Duration(milliseconds: 70 + (i + 1) * 20),
             child: _GameSessionsCard(
               group: group,
               rosterSize: enrollments.length,
             ),
           ),
-        const SizedBox(height: 6),
-        _StaggerFadeIn(
-          delay: Duration(milliseconds: 90 + (groups.length + 1) * 20),
-          child: _ClassActivityPeaksChart(classId: classId),
-        ),
       ],
     );
   }
@@ -1162,28 +965,63 @@ class _MisconceptionBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final modify = OutlinedButton(
+      onPressed: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Focusing next lesson plan on "${module.moduleName}" misconception',
+            ),
+          ),
+        );
+      },
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.coral,
+        backgroundColor: AppColors.surface,
+        minimumSize: const Size(64, 46),
+        side: const BorderSide(color: AppColors.coral, width: 1.4),
+        shape: const StadiumBorder(),
+        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+      ),
+      child: const Text('Modify Lesson', textAlign: TextAlign.center),
+    );
+    final assign = FilledButton(
+      onPressed: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Assigned custom practice homework for "${module.moduleName}" to class',
+            ),
+          ),
+        );
+      },
+      style: FilledButton.styleFrom(
+        backgroundColor: AppColors.coral,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(64, 46),
+        shape: const StadiumBorder(),
+        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+      ),
+      child: const Text('Assign Homework', textAlign: TextAlign.center),
+    );
+
     return SoftCard(
+      radius: 20,
       color: AppColors.coralTint,
-      borderColor: const Color(0x33D85A30),
-      padding: const EdgeInsets.all(16),
+      borderColor: AppColors.coral.withValues(alpha: 0.3),
+      padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: AppColors.coral.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                alignment: Alignment.center,
-                child: const Icon(
+              const Padding(
+                padding: EdgeInsets.only(top: 2),
+                child: Icon(
                   Icons.warning_amber_rounded,
                   color: AppColors.coral,
-                  size: 18,
+                  size: 24,
                 ),
               ),
               const SizedBox(width: 12),
@@ -1192,30 +1030,22 @@ class _MisconceptionBanner extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'CLASS-WIDE MISCONCEPTION',
+                      'Class-wide misconception',
                       style: TextStyle(
-                        fontSize: 9,
+                        fontSize: 13,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
                         color: AppColors.coral,
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      module.moduleName,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.ink,
-                      ),
-                    ),
+                    Text(module.moduleName, style: displayText(18)),
                     const SizedBox(height: 4),
                     Text(
                       'Collective accuracy at home is currently at ${module.avgAccuracy.round()}%. Students are consistently experiencing sequencing errors.',
                       style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textMuted,
-                        fontWeight: FontWeight.w500,
+                        fontSize: 13.5,
+                        height: 1.4,
+                        color: AppColors.ink,
                       ),
                     ),
                   ],
@@ -1224,62 +1054,22 @@ class _MisconceptionBanner extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Focusing next lesson plan on "${module.moduleName}" misconception',
-                        ),
-                      ),
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.coral,
-                    side: const BorderSide(color: Color(0x33D85A30)),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  child: const Text('Modify Lesson'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FilledButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Assigned custom practice homework for "${module.moduleName}" to class',
-                        ),
-                      ),
-                    );
-                  },
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.coral,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  child: const Text('Assign Homework'),
-                ),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (scaledExtent(context, constraints.maxWidth) < 400) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [modify, const SizedBox(height: 8), assign],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: modify),
+                  const SizedBox(width: 8),
+                  Expanded(child: assign),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -1287,11 +1077,8 @@ class _MisconceptionBanner extends StatelessWidget {
   }
 }
 
-/// Three flat tinted stat blocks — same idiom as the dashboard's
-/// `_MasteryCountChip` (tinted bg, accent-colored value) rather than a
-/// solid gradient block, so this reads as part of the same teacher hub
-/// as `ClassHealthDetailScreen`/`ClassroomManagementScreen` instead of a
-/// one-off hero banner.
+/// Class-wide stats: three across when there's room, one per row on narrow
+/// screens / large text.
 class _ClassStatsRow extends StatelessWidget {
   const _ClassStatsRow({
     required this.playRatePct,
@@ -1305,38 +1092,49 @@ class _ClassStatsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _StatBlock(
-            icon: Icons.play_arrow_rounded,
-            label: 'PLAY RATE',
-            value: '$playRatePct%',
-            color: AppColors.teal,
-            bg: AppColors.mint,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _StatBlock(
-            icon: Icons.schedule_rounded,
-            label: 'TIME / STUDENT',
-            value: '${avgTimeMinutes}m',
-            color: const Color(0xFF8A5A12),
-            bg: AppColors.goldTint,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _StatBlock(
-            icon: Icons.check_rounded,
-            label: 'AVG ACCURACY',
-            value: '$avgAccuracyPct%',
-            color: AppColors.coral,
-            bg: AppColors.coralTint,
-          ),
-        ),
-      ],
+    final blocks = [
+      _StatBlock(
+        icon: Icons.play_arrow_rounded,
+        label: 'Play rate',
+        value: '$playRatePct%',
+        color: AppColors.teal,
+      ),
+      _StatBlock(
+        icon: Icons.schedule_rounded,
+        label: 'Time / student',
+        value: '${avgTimeMinutes}m',
+        color: AppColors.gold,
+      ),
+      _StatBlock(
+        icon: Icons.check_rounded,
+        label: 'Avg accuracy',
+        value: '$avgAccuracyPct%',
+        color: AppColors.coral,
+      ),
+    ];
+    return SoftCard(
+      radius: 20,
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (scaledExtent(context, constraints.maxWidth) < 360) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final (i, b) in blocks.indexed) ...[
+                  if (i > 0)
+                    const Divider(height: 20, color: AppColors.creamBorder),
+                  b,
+                ],
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [for (final b in blocks) Expanded(child: b)],
+          );
+        },
+      ),
     );
   }
 }
@@ -1347,47 +1145,37 @@ class _StatBlock extends StatelessWidget {
     required this.label,
     required this.value,
     required this.color,
-    required this.bg,
   });
 
   final IconData icon;
   final String label;
   final String value;
   final Color color;
-  final Color bg;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 15, color: color),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: displayText(22, weight: 800, height: 1.1)),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.inkSoft,
+                ),
+              ),
+            ],
           ),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 8.5,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.3,
-              color: AppColors.textMuted,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -1399,47 +1187,27 @@ class _ClassActivityPeaksChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const days = ['Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return SoftCard(
-      padding: const EdgeInsets.all(16),
+      radius: 20,
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'CLASS HOME PEAKS',
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Distribution of active users during the week',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: AppColors.textMuted,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-              Icon(Icons.timeline_rounded, color: AppColors.teal, size: 16),
-            ],
+          Text('Class home peaks', style: displayText(18)),
+          const SizedBox(height: 2),
+          const Text(
+            'Distribution of active users during the week',
+            style: TextStyle(fontSize: 13, color: AppColors.inkSoft),
           ),
           const SizedBox(height: 16),
           TweenAnimationBuilder<double>(
             tween: Tween<double>(begin: 0.0, end: 1.0),
             duration: const Duration(milliseconds: 1000),
-            curve: Curves.easeOutCubic,
+            curve: Curves.easeOutQuart,
             builder: (context, val, child) {
               return SizedBox(
-                height: 80,
+                height: 90,
                 width: double.infinity,
                 child: CustomPaint(
                   painter: _LineChartPainter(progress: val),
@@ -1449,49 +1217,24 @@ class _ClassActivityPeaksChart extends StatelessWidget {
             },
           ),
           const SizedBox(height: 8),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          Row(
             children: [
-              Text(
-                'Wed',
-                style: TextStyle(
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textMuted,
+              for (final d in days)
+                Expanded(
+                  child: Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        d,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.inkSoft,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              Text(
-                'Thu',
-                style: TextStyle(
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textMuted,
-                ),
-              ),
-              Text(
-                'Fri',
-                style: TextStyle(
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textMuted,
-                ),
-              ),
-              Text(
-                'Sat',
-                style: TextStyle(
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textMuted,
-                ),
-              ),
-              Text(
-                'Sun',
-                style: TextStyle(
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textMuted,
-                ),
-              ),
             ],
           ),
         ],
@@ -1592,12 +1335,6 @@ class _LineChartPainter extends CustomPainter {
 
 // ------------------------------------------------------------------ games
 
-String _tierFor(double accuracyPct) {
-  if (accuracyPct >= 80) return 'High';
-  if (accuracyPct >= 50) return 'Medium';
-  return 'Needs help';
-}
-
 /// One game or stage; tap to show its sessions. Without [rosterSize] it is
 /// one student's view (their score per session); with it, the class's (how
 /// many students played each session and their average).
@@ -1624,122 +1361,132 @@ class _GameSessionsCardState extends State<_GameSessionsCard> {
         : roster == 0
         ? 0.0
         : game.studentsPlayed / roster;
+    final status = game.avgAccuracy == null && game.allLocked
+        ? const LockedTag()
+        : _ScoreBadge(pct: game.avgAccuracy, emptyLabel: 'Not started');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.creamBorder),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
-            onTap: () => setState(() => _open = !_open),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Opacity(
-                    opacity: game.allLocked ? 0.45 : 1,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: AppColors.neutralTint,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        game.icon,
-                        style: const TextStyle(fontSize: 20),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              onTap: () => setState(() => _open = !_open),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compact =
+                        scaledExtent(context, constraints.maxWidth) < 330;
+                    return Row(
                       children: [
-                        Text(
-                          game.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13.5,
-                            color: AppColors.ink,
+                        Opacity(
+                          opacity: game.allLocked ? 0.45 : 1,
+                          child: Container(
+                            width: 42,
+                            height: 42,
+                            alignment: Alignment.center,
+                            decoration: const BoxDecoration(
+                              color: AppColors.neutralTint,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Text(
+                              game.icon,
+                              style: const TextStyle(fontSize: 20),
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          roster == null
-                              ? '${game.sessionsPlayed} of $total session${total == 1 ? '' : 's'} played'
-                                    '${game.lockedCount > 0 && !game.allLocked ? ' · ${game.lockedCount} locked' : ''}'
-                              : '${game.studentsPlayed} of $roster student${roster == 1 ? '' : 's'} played · $total session${total == 1 ? '' : 's'}',
-                          style: const TextStyle(
-                            fontSize: 10.5,
-                            color: AppColors.textMuted,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                game.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                  color: AppColors.ink,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                roster == null
+                                    ? '${game.sessionsPlayed} of $total session${total == 1 ? '' : 's'} played'
+                                          '${game.lockedCount > 0 && !game.allLocked ? ' · ${game.lockedCount} locked' : ''}'
+                                    : '${game.studentsPlayed} of $roster student${roster == 1 ? '' : 's'} played · $total session${total == 1 ? '' : 's'}',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.inkSoft,
+                                ),
+                              ),
+                              const SizedBox(height: 7),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(999),
+                                child: LinearProgressIndicator(
+                                  value: progress,
+                                  minHeight: 6,
+                                  backgroundColor: AppColors.creamDark,
+                                  color: AppColors.teal,
+                                ),
+                              ),
+                              if (compact) ...[
+                                const SizedBox(height: 8),
+                                status,
+                              ],
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: LinearProgressIndicator(
-                            value: progress,
-                            minHeight: 5,
-                            backgroundColor: AppColors.creamDark,
-                            color: AppColors.teal,
+                        if (!compact) ...[const SizedBox(width: 10), status],
+                        AnimatedRotation(
+                          turns: _open ? 0.5 : 0,
+                          duration: const Duration(milliseconds: 200),
+                          child: const Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 24,
+                            color: AppColors.inkSoft,
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  if (game.avgAccuracy == null && game.allLocked)
-                    const LockedTag()
-                  else
-                    _ScoreBadge(
-                      pct: game.avgAccuracy,
-                      emptyLabel: 'Not started',
-                    ),
-                  AnimatedRotation(
-                    turns: _open ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 20,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                ],
+                    );
+                  },
+                ),
               ),
             ),
-          ),
-          if (_open)
-            for (final session in game.sessions)
-              Container(
-                padding: const EdgeInsets.fromLTRB(16, 10, 14, 10),
-                decoration: BoxDecoration(
-                  color: session.studentsPlayed > 0
-                      ? AppColors.mint.withValues(alpha: 0.35)
-                      : null,
-                  border: const Border(
-                    top: BorderSide(color: AppColors.creamBorder),
+            if (_open)
+              for (final session in game.sessions)
+                Container(
+                  padding: const EdgeInsets.fromLTRB(18, 10, 14, 10),
+                  decoration: BoxDecoration(
+                    color: session.studentsPlayed > 0
+                        ? AppColors.mint.withValues(alpha: 0.35)
+                        : null,
+                    border: const Border(
+                      top: BorderSide(color: AppColors.creamBorder),
+                    ),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 10,
+                    runSpacing: 6,
+                    children: [
+                      Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
                             session.label,
                             style: const TextStyle(
-                              fontSize: 12,
+                              fontSize: 14,
                               fontWeight: FontWeight.w700,
                               color: AppColors.ink,
                             ),
@@ -1749,32 +1496,33 @@ class _GameSessionsCardState extends State<_GameSessionsCard> {
                                 ? session.detail
                                 : '${session.detail} · ${session.studentsPlayed}/$roster played',
                             style: const TextStyle(
-                              fontSize: 10,
-                              color: AppColors.textMuted,
+                              fontSize: 12.5,
+                              color: AppColors.inkSoft,
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    if (session.avgAccuracy == null && session.locked)
-                      const LockedTag()
-                    else
-                      _ScoreBadge(
-                        pct: session.avgAccuracy,
-                        emptyLabel: roster == null
-                            ? 'Not played'
-                            : 'No plays yet',
-                      ),
-                  ],
+                      if (session.avgAccuracy == null && session.locked)
+                        const LockedTag()
+                      else
+                        _ScoreBadge(
+                          pct: session.avgAccuracy,
+                          emptyLabel: roster == null
+                              ? 'Not played'
+                              : 'No plays yet',
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Section heading with the "12 Games | 7 Stages" switch.
+/// Section heading with the "12 Games | 7 Stages" switch; the switch drops
+/// under the heading when both don't fit on one line.
 class _GroupHeading extends StatelessWidget {
   const _GroupHeading({
     required this.title,
@@ -1790,55 +1538,60 @@ class _GroupHeading extends StatelessWidget {
   Widget build(BuildContext context) {
     Widget segment(String label, bool value) {
       final active = byStage == value;
-      return GestureDetector(
-        onTap: () => onChanged(value),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: active ? AppColors.teal : Colors.transparent,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-              color: active ? Colors.white : AppColors.teal,
+      return Semantics(
+        button: true,
+        selected: active,
+        child: GestureDetector(
+          onTap: () => onChanged(value),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: active ? AppColors.teal : Colors.transparent,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: active ? Colors.white : AppColors.tealDark,
+              ),
             ),
           ),
         ),
       );
     }
 
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-              color: AppColors.textMuted,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 10),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 10,
+        runSpacing: 8,
+        children: [
+          Text(title, style: displayText(17)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppColors.creamBorder, width: 1.4),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  segment('12 Games', false),
+                  segment('7 Stages', true),
+                ],
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.teal, width: 1.2),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [segment('12 Games', false), segment('7 Stages', true)],
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -1857,161 +1610,27 @@ class _ScoreBadge extends StatelessWidget {
       return Text(
         emptyLabel,
         style: const TextStyle(
-          fontSize: 10.5,
+          fontSize: 12.5,
           fontWeight: FontWeight.w600,
-          color: AppColors.textMuted,
+          color: AppColors.inkSoft,
         ),
       );
     }
-    final color = masteryBarColor(_tierFor(pct));
+    final color = masteryBarColor(_masteryForAccuracy(pct));
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         '${pct.round()}%',
         style: TextStyle(
-          fontSize: 11,
+          fontSize: 13,
           fontWeight: FontWeight.w800,
-          color: color,
+          color: color == AppColors.gold ? AppColors.ink : color,
         ),
       ),
-    );
-  }
-}
-
-class _EmptyBody extends StatelessWidget {
-  const _EmptyBody({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-
-  final IconData icon;
-  final String title;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 40, color: AppColors.textMuted),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 15,
-                color: AppColors.ink,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 12.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PanelRise extends StatefulWidget {
-  const _PanelRise({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  State<_PanelRise> createState() => _PanelRiseState();
-}
-
-class _PanelRiseState extends State<_PanelRise>
-    with SingleTickerProviderStateMixin {
-  late final _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 200),
-  )..forward();
-  late final _curved = CurvedAnimation(
-    parent: _c,
-    curve: const Cubic(0.2, 0.7, 0.3, 1.0),
-  );
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _curved,
-      child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, 0.03),
-          end: Offset.zero,
-        ).animate(_curved),
-        child: widget.child,
-      ),
-    );
-  }
-}
-
-class _StaggerFadeIn extends StatefulWidget {
-  const _StaggerFadeIn({super.key, required this.delay, required this.child});
-
-  final Duration delay;
-  final Widget child;
-
-  @override
-  State<_StaggerFadeIn> createState() => _StaggerFadeInState();
-}
-
-class _StaggerFadeInState extends State<_StaggerFadeIn>
-    with SingleTickerProviderStateMixin {
-  late final _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 280),
-  );
-  late final _fade = CurvedAnimation(
-    parent: _c,
-    curve: const Cubic(0.2, 0.7, 0.3, 1.0),
-  );
-  late final _slide = Tween<Offset>(
-    begin: const Offset(0, 0.04),
-    end: Offset.zero,
-  ).animate(_fade);
-
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(widget.delay, () {
-      if (mounted) _c.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _fade,
-      child: SlideTransition(position: _slide, child: widget.child),
     );
   }
 }

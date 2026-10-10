@@ -1,5 +1,3 @@
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,7 +7,7 @@ import '../../data/models/learner_profile.dart';
 import '../../logic/auth/session.dart';
 import '../theme/app_colors.dart';
 import '../widgets/auth_loading_overlay.dart';
-import '../widgets/soft_card.dart';
+import '../widgets/child_profile_form.dart';
 
 /// Dedicated "Edit Child Profile" screen — split out of the Manage Profile
 /// tab's inline card into its own route so editing a child isn't competing
@@ -18,6 +16,10 @@ import '../widgets/soft_card.dart';
 /// card; edits whichever learner is currently active (same as the card it
 /// replaced), so switch children first via the tab's switcher if editing
 /// a different one.
+///
+/// Built from the shared child-form kit (same look as Create Child
+/// Profile). One column on phones; details beside companion + danger zone
+/// from tablet-landscape widths up.
 class EditChildProfileScreen extends ConsumerStatefulWidget {
   const EditChildProfileScreen({super.key});
 
@@ -26,26 +28,18 @@ class EditChildProfileScreen extends ConsumerStatefulWidget {
       _EditChildProfileScreenState();
 }
 
-class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
-    with TickerProviderStateMixin {
+class _EditChildProfileScreenState
+    extends ConsumerState<EditChildProfileScreen> {
   final _nameC = TextEditingController();
-  final _gradeC = TextEditingController();
   final _usernameC = TextEditingController();
   late int _age;
   late String _avatar;
-
-  late final AnimationController _mascotFloatController;
+  String? _grade;
+  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _mascotFloatController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    );
-    if (kIsWeb || !Platform.environment.containsKey('FLUTTER_TEST')) {
-      _mascotFloatController.repeat(reverse: true);
-    }
     _syncFrom(ref.read(sessionProvider).learner);
   }
 
@@ -57,16 +51,14 @@ class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
     _nameC.text = p?.name ?? '';
     _age = p?.age ?? 7;
     _avatar = p?.avatar ?? 'boy_mascot';
-    _gradeC.text = p?.gradeLevel ?? 'Grade 1';
+    _grade = p?.gradeLevel ?? 'Grade 1';
     _usernameC.text = p?.username ?? '';
   }
 
   @override
   void dispose() {
     _nameC.dispose();
-    _gradeC.dispose();
     _usernameC.dispose();
-    _mascotFloatController.dispose();
     super.dispose();
   }
 
@@ -80,18 +72,23 @@ class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
       ).showSnackBar(const SnackBar(content: Text('Please enter a name')));
       return;
     }
-    await ref
-        .read(sessionProvider.notifier)
-        .updateLearnerProfile(
-          name: name,
-          age: _age,
-          avatar: _avatar,
-          gradeLevel: _gradeC.text.trim(),
-        );
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile updated successfully!')),
-    );
+    setState(() => _saving = true);
+    try {
+      await ref
+          .read(sessionProvider.notifier)
+          .updateLearnerProfile(
+            name: name,
+            age: _age,
+            avatar: _avatar,
+            gradeLevel: (_grade ?? '').trim(),
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile updated successfully!')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   void _confirmDelete(LearnerProfile learner) {
@@ -143,6 +140,94 @@ class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
     );
   }
 
+  Widget _detailsSection() {
+    return ChildFormSection(
+      title: 'Details',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const ChildFieldLabel('Full name'),
+          ChildTextField(
+            controller: _nameC,
+            hint: 'e.g. Nurhana Ali',
+            textCapitalization: TextCapitalization.words,
+            wrap: true,
+          ),
+          const SizedBox(height: 16),
+          const ChildFieldLabel('Grade level'),
+          GradePicker(
+            value: _grade,
+            onChanged: (v) => setState(() => _grade = v),
+          ),
+          const SizedBox(height: 18),
+          ChildFieldLabel(
+            'Age',
+            trailing: Text(
+              '$_age years old',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: AppColors.teal,
+              ),
+            ),
+          ),
+          AgePicker(age: _age, onChanged: (a) => setState(() => _age = a)),
+          const SizedBox(height: 18),
+          // Read-only: saving never stored a changed username (the profile
+          // update takes name, age, avatar and grade only), so an editable
+          // box here would silently discard edits.
+          const ChildFieldLabel(
+            'Username',
+            helper: "Set when the profile was created — it can't be changed.",
+          ),
+          ChildTextField(controller: _usernameC, readOnly: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _companionSection() {
+    return ChildFormSection(
+      title: 'Learning companion',
+      child: CompanionPicker(
+        avatar: _avatar,
+        compact: true,
+        onChanged: (a) => setState(() => _avatar = a),
+      ),
+    );
+  }
+
+  Widget _dangerSection(LearnerProfile learner) {
+    return ChildFormSection(
+      title: 'Danger zone',
+      titleColor: AppColors.coral,
+      color: AppColors.coralTint,
+      borderColor: AppColors.coral.withValues(alpha: 0.3),
+      subtitle:
+          'Permanently delete ${learner.name}\'s profile and progress. '
+          'This cannot be undone.',
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.coral,
+            backgroundColor: AppColors.surface,
+            minimumSize: const Size(64, 48),
+            side: const BorderSide(color: AppColors.coral, width: 1.4),
+            shape: const StadiumBorder(),
+            textStyle: const TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          icon: const Icon(Icons.delete_outline_rounded, size: 18),
+          label: const Text('Delete Child Profile'),
+          onPressed: () => _confirmDelete(learner),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final learner = ref.watch(sessionProvider.select((s) => s.learner));
@@ -152,327 +237,85 @@ class _EditChildProfileScreenState extends ConsumerState<EditChildProfileScreen>
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) _goBack();
       },
-      child: Scaffold(
-        backgroundColor: AppColors.neutralTint,
-        appBar: AppBar(
-          title: const FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text('Edit Child Profile'),
-          ),
-          backgroundColor: Colors.white,
-          foregroundColor: AppColors.ink,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: _goBack,
-          ),
+      child: ChildFormScaffold(
+        header: ChildFormHeader(
+          title: 'Edit child profile',
+          subtitle: learner == null
+              ? 'No child profile selected.'
+              : 'Update ${learner.name}\'s details and companion.',
+          avatar: learner == null ? null : _avatar,
+          onBack: _goBack,
         ),
         body: learner == null
-            ? const Center(
-                child: Text(
-                  'No child profile selected.',
-                  style: TextStyle(color: AppColors.textMuted),
+            ? const Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(
+                  child: Text(
+                    'No child profile selected.',
+                    style: TextStyle(color: AppColors.inkSoft, fontSize: 15),
+                  ),
                 ),
               )
-            : SafeArea(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 480),
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(20),
-                      child: SoftCard(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const _Label('Full Name'),
-                            _Input(
-                              controller: _nameC,
-                              hint: 'e.g. Nurhana Ali',
-                            ),
-                            const SizedBox(height: 14),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const _Label('Age'),
-                                Flexible(
-                                  child: Text(
-                                    '$_age years old',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.teal,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Slider(
-                              value: _age.toDouble(),
-                              min: 5,
-                              max: 11,
-                              divisions: 6,
-                              onChanged: (v) =>
-                                  setState(() => _age = v.round()),
-                            ),
-                            const SizedBox(height: 14),
-                            const _Label('Grade Level'),
-                            _Input(controller: _gradeC, hint: 'e.g. Grade 1'),
-                            const SizedBox(height: 14),
-                            const _Label('Username'),
-                            _Input(
-                              controller: _usernameC,
-                              hint: 'e.g. nurhana_ali',
-                            ),
-                            const SizedBox(height: 14),
-                            const _Label('Mascot Avatar'),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _AvatarSelectionCard(
-                                    imagePath:
-                                        'assets/images/boy_mascot_full_body.png',
-                                    label: 'Amir (Boy)',
-                                    isSelected: _avatar == 'boy_mascot',
-                                    themeColor: AppColors.teal,
-                                    floatAnimation: _mascotFloatController,
-                                    onTap: () =>
-                                        setState(() => _avatar = 'boy_mascot'),
-                                  ),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: _AvatarSelectionCard(
-                                    imagePath:
-                                        'assets/images/girl_mascot_full_body.png',
-                                    label: 'Zara (Girl)',
-                                    isSelected: _avatar == 'girl_mascot',
-                                    themeColor: AppColors.gold,
-                                    floatAnimation: _mascotFloatController,
-                                    onTap: () =>
-                                        setState(() => _avatar = 'girl_mascot'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-                            FilledButton(
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AppColors.teal,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              onPressed: () => _save(learner),
-                              child: const Text('Save Changes'),
-                            ),
-                            const SizedBox(height: 20),
-                            const Divider(
-                              height: 1,
-                              color: AppColors.creamBorder,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Danger Zone',
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(
-                                    color: AppColors.coral,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Permanently delete ${learner.name}\'s profile and '
-                              'progress. This cannot be undone.',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textMuted,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.coral,
-                                side: const BorderSide(color: AppColors.coral),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              icon: const Icon(
-                                Icons.delete_outline_rounded,
-                                size: 18,
-                              ),
-                              label: const Text('Delete Child Profile'),
-                              onPressed: () => _confirmDelete(learner),
-                            ),
-                          ],
-                        ),
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final wide = constraints.maxWidth >= 840;
+                  final side = wide
+                      ? ((constraints.maxWidth - 1120) / 2).clamp(24.0, 9999.0)
+                      : ((constraints.maxWidth - 600) / 2).clamp(16.0, 9999.0);
+                  final padding = EdgeInsets.fromLTRB(side, 20, side, 24);
+                  if (!wide) {
+                    return Padding(
+                      padding: padding,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _detailsSection(),
+                          const SizedBox(height: 16),
+                          _companionSection(),
+                          const SizedBox(height: 16),
+                          _dangerSection(learner),
+                        ],
                       ),
-                    ),
-                  ),
-                ),
-              ),
-      ),
-    );
-  }
-}
-
-class _Label extends StatelessWidget {
-  const _Label(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: AppColors.ink,
-        ),
-      ),
-    );
-  }
-}
-
-class _Input extends StatelessWidget {
-  const _Input({required this.controller, required this.hint});
-  final TextEditingController controller;
-  final String hint;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      decoration: InputDecoration(
-        hintText: hint.tr,
-        filled: true,
-        fillColor: AppColors.neutralTint,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.creamBorder),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.creamBorder),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.teal, width: 1.4),
-        ),
-      ),
-    );
-  }
-}
-
-class _AvatarSelectionCard extends StatelessWidget {
-  const _AvatarSelectionCard({
-    required this.imagePath,
-    required this.label,
-    required this.isSelected,
-    required this.themeColor,
-    required this.floatAnimation,
-    required this.onTap,
-  });
-
-  final String imagePath;
-  final String label;
-  final bool isSelected;
-  final Color themeColor;
-  final Animation<double> floatAnimation;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedScale(
-        scale: isSelected ? 1.04 : 0.96,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.elasticOut,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isSelected ? themeColor : AppColors.creamBorder,
-              width: isSelected ? 3.0 : 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isSelected
-                    ? themeColor.withValues(alpha: 0.12)
-                    : const Color(0x06000000),
-                blurRadius: isSelected ? 12 : 6,
-                offset: Offset(0, isSelected ? 4 : 2),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              SizedBox(
-                height: 100,
-                child: AnimatedBuilder(
-                  animation: floatAnimation,
-                  builder: (context, child) {
-                    return Transform.translate(
-                      offset: Offset(
-                        0,
-                        isSelected ? -5 * floatAnimation.value : 0,
-                      ),
-                      child: child,
                     );
-                  },
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.asset(imagePath, fit: BoxFit.contain),
+                  }
+                  return Padding(
+                    padding: padding,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _detailsSection()),
+                        const SizedBox(width: 24),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _companionSection(),
+                              const SizedBox(height: 16),
+                              _dangerSection(learner),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+        bottomBar: learner == null
+            ? null
+            : ChildFormBottomBar(
+                children: [
+                  ChildFormButton(
+                    label: 'Cancel',
+                    primary: false,
+                    onPressed: _goBack,
                   ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  color: isSelected ? themeColor : AppColors.ink,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 6),
-              Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isSelected ? themeColor : Colors.transparent,
-                  border: Border.all(
-                    color: isSelected ? themeColor : AppColors.creamBorder,
-                    width: 1.5,
+                  ChildFormButton(
+                    label: 'Save Changes',
+                    busy: _saving,
+                    onPressed: () => _save(learner),
                   ),
-                ),
-                alignment: Alignment.center,
-                child: isSelected
-                    ? const Icon(
-                        Icons.check_rounded,
-                        color: Colors.white,
-                        size: 11,
-                      )
-                    : null,
+                ],
               ),
-            ],
-          ),
-        ),
       ),
     );
   }

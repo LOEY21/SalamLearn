@@ -312,7 +312,11 @@ service cloud.firestore {
     // permission-denied cross-device gap fixed above for /progress.
     match /assigned_modules/{assignmentId} {
       allow read: if isAdmin() || isPrincipal() || isSignedIn();
-      allow delete: if isAdmin();
+      // The class's own teacher may delete its homework (single delete, or
+      // as part of deleting the class — children go before the class doc,
+      // so this lookup still resolves).
+      allow delete: if isAdmin() ||
+        ownsTeacherDoc(get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId);
       allow create, update: if isSignedIn();
     }
 
@@ -321,7 +325,7 @@ service cloud.firestore {
     // from classId to teacherId to check true ownership against yet.
     match /custom_lessons/{lessonId} {
       allow read: if isAdmin() || isPrincipal();
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || ownsTeacherDoc(resource.data.teacherId);
       allow create, update: if isSignedIn();
     }
 

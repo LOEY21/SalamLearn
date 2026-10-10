@@ -3853,13 +3853,10 @@ class _WudhuState extends State<_Wudhu> {
       );
       if (done) {
         _doneT?.cancel();
-        _doneT = Timer(
-          const Duration(milliseconds: 5200),
-          () {
-            setState(() => _screen = _WScreen.done);
-            widget.onEnding?.call();
-          },
-        );
+        _doneT = Timer(const Duration(milliseconds: 5200), () {
+          setState(() => _screen = _WScreen.done);
+          widget.onEnding?.call();
+        });
       }
     } else {
       setState(() {
@@ -4044,16 +4041,17 @@ class _WudhuState extends State<_Wudhu> {
                           fit: StackFit.expand,
                           children: [
                             Image.asset('$_kA/s2_logo.png', fit: BoxFit.fill),
+                            // Bent along the plank's own arch.
                             Align(
-                              alignment: const Alignment(0, .7),
+                              alignment: const Alignment(0, .73),
                               child: SizedBox(
-                                width: 330,
-                                height: 60,
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    'Cleanliness & Wudhu',
-                                    style: _baloo(38, const Color(0xFF5A2A0E)),
+                                width: 270,
+                                height: 50,
+                                child: CustomPaint(
+                                  painter: _ArcTextPainter(
+                                    'Cleanliness & Wudhu'.tr,
+                                    _baloo(38, const Color(0xFF5A2A0E)),
+                                    radius: 800,
                                   ),
                                 ),
                               ),
@@ -5436,4 +5434,51 @@ class _WudhuState extends State<_Wudhu> {
       ),
     );
   }
+}
+
+/// One line of text laid letter by letter along an arch of [radius], its
+/// middle at the box centre, shrunk to fit the box's width.
+class _ArcTextPainter extends CustomPainter {
+  const _ArcTextPainter(this.text, this.style, {required this.radius});
+
+  final String text;
+  final TextStyle style;
+  final double radius;
+
+  TextPainter _layout(String s, TextStyle st) => TextPainter(
+    text: TextSpan(text: s, style: st),
+    textDirection: TextDirection.ltr,
+  )..layout();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final full = _layout(text, style).width;
+    final k = math.min(1.0, size.width / full);
+    final st = style.copyWith(fontSize: style.fontSize! * k);
+    final glyphs = [for (final c in text.characters) _layout(c, st)];
+    final total = glyphs.fold<double>(0, (a, g) => a + g.width);
+    // Centre on the letters, not the line box: Baloo's deep descent would
+    // otherwise sit the lettering high. Its caps stand ~0.72em tall.
+    final baseline = glyphs.first.computeDistanceToActualBaseline(
+      TextBaseline.alphabetic,
+    );
+    final lift = baseline - 0.36 * st.fontSize!;
+    final centre = Offset(size.width / 2, size.height / 2 + radius);
+    var s = -total / 2;
+    for (final g in glyphs) {
+      final a = (s + g.width / 2) / radius;
+      canvas
+        ..save()
+        ..translate(centre.dx, centre.dy)
+        ..rotate(a)
+        ..translate(0, -radius);
+      g.paint(canvas, Offset(-g.width / 2, -lift));
+      canvas.restore();
+      s += g.width;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ArcTextPainter old) =>
+      old.text != text || old.style != style || old.radius != radius;
 }

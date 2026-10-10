@@ -57,7 +57,7 @@ abstract final class AppTheme {
           backgroundColor: AppColors.teal,
           foregroundColor: Colors.white,
           minimumSize: const Size(64, 52),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),

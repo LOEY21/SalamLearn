@@ -48,7 +48,7 @@
   <section id="dashboard-view" class="view dashboard-view" hidden>
 
     <!-- Sidebar -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">
         <div class="sidebar-brand-badge">
           <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
@@ -62,7 +62,6 @@
         </div>
       </div>
 
-      <div class="sidebar-section-label">Navigation</div>
       <nav id="tabs" class="sidebar-nav">
         <button class="tab-btn active" data-tab="overview">
           <svg class="tab-icon" viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg>
@@ -75,6 +74,7 @@
         <button class="tab-btn" data-tab="teachers">
           <svg class="tab-icon" viewBox="0 0 20 20" fill="none"><path d="M10 2L2 6l8 4 8-4-8-4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 10l8 4 8-4M2 14l8 4 8-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Asatidz
+          <span class="nav-count" id="nav-pending" hidden></span>
         </button>
         <!--
         <button class="tab-btn" data-tab="principals">
@@ -109,50 +109,20 @@
           <div class="sidebar-avatar" id="sidebar-avatar">A</div>
           <span id="whoami" class="sidebar-whoami"></span>
         </div>
-        <button id="signout-btn" class="btn-signout" title="Sign out">
+        <button id="signout-btn" class="btn-signout" title="Sign out" aria-label="Sign out">
           <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M13 3h4v14h-4M9 14l4-4-4-4M13 10H4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
     </aside>
+    <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
 
     <!-- Main content -->
     <div class="main-wrap">
-      <!-- Topbar -->
-      <div class="topbar">
-        <div class="topbar-left">
-          <button class="topbar-toggle-btn">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-          </button>
-          <div class="topbar-search">
-            <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <input type="text" placeholder="Search for..." />
-          </div>
-        </div>
-        <div class="topbar-right">
-          <div class="topbar-badges">
-            <div class="badge-icon-wrap" title="Alerts">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-              <span class="badge-count badge-red">3</span>
-            </div>
-            <div class="badge-icon-wrap" title="Messages">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-              <span class="badge-count badge-yellow">2</span>
-            </div>
-            <div class="badge-icon-wrap" title="Tasks">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-              <span class="badge-count badge-green">5</span>
-            </div>
-          </div>
-          <div class="topbar-divider"></div>
-          <div class="topbar-user">
-            <span class="topbar-username" id="topbar-username">Admin User</span>
-            <div class="topbar-avatar" id="topbar-avatar">A</div>
-          </div>
-        </div>
-      </div>
-
       <!-- Page header -->
       <header class="page-header">
+        <button type="button" class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+        </button>
         <div class="page-header-left">
           <h2 class="page-title" id="page-title">Overview</h2>
           <p class="page-subtitle" id="page-subtitle">Platform-wide statistics and recent activity</p>
@@ -171,30 +141,6 @@
         <section id="tab-overview" class="tab-panel">
           <div class="stat-grid" id="stat-grid"></div>
 
-          <!-- Middle Row: Chart & Progress (Temporarily Commented Out)
-          <div class="chart-progress-grid">
-            <div class="dash-card chart-card">
-              <div class="dash-card-header">
-                <h3 class="dash-card-title">Monthly Activity Recap Report</h3>
-              </div>
-              <div class="dash-card-body chart-body">
-                <canvas id="recapChart" width="600" height="320"></canvas>
-              </div>
-            </div>
-            <div class="dash-card progress-card">
-              <div class="dash-card-header">
-                <h3 class="dash-card-title">Learning Modules Progress</h3>
-              </div>
-              <div class="dash-card-body progress-body">
-                <div class="progress-list" id="progress-list">
-                  Dynamically populated module progress bars
-                </div>
-              </div>
-            </div>
-          </div>
-          -->
-
-          <!-- Bottom Row: Tables & Insights -->
           <div class="dash-grid">
             <div class="dash-card" id="dash-recent-joins">
               <div class="dash-card-header">
@@ -220,43 +166,47 @@
         <!-- Parents -->
         <section id="tab-parents" class="tab-panel" hidden>
           <div class="panel-head">
-            <h2>Parents / Guardians</h2>
-            <button class="btn-primary btn-small" data-open-form="parent">+ Add parent</button>
+            <input class="table-search" data-table="table-parents" type="search" placeholder="Search parents…" />
+            <button class="btn-primary btn-small" data-open-form="parent">Add parent</button>
           </div>
           <form id="form-parent" class="add-form" hidden>
-            <label>Full name <input type="text" name="fullName" required /></label>
-            <label>Email <input type="email" name="email" required /></label>
-            <label>Password <input type="password" name="password" minlength="6" required /></label>
-            <label>Mobile number <input type="tel" name="mobileNumber" /></label>
+            <div class="name-row">
+              <label><span>First name <span class="req" aria-hidden="true">*</span></span> <input type="text" name="firstName" required /></label>
+              <label>Middle name <input type="text" name="middleName" /></label>
+              <label><span>Last name <span class="req" aria-hidden="true">*</span></span> <input type="text" name="lastName" required /></label>
+            </div>
+            <label><span>Email <span class="req" aria-hidden="true">*</span></span> <input type="email" name="email" required /></label>
+            <label><span>Password <span class="req" aria-hidden="true">*</span></span> <input type="password" name="password" minlength="6" required /></label>
             <div class="form-actions">
               <button type="submit" class="btn-primary btn-small">Create</button>
               <button type="button" class="btn-ghost btn-small" data-cancel-form="parent">Cancel</button>
             </div>
             <p class="form-error error-text" hidden></p>
           </form>
-          <div class="table-search-wrap"><input class="table-search" data-table="table-parents" type="search" placeholder="Search parents…" /></div>
           <div class="table-wrap"><table id="table-parents"></table></div>
         </section>
 
         <!-- Teachers -->
         <section id="tab-teachers" class="tab-panel" hidden>
           <div class="panel-head">
-            <h2>Asatidz / Teachers</h2>
-            <button class="btn-primary btn-small" data-open-form="teacher">+ Add teacher</button>
+            <input class="table-search" data-table="table-teachers" type="search" placeholder="Search teachers…" />
+            <button class="btn-primary btn-small" data-open-form="teacher">Add teacher</button>
           </div>
           <form id="form-teacher" class="add-form" hidden>
-            <label>Full name <input type="text" name="fullName" required /></label>
+            <div class="name-row">
+              <label><span>First name <span class="req" aria-hidden="true">*</span></span> <input type="text" name="firstName" required /></label>
+              <label>Middle name <input type="text" name="middleName" /></label>
+              <label><span>Last name <span class="req" aria-hidden="true">*</span></span> <input type="text" name="lastName" required /></label>
+            </div>
             <label>School <input type="text" name="school" /></label>
-            <label>Email <input type="email" name="email" required /></label>
-            <label>Password <input type="password" name="password" minlength="6" required /></label>
-            <label>Mobile number <input type="tel" name="mobileNumber" /></label>
+            <label><span>Email <span class="req" aria-hidden="true">*</span></span> <input type="email" name="email" required /></label>
+            <label><span>Password <span class="req" aria-hidden="true">*</span></span> <input type="password" name="password" minlength="6" required /></label>
             <div class="form-actions">
               <button type="submit" class="btn-primary btn-small">Create</button>
               <button type="button" class="btn-ghost btn-small" data-cancel-form="teacher">Cancel</button>
             </div>
             <p class="form-error error-text" hidden></p>
           </form>
-          <div class="table-search-wrap"><input class="table-search" data-table="table-teachers" type="search" placeholder="Search teachers…" /></div>
           <div class="table-wrap"><table id="table-teachers"></table></div>
         </section>
 
@@ -267,9 +217,13 @@
             <button class="btn-primary btn-small" data-open-form="principal">+ Add principal</button>
           </div>
           <form id="form-principal" class="add-form" hidden>
-            <label>Full name <input type="text" name="fullName" required /></label>
-            <label>Email <input type="email" name="email" required /></label>
-            <label>Password <input type="password" name="password" minlength="6" required /></label>
+            <div class="name-row">
+              <label><span>First name <span class="req" aria-hidden="true">*</span></span> <input type="text" name="firstName" required /></label>
+              <label>Middle name <input type="text" name="middleName" /></label>
+              <label><span>Last name <span class="req" aria-hidden="true">*</span></span> <input type="text" name="lastName" required /></label>
+            </div>
+            <label><span>Email <span class="req" aria-hidden="true">*</span></span> <input type="email" name="email" required /></label>
+            <label><span>Password <span class="req" aria-hidden="true">*</span></span> <input type="password" name="password" minlength="6" required /></label>
             <div class="form-actions">
               <button type="submit" class="btn-primary btn-small">Create</button>
               <button type="button" class="btn-ghost btn-small" data-cancel-form="principal">Cancel</button>
@@ -288,17 +242,17 @@
         <!-- Learners -->
         <section id="tab-learners" class="tab-panel" hidden>
           <div class="panel-head">
-            <h2>Learners</h2>
-            <button class="btn-primary btn-small" data-open-form="learner">+ Add learner</button>
+            <input class="table-search" data-table="table-learners" type="search" placeholder="Search learners…" />
+            <button class="btn-primary btn-small" data-open-form="learner">Add learner</button>
           </div>
           <form id="form-learner" class="add-form" hidden>
-            <label>Parent <select name="parentId" required></select></label>
+            <label><span>Parent <span class="req" aria-hidden="true">*</span></span> <select name="parentId" required></select></label>
             <div class="name-row">
-              <label>First name <input type="text" name="firstName" required /></label>
+              <label><span>First name <span class="req" aria-hidden="true">*</span></span> <input type="text" name="firstName" required /></label>
               <label>Middle name <input type="text" name="middleName" /></label>
-              <label>Last name <input type="text" name="lastName" required /></label>
+              <label><span>Last name <span class="req" aria-hidden="true">*</span></span> <input type="text" name="lastName" required /></label>
             </div>
-            <label>Username <input type="text" name="username" required /></label>
+            <label><span>Username <span class="req" aria-hidden="true">*</span></span> <input type="text" name="username" required /></label>
             <div class="age-grade-row">
               <label>Age <select name="age" id="learner-age-select">
                 <option>5</option><option>6</option><option>7</option>
@@ -312,57 +266,51 @@
                 <option>Grade 4</option><option>Grade 5</option><option>Grade 6</option>
               </select></label>
             </div>
-            <label>Avatar</label>
-            <div class="avatar-options">
+            <fieldset class="avatar-options">
+              <legend>Avatar</legend>
               <label class="avatar-card">
                 <input type="radio" name="avatar" value="boy_mascot" checked />
-                <span class="avatar-preview boy-mascot-preview">Amir</span>
+                <img src="img/boy_avatar.jpg" alt="" width="56" height="56" /><span>Amir</span>
               </label>
               <label class="avatar-card">
                 <input type="radio" name="avatar" value="girl_mascot" />
-                <span class="avatar-preview girl-mascot-preview">Zara</span>
+                <img src="img/girl_avatar.jpg" alt="" width="56" height="56" /><span>Zara</span>
               </label>
-            </div>
+            </fieldset>
             <div class="form-actions">
               <button type="submit" class="btn-primary btn-small">Create</button>
               <button type="button" class="btn-ghost btn-small" data-cancel-form="learner">Cancel</button>
             </div>
             <p class="form-error error-text" hidden></p>
           </form>
-          <div class="table-search-wrap"><input class="table-search" data-table="table-learners" type="search" placeholder="Search learners…" /></div>
           <div class="table-wrap"><table id="table-learners"></table></div>
         </section>
 
         <!-- Classes -->
         <section id="tab-classes" class="tab-panel" hidden>
           <div class="panel-head">
-            <h2>Classes</h2>
+            <input class="table-search" data-table="table-classes" type="search" placeholder="Search classes…" />
           </div>
-          <div class="table-search-wrap"><input class="table-search" data-table="table-classes" type="search" placeholder="Search classes…" /></div>
           <div class="table-wrap"><table id="table-classes"></table></div>
         </section>
 
         <!-- Progress -->
         <section id="tab-progress" class="tab-panel" hidden>
           <div class="panel-head">
-            <h2>Recent Progress Records</h2>
+            <input class="table-search" data-table="table-progress" type="search" placeholder="Search progress…" />
           </div>
-          <div class="table-search-wrap"><input class="table-search" data-table="table-progress" type="search" placeholder="Search progress…" /></div>
           <div class="table-wrap"><table id="table-progress"></table></div>
         </section>
 
         <!-- Trashbin -->
         <section id="tab-trashbin" class="tab-panel" hidden>
-          <div class="panel-head">
-            <h2>Trashbin</h2>
-          </div>
           <h3 class="trash-section-title">Deleted by Users (App)</h3>
-          <div class="table-search-wrap"><input class="table-search" data-table="table-trashbin-users" type="search" placeholder="Search trash…" /></div>
-          <div class="table-wrap" style="margin-bottom: 24px;">
+          <div class="panel-head"><input class="table-search" data-table="table-trashbin-users" type="search" placeholder="Search deleted items…" /></div>
+          <div class="table-wrap">
             <table id="table-trashbin-users"></table>
           </div>
           <h3 class="trash-section-title">Deleted by Admins (Oversight Panel)</h3>
-          <div class="table-search-wrap"><input class="table-search" data-table="table-trashbin-admins" type="search" placeholder="Search trash…" /></div>
+          <div class="panel-head"><input class="table-search" data-table="table-trashbin-admins" type="search" placeholder="Search deleted items…" /></div>
           <div class="table-wrap">
             <table id="table-trashbin-admins"></table>
           </div>
@@ -371,7 +319,7 @@
         <!-- Reports -->
         <section id="tab-reports" class="tab-panel" hidden>
           <div class="panel-head no-print">
-            <h2>Platform Summary Report</h2>
+            <p class="panel-note">To export, choose "Save as PDF" in the print dialog.</p>
             <button id="print-report-btn" class="btn-primary btn-small">Print / Export PDF</button>
           </div>
           <div id="report-doc" class="report-doc"></div>
@@ -392,36 +340,5 @@
   <div id="toast-container" class="toast-container"></div>
 
   <script type="module" src="app.js"></script>
-  <script>
-    // Update page header title/subtitle when tab changes
-    const pageMeta = {
-      overview:  { title: 'Overview',          subtitle: 'Platform-wide statistics and recent activity' },
-      parents:   { title: 'Parents / Guardians', subtitle: 'Manage parent and guardian accounts' },
-      teachers:  { title: 'Asatidz',            subtitle: 'Manage teacher accounts and assignments' },
-      // principals: { title: 'Principals',         subtitle: 'Manage principal (read-only monitoring) accounts' },
-      learners:  { title: 'Learners',            subtitle: 'View and manage student profiles' },
-      classes:   { title: 'Classes',             subtitle: 'Browse all registered class sections' },
-      progress:  { title: 'Progress',            subtitle: 'Recent learning progress records' },
-      trashbin:  { title: 'Trashbin',            subtitle: 'Deleted records from app users and admins' },
-      reports:   { title: 'Reports',             subtitle: 'Printable platform summary report' },
-    };
-    document.addEventListener('click', e => {
-      const btn = e.target.closest('.tab-btn');
-      if (!btn) return;
-      const tab = btn.dataset.tab;
-      const meta = pageMeta[tab];
-      if (!meta) return;
-      document.getElementById('page-title').textContent = meta.title;
-      document.getElementById('page-subtitle').textContent = meta.subtitle;
-    });
-    // Populate sidebar avatar initial from whoami
-    const whoamiEl = document.getElementById('whoami');
-    const avatarEl = document.getElementById('sidebar-avatar');
-    const obs = new MutationObserver(() => {
-      const text = whoamiEl.textContent.trim();
-      if (text) avatarEl.textContent = text[0].toUpperCase();
-    });
-    obs.observe(whoamiEl, { childList: true, characterData: true, subtree: true });
-  </script>
 </body>
 </html>

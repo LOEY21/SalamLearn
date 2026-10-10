@@ -532,7 +532,7 @@ void main() {
     }
 
     // Narration done: the scene's dim covers the whole screen, bands and all.
-    expect(fullScreen(const Color(0x73000000)), isNotNull);
+    expect(fullScreen(const Color(0x9E000000)), isNotNull);
 
     // The question card's darkness does too.
     await openQuestion(tester);

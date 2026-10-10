@@ -13,6 +13,7 @@ import '../../data/repositories/consent_repository.dart';
 import '../../data/repositories/learner_repository.dart';
 import '../../data/repositories/class_repository.dart';
 import '../../data/remote/firebase_auth_gateway.dart';
+import '../../data/remote/firebase_role_app.dart';
 import '../../data/remote/firestore_mirror.dart';
 import '../../data/repositories/parent_repository.dart';
 import '../../data/repositories/teacher_repository.dart';
@@ -219,6 +220,13 @@ class SessionNotifier extends Notifier<SessionState> {
   /// same as the flowchart's "Enter PIN" gate on every return visit.
   @override
   SessionState build() {
+    FirebaseRoleApp.isTeacherActive = () {
+      try {
+        return state.activeRole == UserRole.asatidz;
+      } catch (_) {
+        return false; // state not built yet
+      }
+    };
     final languageCode = _settings.get('languageCode') as String?;
     final roleName = _settings.get('activeRole') as String?;
 
@@ -356,7 +364,7 @@ class SessionNotifier extends Notifier<SessionState> {
       final account = _teachers.findByEmail(email);
       if (account == null) return false;
       if (account.firebaseUid == null ||
-          await FirestoreMirror().docExists(HiveBoxes.teachers, account.id)) {
+          await FirestoreMirror(teacher: true).docExists(HiveBoxes.teachers, account.id)) {
         return true;
       }
       await _teachers.delete(account.id);
@@ -365,7 +373,7 @@ class SessionNotifier extends Notifier<SessionState> {
     final account = _parents.findByEmail(email);
     if (account == null) return false;
     if (account.firebaseUid == null ||
-        await FirestoreMirror().docExists(HiveBoxes.parents, account.id)) {
+        await FirestoreMirror(teacher: false).docExists(HiveBoxes.parents, account.id)) {
       return true;
     }
     await _parents.delete(account.id);
@@ -440,7 +448,7 @@ class SessionNotifier extends Notifier<SessionState> {
     final error = await ensureParentFirebaseUser();
     if (error != null) return error;
     try {
-      await FirebaseAuthGateway().sendEmailVerification();
+      await FirebaseAuthGateway(teacher: false).sendEmailVerification();
       return null;
     } on FirebaseAuthException catch (e) {
       debugPrint('beginParentEmailVerification failed: ${e.code} ${e.message}');
@@ -465,7 +473,7 @@ class SessionNotifier extends Notifier<SessionState> {
       return 'Your sign-up details were lost. Go back and try again.';
     }
     if (pending.firebaseUid != null) return null;
-    final gateway = FirebaseAuthGateway();
+    final gateway = FirebaseAuthGateway(teacher: false);
     try {
       try {
         final credential = await gateway.signUp(
@@ -508,7 +516,7 @@ class SessionNotifier extends Notifier<SessionState> {
 
   static Future<bool> _isProfileless(String uid) async {
     try {
-      return await FirestoreMirror().isProfilelessAuthUser(uid);
+      return await FirestoreMirror(teacher: false).isProfilelessAuthUser(uid);
     } catch (e) {
       debugPrint('_isProfileless check failed: $e');
       return false;
@@ -530,7 +538,7 @@ class SessionNotifier extends Notifier<SessionState> {
   /// after a `reload()`) and reports whether the gate can let the parent
   /// through to PIN setup now.
   Future<bool> refreshParentEmailVerified() async {
-    final gateway = FirebaseAuthGateway();
+    final gateway = FirebaseAuthGateway(teacher: false);
     final user = gateway.currentUser;
     if (user == null) return false;
     try {
@@ -611,7 +619,7 @@ class SessionNotifier extends Notifier<SessionState> {
         // though local registration fully succeeded.
         if (pending.remoteId == null && account.firebaseUid != null) {
           try {
-            await FirestoreMirror().pushTeacher(account);
+            await FirestoreMirror(teacher: true).pushTeacher(account);
           } catch (e) {
             debugPrint('createPin: initial teacher push failed: $e');
           }
@@ -654,7 +662,7 @@ class SessionNotifier extends Notifier<SessionState> {
         // See the matching comment in the teacher branch above.
         if (pending.remoteId == null && account.firebaseUid != null) {
           try {
-            await FirestoreMirror().pushParent(account);
+            await FirestoreMirror(teacher: false).pushParent(account);
           } catch (e) {
             debugPrint('createPin: initial parent push failed: $e');
           }
@@ -688,7 +696,7 @@ class SessionNotifier extends Notifier<SessionState> {
   /// would silently never refresh again after this one pull completes.
   Future<void> _pullLearnersFromRemote(String parentId) async {
     try {
-      final remoteLearners = await FirestoreMirror().fetchLearnersForParent(
+      final remoteLearners = await FirestoreMirror(teacher: false).fetchLearnersForParent(
         parentId,
       );
       LearnerProfile? first;
@@ -717,13 +725,15 @@ class SessionNotifier extends Notifier<SessionState> {
 
   Future<void> _pullClassesFromRemote(String teacherId) async {
     try {
-      final remoteClasses = await FirestoreMirror().fetchClassesForTeacher(
+      final remoteClasses = await FirestoreMirror(teacher: true).fetchClassesForTeacher(
         teacherId,
       );
       final classes = ClassRepository();
+      final deleted = classes.pendingClassDeletes;
       for (final remote in remoteClasses) {
+        if (deleted.contains(remote.id)) continue;
         await classes.saveFromRemote(remote);
-        final remoteEnrollments = await FirestoreMirror().fetchEnrollmentsForClass(remote.id);
+        final remoteEnrollments = await FirestoreMirror(teacher: true).fetchEnrollmentsForClass(remote.id);
         for (final remoteEnrollment in remoteEnrollments) {
           await classes.enroll(
             classId: remoteEnrollment.classId,
@@ -731,7 +741,7 @@ class SessionNotifier extends Notifier<SessionState> {
           );
           final localLearner = _learners.findById(remoteEnrollment.learnerId);
           if (localLearner == null) {
-            final remoteLearner = await FirestoreMirror().fetchLearner(remoteEnrollment.learnerId);
+            final remoteLearner = await FirestoreMirror(teacher: true).fetchLearner(remoteEnrollment.learnerId);
             if (remoteLearner != null) {
               await _learners.saveFromRemote(
                 id: remoteLearner.id,
@@ -794,6 +804,8 @@ class SessionNotifier extends Notifier<SessionState> {
               await _tryRemotePasswordVerify(
                 email: normalizedEmail,
                 password: password,
+                firebaseUid: account.firebaseUid!,
+                teacher: true,
               );
           if (!verifiedRemotely) return SignInResult.invalidCredentials;
           await _teachers.updatePasswordLocally(
@@ -805,9 +817,10 @@ class SessionNotifier extends Notifier<SessionState> {
           firebaseUid: account.firebaseUid,
           email: normalizedEmail,
           password: password,
+          teacher: true,
         );
         if (account.firebaseUid != null) {
-          final remoteExists = await FirestoreMirror().docExists(
+          final remoteExists = await FirestoreMirror(teacher: true).docExists(
             HiveBoxes.teachers,
             account.id,
           );
@@ -841,6 +854,7 @@ class SessionNotifier extends Notifier<SessionState> {
               await _tryRemotePasswordVerify(
                 email: normalizedEmail,
                 password: password,
+                firebaseUid: account.firebaseUid!,
               );
           if (!verifiedRemotely) return SignInResult.invalidCredentials;
           await _parents.updatePasswordLocally(
@@ -854,7 +868,7 @@ class SessionNotifier extends Notifier<SessionState> {
           password: password,
         );
         if (account.firebaseUid != null) {
-          final remoteExists = await FirestoreMirror().docExists(
+          final remoteExists = await FirestoreMirror(teacher: false).docExists(
             HiveBoxes.parents,
             account.id,
           );
@@ -928,14 +942,23 @@ class SessionNotifier extends Notifier<SessionState> {
   /// every failure (wrong password, offline, unknown user) as `false`;
   /// callers already have their own "local check failed" path to fall back
   /// to, so there's nothing more specific to report here.
+  ///
+  /// The uid check matters now that a parent and a teacher can share an
+  /// email: the teacher fallback to the plain address could otherwise
+  /// accept the *parent's* password for the teacher account.
   Future<bool> _tryRemotePasswordVerify({
     required String email,
     required String password,
+    required String firebaseUid,
+    bool teacher = false,
   }) async {
     if (!await _hasInternet()) return false;
     try {
-      await FirebaseAuthGateway().signIn(email: email, password: password);
-      return true;
+      final gateway = FirebaseAuthGateway(teacher: teacher);
+      final credential = teacher
+          ? await gateway.signInTeacher(email: email, password: password)
+          : await gateway.signIn(email: email, password: password);
+      return credential.user?.uid == firebaseUid;
     } catch (_) {
       return false;
     }
@@ -968,6 +991,7 @@ class SessionNotifier extends Notifier<SessionState> {
     required String? firebaseUid,
     required String email,
     required String password,
+    bool teacher = false,
   }) async {
     if (firebaseUid == null) return;
     // Wrapped as one block, not just around the `signIn` call — even
@@ -979,10 +1003,12 @@ class SessionNotifier extends Notifier<SessionState> {
     // Firebase not initialized, offline, a stale password — must fall
     // through silently rather than surface at all.
     try {
-      final gateway = FirebaseAuthGateway();
+      final gateway = FirebaseAuthGateway(teacher: teacher);
       if (gateway.currentUser?.uid == firebaseUid) return;
       if (!await _hasInternet()) return;
-      await gateway.signIn(email: email, password: password);
+      teacher
+          ? await gateway.signInTeacher(email: email, password: password)
+          : await gateway.signIn(email: email, password: password);
     } catch (e) {
       debugPrint('SessionNotifier: Firebase session re-auth failed: $e');
     }
@@ -994,11 +1020,11 @@ class SessionNotifier extends Notifier<SessionState> {
   }) async {
     if (!await _hasInternet()) return SignInResult.noInternet;
     try {
-      final gateway = FirebaseAuthGateway();
+      final gateway = FirebaseAuthGateway(teacher: false);
       final credential = await gateway.signIn(email: email, password: password);
       final uid = credential.user?.uid;
       if (uid == null) return SignInResult.invalidCredentials;
-      final remote = await FirestoreMirror().fetchParentByFirebaseUid(uid);
+      final remote = await FirestoreMirror(teacher: false).fetchParentByFirebaseUid(uid);
       if (remote == null) return SignInResult.noProfileForRole;
       _pendingParent = _PendingParentRegistration(
         fullName: remote.fullName,
@@ -1025,11 +1051,14 @@ class SessionNotifier extends Notifier<SessionState> {
   }) async {
     if (!await _hasInternet()) return SignInResult.noInternet;
     try {
-      final gateway = FirebaseAuthGateway();
-      final credential = await gateway.signIn(email: email, password: password);
+      final gateway = FirebaseAuthGateway(teacher: true);
+      final credential = await gateway.signInTeacher(
+        email: email,
+        password: password,
+      );
       final uid = credential.user?.uid;
       if (uid == null) return SignInResult.invalidCredentials;
-      final remote = await FirestoreMirror().fetchTeacherByFirebaseUid(uid);
+      final remote = await FirestoreMirror(teacher: true).fetchTeacherByFirebaseUid(uid);
       if (remote == null) return SignInResult.noProfileForRole;
       _pendingTeacher = _PendingTeacherRegistration(
         fullName: remote.fullName,
@@ -1052,10 +1081,18 @@ class SessionNotifier extends Notifier<SessionState> {
 
   /// Best-effort, fire-and-forget — only feeds the Activate screen's
   /// "already activated" notice, so a failure must never affect sign-in.
+  ///
+  /// Keyed by the login's own email (the `+teacher` alias for Gmail
+  /// teachers) — `firestore.rules` only lets that exact email write it.
   void _markTeacherActivated(String email) {
-    FirestoreMirror().markTeacherActivated(email).catchError((Object e) {
+    try {
+      final loginEmail = FirebaseAuthGateway(teacher: true).currentUser?.email ?? email;
+      FirestoreMirror(teacher: true).markTeacherActivated(loginEmail).catchError((Object e) {
+        debugPrint('markTeacherActivated failed: $e');
+      });
+    } catch (e) {
       debugPrint('markTeacherActivated failed: $e');
-    });
+    }
   }
 
   /// Teacher verification (SL-TEA-01..03). The status lives in Hive (not in
@@ -1077,7 +1114,7 @@ class SessionNotifier extends Notifier<SessionState> {
     final account = id == null ? null : _teachers.findById(id);
     final uid = account?.firebaseUid;
     if (account != null && uid != null) {
-      final remote = await FirestoreMirror().fetchTeacherByFirebaseUid(uid);
+      final remote = await FirestoreMirror(teacher: true).fetchTeacherByFirebaseUid(uid);
       await _applyRemoteTeacherStatus(account, remote?.verificationStatus);
     }
     return activeTeacherStatus;
@@ -1176,6 +1213,10 @@ class SessionNotifier extends Notifier<SessionState> {
     }
     return ok;
   }
+
+  /// The active parent's/teacher's email, as they registered it (a Gmail
+  /// teacher's `+teacher` login alias is never shown) — Settings header.
+  String? get activeAccountEmail => _activeGrownUp().$1;
 
   /// Whether the active account has a Firebase Auth link yet (FR-7.2 sync
   /// needs this — see `ParentRepository.linkToFirebase` doc for why an
@@ -1526,8 +1567,15 @@ class SessionNotifier extends Notifier<SessionState> {
     }
     if (!await _hasInternet()) return DeleteAccountCheck.noInternet;
     try {
-      await FirebaseAuthGateway().signIn(email: email, password: password);
-      return DeleteAccountCheck.ok;
+      final gateway = FirebaseAuthGateway();
+      final credential = state.activeRole == UserRole.asatidz
+          ? await gateway.signInTeacher(email: email, password: password)
+          : await gateway.signIn(email: email, password: password);
+      // A shared-email parent's password must not unlock the teacher's
+      // account deletion (or vice versa).
+      return credential.user?.uid == firebaseUid
+          ? DeleteAccountCheck.ok
+          : DeleteAccountCheck.wrongPassword;
     } on FirebaseAuthException catch (e) {
       return e.code == 'network-request-failed'
           ? DeleteAccountCheck.noInternet
@@ -1578,7 +1626,7 @@ class SessionNotifier extends Notifier<SessionState> {
         final account = id == null ? null : _teachers.findById(id);
         final firebaseUid = account?.firebaseUid;
         if (firebaseUid == null) return true;
-        final remote = await FirestoreMirror().fetchTeacherByFirebaseUid(
+        final remote = await FirestoreMirror(teacher: true).fetchTeacherByFirebaseUid(
           firebaseUid,
         );
         if (remote != null) {
@@ -1590,7 +1638,7 @@ class SessionNotifier extends Notifier<SessionState> {
         final account = id == null ? null : _parents.findById(id);
         final firebaseUid = account?.firebaseUid;
         if (firebaseUid == null) return true;
-        final remote = await FirestoreMirror().fetchParentByFirebaseUid(
+        final remote = await FirestoreMirror(teacher: false).fetchParentByFirebaseUid(
           firebaseUid,
         );
         if (remote != null) return true;

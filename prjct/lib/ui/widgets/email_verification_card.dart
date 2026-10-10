@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
+import '../../data/remote/firebase_role_app.dart';
 import '../theme/app_colors.dart';
 import 'soft_card.dart';
 
@@ -28,7 +29,9 @@ class _EmailVerificationCardState extends State<EmailVerificationCard> {
   bool _justSent = false;
 
   Future<void> _resend() async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = FirebaseAuth.instanceFor(
+      app: FirebaseRoleApp.app(),
+    ).currentUser;
     if (user == null) return;
     setState(() => _busy = true);
     try {
@@ -53,12 +56,16 @@ class _EmailVerificationCardState extends State<EmailVerificationCard> {
   }
 
   Future<void> _checkVerified() async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = FirebaseAuth.instanceFor(
+      app: FirebaseRoleApp.app(),
+    ).currentUser;
     if (user == null) return;
     setState(() => _busy = true);
     try {
       await user.reload();
-      final refreshed = FirebaseAuth.instance.currentUser;
+      final refreshed = FirebaseAuth.instanceFor(
+        app: FirebaseRoleApp.app(),
+      ).currentUser;
       if (mounted) {
         setState(() => _busy = false);
         if (refreshed?.emailVerified ?? false) {
@@ -80,7 +87,9 @@ class _EmailVerificationCardState extends State<EmailVerificationCard> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = FirebaseAuth.instanceFor(
+      app: FirebaseRoleApp.app(),
+    ).currentUser;
     if (user == null || user.emailVerified) return const SizedBox.shrink();
 
     return SoftCard(

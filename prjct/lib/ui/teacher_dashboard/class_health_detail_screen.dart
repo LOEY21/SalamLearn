@@ -4,19 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../logic/teacher/teacher_providers.dart';
 import '../theme/app_colors.dart';
+import '../widgets/child_profile_form.dart' show displayText, scaledExtent;
+import '../widgets/hub_kit.dart';
 import '../widgets/soft_card.dart';
 import 'teacher_dashboard_screen.dart'
     show MasteryPill, masteryBarColor, masteryBg, masteryFg;
 
 /// Full-screen drill-in for the Classroom tab's Class Health Index card
-/// (FR-6.2) — reached via that card's "See details" button. Shows every
+/// (FR-6.2) — reached via that card's "See details" row. Shows every
 /// module's full stat breakdown plus the health-index methodology, which
-/// the compact card has no room for.
-///
-/// Flat appbar + white surface, matching `ClassDetailScreen`/
-/// `ClassroomManagementScreen`/`HomeModeDashboardScreen` — no gradient hero
-/// banner, per this codebase's standing "flat appbar ... rather than the
-/// old teal-gradient hero" design decision.
+/// the compact card has no room for. Built on the hub kit's sub-page
+/// frame; two columns (games | methodology) from tablet-landscape widths.
 class ClassHealthDetailScreen extends ConsumerWidget {
   const ClassHealthDetailScreen({super.key, required this.classId});
 
@@ -38,121 +36,31 @@ class ClassHealthDetailScreen extends ConsumerWidget {
                   active.length)
               .round();
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _ClassHealthAppBar(onBack: () => Navigator.of(context).pop()),
-            const Divider(height: 1, color: AppColors.creamBorder),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(18, 14, 18, 28),
-                children: [
-                  _OverallSummaryCard(overall: overall, moduleCount: active.length),
-                  const SizedBox(height: 18),
-                  const _SectionHeading('GAMES'),
-                  const SizedBox(height: 10),
-                  for (final module in modules)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _ModuleDetailCard(
-                        module: module,
-                        tier: _tierFor(module.healthIndex),
-                      ),
-                    ),
-                  const SizedBox(height: 6),
-                  const _SectionHeading('HOW THIS IS CALCULATED'),
-                  const SizedBox(height: 10),
-                  const _MethodologyCard(),
-                ],
-              ),
-            ),
-          ],
-        ),
+    return HubSubpage(
+      header: HubSubpageHeader(
+        title: 'Class Health Index',
+        subtitle:
+            'Classroom Mode only — games played on the Hot Seat '
+            'during live Cast sessions.',
+        onBack: () => Navigator.of(context).pop(),
       ),
-    );
-  }
-}
-
-/// Same shape as `ClassroomManagementScreen`'s `_ManagementAppBar` /
-/// `HomeModeDashboardScreen`'s `_HomeModeAppBar` — neutral-tint back
-/// button, uppercase eyebrow, bold title.
-class _ClassHealthAppBar extends StatelessWidget {
-  const _ClassHealthAppBar({required this.onBack});
-
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 18, 8),
-      child: Row(
-        children: [
-          Material(
-            color: AppColors.neutralTint,
-            borderRadius: BorderRadius.circular(11),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(11),
-              onTap: onBack,
-              child: const SizedBox(
-                width: 34,
-                height: 34,
-                child: Icon(
-                  Icons.arrow_back_rounded,
-                  size: 18,
-                  color: AppColors.ink,
-                ),
+      body: HubTabBody(
+        left: [
+          _OverallSummaryCard(overall: overall, moduleCount: active.length),
+          const HubSectionLabel('Games'),
+          for (final module in modules)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _ModuleDetailCard(
+                module: module,
+                tier: _tierFor(module.healthIndex),
               ),
             ),
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'CLASSROOM TAB',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-                Text(
-                  'Class Health Index',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.2,
-                    color: AppColors.ink,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
-      ),
-    );
-  }
-}
-
-class _SectionHeading extends StatelessWidget {
-  const _SectionHeading(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.6,
-        color: AppColors.textMuted,
+        right: const [
+          HubSectionLabel('How this is calculated'),
+          _MethodologyCard(),
+        ],
       ),
     );
   }
@@ -170,54 +78,60 @@ class _OverallSummaryCard extends StatelessWidget {
         ? null
         : ClassHealthDetailScreen._tierFor(overall!);
 
-    return SoftCard(
-      padding: const EdgeInsets.all(18),
-      child: Row(
-        children: [
-          if (overall != null) ...[
-            _HealthRing(score: overall!, tier: tier!),
-            const SizedBox(width: 16),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Overall class health',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.ink,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  overall == null
-                      ? 'No classroom activity recorded yet.'
-                      : 'Average across $moduleCount active game'
-                            '${moduleCount == 1 ? '' : 's'} this class has '
-                            'practiced in Classroom Mode.',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textMuted,
-                    height: 1.35,
-                  ),
-                ),
-                if (tier != null) ...[
-                  const SizedBox(height: 8),
-                  MasteryPill(mastery: tier, dotted: true),
-                ],
-              ],
-            ),
+    final text = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Overall class health', style: displayText(19)),
+        const SizedBox(height: 4),
+        Text(
+          overall == null
+              ? 'No classroom activity recorded yet.'
+              : 'Average across $moduleCount active game'
+                    '${moduleCount == 1 ? '' : 's'} this class has '
+                    'practiced in Classroom Mode.',
+          style: const TextStyle(
+            fontSize: 13.5,
+            color: AppColors.inkSoft,
+            height: 1.4,
           ),
+        ),
+        if (tier != null) ...[
+          const SizedBox(height: 10),
+          MasteryPill(mastery: tier, dotted: true),
         ],
-      ),
+      ],
+    );
+
+    return SoftCard(
+      radius: 20,
+      padding: const EdgeInsets.all(20),
+      child: overall == null
+          ? text
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final ring = _HealthRing(score: overall!, tier: tier!);
+                // Ring above the text when there's no room beside it.
+                if (scaledExtent(context, constraints.maxWidth) < 300) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [ring, const SizedBox(height: 14), text],
+                  );
+                }
+                return Row(
+                  children: [
+                    ring,
+                    const SizedBox(width: 18),
+                    Expanded(child: text),
+                  ],
+                );
+              },
+            ),
     );
   }
 }
 
-/// Bigger, more legible version of the module cards' ring — this is the
-/// one number on the screen a teacher should read first.
+/// Bigger, more legible ring than the module cards' — this is the one
+/// number on the screen a teacher should read first.
 class _HealthRing extends StatelessWidget {
   const _HealthRing({required this.score, required this.tier});
 
@@ -226,58 +140,65 @@ class _HealthRing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const size = 96.0;
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0.0, end: (score / 100).clamp(0.0, 1.0)),
       duration: const Duration(milliseconds: 900),
-      curve: Curves.easeOutCubic,
+      curve: Curves.easeOutQuart,
       builder: (context, val, child) {
         return SizedBox(
-          width: 76,
-          height: 76,
+          width: size,
+          height: size,
           child: Stack(
             alignment: Alignment.center,
             children: [
               const SizedBox(
-                width: 76,
-                height: 76,
+                width: size,
+                height: size,
                 child: CircularProgressIndicator(
                   value: 1,
-                  strokeWidth: 8,
+                  strokeWidth: 10,
                   color: AppColors.creamDark,
                 ),
               ),
               SizedBox(
-                width: 76,
-                height: 76,
+                width: size,
+                height: size,
                 child: CircularProgressIndicator(
                   value: val,
-                  strokeWidth: 8,
+                  strokeWidth: 10,
                   strokeCap: StrokeCap.round,
                   backgroundColor: Colors.transparent,
                   color: masteryBarColor(tier),
                 ),
               ),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '${(val * 100).round()}',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.tealDark,
-                      height: 1,
-                    ),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${(val * 100).round()}',
+                        style: displayText(
+                          28,
+                          weight: 800,
+                          color: AppColors.tealDark,
+                          height: 1,
+                        ),
+                      ),
+                      const Text(
+                        '/ 100',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.inkSoft,
+                        ),
+                      ),
+                    ],
                   ),
-                  const Text(
-                    '/ 100',
-                    style: TextStyle(
-                      fontSize: 8,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ],
           ),
@@ -295,23 +216,28 @@ class _ModuleDetailCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final title = '${module.icon}  ${module.moduleName}'.trim();
     if (!module.hasActivity) {
       return SoftCard(
+        radius: 18,
         padding: const EdgeInsets.all(16),
-        child: Row(
+        child: Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 10,
+          runSpacing: 4,
           children: [
-            Expanded(
-              child: Text(
-                '${module.icon}  ${module.moduleName}'.trim(),
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                color: AppColors.ink,
               ),
             ),
-            const Flexible(
-              child: Text(
-                'No activity yet',
-                textAlign: TextAlign.end,
-                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-              ),
+            const Text(
+              'No activity yet',
+              style: TextStyle(fontSize: 13, color: AppColors.inkSoft),
             ),
           ],
         ),
@@ -327,115 +253,129 @@ class _ModuleDetailCard extends StatelessWidget {
       trendColor = trend > 0 ? AppColors.teal : AppColors.coral;
     }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: AppColors.creamBorder),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    final stats = [
+      _StatColumn(
+        label: 'Completion',
+        value: '${(module.completionRate * 100).round()}%',
+      ),
+      _StatColumn(
+        label: 'Avg accuracy',
+        value: '${module.avgAccuracy.round()}%',
+      ),
+      _StatColumn(
+        label: 'Avg errors',
+        value: module.avgErrors.toStringAsFixed(1),
+      ),
+    ];
+
+    return SoftCard(
+      radius: 18,
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 6,
             children: [
-              // Mastery-colored rail — a scan cue that doesn't require
-              // reading the pill text, matching the redesign mock.
-              Container(width: 5, color: masteryBarColor(tier)),
-              Expanded(
-                child: Container(
-                  color: AppColors.surface,
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${module.icon}  ${module.moduleName}'.trim(),
-                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-                            ),
-                          ),
-                          MasteryPill(mastery: tier),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Health index ${module.healthIndex}/100',
-                        style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-                      ),
-                      const SizedBox(height: 12),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: TweenAnimationBuilder<double>(
-                          tween: Tween<double>(begin: 0.0, end: module.completionRate),
-                          duration: const Duration(milliseconds: 900),
-                          curve: Curves.easeOutCubic,
-                          builder: (context, val, child) {
-                            return LinearProgressIndicator(
-                              value: val,
-                              minHeight: 7,
-                              backgroundColor: AppColors.creamDark,
-                              color: masteryBarColor(tier),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _StatColumn(
-                              label: 'Completion',
-                              value: '${(module.completionRate * 100).round()}%',
-                            ),
-                          ),
-                          Expanded(
-                            child: _StatColumn(
-                              label: 'Avg accuracy',
-                              value: '${module.avgAccuracy.round()}%',
-                            ),
-                          ),
-                          Expanded(
-                            child: _StatColumn(
-                              label: 'Avg errors',
-                              value: module.avgErrors.toStringAsFixed(1),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (trendLabel != null) ...[
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Icon(
-                              trend! > 0
-                                  ? Icons.arrow_upward_rounded
-                                  : Icons.arrow_downward_rounded,
-                              size: 15,
-                              color: trendColor,
-                            ),
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                trendLabel,
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: trendColor,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: masteryBarColor(tier),
+                      shape: BoxShape.circle,
+                    ),
                   ),
-                ),
+                  Flexible(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15.5,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                  ),
+                ],
               ),
+              MasteryPill(mastery: tier),
             ],
           ),
-        ),
+          const SizedBox(height: 4),
+          Text(
+            'Health index ${module.healthIndex}/100',
+            style: const TextStyle(fontSize: 13, color: AppColors.inkSoft),
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0.0, end: module.completionRate),
+              duration: const Duration(milliseconds: 900),
+              curve: Curves.easeOutQuart,
+              builder: (context, val, child) {
+                return LinearProgressIndicator(
+                  value: val,
+                  minHeight: 8,
+                  backgroundColor: AppColors.creamDark,
+                  color: masteryBarColor(tier),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // Three across when there's room, stacked when narrow.
+              if (scaledExtent(context, constraints.maxWidth) < 300) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final (i, s) in stats.indexed) ...[
+                      if (i > 0) const SizedBox(height: 8),
+                      s,
+                    ],
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [for (final s in stats) Expanded(child: s)],
+              );
+            },
+          ),
+          if (trendLabel != null) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(
+                  trend! > 0
+                      ? Icons.arrow_upward_rounded
+                      : Icons.arrow_downward_rounded,
+                  size: 18,
+                  color: trendColor,
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    trendLabel,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: trendColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -452,17 +392,10 @@ class _StatColumn extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-            color: AppColors.ink,
-          ),
-        ),
+        Text(value, style: displayText(20, weight: 800, height: 1.1)),
         Text(
           label,
-          style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+          style: const TextStyle(fontSize: 12.5, color: AppColors.inkSoft),
         ),
       ],
     );
@@ -475,7 +408,8 @@ class _MethodologyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SoftCard(
-      padding: const EdgeInsets.all(16),
+      radius: 20,
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -483,7 +417,7 @@ class _MethodologyCard extends StatelessWidget {
             'Each game\'s health index is a weighted blend of three '
             'Classroom Mode signals — solo Student Hub practice at home '
             'never counts toward it:',
-            style: TextStyle(fontSize: 12.5, color: AppColors.ink, height: 1.4),
+            style: TextStyle(fontSize: 14, color: AppColors.ink, height: 1.45),
           ),
           const SizedBox(height: 14),
           const _WeightSegmentBar(),
@@ -509,10 +443,7 @@ class _MethodologyCard extends StatelessWidget {
           const SizedBox(height: 6),
           const Divider(height: 1, color: AppColors.creamDark),
           const SizedBox(height: 14),
-          const Text(
-            'Tiers',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.ink),
-          ),
+          Text('Tiers', style: displayText(16)),
           const SizedBox(height: 10),
           const Wrap(
             spacing: 8,
@@ -529,7 +460,11 @@ class _MethodologyCard extends StatelessWidget {
             'prior week and only appear once a game has at least one '
             'record in both. Solo Student Hub practice at home never '
             'counts here — see Home Mode Insights for that.',
-            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted, height: 1.4),
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.inkSoft,
+              height: 1.45,
+            ),
           ),
         ],
       ),
@@ -545,11 +480,11 @@ class _WeightSegmentBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: SizedBox(
+      borderRadius: BorderRadius.circular(999),
+      child: const SizedBox(
         height: 14,
         child: Row(
-          children: const [
+          children: [
             Expanded(flex: 40, child: ColoredBox(color: AppColors.teal)),
             Expanded(flex: 40, child: ColoredBox(color: AppColors.gold)),
             Expanded(flex: 20, child: ColoredBox(color: AppColors.coral)),
@@ -581,15 +516,19 @@ class _WeightRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 9,
-            height: 9,
-            margin: const EdgeInsets.only(top: 4, right: 8),
-            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
+            width: 10,
+            height: 10,
+            margin: const EdgeInsets.only(top: 5, right: 10),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           Expanded(
-            child: RichText(
-              text: TextSpan(
-                style: const TextStyle(fontSize: 12.5, color: AppColors.ink, height: 1.35),
+            child: Text.rich(
+              TextSpan(
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: AppColors.ink,
+                  height: 1.4,
+                ),
                 children: [
                   TextSpan(
                     text: '$weight $label — ',
@@ -597,7 +536,7 @@ class _WeightRow extends StatelessWidget {
                   ),
                   TextSpan(
                     text: detail,
-                    style: const TextStyle(color: AppColors.textMuted),
+                    style: const TextStyle(color: AppColors.inkSoft),
                   ),
                 ],
               ),
@@ -618,16 +557,16 @@ class _TierChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: masteryBg(tier),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        '${tier.toUpperCase()} $range',
+        '$tier · $range',
         style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
           color: masteryFg(tier),
         ),
       ),

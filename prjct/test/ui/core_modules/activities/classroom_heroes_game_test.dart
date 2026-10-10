@@ -146,6 +146,7 @@ void main() {
       expect(find.text(q.promptText), findsOneWidget);
       expect(find.text(q.correctText), findsOneWidget);
       expect(find.text(q.decoyText), findsOneWidget);
+      expect(find.text('Read again'), findsOneWidget);
     }
   });
 
@@ -224,6 +225,11 @@ void main() {
     final handle = tester.ensureSemantics();
     await tester.pump(const Duration(milliseconds: 1500));
     expect(find.text(session.finishText), findsOneWidget);
+    // 2 of 3 right: two stars and the round's tally.
+    expect(find.text('Great job! Keep being a classroom hero!'), findsOneWidget);
+    expect(find.text('2 right'), findsOneWidget);
+    expect(find.text('1 wrong'), findsOneWidget);
+    expect(find.text('67% correct'), findsOneWidget);
     expect(xp, isNull, reason: 'the badge waits for the continue button');
 
     await tester.tap(find.bySemanticsLabel('Continue to Next Lesson'));

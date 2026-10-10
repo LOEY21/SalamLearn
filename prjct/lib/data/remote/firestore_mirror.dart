@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../local/hive_boxes.dart';
+import 'firebase_role_app.dart';
 import '../models/assigned_module.dart';
 import '../models/class_section.dart';
 import '../models/consent_record.dart';
@@ -110,17 +111,24 @@ class RemoteClassRef {
 /// [FirebaseAuthGateway]) is the credential story once online, not a
 /// second copy of the local hash.
 class FirestoreMirror {
-  FirestoreMirror({FirebaseFirestore? firestore})
-    : _firestoreOverride = firestore;
+  /// [teacher] picks the teacher's own Firebase app (see [FirebaseRoleApp])
+  /// — needed before the session's role flips, e.g. reading the teacher doc
+  /// during sign-in. Null follows the active role at call time.
+  FirestoreMirror({FirebaseFirestore? firestore, bool? teacher})
+    : _firestoreOverride = firestore,
+      _teacher = teacher;
 
   final FirebaseFirestore? _firestoreOverride;
+  final bool? _teacher;
 
   /// Lazy on purpose — touching `FirebaseFirestore.instance` at
   /// construction time means every consumer of [SyncManager] (which builds
   /// one of these eagerly) blows up unless `Firebase.initializeApp()` has
   /// already run, including in widget tests that never call it. Only
   /// resolve the real instance when a push is actually attempted.
-  FirebaseFirestore get _db => _firestoreOverride ?? FirebaseFirestore.instance;
+  FirebaseFirestore get _db =>
+      _firestoreOverride ??
+      FirebaseFirestore.instanceFor(app: FirebaseRoleApp.app(teacher: _teacher));
 
   Future<void> pushParent(ParentAccount account) {
     return _db.collection(HiveBoxes.parents).doc(account.id).set({
@@ -218,6 +226,33 @@ class FirestoreMirror {
     );
   }
 
+  /// Parent-side counterpart of [fetchClassByInvitationCode] for a
+  /// teacher-initiated enroll (Student ID): the parent's device gets the
+  /// enrollment via [watchEnrollmentsForLearners] but has never seen the
+  /// teacher's class, so it's pulled by id. Unlike the code lookup, an
+  /// archived class is still returned — the parent dashboard shows it as
+  /// archived rather than hiding the enrollment.
+  Future<RemoteClassRef?> fetchClassById(String classId) async {
+    final doc = await _db.collection(HiveBoxes.classes).doc(classId).get();
+    final data = doc.data();
+    if (data == null) return null;
+    final createdAtRaw = data['createdAt'] as String?;
+    final archivedAtRaw = data['archivedAt'] as String?;
+    return RemoteClassRef(
+      id: doc.id,
+      teacherId: data['teacherId'] as String? ?? '',
+      name: data['name'] as String? ?? 'Class',
+      invitationCode: data['invitationCode'] as String? ?? '',
+      gradeLevel: data['gradeLevel'] as String?,
+      section: data['section'] as String?,
+      schedule: data['schedule'] as String?,
+      createdAt: createdAtRaw == null ? null : DateTime.tryParse(createdAtRaw),
+      archivedAt: archivedAtRaw == null
+          ? null
+          : DateTime.tryParse(archivedAtRaw),
+    );
+  }
+
   Future<void> pushEnrollment(Enrollment enrollment) {
     final docId = '${enrollment.classId}_${enrollment.learnerId}';
     return _db.collection(HiveBoxes.enrollments).doc(docId).set({
@@ -258,7 +293,9 @@ class FirestoreMirror {
   /// learners — emits each chunk's full record list on every change, so a
   /// parent/teacher dashboard picks up games played on another device
   /// without a manual sync.
-  Stream<List<ProgressRecord>> watchProgressForLearners(List<String> learnerIds) {
+  Stream<List<ProgressRecord>> watchProgressForLearners(
+    List<String> learnerIds,
+  ) {
     if (learnerIds.isEmpty) return const Stream.empty();
     final controller = StreamController<List<ProgressRecord>>();
     final subs = <StreamSubscription>[];
@@ -266,14 +303,18 @@ class FirestoreMirror {
       try {
         // Firestore `in` limit is 10; chunk for safety
         for (var i = 0; i < learnerIds.length; i += 10) {
-          final chunk = learnerIds.sublist(i, (i + 10).clamp(0, learnerIds.length));
+          final chunk = learnerIds.sublist(
+            i,
+            (i + 10).clamp(0, learnerIds.length),
+          );
           subs.add(
             _db
                 .collection(HiveBoxes.progress)
                 .where('learnerId', whereIn: chunk)
                 .snapshots()
                 .listen(
-                  (snap) => controller.add(snap.docs.map(_progressFromDoc).toList()),
+                  (snap) =>
+                      controller.add(snap.docs.map(_progressFromDoc).toList()),
                   onError: controller.addError,
                 ),
           );
@@ -302,7 +343,8 @@ class FirestoreMirror {
       sequencingErrors: (data['sequencingErrors'] as num?)?.toInt() ?? 0,
       timeOnTaskSeconds: (data['timeOnTaskSeconds'] as num?)?.toInt() ?? 0,
       completedAt:
-          DateTime.tryParse(data['completedAt'] as String? ?? '') ?? DateTime.now(),
+          DateTime.tryParse(data['completedAt'] as String? ?? '') ??
+          DateTime.now(),
       assignedByTeacher: data['assignedByTeacher'] as bool? ?? false,
       lessonId: data['lessonId'] as String?,
       isClassroomMode: data['isClassroomMode'] as bool? ?? false,
@@ -462,8 +504,12 @@ class FirestoreMirror {
         gradeLevel: data['gradeLevel'] as String?,
         section: data['section'] as String?,
         schedule: data['schedule'] as String?,
-        createdAt: createdAtRaw == null ? null : DateTime.tryParse(createdAtRaw),
-        archivedAt: archivedAtRaw == null ? null : DateTime.tryParse(archivedAtRaw),
+        createdAt: createdAtRaw == null
+            ? null
+            : DateTime.tryParse(createdAtRaw),
+        archivedAt: archivedAtRaw == null
+            ? null
+            : DateTime.tryParse(archivedAtRaw),
       );
     }).toList();
   }
@@ -478,7 +524,9 @@ class FirestoreMirror {
       return Enrollment(
         classId: data['classId'] as String? ?? '',
         learnerId: data['learnerId'] as String? ?? '',
-        enrolledAt: DateTime.tryParse(data['enrolledAt'] as String? ?? '') ?? DateTime.now(),
+        enrolledAt:
+            DateTime.tryParse(data['enrolledAt'] as String? ?? '') ??
+            DateTime.now(),
       );
     }).toList();
   }
@@ -493,7 +541,9 @@ class FirestoreMirror {
       return Enrollment(
         classId: data['classId'] as String? ?? '',
         learnerId: data['learnerId'] as String? ?? '',
-        enrolledAt: DateTime.tryParse(data['enrolledAt'] as String? ?? '') ?? DateTime.now(),
+        enrolledAt:
+            DateTime.tryParse(data['enrolledAt'] as String? ?? '') ??
+            DateTime.now(),
       );
     }).toList();
   }
@@ -511,8 +561,12 @@ class FirestoreMirror {
             classId: data['classId'] as String? ?? '',
             learnerId: data['learnerId'] as String?,
             moduleId: data['moduleId'] as String? ?? '',
-            dueDate: DateTime.tryParse(data['dueDate'] as String? ?? '') ?? DateTime.now(),
-            assignedAt: DateTime.tryParse(data['assignedAt'] as String? ?? '') ?? DateTime.now(),
+            dueDate:
+                DateTime.tryParse(data['dueDate'] as String? ?? '') ??
+                DateTime.now(),
+            assignedAt:
+                DateTime.tryParse(data['assignedAt'] as String? ?? '') ??
+                DateTime.now(),
             maxLevel: data['maxLevel'] as int? ?? 3,
             maxLessons: data['maxLessons'] as int?,
           );
@@ -521,7 +575,9 @@ class FirestoreMirror {
         .toList();
   }
 
-  Future<List<AssignedModule>> fetchAssignmentsForLearner(String learnerId) async {
+  Future<List<AssignedModule>> fetchAssignmentsForLearner(
+    String learnerId,
+  ) async {
     final snapshot = await _db
         .collection(HiveBoxes.assignedModules)
         .where('learnerId', isEqualTo: learnerId)
@@ -533,8 +589,12 @@ class FirestoreMirror {
         classId: data['classId'] as String? ?? '',
         learnerId: data['learnerId'] as String?,
         moduleId: data['moduleId'] as String? ?? '',
-        dueDate: DateTime.tryParse(data['dueDate'] as String? ?? '') ?? DateTime.now(),
-        assignedAt: DateTime.tryParse(data['assignedAt'] as String? ?? '') ?? DateTime.now(),
+        dueDate:
+            DateTime.tryParse(data['dueDate'] as String? ?? '') ??
+            DateTime.now(),
+        assignedAt:
+            DateTime.tryParse(data['assignedAt'] as String? ?? '') ??
+            DateTime.now(),
         maxLevel: data['maxLevel'] as int? ?? 3,
         maxLessons: data['maxLessons'] as int?,
       );
@@ -551,26 +611,41 @@ class FirestoreMirror {
   /// `LearnerRepository.saveFromRemote` so repeat lookups stay local.
   Future<List<RemoteLearnerRef>> findLearnersByName(String name) async {
     final normalized = name.trim().toLowerCase();
-    final snapshot = await _db.collection(HiveBoxes.learners).get();
-    return snapshot.docs
-        .map((doc) {
-          final data = doc.data();
-          final createdAtRaw = data['createdAt'] as String?;
-          return RemoteLearnerRef(
-            id: doc.id,
-            name: data['name'] as String? ?? 'Learner',
-            age: data['age'] as int? ?? 5,
-            avatar: data['avatar'] as String? ?? '🧒',
-            gradeLevel: data['gradeLevel'] as String? ?? 'Grade 1',
-            username: data['username'] as String?,
-            parentId: data['parentId'] as String?,
-            createdAt: createdAtRaw == null
-                ? null
-                : DateTime.tryParse(createdAtRaw),
-          );
-        })
+    return (await _allLearners())
         .where((l) => l.name.trim().toLowerCase() == normalized)
         .toList();
+  }
+
+  /// Same whole-collection pull as [findLearnersByName] — the Student ID is
+  /// derived from the doc id ([studentIdFor]), not stored, so it can only be
+  /// matched client-side.
+  Future<List<RemoteLearnerRef>> findLearnersByStudentId(
+    String studentId,
+  ) async {
+    final normalized = normalizeStudentId(studentId);
+    return (await _allLearners())
+        .where((l) => normalizeStudentId(studentIdFor(l.id)) == normalized)
+        .toList();
+  }
+
+  Future<List<RemoteLearnerRef>> _allLearners() async {
+    final snapshot = await _db.collection(HiveBoxes.learners).get();
+    return snapshot.docs.map((doc) {
+      final data = doc.data();
+      final createdAtRaw = data['createdAt'] as String?;
+      return RemoteLearnerRef(
+        id: doc.id,
+        name: data['name'] as String? ?? 'Learner',
+        age: data['age'] as int? ?? 5,
+        avatar: data['avatar'] as String? ?? '🧒',
+        gradeLevel: data['gradeLevel'] as String? ?? 'Grade 1',
+        username: data['username'] as String?,
+        parentId: data['parentId'] as String?,
+        createdAt: createdAtRaw == null
+            ? null
+            : DateTime.tryParse(createdAtRaw),
+      );
+    }).toList();
   }
 
   Future<RemoteLearnerRef?> fetchLearner(String learnerId) async {
@@ -587,9 +662,7 @@ class FirestoreMirror {
       gradeLevel: data['gradeLevel'] as String? ?? 'Grade 1',
       username: data['username'] as String?,
       parentId: data['parentId'] as String?,
-      createdAt: createdAtRaw == null
-          ? null
-          : DateTime.tryParse(createdAtRaw),
+      createdAt: createdAtRaw == null ? null : DateTime.tryParse(createdAtRaw),
     );
   }
 
@@ -624,9 +697,11 @@ class FirestoreMirror {
   /// deleted — used by [accountStreamProvider] so a dashboard user learns
   /// immediately if an admin removes their account.
   Stream<bool> watchDocExistence(String collection, String docId) {
-    return _db.collection(collection).doc(docId).snapshots().map(
-      (snap) => snap.exists,
-    );
+    return _db
+        .collection(collection)
+        .doc(docId)
+        .snapshots()
+        .map((snap) => snap.exists);
   }
 
   /// One-shot check — returns `true` iff a document at [collection]/[docId]
@@ -689,7 +764,10 @@ class FirestoreMirror {
         .collection(HiveBoxes.enrollments)
         .where('classId', isEqualTo: classId)
         .snapshots()
-        .map((snap) => snap.docs.map((d) => d.data()['learnerId'] as String).toSet());
+        .map(
+          (snap) =>
+              snap.docs.map((d) => d.data()['learnerId'] as String).toSet(),
+        );
   }
 
   /// Real-time stream of enrollment IDs (each as `"$classId:$learnerId"`)
@@ -702,18 +780,24 @@ class FirestoreMirror {
     void onListen() async {
       // Firestore `in` limit is 10; chunk for safety
       for (var i = 0; i < learnerIds.length; i += 10) {
-        final chunk = learnerIds.sublist(i, (i + 10).clamp(0, learnerIds.length));
+        final chunk = learnerIds.sublist(
+          i,
+          (i + 10).clamp(0, learnerIds.length),
+        );
         final sub = _db
             .collection(HiveBoxes.enrollments)
             .where('learnerId', whereIn: chunk)
             .snapshots()
             .listen((snap) {
-              final ids = snap.docs.map((d) => '${d.data()['classId']}_${d.data()['learnerId']}').toSet();
+              final ids = snap.docs
+                  .map((d) => '${d.data()['classId']}_${d.data()['learnerId']}')
+                  .toSet();
               controller.add(ids);
             });
         subs.add(sub);
       }
     }
+
     controller.onListen = onListen;
     controller.onCancel = () {
       for (final sub in subs) {

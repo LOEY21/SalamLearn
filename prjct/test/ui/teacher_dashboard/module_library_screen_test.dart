@@ -26,9 +26,7 @@ ClassSection _testClass() => ClassSection(
 );
 
 void main() {
-  testWidgets('prompts to create a class when none is active', (
-    tester,
-  ) async {
+  testWidgets('prompts to create a class when none is active', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -60,12 +58,7 @@ void main() {
       ),
     );
 
-    expect(
-      find.textContaining('No lesson folders yet'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('No lesson folders yet'), findsOneWidget);
     expect(find.text('New lesson folder'), findsOneWidget);
   });
 }
-
-

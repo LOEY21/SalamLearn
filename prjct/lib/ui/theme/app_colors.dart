@@ -25,6 +25,9 @@ abstract final class AppColors {
   static const creamBorder = Color(0xFFECEEEC);
   static const creamDark = Color(0xFFF1EADA);
   static const textMuted = Color(0xFF7A8079);
+  // Secondary text that still clears 4.5:1 on white and cream — textMuted
+  // only reaches ~4:1, too faint for body-size copy on the parent screens.
+  static const inkSoft = Color(0xFF545B53);
   static const neutralTint = Color(0xFFF7F8F7);
 
   static const tealDark = Color(0xFF0A4F3E);

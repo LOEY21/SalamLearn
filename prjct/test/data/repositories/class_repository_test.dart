@@ -36,6 +36,25 @@ void main() {
       expect(unarchived.archivedAt, isNull);
     });
 
+    test('deleteClass unenrolls students and stays pending when the cloud delete fails', () async {
+      final repo = ClassRepository();
+      final section = await repo.create(
+        teacherId: 'teacher-1',
+        gradeLevel: 'Grade 1',
+        section: 'A',
+      );
+      await repo.enroll(classId: section.id, learnerId: 'kid-1');
+      await repo.enroll(classId: section.id, learnerId: 'kid-2');
+
+      // No Firebase in tests — every remote delete fails, like offline.
+      await repo.deleteClass(section.id);
+
+      expect(repo.findById(section.id), isNull);
+      expect(repo.byLearnerId('kid-1'), isEmpty);
+      expect(repo.byLearnerId('kid-2'), isEmpty);
+      expect(repo.pendingClassDeletes, contains(section.id));
+    });
+
     test('activeByTeacherId excludes archived, archivedByTeacherId includes only archived', () async {
       final repo = ClassRepository();
       final active = await repo.create(

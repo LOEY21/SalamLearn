@@ -1456,7 +1456,29 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _speakerDisc(wt, 42, 20, 1.6, _svgSpeakerWide),
+                      // Once the ayah has played, the speaker is the
+                      // replay button.
+                      if (_listenDoneT == null)
+                        _speakerDisc(wt, 42, 20, 1.6, _svgSpeakerWide)
+                      else
+                        _Press(
+                          key: const ValueKey('ab-listen-again'),
+                          onTap: _onReplayListen,
+                          builder: (pressed) => Semantics(
+                            button: true,
+                            label: 'Listen again',
+                            child: Transform.scale(
+                              scale: pressed ? .9 : 1,
+                              child: _speakerDisc(
+                                t,
+                                42,
+                                20,
+                                1.6,
+                                _svgSpeakerWide,
+                              ),
+                            ),
+                          ),
+                        ),
                       const SizedBox(width: 12),
                       _waveBars(wt, 4, 34, .9, .08, const [
                         Color(0xFF6EC9FF),
@@ -1484,7 +1506,9 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                   .75,
                   .90,
                   Text(
-                    'The full ayah plays automatically\nwhen the level opens.',
+                    _listenDoneT == null
+                        ? 'The full ayah plays automatically\nwhen the level opens.'
+                        : 'Tap the speaker\nto listen again.',
                     textAlign: TextAlign.center,
                     style: _nunito(13, 400, _cr(.7), height: 1.4),
                   ),
@@ -1495,27 +1519,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
         ),
         if (_listenDoneT != null)
           Positioned(
-            left: 26,
-            top: 761,
-            width: 62,
-            height: 61,
-            child: _enter(
-              _once(t - _listenDoneT!, .5),
-              fromScale: .6,
-              _Press(
-                onTap: _onReplayListen,
-                builder: (pressed) => Image.asset(
-                  '$_kA/btn_replay_${pressed ? 'down' : 'up'}.png',
-                  fit: BoxFit.fill,
-                  gaplessPlayback: true,
-                  semanticLabel: 'Listen again',
-                ),
-              ),
-            ),
-          ),
-        if (_listenDoneT != null)
-          Positioned(
-            left: 96,
+            left: (_kW - 282) / 2,
             top: 760,
             width: 282,
             height: 63.4,

@@ -36,62 +36,64 @@ void main() {
     expect(find.textContaining('No games cast yet'), findsOneWidget);
   });
 
-  testWidgets('shows a High health pill and an upward trend for a healthy module', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          classHealthIndexProvider(_classId).overrideWithValue(const [
-            ModuleHealth(
-              moduleId: '1',
-              moduleName: 'Alif to Yaa',
-              completionRate: 1.0,
-              avgAccuracy: 92,
-              avgErrors: 0.5,
-              trend: 8.0,
-              healthIndex: 90,
-              hasActivity: true,
-            ),
-          ]),
-        ],
-        child: const MaterialApp(
-          home: Scaffold(body: ClassHealthSection(classId: _classId)),
+  testWidgets(
+    'shows a High health pill and an upward trend for a healthy module',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            classHealthIndexProvider(_classId).overrideWithValue(const [
+              ModuleHealth(
+                moduleId: '1',
+                moduleName: 'Alif to Yaa',
+                completionRate: 1.0,
+                avgAccuracy: 92,
+                avgErrors: 0.5,
+                trend: 8.0,
+                healthIndex: 90,
+                hasActivity: true,
+              ),
+            ]),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: ClassHealthSection(classId: _classId)),
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text('Alif to Yaa'), findsOneWidget);
-    expect(find.text('HIGH'), findsOneWidget);
-    expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
-  });
+      expect(find.text('Alif to Yaa'), findsOneWidget);
+      expect(find.text('HIGH'), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
+    },
+  );
 
-  testWidgets('shows a Needs help pill and a downward trend for a struggling module', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          classHealthIndexProvider(_classId).overrideWithValue(const [
-            ModuleHealth(
-              moduleId: '1',
-              moduleName: 'Alif to Yaa',
-              completionRate: 0.3,
-              avgAccuracy: 40,
-              avgErrors: 3,
-              trend: -5.0,
-              healthIndex: 30,
-              hasActivity: true,
-            ),
-          ]),
-        ],
-        child: const MaterialApp(
-          home: Scaffold(body: ClassHealthSection(classId: _classId)),
+  testWidgets(
+    'shows a Needs help pill and a downward trend for a struggling module',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            classHealthIndexProvider(_classId).overrideWithValue(const [
+              ModuleHealth(
+                moduleId: '1',
+                moduleName: 'Alif to Yaa',
+                completionRate: 0.3,
+                avgAccuracy: 40,
+                avgErrors: 3,
+                trend: -5.0,
+                healthIndex: 30,
+                hasActivity: true,
+              ),
+            ]),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: ClassHealthSection(classId: _classId)),
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text('NEEDS HELP'), findsOneWidget);
-    expect(find.byIcon(Icons.arrow_downward_rounded), findsOneWidget);
-  });
+      expect(find.text('NEEDS HELP'), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_downward_rounded), findsOneWidget);
+    },
+  );
 }

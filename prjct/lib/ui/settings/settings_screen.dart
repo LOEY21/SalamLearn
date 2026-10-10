@@ -8,6 +8,7 @@ import '../../logic/auth/session.dart';
 import '../../logic/settings/settings_providers.dart';
 import '../../logic/sync/sync_manager.dart';
 import '../theme/app_colors.dart';
+import '../widgets/account_email_card.dart';
 import '../widgets/delete_account_dialog.dart';
 import '../widgets/change_pin_card.dart';
 import '../widgets/email_verification_card.dart';
@@ -94,6 +95,10 @@ class SettingsScreen extends ConsumerWidget {
                     padding: EdgeInsets.symmetric(vertical: 4),
                     child: LanguageSettingRow(),
                   ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 14, 20, 0),
+                  child: AccountEmailCard(),
                 ),
                 _SectionLabel('Sound & Voice'),
                 Padding(
@@ -393,46 +398,57 @@ class _SettingsRow extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: AppColors.mint,
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                alignment: Alignment.center,
-                child: Icon(icon, size: 17, color: AppColors.teal),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                      ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Control moves under the text when it would squeeze the
+              // title into mid-word breaks (narrow phone / large text).
+              final scale = MediaQuery.textScalerOf(
+                context,
+              ).scale(1).clamp(1.0, 3.0);
+              final stacked = constraints.maxWidth / scale < 300;
+              return Row(
+                crossAxisAlignment: stacked
+                    ? CrossAxisAlignment.start
+                    : CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: AppColors.mint,
+                      borderRadius: BorderRadius.circular(11),
                     ),
-                    const SizedBox(height: 1),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textMuted,
-                      ),
+                    alignment: Alignment.center,
+                    child: Icon(icon, size: 17, color: AppColors.teal),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          subtitle,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                        if (stacked) ...[const SizedBox(height: 8), trailing],
+                      ],
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              trailing,
-            ],
+                  ),
+                  if (!stacked) ...[const SizedBox(width: 8), trailing],
+                ],
+              );
+            },
           ),
         ),
       ),

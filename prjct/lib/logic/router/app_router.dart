@@ -125,16 +125,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '$gate?redirect=${Uri.encodeComponent(fullPath)}';
       }
 
-      // Teacher verification (SL-TEA-03): an unapproved teacher only ever
-      // sees the pending screen; an approved one never needs it. Settings
-      // stay reachable so a pending teacher isn't stuck without them.
+      // Teacher verification (SL-TEA-03): a pending teacher may open the
+      // dashboard itself (it shows the "waiting for approval" notice and
+      // locks its tools), but every other teacher/cast route sends them back
+      // to it. A rejected (or unknown-status) teacher only ever sees the
+      // pending screen; an approved one never needs it.
       if (session.activeRole == UserRole.asatidz && session.pinVerified) {
-        final approved = ref.read(sessionProvider.notifier).activeTeacherApproved;
+        final status = ref.read(sessionProvider.notifier).activeTeacherStatus;
         final teacherArea = path.startsWith('/teacher') || path.startsWith('/cast');
-        if (!approved && teacherArea && path != '/teacher/pending') {
+        if (status == 'pending' && teacherArea && path != '/teacher') {
+          return '/teacher';
+        }
+        if (status != 'approved' && status != 'pending' && teacherArea &&
+            path != '/teacher/pending') {
           return '/teacher/pending';
         }
-        if (approved && path == '/teacher/pending') return '/teacher';
+        if (status == 'approved' && path == '/teacher/pending') return '/teacher';
       }
 
       return null;

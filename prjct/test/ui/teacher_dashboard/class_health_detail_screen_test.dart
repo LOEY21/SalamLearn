@@ -41,12 +41,19 @@ void main() {
         ),
       ),
     );
+    // The overall score ring counts up from 0 over 900ms — let it finish.
+    await tester.pump(const Duration(seconds: 1));
 
     expect(find.text('Class Health Index'), findsOneWidget);
     expect(find.text('90'), findsOneWidget);
     expect(find.text('Alif'), findsOneWidget);
     expect(find.text('92%'), findsOneWidget);
     expect(find.text('No activity yet'), findsOneWidget);
+    await tester.dragUntilVisible(
+      find.text('Tiers'),
+      find.byType(ListView).first,
+      const Offset(0, -200),
+    );
     expect(find.text('Tiers'), findsOneWidget);
   });
 

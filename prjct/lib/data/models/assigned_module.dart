@@ -1,5 +1,11 @@
 import 'package:hive/hive.dart';
 
+/// Teachers no longer set a deadline — homework shows the date the learner
+/// finished it instead. [AssignedModule.dueDate] stays in the schema (Hive
+/// field 4, Firestore `dueDate`) and is filled with this far-future value so
+/// the Adventure Map's overdue check never fires for new assignments.
+final noDueDate = DateTime(9999, 12, 31);
+
 /// A take-home module assignment (FR-6.3). [learnerId] is null when the
 /// teacher assigned it to the whole class rather than one student — the
 /// Learner's Student Hub resolves whether a module is "Assigned" by

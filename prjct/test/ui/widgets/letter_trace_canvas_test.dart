@@ -56,6 +56,50 @@ void main() {
     expect(last[1], const [Offset(150, 50), Offset(150, 150), Offset(150, 250)]);
   });
 
+  testWidgets('tapping the dot before finishing the body scores the dot',
+      (tester) async {
+    final breathe = AnimationController(vsync: const _NoVsync());
+    addTearDown(breathe.dispose);
+    var last = <List<Offset>>[];
+    // Like ب: a body, then a dot just under it.
+    const withDot = [
+      [Offset(50, 50), Offset(100, 50), Offset(150, 50), Offset(200, 50), Offset(250, 50)],
+      [Offset(150, 90)],
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 300,
+            height: 300,
+            child: LetterTraceCanvas(
+              passed: false,
+              failed: false,
+              breathe: breathe,
+              guidePointsBuilder: (_) => withDot,
+              onStroke: (s, _) => last = s,
+              onDirectionViolation: () {},
+              coverTolerance: 18,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final o = tester.getTopLeft(find.byType(LetterTraceCanvas));
+    final g = await tester.startGesture(o + const Offset(50, 50));
+    await g.moveTo(o + const Offset(190, 50));
+    await g.up();
+    await tester.pump();
+    await tester.tapAt(o + const Offset(150, 90));
+    await tester.pump();
+
+    expect(last[0].last, const Offset(190, 50));
+    expect(last[1], const [Offset(150, 90)]);
+  });
+
   testWidgets('tracing inside the letter kicks up sand and paints cleanly',
       (tester) async {
     final breathe = AnimationController(vsync: const _NoVsync());

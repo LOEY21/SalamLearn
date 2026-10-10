@@ -51,7 +51,8 @@ class ModuleSummary {
 /// [StreakState]/[BadgeAward] side-state that gets updated alongside it on
 /// every completed activity (FR-3.2, FR-3.3, FR-5.1, FR-5.2, FR-6.2).
 class ProgressRepository {
-  Box<ProgressRecord> get _progress => Hive.box<ProgressRecord>(HiveBoxes.progress);
+  Box<ProgressRecord> get _progress =>
+      Hive.box<ProgressRecord>(HiveBoxes.progress);
   Box<StreakState> get _streaks => Hive.box<StreakState>(HiveBoxes.streaks);
   Box<BadgeAward> get _badges => Hive.box<BadgeAward>(HiveBoxes.badges);
 
@@ -89,9 +90,9 @@ class ProgressRepository {
     // Push now instead of waiting for the next SyncManager run, so a
     // parent/teacher on another device sees it live. Not awaited — an
     // offline Firestore write only completes once the server acks it.
-    Future.sync(() => FirestoreMirror().pushProgress(record)).catchError(
-      (Object e) => debugPrint('writeProgress: push failed: $e'),
-    );
+    Future.sync(
+      () => FirestoreMirror().pushProgress(record),
+    ).catchError((Object e) => debugPrint('writeProgress: push failed: $e'));
     return record;
   }
 
@@ -115,28 +116,59 @@ class ProgressRepository {
   Set<String> completedLessonIds(
     String learnerId, {
     bool includeAssigned = false,
-  }) =>
-      _progress.values
-          .where((p) =>
-              p.learnerId == learnerId &&
-              p.lessonId != null &&
-              (includeAssigned || (!p.assignedByTeacher && !p.isClassroomMode)))
-          .map((p) => p.lessonId!)
-          .toSet();
-
-  /// Every `lessonId` this learner has finished specifically as assigned homework.
-  Set<String> completedHomeworkLessonIds(String learnerId) => _progress.values
-      .where((p) =>
-          p.learnerId == learnerId &&
-          p.lessonId != null &&
-          p.assignedByTeacher &&
-          !p.isClassroomMode)
+  }) => _progress.values
+      .where(
+        (p) =>
+            p.learnerId == learnerId &&
+            p.lessonId != null &&
+            (includeAssigned || (!p.assignedByTeacher && !p.isClassroomMode)),
+      )
       .map((p) => p.lessonId!)
       .toSet();
 
+  /// Every `lessonId` this learner has finished specifically as assigned homework.
+  Set<String> completedHomeworkLessonIds(String learnerId) => _progress.values
+      .where(
+        (p) =>
+            p.learnerId == learnerId &&
+            p.lessonId != null &&
+            p.assignedByTeacher &&
+            !p.isClassroomMode,
+      )
+      .map((p) => p.lessonId!)
+      .toSet();
+
+  /// When [learnerId] finished every lesson in [lessonIds] as homework — the
+  /// first completion of the last one to be finished — or null while any is
+  /// still unplayed. Same "homework" filter as [completedHomeworkLessonIds],
+  /// so the teacher's "Done" date matches the learner's own checklist.
+  DateTime? homeworkDoneAt(String learnerId, Iterable<String> lessonIds) {
+    final wanted = lessonIds.toSet();
+    if (wanted.isEmpty) return null;
+    final firstDone = <String, DateTime>{};
+    for (final p in _progress.values) {
+      final id = p.lessonId;
+      if (p.learnerId != learnerId ||
+          !p.assignedByTeacher ||
+          p.isClassroomMode ||
+          id == null ||
+          !wanted.contains(id)) {
+        continue;
+      }
+      final prev = firstDone[id];
+      if (prev == null || p.completedAt.isBefore(prev)) {
+        firstDone[id] = p.completedAt;
+      }
+    }
+    if (firstDone.length < wanted.length) return null;
+    return firstDone.values.reduce((a, b) => a.isAfter(b) ? a : b);
+  }
+
   List<ProgressRecord> _sinceDays(String learnerId, int days) {
     final cutoff = DateTime.now().subtract(Duration(days: days));
-    return byLearnerId(learnerId).where((p) => p.completedAt.isAfter(cutoff)).toList();
+    return byLearnerId(
+      learnerId,
+    ).where((p) => p.completedAt.isAfter(cutoff)).toList();
   }
 
   /// FR-5.1 — accuracy %, time-on-task, and error totals over the last
@@ -148,17 +180,30 @@ class ProgressRepository {
 
   /// Same rollup as [summary], but over an arbitrary `[from, to)` window —
   /// used to compare "this week" against "last week" for trend arrows.
-  ProgressSummary summaryForRange(String learnerId, DateTime from, DateTime to) {
+  ProgressSummary summaryForRange(
+    String learnerId,
+    DateTime from,
+    DateTime to,
+  ) {
     final records = byLearnerId(learnerId)
         .where((p) => p.completedAt.isAfter(from) && p.completedAt.isBefore(to))
         .toList();
     if (records.isEmpty) {
-      return const ProgressSummary(accuracyPct: 0, timeOnTaskMinutes: 0, errorCount: 0);
+      return const ProgressSummary(
+        accuracyPct: 0,
+        timeOnTaskMinutes: 0,
+        errorCount: 0,
+      );
     }
     final avgAccuracy =
-        records.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) / records.length;
-    final totalSeconds = records.map((r) => r.timeOnTaskSeconds).reduce((a, b) => a + b);
-    final totalErrors = records.map((r) => r.sequencingErrors).reduce((a, b) => a + b);
+        records.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) /
+        records.length;
+    final totalSeconds = records
+        .map((r) => r.timeOnTaskSeconds)
+        .reduce((a, b) => a + b);
+    final totalErrors = records
+        .map((r) => r.sequencingErrors)
+        .reduce((a, b) => a + b);
     return ProgressSummary(
       accuracyPct: avgAccuracy,
       timeOnTaskMinutes: totalSeconds ~/ 60,
@@ -179,7 +224,11 @@ class ProgressRepository {
     final records = _sinceDays(learnerId, windowDays);
     final secondsByDay = <DateTime, int>{};
     for (final r in records) {
-      final day = DateTime(r.completedAt.year, r.completedAt.month, r.completedAt.day);
+      final day = DateTime(
+        r.completedAt.year,
+        r.completedAt.month,
+        r.completedAt.day,
+      );
       secondsByDay[day] = (secondsByDay[day] ?? 0) + r.timeOnTaskSeconds;
     }
     final maxSeconds = secondsByDay.values.isEmpty
@@ -198,7 +247,9 @@ class ProgressRepository {
     final result = <ChartPoint>[];
     for (var i = 0; i < windowDays; i++) {
       final day = windowStart.add(Duration(days: i));
-      final label = windowDays <= 7 ? weekdayLabels[day.weekday % 7] : '${day.day}/${day.month}';
+      final label = windowDays <= 7
+          ? weekdayLabels[day.weekday % 7]
+          : '${day.day}/${day.month}';
       final value = (secondsByDay[day] ?? 0) / maxSeconds;
       result.add(ChartPoint(label, value.clamp(0.0, 1.0)));
     }
@@ -216,8 +267,11 @@ class ProgressRepository {
     return byModule.entries.map((entry) {
       final records = entry.value;
       final avgAccuracy =
-          records.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) / records.length;
-      final totalErrors = records.map((r) => r.sequencingErrors).reduce((a, b) => a + b);
+          records.map((r) => r.strokeAccuracyPct).reduce((a, b) => a + b) /
+          records.length;
+      final totalErrors = records
+          .map((r) => r.sequencingErrors)
+          .reduce((a, b) => a + b);
       return ModuleSummary(
         moduleId: entry.key,
         accuracyPct: avgAccuracy,
@@ -230,16 +284,19 @@ class ProgressRepository {
   /// FR-5.2 — curriculum-aligned practice prompts, generated from whichever
   /// module has accumulated the most sequencing errors recently. Falls back
   /// to a generic prompt when there isn't enough history yet.
-Future<void> _bumpStreak(String learnerId) async {
+  Future<void> _bumpStreak(String learnerId) async {
     final today = DateTime.now();
     final todayDate = DateTime(today.year, today.month, today.day);
     final existing = _streaks.get(learnerId);
     if (existing == null) {
-      await _streaks.put(learnerId, StreakState(
-        learnerId: learnerId,
-        currentStreak: 1,
-        lastPlayedDate: todayDate,
-      ));
+      await _streaks.put(
+        learnerId,
+        StreakState(
+          learnerId: learnerId,
+          currentStreak: 1,
+          lastPlayedDate: todayDate,
+        ),
+      );
       return;
     }
     final lastDate = DateTime(
@@ -249,14 +306,18 @@ Future<void> _bumpStreak(String learnerId) async {
     );
     if (lastDate == todayDate) return; // already counted today
     final isConsecutive = todayDate.difference(lastDate).inDays == 1;
-    await _streaks.put(learnerId, StreakState(
-      learnerId: learnerId,
-      currentStreak: isConsecutive ? existing.currentStreak + 1 : 1,
-      lastPlayedDate: todayDate,
-    ));
+    await _streaks.put(
+      learnerId,
+      StreakState(
+        learnerId: learnerId,
+        currentStreak: isConsecutive ? existing.currentStreak + 1 : 1,
+        lastPlayedDate: todayDate,
+      ),
+    );
   }
 
-  int currentStreak(String learnerId) => _streaks.get(learnerId)?.currentStreak ?? 0;
+  int currentStreak(String learnerId) =>
+      _streaks.get(learnerId)?.currentStreak ?? 0;
 
   /// The streak a learner has right now: their run if they played today or
   /// yesterday, 0 once a day has been missed (or they never played).
@@ -280,19 +341,24 @@ Future<void> _bumpStreak(String learnerId) async {
 
   static int _daysSince(DateTime date) {
     final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day)
-        .difference(DateTime(date.year, date.month, date.day))
-        .inDays;
+    return DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).difference(DateTime(date.year, date.month, date.day)).inDays;
   }
 
   Future<void> awardBadge(String learnerId, String badgeId) async {
     final key = '$learnerId:$badgeId';
     if (_badges.containsKey(key)) return;
-    await _badges.put(key, BadgeAward(
-      learnerId: learnerId,
-      badgeId: badgeId,
-      earnedAt: DateTime.now(),
-    ));
+    await _badges.put(
+      key,
+      BadgeAward(
+        learnerId: learnerId,
+        badgeId: badgeId,
+        earnedAt: DateTime.now(),
+      ),
+    );
   }
 
   List<BadgeAward> badgesFor(String learnerId) =>

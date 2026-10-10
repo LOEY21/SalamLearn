@@ -2581,7 +2581,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
             ),
             const SizedBox(height: 12),
             SizedBox(
-              width: 256,
+              width: 310,
               child: AspectRatio(
                 aspectRatio: _kBtnGreenRatio,
                 child: _ImageButton(

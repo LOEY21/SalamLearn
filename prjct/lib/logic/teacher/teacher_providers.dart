@@ -3,6 +3,7 @@ import 'package:hive/hive.dart';
 
 import '../../data/curriculum_data.dart';
 import '../../data/local/hive_boxes.dart';
+import '../../data/models/assigned_module.dart';
 import '../../data/models/class_section.dart';
 import '../../data/models/curriculum/curriculum_models.dart';
 import '../../data/models/custom_lesson.dart';
@@ -20,6 +21,26 @@ import '../auth/session.dart';
 import '../progress_providers.dart';
 
 String _moduleTitle(String moduleId) => assignmentTitle(moduleId);
+
+DateTime? _doneAt(
+  ProgressRepository progress,
+  String learnerId,
+  AssignedModule a,
+) => progress.homeworkDoneAt(
+  learnerId,
+  assignedLessonsFor(a.moduleId, a.maxLevel, a.maxLessons).map((l) => l.id),
+);
+
+/// "Done: 6/10/2026" once the learner has played every assigned game, else
+/// "Not done yet" — replaces the old teacher-set due date.
+String _doneLabel(
+  ProgressRepository progress,
+  String learnerId,
+  AssignedModule a,
+) {
+  final d = _doneAt(progress, learnerId, a);
+  return d == null ? 'Not done yet' : 'Done: ${d.day}/${d.month}/${d.year}';
+}
 
 /// Real, Hive-backed replacement for the hardcoded Ali/Yusra/Hamza roster
 /// and single-class state that used to live directly in
@@ -311,7 +332,7 @@ final classRosterProvider = Provider.family<List<Map<String, dynamic>>, String>(
     final assignments = rawAssignments
         .map(
           (a) =>
-              '${_moduleTitle(a.moduleId)} (Due: ${a.dueDate.day}/${a.dueDate.month}/${a.dueDate.year})',
+              '${_moduleTitle(a.moduleId)} (${_doneLabel(progress, enrollment.learnerId, a)})',
         )
         .toList();
     roster.add({
@@ -337,6 +358,7 @@ final classRosterProvider = Provider.family<List<Map<String, dynamic>>, String>(
             'module': _moduleTitle(a.moduleId),
             'dueDate': '${a.dueDate.day}/${a.dueDate.month}/${a.dueDate.year}',
             'dueDateRaw': a.dueDate,
+            'doneLabel': _doneLabel(progress, enrollment.learnerId, a),
             'maxLevel': a.maxLevel,
             'maxLessons': a.maxLessons,
           },
@@ -367,7 +389,13 @@ final teacherRosterProvider = Provider<List<Map<String, dynamic>>>((ref) {
 final classHomeworkProvider = Provider<List<Map<String, dynamic>>>((ref) {
   final section = ref.watch(teacherClassControllerProvider);
   if (section == null) return const [];
+  ref.watch(progressChangesProvider);
   final classes = ClassRepository();
+  final progress = ProgressRepository();
+  final learnerIds = classes
+      .byClassId(section.id)
+      .map((e) => e.learnerId)
+      .toList();
   return classes
       .assignmentsFor(classId: section.id, learnerId: null)
       .map(
@@ -378,6 +406,10 @@ final classHomeworkProvider = Provider<List<Map<String, dynamic>>>((ref) {
           'module': _moduleTitle(a.moduleId),
           'dueDate': '${a.dueDate.day}/${a.dueDate.month}/${a.dueDate.year}',
           'dueDateRaw': a.dueDate,
+          // One date can't describe a whole class, so this counts finishers.
+          'doneLabel':
+              'Done by ${learnerIds.where((id) => _doneAt(progress, id, a) != null).length}'
+              ' of ${learnerIds.length} students',
           'maxLevel': a.maxLevel,
           'maxLessons': a.maxLessons,
         },

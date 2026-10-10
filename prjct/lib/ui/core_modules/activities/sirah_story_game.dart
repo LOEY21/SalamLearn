@@ -135,6 +135,7 @@ const _red = Color(0xFFC2452D);
 const _plateEyebrow = Color(0xFF8A5A17);
 
 const _endVeil = Color(0x3DFFE9B8); // warm daylight wash over the last scene
+const _sceneDim = Color(0x9E000000); // the scene behind a lit layer
 const _scrim = Color(0x9E181006); // rgba(24,16,6,.62)
 const _scrimDeep = Color(0xC7181006); // rgba(24,16,6,.78)
 
@@ -743,7 +744,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
     AnimatedOpacity(
       opacity: _glowOn ? 1 : 0,
       duration: const Duration(milliseconds: 600),
-      child: const ColoredBox(color: Color(0x73000000)),
+      child: const ColoredBox(color: _sceneDim),
     ),
     // The question card's darkness.
     AnimatedOpacity(
@@ -1271,7 +1272,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
           child: AnimatedOpacity(
             opacity: glowOn ? 1 : 0,
             duration: const Duration(milliseconds: 600),
-            child: const ColoredBox(color: Color(0x73000000)),
+            child: const ColoredBox(color: _sceneDim),
           ),
         ),
       ),
@@ -1309,7 +1310,13 @@ class _SirahStoryGameState extends State<SirahStoryGame>
     if (!glowOn) return img;
     return Stack(
       fit: StackFit.expand,
-      children: [_glowCopy(img, 22, 0.85), _glowCopy(img, 58, 0.6), img],
+      children: [
+        _glowCopy(img, 110, 0.7),
+        _glowCopy(img, 48, 1.0),
+        _glowCopy(img, 18, 1.0),
+        _glowCopy(img, 6, 1.0, color: const Color(0xFFFFFBEA)),
+        img,
+      ],
     );
   }
 
@@ -1369,7 +1376,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   /// itself.)
   Widget _dimmable(bool dim, Widget child) => ColorFiltered(
     colorFilter: ColorFilter.mode(
-      dim ? const Color(0x73000000) : const Color(0x00000000),
+      dim ? _sceneDim : const Color(0x00000000),
       BlendMode.srcATop,
     ),
     child: child,

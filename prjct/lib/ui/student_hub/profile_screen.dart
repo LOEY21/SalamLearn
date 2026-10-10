@@ -56,6 +56,7 @@ class ProfileScreen extends ConsumerWidget {
           _ProfileHeader(
             avatar: learner?.avatar ?? '🧒',
             name: name,
+            studentId: learner?.studentId,
             age: learner?.age,
             gradeLevel: learner?.gradeLevel,
           ),
@@ -66,46 +67,46 @@ class ProfileScreen extends ConsumerWidget {
               // Equal-height tiles, whatever the label length.
               child: IntrinsicHeight(
                 child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: _StatTile(
-                      icon: StreakFlame(lit: streakDays > 0, size: 30),
-                      value: '$streakDays',
-                      label: 'Day Streak',
-                      color: AppColors.coral,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _StatTile(
-                      icon: Image.asset(
-                        'assets/images/xp_star.webp',
-                        width: 30,
-                        height: 30,
-                        excludeFromSemantics: true,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: _StatTile(
+                        icon: StreakFlame(lit: streakDays > 0, size: 30),
+                        value: '$streakDays',
+                        label: 'Day Streak',
+                        color: AppColors.coral,
                       ),
-                      value: '$xp',
-                      label: 'XP',
-                      color: HubWorld.goldDeep,
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _StatTile(
-                      icon: Image.asset(
-                        'assets/images/adventure_map/tab_backpack.png',
-                        width: 30,
-                        height: 30,
-                        excludeFromSemantics: true,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _StatTile(
+                        icon: Image.asset(
+                          'assets/images/xp_star.webp',
+                          width: 30,
+                          height: 30,
+                          excludeFromSemantics: true,
+                        ),
+                        value: '$xp',
+                        label: 'XP',
+                        color: HubWorld.goldDeep,
                       ),
-                      value: '$earnedCount',
-                      label: 'Badges',
-                      color: AppColors.teal,
-                      onTap: () => _openBackpack(context, ref),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _StatTile(
+                        icon: Image.asset(
+                          'assets/images/adventure_map/tab_backpack.png',
+                          width: 30,
+                          height: 30,
+                          excludeFromSemantics: true,
+                        ),
+                        value: '$earnedCount',
+                        label: 'Badges',
+                        color: AppColors.teal,
+                        onTap: () => _openBackpack(context, ref),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -167,19 +168,21 @@ class _ProfileHeader extends StatelessWidget {
   const _ProfileHeader({
     required this.avatar,
     required this.name,
+    this.studentId,
     this.age,
     this.gradeLevel,
   });
 
   final String avatar;
   final String name;
+  final String? studentId;
   final int? age;
   final String? gradeLevel;
 
   @override
   Widget build(BuildContext context) {
     return MapSceneHeader(
-      height: 300,
+      height: 320,
       image: HubWorld.meArt,
       focusY: -0.3,
       child: Padding(
@@ -220,8 +223,21 @@ class _ProfileHeader extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: hubText(30, Colors.white, height: 1.1, shadows: hubTextShadow),
+              style: hubText(
+                30,
+                Colors.white,
+                height: 1.1,
+                shadows: hubTextShadow,
+              ),
             ),
+            if (studentId != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Student ID: $studentId',
+                textAlign: TextAlign.center,
+                style: hubText(14, AppColors.goldSoft, shadows: hubTextShadow),
+              ),
+            ],
             const SizedBox(height: 8),
             Wrap(
               alignment: WrapAlignment.center,
@@ -288,21 +304,21 @@ class _StatTile extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(height: 32, child: Center(child: icon)),
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(value, style: hubText(26, color, height: 1.05)),
-          ),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            style: hubText(13, HubWorld.inkSoft, weight: 700, height: 1.15),
-          ),
-        ],
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(height: 32, child: Center(child: icon)),
+              const SizedBox(height: 4),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(value, style: hubText(26, color, height: 1.05)),
+              ),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                style: hubText(13, HubWorld.inkSoft, weight: 700, height: 1.15),
+              ),
+            ],
           ),
           if (onTap != null)
             Positioned(
@@ -438,7 +454,12 @@ class _SettingRow extends StatelessWidget {
                 Text(label, style: hubText(17, AppColors.ink, height: 1.15)),
                 Text(
                   sublabel,
-                  style: hubText(13.5, HubWorld.inkSoft, weight: 600, height: 1.2),
+                  style: hubText(
+                    13.5,
+                    HubWorld.inkSoft,
+                    weight: 600,
+                    height: 1.2,
+                  ),
                 ),
               ],
             ),
@@ -612,15 +633,11 @@ class AssignedHomeworkScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final learner = ref.watch(sessionProvider).learner;
     if (learner == null) {
-      return const Scaffold(
-        body: Center(child: Text('No active profile')),
-      );
+      return const Scaffold(body: Center(child: Text('No active profile')));
     }
     final learnerId = learner.id;
     if (learnerId == null) {
-      return const Scaffold(
-        body: Center(child: Text('No active profile ID')),
-      );
+      return const Scaffold(body: Center(child: Text('No active profile ID')));
     }
     _watchHomeworkPull(ref, learnerId);
     return ListenableBuilder(
@@ -636,7 +653,10 @@ class AssignedHomeworkScreen extends ConsumerWidget {
     final List<Map<String, dynamic>> assignedList = [];
 
     for (final classId in enrolledClassIds) {
-      final classAssignments = ClassRepository().assignmentsFor(classId: classId, learnerId: null);
+      final classAssignments = ClassRepository().assignmentsFor(
+        classId: classId,
+        learnerId: null,
+      );
       for (final a in classAssignments) {
         assignedList.add({
           'moduleId': a.moduleId,
@@ -645,9 +665,14 @@ class AssignedHomeworkScreen extends ConsumerWidget {
           'assignedBy': 'Class Homework',
         });
       }
-      final personalAssignments = ClassRepository().assignmentsFor(classId: classId, learnerId: learnerId);
+      final personalAssignments = ClassRepository().assignmentsFor(
+        classId: classId,
+        learnerId: learnerId,
+      );
       for (final a in personalAssignments) {
-        final existingIdx = assignedList.indexWhere((m) => m['moduleId'] == a.moduleId);
+        final existingIdx = assignedList.indexWhere(
+          (m) => m['moduleId'] == a.moduleId,
+        );
         if (existingIdx != -1) {
           assignedList[existingIdx] = {
             'moduleId': a.moduleId,
@@ -695,10 +720,7 @@ class AssignedHomeworkScreen extends ConsumerWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text(
-                      '🎉',
-                      style: TextStyle(fontSize: 48),
-                    ),
+                    const Text('🎉', style: TextStyle(fontSize: 48)),
                     const SizedBox(height: 12),
                     const Text(
                       'No homework assigned!',
@@ -734,8 +756,11 @@ class AssignedHomeworkScreen extends ConsumerWidget {
                     (d) => d.id == module.destinationId,
                     orElse: () => curriculum.first,
                   );
-                  final assignedLessons =
-                      assignedLessonsFor(moduleId, maxLevel, maxLessons);
+                  final assignedLessons = assignedLessonsFor(
+                    moduleId,
+                    maxLevel,
+                    maxLessons,
+                  );
                   final lessons = dest.lessons;
                   final perLevel = (lessons.length / 3).ceil();
                   final levelsList = [
@@ -744,8 +769,8 @@ class AssignedHomeworkScreen extends ConsumerWidget {
                     lessons.skip(perLevel * 2).toList(),
                   ].where((group) => group.isNotEmpty).toList();
 
-                  final completedLessons =
-                      ProgressRepository().completedHomeworkLessonIds(learnerId);
+                  final completedLessons = ProgressRepository()
+                      .completedHomeworkLessonIds(learnerId);
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 16),
@@ -753,7 +778,10 @@ class AssignedHomeworkScreen extends ConsumerWidget {
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(24),
-                      side: const BorderSide(color: AppColors.creamBorder, width: 2),
+                      side: const BorderSide(
+                        color: AppColors.creamBorder,
+                        width: 2,
+                      ),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
@@ -769,7 +797,11 @@ class AssignedHomeworkScreen extends ConsumerWidget {
                                   color: module.color.withValues(alpha: 0.12),
                                   shape: BoxShape.circle,
                                 ),
-                                child: Icon(module.icon, color: module.color, size: 22),
+                                child: Icon(
+                                  module.icon,
+                                  color: module.color,
+                                  size: 22,
+                                ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -799,12 +831,18 @@ class AssignedHomeworkScreen extends ConsumerWidget {
                             ],
                           ),
                           const SizedBox(height: 14),
-                          const Divider(height: 1, color: AppColors.creamBorder),
+                          const Divider(
+                            height: 1,
+                            color: AppColors.creamBorder,
+                          ),
                           const SizedBox(height: 14),
                           if (assignedLessons.isEmpty)
                             const Text(
                               'No specific games assigned.',
-                              style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textMuted,
+                              ),
                             )
                           else
                             ...assignedLessons.map((lesson) {
@@ -813,7 +851,9 @@ class AssignedHomeworkScreen extends ConsumerWidget {
                               // Find which level this lesson belongs to
                               var levelName = 'Beginner';
                               for (var li = 0; li < levelsList.length; li++) {
-                                if (levelsList[li].any((l) => l.id == lesson.id)) {
+                                if (levelsList[li].any(
+                                  (l) => l.id == lesson.id,
+                                )) {
                                   levelName = switch (li) {
                                     0 => 'Beginner',
                                     1 => 'Practice',
@@ -830,22 +870,34 @@ class AssignedHomeworkScreen extends ConsumerWidget {
                                     // Same Noor Energy rule as the map: none
                                     // left blocks every game, finished ones
                                     // too; otherwise only a new one costs 1.
-                                    if (!ref.read(noorEnergyProvider).hasEnergy) {
+                                    if (!ref
+                                        .read(noorEnergyProvider)
+                                        .hasEnergy) {
                                       showNoorEnergyRestingSheet(context);
                                       return;
                                     }
                                     if (!done) {
-                                      ref.read(noorEnergyProvider.notifier).consume();
+                                      ref
+                                          .read(noorEnergyProvider.notifier)
+                                          .consume();
                                     }
-                                    ref.read(recentModuleProvider.notifier).interactWith(module.id);
-                                    Navigator.of(context, rootNavigator: true).push(
+                                    ref
+                                        .read(recentModuleProvider.notifier)
+                                        .interactWith(module.id);
+                                    Navigator.of(
+                                      context,
+                                      rootNavigator: true,
+                                    ).push(
                                       MaterialPageRoute<void>(
                                         builder: (_) => LessonPlayerScreen(
                                           lesson: lesson,
                                           destinationId: dest.id,
                                           assignedByTeacher: true,
                                           onClose: () {
-                                            Navigator.of(context, rootNavigator: true).pop();
+                                            Navigator.of(
+                                              context,
+                                              rootNavigator: true,
+                                            ).pop();
                                             // Re-trigger rebuild
                                             ref.invalidate(sessionProvider);
                                           },
@@ -855,7 +907,10 @@ class AssignedHomeworkScreen extends ConsumerWidget {
                                   },
                                   borderRadius: BorderRadius.circular(14),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: AppColors.neutralTint,
                                       borderRadius: BorderRadius.circular(14),
@@ -867,30 +922,42 @@ class AssignedHomeworkScreen extends ConsumerWidget {
                                           height: 34,
                                           alignment: Alignment.center,
                                           decoration: BoxDecoration(
-                                            color: done ? AppColors.mint : Colors.white,
+                                            color: done
+                                                ? AppColors.mint
+                                                : Colors.white,
                                             shape: BoxShape.circle,
                                           ),
                                           child: Text(
                                             done ? '✓' : lesson.icon,
                                             style: TextStyle(
                                               fontSize: done ? 14 : 18,
-                                              fontWeight: done ? FontWeight.bold : null,
-                                              color: done ? AppColors.adventureGreen : null,
+                                              fontWeight: done
+                                                  ? FontWeight.bold
+                                                  : null,
+                                              color: done
+                                                  ? AppColors.adventureGreen
+                                                  : null,
                                             ),
                                           ),
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Text(
                                                 lesson.title,
                                                 style: TextStyle(
                                                   fontSize: 14,
                                                   fontWeight: FontWeight.w700,
-                                                  color: done ? AppColors.textMuted : AppColors.ink,
-                                                  decoration: done ? TextDecoration.lineThrough : null,
+                                                  color: done
+                                                      ? AppColors.textMuted
+                                                      : AppColors.ink,
+                                                  decoration: done
+                                                      ? TextDecoration
+                                                            .lineThrough
+                                                      : null,
                                                 ),
                                               ),
                                               const SizedBox(height: 2),
@@ -906,8 +973,12 @@ class AssignedHomeworkScreen extends ConsumerWidget {
                                           ),
                                         ),
                                         Icon(
-                                          done ? Icons.check_circle_rounded : Icons.play_arrow_rounded,
-                                          color: done ? AppColors.adventureGreen : AppColors.adventureBlue,
+                                          done
+                                              ? Icons.check_circle_rounded
+                                              : Icons.play_arrow_rounded,
+                                          color: done
+                                              ? AppColors.adventureGreen
+                                              : AppColors.adventureBlue,
                                           size: 22,
                                         ),
                                       ],

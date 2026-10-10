@@ -7,10 +7,11 @@ import '../../logic/auth/session.dart';
 import '../theme/app_colors.dart';
 import '../widgets/soft_card.dart';
 
-/// Teacher verification gate (SL-TEA-01..03). A teacher who is not yet
-/// approved by an admin lands here after the PIN gate instead of the
-/// Asatidz dashboard; the router keeps every `/teacher*` and `/cast*` route
-/// closed until [SessionNotifier.activeTeacherApproved] is true. Approval,
+/// Teacher verification gate (SL-TEA-01..03). A rejected teacher lands here
+/// after the PIN gate instead of the Asatidz dashboard, and the router keeps
+/// every `/teacher*` and `/cast*` route closed. (A pending teacher gets the
+/// dashboard instead, with a "waiting for approval" banner and its tools
+/// locked; see `_PendingApprovalBanner` in teacher_dashboard_screen.dart.) Approval,
 /// rejection, and letting a rejected teacher re-apply are all decided by an
 /// admin in the web panel — this screen only reflects that status.
 class TeacherPendingScreen extends ConsumerStatefulWidget {

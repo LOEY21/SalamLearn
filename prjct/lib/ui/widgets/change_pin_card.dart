@@ -17,61 +17,79 @@ class ChangePinCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final button = OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.teal,
+        side: const BorderSide(color: AppColors.teal),
+      ),
+      onPressed: () => showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (_) => _ChangePinSheet(accentColor: accentColor),
+      ),
+      child: const Text('Change'),
+    );
     return SoftCard(
       padding: const EdgeInsets.all(18),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: const BoxDecoration(
-              color: AppColors.mint,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: const Icon(
-              Icons.lock_reset_rounded,
-              color: AppColors.teal,
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 14),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Change PIN',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.ink,
-                  ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Button moves under the text when it would squeeze the title
+          // into mid-word breaks (narrow phone / large text).
+          final scale = MediaQuery.textScalerOf(
+            context,
+          ).scale(1).clamp(1.0, 3.0);
+          final stacked = constraints.maxWidth / scale < 300;
+          return Row(
+            crossAxisAlignment: stacked
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: const BoxDecoration(
+                  color: AppColors.mint,
+                  shape: BoxShape.circle,
                 ),
-                Text(
-                  'Update the 4-digit PIN for this account',
-                  style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.lock_reset_rounded,
+                  color: AppColors.teal,
+                  size: 18,
                 ),
-              ],
-            ),
-          ),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.teal,
-              side: const BorderSide(color: AppColors.teal),
-            ),
-            onPressed: () => showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.white,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
-              builder: (_) => _ChangePinSheet(accentColor: accentColor),
-            ),
-            child: const Text('Change'),
-          ),
-        ],
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Change PIN',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    const Text(
+                      'Update the 4-digit PIN for this account',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    if (stacked) ...[const SizedBox(height: 10), button],
+                  ],
+                ),
+              ),
+              if (!stacked) button,
+            ],
+          );
+        },
       ),
     );
   }

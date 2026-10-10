@@ -82,6 +82,8 @@ const _leafGreen = Color(0xFF4FB15F);
 const _leafGreenDeep = Color(0xFF2F8B45);
 const _leafGreenShade = Color(0xFF1F6B32);
 const _meterFill = Color(0xFF5FC06F);
+const _meterWrong = Color(0xFFEF5B50);
+const _meterWrongDeep = Color(0xFFC0352C);
 const _meterTrack = Color(0xFFC8C3B4);
 const _meterTrackEdge = Color(0xFFA9A394);
 const _barTrack = Color(0xFFDED6BF);
@@ -146,7 +148,6 @@ double _loop(double t, double dur) {
 const double _kCurtain = 1.0;
 const double _kNarrateDelay = 0.62;
 const double _kMumtaz = 1.7;
-const double _kReplaySpin = 0.9;
 
 enum _Screen { start, play }
 
@@ -172,7 +173,6 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   double _mumtazT0 = 0;
   double _bandT0 = 0;
   double _wrongT0 = 0;
-  double _replayT0 = 0;
   double _finishT0 = 0;
   double _narrateT0 = 0;
   double _narrateDur = 1;
@@ -188,7 +188,6 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   bool _answered = false;
   bool _wrong = false;
   bool _mumtaz = false;
-  bool _replaying = false;
   bool _curtain = false;
   bool _narrating = false;
   bool _finished = false;
@@ -197,9 +196,12 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
 
   int _errors = 0;
 
+  /// Each answered question's outcome, in order — the Hero Meter's chunks
+  /// (green right, red wrong).
+  final _results = <bool>[];
+
   Timer? _curtainTimer;
   Timer? _mumtazTimer;
-  Timer? _replayTimer;
   Timer? _narrateDelayTimer;
   Timer? _narrateEndTimer;
 
@@ -229,7 +231,6 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   void dispose() {
     _curtainTimer?.cancel();
     _mumtazTimer?.cancel();
-    _replayTimer?.cancel();
     _stopNarration();
     if (_audio != null) unawaited(_audio!.dispose());
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -355,6 +356,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       _mumtaz = false;
       _finished = false;
       _errors = 0;
+      _results.clear();
     });
     _beginQuestion();
   }
@@ -374,6 +376,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       _curtain = false;
       _narrating = false;
       _finished = false;
+      _results.clear();
     });
   }
 
@@ -390,6 +393,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
         _successT0 = _now;
         _bandT0 = _now;
         _correct += 1;
+        _results.add(true);
       });
       _mumtazTimer?.cancel();
       _mumtazTimer = Timer(_ms(_kMumtaz), () {
@@ -405,7 +409,9 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
         _wrong = true;
         _wrongT0 = _now;
         _bandT0 = _now;
+        _successT0 = _now;
         _errors += 1;
+        _results.add(false);
       });
     }
   }
@@ -431,18 +437,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     _beginQuestion();
   }
 
-  void _replay() {
-    setState(() {
-      _replaying = true;
-      _replayT0 = _now;
-    });
-    _replayTimer?.cancel();
-    _replayTimer = Timer(_ms(_kReplaySpin), () {
-      if (!mounted) return;
-      setState(() => _replaying = false);
-    });
-    _narrate(0);
-  }
+  void _readAgain() => _narrate(0);
 
   void _skipNarration() {
     _stopNarration();
@@ -676,7 +671,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     );
   }
 
-  Widget _heroMeter({bool allFull = false}) {
+  Widget _heroMeter({bool still = false}) {
     return Container(
       padding: const EdgeInsets.fromLTRB(32, 14, 26, 14),
       decoration: BoxDecoration(
@@ -703,10 +698,10 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
           for (var i = 0; i < _items.length; i++) ...[
             if (i > 0) const SizedBox(width: 14),
             _meterChunk(
-              on: allFull || i < _correct,
-              // Only the chunk just earned wipes in; the ones before it are
-              // already full and stay put.
-              animate: !allFull && i == _correct - 1,
+              result: i < _results.length ? _results[i] : null,
+              // Only the chunk just answered wipes in; the ones before it are
+              // already filled and stay put.
+              animate: !still && _answered && i == _results.length - 1,
             ),
           ],
         ],
@@ -714,17 +709,22 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     );
   }
 
-  Widget _meterChunk({required bool on, required bool animate}) {
-    const fill = DecoratedBox(
+  /// One question's chunk: green for a hero choice, red for a wrong one,
+  /// empty while unanswered.
+  Widget _meterChunk({required bool? result, required bool animate}) {
+    final on = result != null;
+    final fill = DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [_meterFill, _leafGreenDeep],
+          colors: result == false
+              ? const [_meterWrong, _meterWrongDeep]
+              : const [_meterFill, _leafGreenDeep],
         ),
-        borderRadius: BorderRadius.all(Radius.circular(999)),
+        borderRadius: const BorderRadius.all(Radius.circular(999)),
       ),
-      child: SizedBox.expand(),
+      child: const SizedBox.expand(),
     );
     return Container(
       width: 88,
@@ -988,13 +988,14 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
         ),
         const SizedBox(width: 26),
         _Push(
-          onTap: _replay,
+          key: const ValueKey('ch-read-again'),
+          onTap: _readAgain,
           builder: (down) => Container(
-            width: 92,
             height: 92,
+            padding: const EdgeInsets.symmetric(horizontal: 28),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(999),
               gradient: const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -1010,20 +1011,25 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
                 ),
               ],
             ),
-            // ch-spin .9s linear while replaying
-            child: _fx((_) {
-              final a = _replaying
-                  ? _loop(_now - _replayT0, _kReplaySpin) * 2 * 3.1415926535
-                  : 0.0;
-              return Transform.rotate(
-                angle: a,
-                child: const Icon(
-                  Icons.refresh,
-                  size: 50,
-                  color: Color(0xFFFFFBE9),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.volume_up, size: 42, color: Color(0xFFFFFBE9)),
+                SizedBox(width: 12),
+                Text(
+                  'Read again',
+                  style: TextStyle(
+                    fontFamily: _kBaloo,
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFFFFFBE9),
+                    shadows: [
+                      Shadow(color: _goldShade, offset: Offset(0, 2)),
+                    ],
+                  ),
                 ),
-              );
-            }),
+              ],
+            ),
           ),
         ),
       ],
@@ -1476,7 +1482,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
                 left: 0,
                 right: 0,
                 top: 22,
-                child: Center(child: _heroMeter(allFull: true)),
+                child: Center(child: _heroMeter(still: true)),
               ),
               // Amina and Ahmad, cheering either side of the card.
               Positioned(
@@ -1554,7 +1560,22 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     );
   }
 
+  /// Stars for the round: every hero choice 3, at least half 2, else 1.
+  int get _stars {
+    final n = _items.length;
+    if (_correct >= n) return 3;
+    return _correct * 2 >= n ? 2 : 1;
+  }
+
+  String get _verdict => switch (_stars) {
+    3 => 'Perfect! You made every hero choice!',
+    2 => 'Great job! Keep being a classroom hero!',
+    _ => 'Good try! Play again to earn more stars!',
+  };
+
   Widget _badgePanel() {
+    final n = _items.length;
+    final pct = n == 0 ? 100 : (_correct / n * 100).round();
     return Stack(
       clipBehavior: Clip.none,
       alignment: Alignment.topCenter,
@@ -1568,40 +1589,88 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
         Positioned.fill(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(90, 34, 90, 40),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Image.asset('$_kA/ribbon_hero.png', width: 620, height: 157),
-                const SizedBox(height: 10),
-                Text(
-                  _session.finishText,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontFamily: _kBaloo,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    height: 1.2,
-                    color: _inkGreen,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Semantics(
-                  button: true,
-                  label: 'Continue to Next Lesson',
-                  child: _Push(
-                    onTap: _finish,
-                    dy: 3,
-                    builder: (down) => Image.asset(
-                      down
-                          ? '$_kA/continue_btn_down.png'
-                          : '$_kA/continue_btn.png',
-                      width: 380,
-                      height: 121,
-                      gaplessPlayback: true,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: SizedBox(
+                width: 720,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      '$_kA/ribbon_hero.png',
+                      width: 500,
+                      height: 127,
                     ),
-                  ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _verdict,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontFamily: _kBaloo,
+                        fontSize: 36,
+                        fontWeight: FontWeight.w800,
+                        height: 1.15,
+                        color: _deepGreen,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _session.finishText,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontFamily: _kBaloo,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        height: 1.2,
+                        color: _inkGreen,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _statChip(
+                            Icons.check_circle,
+                            _leafGreenDeep,
+                            '$_correct right',
+                          ),
+                          const SizedBox(width: 14),
+                          _statChip(
+                            Icons.cancel,
+                            _meterWrongDeep,
+                            '$_errors wrong',
+                          ),
+                          const SizedBox(width: 14),
+                          _statChip(
+                            Icons.track_changes,
+                            _amber,
+                            '$pct% correct',
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Semantics(
+                      button: true,
+                      label: 'Continue to Next Lesson',
+                      child: _Push(
+                        onTap: _finish,
+                        dy: 3,
+                        builder: (down) => Image.asset(
+                          down
+                              ? '$_kA/continue_btn_down.png'
+                              : '$_kA/continue_btn.png',
+                          width: 330,
+                          height: 105,
+                          gaplessPlayback: true,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -1611,14 +1680,14 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _star(88, 1.1),
+              _star(88, 1.1, on: _stars >= 1),
               const SizedBox(width: 2),
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
-                child: _star(112, 1.3),
+                child: _star(112, 1.3, on: _stars >= 2),
               ),
               const SizedBox(width: 2),
-              _star(88, 1.5),
+              _star(88, 1.5, on: _stars >= 3),
             ],
           ),
         ),
@@ -1626,8 +1695,45 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     );
   }
 
-  Widget _star(double size, double period) {
+  /// One fact on the badge's score line: icon, then its value.
+  Widget _statChip(IconData icon, Color color, String text) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 8, 20, 8),
+      decoration: BoxDecoration(
+        color: _creamChip,
+        border: Border.all(color: _creamEdge, width: 3),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 30, color: color),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: TextStyle(
+              fontFamily: _kNunito,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Unearned stars: greyed out, no glow or twinkle.
+  static const _greyStar = ColorFilter.matrix([
+    .2126, .7152, .0722, 0, 0, //
+    .2126, .7152, .0722, 0, 0,
+    .2126, .7152, .0722, 0, 0,
+    0, 0, 0, .45, 0,
+  ]);
+
+  Widget _star(double size, double period, {bool on = true}) {
     final img = Image.asset('$_kA/star.png', width: size, height: size * 0.908);
+    if (!on) return ColorFiltered(colorFilter: _greyStar, child: img);
     return _fx((_) {
       final g = _kf(
         _loop(_now, period),

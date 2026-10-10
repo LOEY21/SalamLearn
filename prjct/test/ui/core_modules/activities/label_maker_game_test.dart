@@ -110,15 +110,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Get Ready!'), findsNothing);
 
-    // Replay swaps to its pressed art while held.
-    final replay = find.byKey(const ValueKey('lm-replay'));
-    final hold = await tester.startGesture(tester.getCenter(replay));
+    // No separate Replay button: the speaker badge is the replay, and it
+    // swaps to its pressed art while held.
+    expect(find.byKey(const ValueKey('lm-replay')), findsNothing);
+    final speaker = find.byWidgetPredicate(
+      (w) =>
+          w.key is ValueKey<String> &&
+          (w.key! as ValueKey<String>).value.startsWith('lm-badge-'),
+    );
+    final hold = await tester.startGesture(tester.getCenter(speaker));
     await tester.pump();
     expect(
       find.descendant(
-        of: replay,
+        of: speaker,
         matching: find.image(
-          const AssetImage('assets/images/label_maker/btn_replay_down.png'),
+          const AssetImage('assets/images/label_maker/btn_speaker_down.png'),
         ),
       ),
       findsOneWidget,

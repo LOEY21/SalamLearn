@@ -37,8 +37,8 @@ class TeacherRepository {
     // ([linkToFirebase] can retry it).
     String? firebaseUid;
     try {
-      final gateway = FirebaseAuthGateway();
-      final credential = await gateway.signUp(
+      final gateway = FirebaseAuthGateway(teacher: true);
+      final credential = await gateway.signUpTeacher(
         email: normalizedEmail,
         password: password,
       );
@@ -85,12 +85,12 @@ class TeacherRepository {
   /// it anymore; otherwise null (unlinked, same as before).
   Future<String?> _reclaimErasedAuthUser(String email, String password) async {
     try {
-      final credential = await FirebaseAuthGateway().signIn(
-        email: email,
+      final credential = await FirebaseAuthGateway(teacher: true).signIn(
+        email: FirebaseAuthGateway.teacherAuthEmail(email),
         password: password,
       );
       final uid = credential.user?.uid;
-      if (uid != null && await FirestoreMirror().isProfilelessAuthUser(uid)) {
+      if (uid != null && await FirestoreMirror(teacher: true).isProfilelessAuthUser(uid)) {
         return uid;
       }
     } catch (e) {
@@ -164,7 +164,7 @@ class TeacherRepository {
 
     String firebaseUid;
     try {
-      final credential = await FirebaseAuthGateway().signUp(
+      final credential = await FirebaseAuthGateway(teacher: true).signUpTeacher(
         email: account.email!,
         password: password,
       );
@@ -172,8 +172,8 @@ class TeacherRepository {
     } on FirebaseAuthException catch (e) {
       if (e.code != 'email-already-in-use') rethrow;
       try {
-        final credential = await FirebaseAuthGateway().signIn(
-          email: account.email!,
+        final credential = await FirebaseAuthGateway(teacher: true).signIn(
+          email: FirebaseAuthGateway.teacherAuthEmail(account.email!),
           password: password,
         );
         firebaseUid = credential.user!.uid;

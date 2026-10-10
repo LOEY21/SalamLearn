@@ -61,8 +61,13 @@ class _TraceActivityState extends State<TraceActivity>
   bool _passed = false;
   int _failedChecks = 0;
 
-  /// Accuracy (0..1) each letter passed with, in order — the ending's tiles.
+  /// Accuracy (0..1) per letter, in order — the ending's tiles. Each is the
+  /// mean of every checked attempt on that letter, so failed Checks before
+  /// the pass pull it down.
   final List<double> _scores = [];
+
+  /// This letter's failed-Check accuracies, folded into its score on Next.
+  final List<double> _attempts = [];
 
   /// Time spent tracing this round, for the ending's summary.
   final _watch = Stopwatch();
@@ -343,14 +348,14 @@ class _TraceActivityState extends State<TraceActivity>
     return path;
   }
 
-  /// Accuracy per stroke blends two measures so both failure modes get
-  /// caught: recall (how much of the guide the learner actually traced)
-  /// and precision (how closely the learner's own marks stuck to the
-  /// guide). Recall alone let a broad scribble across the whole card
-  /// "cover" every guide point and score as a near-perfect trace, since
-  /// nothing penalized ink that strayed off the letter. The average
-  /// across strokes (including dots) keeps every stroke weighted
-  /// equally so body strokes don't dominate the check.
+  /// Accuracy per stroke is the F1 of recall (how much of the guide the
+  /// learner actually traced) and precision (how much of the learner's ink
+  /// stuck to the guide), so a scribble that covers the letter and a clean
+  /// but half-finished trace both score low. Strokes are weighted by their
+  /// guide length, with dots floored at [_kDotWeight] points, so tapping
+  /// the dots of ث can't outweigh its body.
+  static const _kDotWeight = 10;
+
   double _computeAccuracy(List<List<Offset>> userStrokes, Size canvasSize) {
     if (userStrokes.isEmpty) return 0.0;
     final guideStrokes = _guideStrokes(canvasSize);
@@ -358,9 +363,12 @@ class _TraceActivityState extends State<TraceActivity>
     final tolerance = _boxSizeFor(canvasSize) * 0.12;
 
     var totalScore = 0.0;
+    var totalWeight = 0;
     for (var i = 0; i < guideStrokes.length; i++) {
       final guide = guideStrokes[i];
       if (guide.isEmpty) continue;
+      final weight = math.max(guide.length, _kDotWeight);
+      totalWeight += weight;
       if (i >= userStrokes.length) continue;
       final user = userStrokes[i];
       if (user.isEmpty) continue;
@@ -387,13 +395,17 @@ class _TraceActivityState extends State<TraceActivity>
       }
       final precision = onPath / user.length;
 
-      totalScore += recall * 0.6 + precision * 0.4;
+      if (recall + precision > 0) {
+        totalScore += weight * 2 * recall * precision / (recall + precision);
+      }
     }
 
-    return totalScore / guideStrokes.length;
+    return totalWeight == 0 ? 0.0 : totalScore / totalWeight;
   }
 
   void _handleStroke(List<List<Offset>> userStrokes, Size canvasSize) {
+    // A passed letter's score is locked; ink after the pass doesn't move it.
+    if (_passed) return;
     final acc = _computeAccuracy(userStrokes, canvasSize);
     setState(() => _accuracy = acc);
     if (acc >= _autoPassThreshold && !_passed) {
@@ -426,6 +438,7 @@ class _TraceActivityState extends State<TraceActivity>
     if (passed) _clock.stop();
     if (!passed) {
       _failedChecks++;
+      _attempts.add(_accuracy);
       _wobble.forward(from: 0);
       Future.delayed(const Duration(milliseconds: 700), () {
         if (mounted) setState(() => _checked = false);
@@ -434,7 +447,9 @@ class _TraceActivityState extends State<TraceActivity>
   }
 
   void _next() {
-    _scores.add(_accuracy);
+    _attempts.add(_accuracy);
+    _scores.add(_attempts.reduce((a, b) => a + b) / _attempts.length);
+    _attempts.clear();
     if (_idx + 1 >= widget.cards.length) {
       _clock.stop();
       _watch.stop();
@@ -621,6 +636,7 @@ class _TraceActivityState extends State<TraceActivity>
     setState(() {
       _idx = 0;
       _scores.clear();
+      _attempts.clear();
       _failedChecks = 0;
       _accuracy = 0;
       _checked = false;
@@ -1195,10 +1211,19 @@ class _TraceActivityState extends State<TraceActivity>
                                     _letter,
                                     key: ValueKey(_idx),
                                     textDirection: TextDirection.rtl,
+                                    // Scheherazade's ascent is ~2x the tallest
+                                    // letter, which pushed the glyph to the
+                                    // card's bottom edge. Trim the ascent only;
+                                    // keep the natural descent for ج/ح/ع tails.
+                                    textHeightBehavior:
+                                        const TextHeightBehavior(
+                                      applyHeightToLastDescent: false,
+                                    ),
                                     style: const TextStyle(
                                       fontFamily: 'ScheherazadeNew',
                                       fontWeight: FontWeight.w700,
                                       fontSize: 84,
+                                      height: 1.37,
                                       color: _kBrown,
                                     ),
                                   ),

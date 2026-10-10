@@ -55,6 +55,13 @@ class ClassRepository {
       schedule: schedule,
     );
     await _classes.put(created.id, created);
+    // Best-effort — a parent's invitation-code join and every enrollment
+    // write need the class in Firestore; offline falls back to sync.
+    try {
+      await FirestoreMirror().pushClass(created);
+    } catch (e) {
+      debugPrint('ClassRepository.create: push failed: $e');
+    }
     return created;
   }
 
@@ -167,32 +174,28 @@ class ClassRepository {
   /// before local, swallow failure" contract as
   /// `SessionNotifier.deleteLearner`; offline devices just skip the
   /// remote half and stay locally deleted).
+  ///
+  /// Children go first: `firestore.rules` authorizes enrollment/assignment
+  /// deletes by looking up the class doc, so deleting the class first made
+  /// every later delete fail — students stayed enrolled online. Each delete
+  /// is its own best-effort attempt. If the class doc itself can't be
+  /// deleted (offline, wrong session), its id is kept in
+  /// [pendingClassDeletes] so sync neither pulls it back nor forgets to
+  /// retry ([retryPendingClassDeletes]).
   Future<void> deleteClass(String classId) async {
     final enrollments = byClassId(classId);
     final assignments = _assignments.values
         .where((a) => a.classId == classId)
         .toList();
     final lessons = CustomLessonRepository().byClassId(classId);
-    final mirror = FirestoreMirror();
 
-    try {
-      await mirror.deleteDoc(HiveBoxes.classes, classId);
-      for (final enrollment in enrollments) {
-        await mirror.deleteDoc(
-          HiveBoxes.enrollments,
-          '${classId}_${enrollment.learnerId}',
-        );
-      }
-      for (final assignment in assignments) {
-        await mirror.deleteDoc(HiveBoxes.assignedModules, assignment.id);
-      }
-      for (final lesson in lessons) {
-        await mirror.deleteDoc(HiveBoxes.customLessons, lesson.id);
-      }
-    } catch (_) {
-      // Offline, never-synced, or already gone — matching
-      // deleteLearner's own best-effort remote-delete contract.
-    }
+    await _addPendingClassDelete(classId);
+    await _deleteClassRemote(
+      classId,
+      learnerIds: enrollments.map((e) => e.learnerId),
+      assignmentIds: assignments.map((a) => a.id),
+      lessonIds: lessons.map((l) => l.id),
+    );
 
     await _classes.delete(classId);
     for (final enrollment in enrollments) {
@@ -203,6 +206,87 @@ class ClassRepository {
     }
     for (final lesson in lessons) {
       await CustomLessonRepository().delete(lesson.id);
+    }
+  }
+
+  Box<dynamic> get _settings => Hive.box<dynamic>(HiveBoxes.settings);
+
+  /// Classes deleted on this device whose Firestore doc may still exist.
+  Set<String> get pendingClassDeletes =>
+      ((_settings.get('pendingClassDeletes') as List?) ?? const [])
+          .cast<String>()
+          .toSet();
+
+  Future<void> _addPendingClassDelete(String classId) =>
+      _settings.put('pendingClassDeletes', [...pendingClassDeletes, classId]);
+
+  /// Deletes the class's remote children, then the class doc. Clears the
+  /// pending marker only once the class doc is confirmed gone.
+  Future<void> _deleteClassRemote(
+    String classId, {
+    Iterable<String> learnerIds = const [],
+    Iterable<String> assignmentIds = const [],
+    Iterable<String> lessonIds = const [],
+  }) async {
+    final mirror = FirestoreMirror();
+    Future<bool> attempt(String collection, String id) async {
+      try {
+        await mirror.deleteDoc(collection, id);
+        return true;
+      } catch (e) {
+        debugPrint('ClassRepository.deleteClass: $collection/$id failed: $e');
+        return false;
+      }
+    }
+
+    for (final learnerId in learnerIds) {
+      await attempt(HiveBoxes.enrollments, '${classId}_$learnerId');
+    }
+    for (final id in assignmentIds) {
+      await attempt(HiveBoxes.assignedModules, id);
+    }
+    for (final id in lessonIds) {
+      await attempt(HiveBoxes.customLessons, id);
+    }
+    if (await attempt(HiveBoxes.classes, classId)) {
+      await _settings.put(
+        'pendingClassDeletes',
+        (pendingClassDeletes..remove(classId)).toList(),
+      );
+    }
+  }
+
+  /// Called by sync: finishes class deletes that failed earlier. Local
+  /// copies are already gone, so remote enrollments are looked up first.
+  Future<void> retryPendingClassDeletes() async {
+    for (final classId in pendingClassDeletes) {
+      // Already gone online (e.g. removed by the admin) — a second delete
+      // would be refused by the rules, so just drop the marker.
+      if (!await FirestoreMirror().docExists(HiveBoxes.classes, classId)) {
+        await _settings.put(
+          'pendingClassDeletes',
+          (pendingClassDeletes..remove(classId)).toList(),
+        );
+        continue;
+      }
+      var learnerIds = const <String>[];
+      var assignmentIds = const <String>[];
+      try {
+        final mirror = FirestoreMirror();
+        learnerIds = (await mirror.fetchEnrollmentsForClass(
+          classId,
+        )).map((e) => e.learnerId).toList();
+        assignmentIds = (await mirror.fetchAssignmentsForClass(
+          classId,
+        )).map((a) => a.id).toList();
+      } catch (_) {
+        // Offline — the class-doc attempt below fails too and stays pending.
+      }
+      await _deleteClassRemote(
+        classId,
+        learnerIds: learnerIds,
+        assignmentIds: assignmentIds,
+      );
     }
   }
 
@@ -240,12 +324,15 @@ class ClassRepository {
     await _enrollments.delete(localKey);
 
     // Also delete any assignments for this specific learner in this class
-    final assignments = _assignments.values.where(
-      (a) => a.classId == classId && a.learnerId == learnerId,
-    ).toList();
+    final assignments = _assignments.values
+        .where((a) => a.classId == classId && a.learnerId == learnerId)
+        .toList();
     for (final assignment in assignments) {
       try {
-        await FirestoreMirror().deleteDoc(HiveBoxes.assignedModules, assignment.id);
+        await FirestoreMirror().deleteDoc(
+          HiveBoxes.assignedModules,
+          assignment.id,
+        );
       } catch (_) {}
       await _assignments.delete(assignment.id);
     }
@@ -265,7 +352,7 @@ class ClassRepository {
   Future<AssignedModule> assignModule({
     required String classId,
     required String moduleId,
-    required DateTime dueDate,
+    DateTime? dueDate,
     String? learnerId,
     int maxLevel = 3,
     int? maxLessons,
@@ -275,7 +362,7 @@ class ClassRepository {
       classId: classId,
       learnerId: learnerId,
       moduleId: moduleId,
-      dueDate: dueDate,
+      dueDate: dueDate ?? noDueDate,
       assignedAt: DateTime.now(),
       maxLevel: maxLevel,
       maxLessons: maxLessons,
@@ -292,11 +379,11 @@ class ClassRepository {
     return assignment;
   }
 
-  /// Updates an existing take-home module assignment (due date, module, level cap).
+  /// Updates an existing take-home module assignment (module, level cap).
   Future<AssignedModule?> updateAssignment({
     required String id,
     required String moduleId,
-    required DateTime dueDate,
+    DateTime? dueDate,
     int? maxLevel,
     int? maxLessons,
   }) async {
@@ -307,7 +394,7 @@ class ClassRepository {
       classId: existing.classId,
       learnerId: existing.learnerId,
       moduleId: moduleId,
-      dueDate: dueDate,
+      dueDate: dueDate ?? existing.dueDate,
       assignedAt: existing.assignedAt,
       maxLevel: maxLevel ?? existing.maxLevel,
       maxLessons: maxLessons ?? existing.maxLessons,
@@ -324,7 +411,10 @@ class ClassRepository {
   /// Deletes a take-home module assignment from both local Hive and remote Firestore.
   Future<void> deleteAssignment(String assignmentId) async {
     try {
-      await FirestoreMirror().deleteDoc(HiveBoxes.assignedModules, assignmentId);
+      await FirestoreMirror().deleteDoc(
+        HiveBoxes.assignedModules,
+        assignmentId,
+      );
     } catch (_) {}
     await _assignments.delete(assignmentId);
   }
@@ -334,15 +424,26 @@ class ClassRepository {
   /// both the teacher and parent side delete any local enrollment that
   /// isn't there, so a local-only enrollment silently disappears (and
   /// takes the learner's homework with it).
+  ///
+  /// The class is pushed first: [create] is local-only, and
+  /// `firestore.rules` checks enrollment writes against the class doc, so
+  /// an enroll into a not-yet-synced class was being rejected. On failure
+  /// the local enrollment is rolled back and the error rethrown, so the
+  /// teacher sees it instead of a fake success that vanishes on restart.
   Future<void> enrollAndPush({
     required String classId,
     required String learnerId,
   }) async {
     final enrollment = await enroll(classId: classId, learnerId: learnerId);
+    final mirror = FirestoreMirror();
     try {
-      await FirestoreMirror().pushEnrollment(enrollment);
+      final section = _classes.get(classId);
+      if (section != null) await mirror.pushClass(section);
+      await mirror.pushEnrollment(enrollment);
     } catch (e) {
       debugPrint('ClassRepository.enrollAndPush: push failed: $e');
+      await _enrollments.delete('$classId:$learnerId');
+      rethrow;
     }
   }
 

@@ -82,7 +82,6 @@ loginForm.addEventListener("submit", async (event) => {
   try {
     await signInWithEmailAndPassword(auth, email, password);
     hideLoading();
-    showToast("Signed in successfully", "success");
   } catch (err) {
     console.error("Sign-in failed:", err.code, err.message);
     loginError.textContent = describeAuthError(err);
@@ -139,27 +138,55 @@ onAuthStateChanged(auth, async (user) => {
   loginView.hidden = true;
   dashboardView.hidden = false;
   whoami.textContent = user.email ?? "";
-  
-  // Sync to Topbar
-  const emailVal = user.email ?? "Admin";
-  const topbarUser = document.getElementById("topbar-username");
-  const topbarAvatar = document.getElementById("topbar-avatar");
-  if (topbarUser) topbarUser.textContent = emailVal;
-  if (topbarAvatar) topbarAvatar.textContent = emailVal[0].toUpperCase();
-  
+  whoami.title = user.email ?? "";
+  document.getElementById("sidebar-avatar").textContent = (user.email ?? "A")[0].toUpperCase();
+
+  showLoading("Loading dashboard...");
   await loadAllData();
+  hideLoading();
 });
 
 // ---- Tabs ----
+const pageMeta = {
+  overview: { title: "Overview", subtitle: "Platform-wide statistics and recent activity" },
+  parents: { title: "Parents / Guardians", subtitle: "Manage parent and guardian accounts" },
+  teachers: { title: "Asatidz", subtitle: "Approve and manage teacher accounts" },
+  learners: { title: "Learners", subtitle: "View and manage student profiles" },
+  classes: { title: "Classes", subtitle: "Browse class sections and enroll students" },
+  progress: { title: "Progress", subtitle: "Learning activity per learner, classroom and home" },
+  trashbin: { title: "Trashbin", subtitle: "Restore or permanently delete removed records" },
+  reports: { title: "Reports", subtitle: "Printable platform summary report" },
+};
 const tabButtons = document.querySelectorAll(".tab-btn");
 tabButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
-    tabButtons.forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
+    tabButtons.forEach((b) => {
+      b.classList.toggle("active", b === btn);
+      b.toggleAttribute("aria-current", b === btn);
+    });
     document.querySelectorAll(".tab-panel").forEach((panel) => {
       panel.hidden = panel.id !== `tab-${btn.dataset.tab}`;
     });
+    const meta = pageMeta[btn.dataset.tab];
+    document.getElementById("page-title").textContent = meta.title;
+    document.getElementById("page-subtitle").textContent = meta.subtitle;
+    setDrawer(false);
   });
+});
+
+// ---- Mobile navigation drawer ----
+const sidebar = document.getElementById("sidebar");
+const sidebarScrim = document.getElementById("sidebar-scrim");
+const menuBtn = document.getElementById("menu-btn");
+function setDrawer(open) {
+  sidebar.classList.toggle("open", open);
+  sidebarScrim.hidden = !open;
+  menuBtn.setAttribute("aria-expanded", String(open));
+}
+menuBtn.addEventListener("click", () => setDrawer(!sidebar.classList.contains("open")));
+sidebarScrim.addEventListener("click", () => setDrawer(false));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") setDrawer(false);
 });
 
 // ---- Table search ----
@@ -230,13 +257,21 @@ function renderTable(tableEl, columns, rows, actions) {
     const tr = document.createElement("tr");
     columns.forEach((c) => {
       const td = document.createElement("td");
-      td.textContent = c.value(row) ?? "—";
+      const text = c.value(row) ?? "—";
+      if (c.badge) {
+        const badge = document.createElement("span");
+        badge.className = `dash-badge dash-badge-${c.badge(row)}`;
+        badge.textContent = text;
+        td.appendChild(badge);
+      } else {
+        td.textContent = text;
+      }
       tr.appendChild(td);
     });
     if (actionsList.length > 0) {
       const td = document.createElement("td");
       td.className = "actions-cell";
-      actionsList.forEach((act) => {
+      actionsList.filter((act) => !act.show || act.show(row)).forEach((act) => {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = act.className ?? "btn-danger";
@@ -275,90 +310,57 @@ function computeInsights(data) {
 function renderDashboard(data) {
   const { parents, teachers, learners, classes, enrollments, progress } = data;
 
-  // Stats - RuangAdmin style metric cards
+  const { enrolledLearnerIds, learnersNoClass, classesNoStudents, maxChildren, topParent } =
+    computeInsights(data);
+  const pendingTeachers = teachers.filter((t) => teacherStatus(t) === "pending").length;
+  const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const newParents = parents.filter((p) => p.createdAt && new Date(p.createdAt).getTime() >= monthAgo).length;
+
   const metrics = [
     {
-      title: "TOTAL LEARNERS",
+      title: "Learners",
       value: learners.length,
-      trend: "+12.5%",
-      sub: " Since last month",
-      positive: true,
-      color: "var(--teal-dark)", // Dark Teal
-      icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`
+      sub: `${enrolledLearnerIds.size} enrolled in a class`,
+      tab: "learners",
+      icon: `<circle cx="9" cy="7" r="4"></circle><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>`,
     },
     {
-      title: "ACTIVE ASATIDZ",
+      title: "Asatidz",
       value: teachers.length,
-      trend: "+5.4%",
-      sub: " Since last week",
-      positive: true,
-      color: "#1cc88a", // Green
-      icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>`
+      sub: pendingTeachers > 0 ? `${pendingTeachers} awaiting approval` : "None awaiting approval",
+      alert: pendingTeachers > 0,
+      tab: "teachers",
+      icon: `<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>`,
     },
     {
-      title: "PARENT REGISTRATIONS",
+      title: "Parents",
       value: parents.length,
-      trend: "+20.4%",
-      sub: " Since last month",
-      positive: true,
-      color: "#0f6e56", // Teal
-      icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>`
+      sub: `${newParents} joined in the last 30 days`,
+      tab: "parents",
+      icon: `<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline>`,
     },
     {
-      title: "CLASSES CREATED",
+      title: "Classes",
       value: classes.length,
-      trend: "-1.10%",
-      sub: " Since yesterday",
-      positive: false,
-      color: "#ef9f27", // Orange
-      icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`
-    }
+      sub: classesNoStudents.length > 0 ? `${classesNoStudents.length} with no students` : "All have students",
+      tab: "classes",
+      icon: `<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>`,
+    },
   ];
 
-  document.getElementById("stat-grid").innerHTML = metrics.map(m => `
-    <div class="stat-card" style="border-left: 4.5px solid ${m.color}">
-      <div class="stat-card-left">
-        <div class="stat-card-title" style="color: ${m.color}">${m.title}</div>
-        <div class="stat-card-value">${m.value}</div>
-        <div class="stat-card-trend">
-          <span class="trend-badge ${m.positive ? 'trend-up' : 'trend-down'}">${m.trend}</span>
-          <span class="trend-sub">${m.sub}</span>
-        </div>
-      </div>
-      <div class="stat-card-right">
-        <div class="stat-card-icon" style="color: #d1d3e2">
-          ${m.icon}
-        </div>
-      </div>
-    </div>
+  document.getElementById("stat-grid").innerHTML = metrics.map((m) => `
+    <button type="button" class="stat-card" data-goto="${m.tab}">
+      <span class="stat-card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${m.icon}</svg></span>
+      <span class="stat-card-title">${m.title}</span>
+      <span class="stat-card-value">${m.value}</span>
+      <span class="stat-card-sub${m.alert ? " stat-card-sub-alert" : ""}">${m.sub}</span>
+    </button>
   `).join("");
 
-  // Draw Recap Chart
-  drawRecapChart();
-
-  // Populate Modules Progress list
-  const progressList = document.getElementById("progress-list");
-  if (progressList) {
-    const modules = [
-      { name: "Letters Tracing (Alif to Kha)", current: Math.min(learners.length, 6) * 100, total: learners.length * 100 || 800, color: "#0f6e56" },
-      { name: "Wudhu Sequence Matcher", current: Math.min(learners.length, 5) * 100, total: learners.length * 100 || 800, color: "#0f6e56" },
-      { name: "Alphabet Song Practice", current: Math.min(learners.length, 4) * 100 + 55, total: learners.length * 100 || 800, color: "#0f6e56" },
-      { name: "Pronunciation of Letter ج", current: Math.min(learners.length, 4) * 100, total: learners.length * 100 || 800, color: "#0f6e56" },
-      { name: "Quran Sync Syncing", current: Math.min(learners.length, 2) * 100, total: learners.length * 100 || 800, color: "#0f6e56" }
-    ];
-    
-    progressList.innerHTML = modules.map(m => `
-      <div class="progress-bar-item">
-        <div class="progress-bar-labels">
-          <span class="progress-bar-title" title="${escapeAttr(m.name)}">${escapeAttr(m.name)}</span>
-          <span class="progress-bar-value">${m.current} of ${m.total} items</span>
-        </div>
-        <div class="progress-bar-track">
-          <div class="progress-bar-fill" style="width: ${(m.current / m.total * 100)}%; background-color: ${m.color};"></div>
-        </div>
-      </div>
-    `).join("");
-  }
+  const pendingBadge = document.getElementById("nav-pending");
+  pendingBadge.hidden = pendingTeachers === 0;
+  pendingBadge.textContent = pendingTeachers;
+  pendingBadge.title = `${pendingTeachers} awaiting approval`;
 
   // Recent joins
   const recentParents = [...parents].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")).slice(0, 2);
@@ -395,170 +397,21 @@ function renderDashboard(data) {
         <td class="dash-date">${formatDate(r.completedAt)}</td>
       </tr>`).join("")}</tbody></table>`;
 
-  // Insights
-  const { enrolledLearnerIds, learnersNoClass, classesNoStudents, maxChildren, topParent } =
-    computeInsights(data);
-
+  // Insights (counts already on the stat cards above are not repeated here)
+  const lastActivity = recentProgress[0]?.completedAt;
   const insightsBody = document.querySelector("#dash-insights .dash-card-body");
   insightsBody.innerHTML = `
-    <div class="insight-item"><strong>${enrolledLearnerIds.size}</strong> / ${learners.length} learners enrolled in a class</div>
     <div class="insight-item"><strong>${learnersNoClass.length}</strong> learners not yet in any class</div>
-    <div class="insight-item"><strong>${classesNoStudents.length}</strong> classes with no students</div>
     <div class="insight-item">${topParent ? `<strong>${escapeAttr(topParent.fullName)}</strong> has the most children (${maxChildren})` : "No parents with children yet"}</div>
     <div class="insight-item"><strong>${progress.length}</strong> total progress records</div>
-    ${progress.length > 0 ? `<div class="insight-item">Last activity: ${formatDate([...progress].sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""))[0].completedAt)}</div>` : ""}
+    <div class="insight-item">Last activity: <strong>${lastActivity ? formatDate(lastActivity) : "none yet"}</strong></div>
   `;
 }
 
-// Canvas chart drawing helper
-function drawRecapChart() {
-  const canvas = document.getElementById('recapChart');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  
-  // Handle responsiveness - match resolution to screen size
-  const parentWidth = canvas.parentNode.clientWidth;
-  canvas.width = Math.max(parentWidth, 300);
-  canvas.height = 280;
-  
-  const width = canvas.width;
-  const height = canvas.height;
-  
-  ctx.clearRect(0, 0, width, height);
-  
-  const gridCount = 5;
-  const graphTop = 25;
-  const graphBottom = height - 25;
-  const usableHeight = graphBottom - graphTop;
-  const startX = 55;
-  const usableWidth = width - startX - 15;
-  
-  // Y-Grid & Labels
-  ctx.strokeStyle = 'rgba(231, 224, 206, 0.4)';
-  ctx.lineWidth = 1;
-  ctx.font = 'bold 9px "Inter", sans-serif';
-  ctx.fillStyle = '#858796';
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'middle';
-  
-  const yLabels = ["$0", "$10,000", "$20,000", "$30,000", "$40,000"];
-  for (let i = 0; i < gridCount; i++) {
-    const y = graphBottom - (i * usableHeight / 4);
-    ctx.beginPath();
-    ctx.moveTo(startX, y);
-    ctx.lineTo(width - 15, y);
-    ctx.stroke();
-    
-    ctx.fillText(yLabels[i], startX - 10, y);
-  }
-  
-  // Data values representing screenshot
-  const values = [5000, 14000, 11000, 18000, 25000, 41000];
-  const maxVal = 45000;
-  const points = [];
-  
-  for (let i = 0; i < values.length; i++) {
-    const x = startX + (i * usableWidth / 5);
-    const y = graphBottom - (values[i] / maxVal * usableHeight);
-    points.push({ x, y });
-  }
-  
-  // Area Gradient
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
-  for (let i = 0; i < points.length - 1; i++) {
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const cp1x = p1.x + (p2.x - p1.x) * 0.45;
-    const cp2x = p2.x - (p2.x - p1.x) * 0.45;
-    ctx.bezierCurveTo(cp1x, p1.y, cp2x, p2.y, p2.x, p2.y);
-  }
-  ctx.lineTo(points[points.length - 1].x, graphBottom);
-  ctx.lineTo(points[0].x, graphBottom);
-  ctx.closePath();
-  
-  const gradient = ctx.createLinearGradient(0, graphTop, 0, graphBottom);
-  gradient.addColorStop(0, 'rgba(15, 110, 86, 0.32)');
-  gradient.addColorStop(1, 'rgba(15, 110, 86, 0.00)');
-  ctx.fillStyle = gradient;
-  ctx.fill();
-  
-  // Line Stroke
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
-  for (let i = 0; i < points.length - 1; i++) {
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const cp1x = p1.x + (p2.x - p1.x) * 0.45;
-    const cp2x = p2.x - (p2.x - p1.x) * 0.45;
-    ctx.bezierCurveTo(cp1x, p1.y, cp2x, p2.y, p2.x, p2.y);
-  }
-  ctx.strokeStyle = '#0f6e56';
-  ctx.lineWidth = 3;
-  ctx.lineCap = 'round';
-  ctx.stroke();
-  
-  // Dot vertices
-  const xLabels = ["Jan", "Mar", "May", "Jul", "Sep", "Nov"];
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i];
-    
-    // Draw outer dot
-    ctx.fillStyle = '#0f6e56';
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Draw inner dot
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // X Label
-    ctx.fillStyle = '#858796';
-    ctx.fillText(xLabels[i], p.x, graphBottom + 8);
-  }
-  
-  // Peak indicator line
-  const peak = points[5];
-  ctx.strokeStyle = 'rgba(15, 110, 86, 0.4)';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([2, 2]);
-  ctx.beginPath();
-  ctx.moveTo(peak.x, peak.y);
-  ctx.lineTo(peak.x, graphBottom);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  
-  // Tooltip Box
-  const boxW = 54;
-  const boxH = 18;
-  const boxX = peak.x - boxW / 2;
-  const boxY = peak.y - 24;
-  
-  ctx.fillStyle = '#2c9faf';
-  if (ctx.roundRect) {
-    ctx.beginPath();
-    ctx.roundRect(boxX, boxY, boxW, boxH, 3);
-    ctx.fill();
-  } else {
-    ctx.fillRect(boxX, boxY, boxW, boxH);
-  }
-  
-  // Tooltip Text
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 8.5px "Inter", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('$41,000', peak.x, boxY + boxH / 2);
-}
-
-// Redraw chart on resize
-window.addEventListener('resize', drawRecapChart);
+document.getElementById("stat-grid").addEventListener("click", (e) => {
+  const card = e.target.closest("[data-goto]");
+  if (card) document.querySelector(`.tab-btn[data-tab="${card.dataset.goto}"]`).click();
+});
 
 // Bucket the last 8 weeks (Mon-start) of combined parent/teacher/learner
 // signups into one count per week, oldest first, for the growth chart.
@@ -789,8 +642,8 @@ function renderReport(data) {
     <div class="report-chart-wrap">${renderRoleDonut([
       { label: "Parents / Guardians", value: parents.length, color: "#0f6e56" },
       { label: "Asatidz / Teachers", value: teachers.length, color: "#ef9f27" },
-      { label: "Principals", value: principals.length, color: "#d85a30" },
-      { label: "Learners", value: learners.length, color: "#36b9cc" },
+      { label: "Principals", value: principals.length, color: "#2c2c2a" },
+      { label: "Learners", value: learners.length, color: "#d85a30" },
     ])}</div>
 
     <h2 class="report-section-title">Weekly Growth</h2>
@@ -859,15 +712,15 @@ async function loadAllData() {
         { label: "Name", value: (r) => r.fullName },
         { label: "School", value: (r) => r.school },
         { label: "Email", value: (r) => r.email },
-        { label: "Status", value: (r) => r.verificationStatus ?? "approved" },
+        { label: "Status", value: (r) => teacherStatus(r), badge: (r) => `status-${teacherStatus(r)}` },
         { label: "Registered", value: (r) => formatDate(r.createdAt) },
       ],
-      teachers,
+      [...teachers].sort((a, b) => (teacherStatus(b) === "pending") - (teacherStatus(a) === "pending")),
       [
-        { label: "Approve", className: "btn-view", onClick: (row, btn) => setTeacherStatus(row, "approved", btn) },
-        { label: "Reject", onClick: (row, btn) => setTeacherStatus(row, "rejected", btn) },
-        { label: "Set pending", className: "btn-view", onClick: (row, btn) => setTeacherStatus(row, "pending", btn) },
-        { label: "Reset Password", className: "btn-view", onClick: (row) => resetAccountPassword(row.email) },
+        { label: "Approve", className: "btn-primary btn-small", show: (r) => teacherStatus(r) !== "approved", onClick: (row, btn) => setTeacherStatus(row, "approved", btn) },
+        { label: "Reject", show: (r) => teacherStatus(r) !== "rejected", onClick: (row, btn) => setTeacherStatus(row, "rejected", btn) },
+        { label: "Set pending", className: "btn-view", show: (r) => teacherStatus(r) === "rejected", onClick: (row, btn) => setTeacherStatus(row, "pending", btn) },
+        { label: "Reset Password", className: "btn-view", onClick: (row) => resetAccountPassword(row.email, row.email && teacherAuthEmail(row.email)) },
         { label: "Remove", onClick: (row, btn) => confirmDeleteTeacher(row, btn) },
       ]
     );
@@ -978,7 +831,7 @@ async function loadAllData() {
     renderTable(
       document.getElementById("table-trashbin-users"),
       [
-        { label: "Type", value: (r) => r.collection ? r.collection.toUpperCase() : "" },
+        { label: "Type", value: (r) => trashTypeLabel(r.collection) },
         { label: "Original ID", value: (r) => r.originalId },
         { label: "Details", value: (r) => getTrashDetails(r) },
         { label: "Deleted At", value: (r) => formatDate(r.deletedAt) },
@@ -1008,10 +861,11 @@ async function loadAllData() {
     if (err.code === "permission-denied") {
       document.getElementById("my-uid").textContent = auth.currentUser?.uid ?? "(unknown)";
       accessDenied.hidden = false;
-      renderStats({});
+      document.getElementById("stat-grid").innerHTML = "";
       document.querySelectorAll(".tab-panel table").forEach((t) => (t.innerHTML = ""));
     } else {
       console.error(err);
+      showToast("Couldn't load data. Check your connection and refresh.", "error");
     }
   }
 }
@@ -1025,13 +879,33 @@ function populateParentPicker(parents) {
 }
 
 function escapeAttr(value) {
-  return String(value ?? "").replace(/"/g, "&quot;");
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[ch]);
+}
+
+const trashTypeLabels = {
+  parents: "Parent",
+  teachers: "Teacher",
+  principals: "Principal",
+  learners: "Learner",
+  classes: "Class",
+  enrollments: "Enrollment",
+  progress: "Progress",
+  assigned_modules: "Assignment",
+  custom_lessons: "Lesson",
+  consents: "Consent",
+};
+function trashTypeLabel(collectionName) {
+  return trashTypeLabels[collectionName] ?? collectionName ?? "";
 }
 
 // ---- Add-user forms (show/hide) ----
 document.querySelectorAll("[data-open-form]").forEach((btn) => {
   btn.addEventListener("click", () => {
-    document.getElementById(`form-${btn.dataset.openForm}`).hidden = false;
+    const form = document.getElementById(`form-${btn.dataset.openForm}`);
+    form.hidden = false;
+    form.querySelector("input, select").focus();
   });
 });
 document.querySelectorAll("[data-cancel-form]").forEach((btn) => {
@@ -1042,6 +916,15 @@ document.querySelectorAll("[data-cancel-form]").forEach((btn) => {
     form.querySelector(".form-error").hidden = true;
   });
 });
+
+// Firestore keeps a single `fullName` (see isValidNewParent/isValidNewTeacher
+// in firestore.rules), so the separate name inputs are joined here.
+function fullNameFrom(data) {
+  const first = data.get("firstName").trim();
+  const last = data.get("lastName").trim();
+  if (!first || !last) return null;
+  return [first, data.get("middleName").trim(), last].filter(Boolean).join(" ");
+}
 
 function showFormError(form, message) {
   const errorEl = form.querySelector(".form-error");
@@ -1081,21 +964,31 @@ async function requireInternetForAccountCreation(form) {
 // with a second, throwaway Firebase App instance (same project) keeps the
 // admin's own `auth` session on this page untouched; the throwaway app is
 // torn down right after we have the new user's uid.
-async function createAuthAccountWithoutSignOut(email, password) {
+//
+// `writeProfile(uid)` saves the Firestore doc while the new user is still
+// signed in on the worker app. If it throws, the new Auth user is deleted
+// again, so a failed save can't leave the email stuck as "already in use"
+// with no profile behind it.
+async function createAuthAccountWithoutSignOut(email, password, writeProfile, { sendActivationEmail = false } = {}) {
   const workerApp = initializeApp(firebaseConfig, `admin-worker-${Date.now()}`);
   try {
     const workerAuth = getAuth(workerApp);
     const credential = await createUserWithEmailAndPassword(workerAuth, email, password);
-    // Activation step for the account holder (Teacher/Parent app's
-    // "New Account" / "Activate my account" flow): sends Firebase's own
-    // built-in password-reset email. They set their own real password on
-    // Firebase's hosted reset page, then sign in with it in the app — the
-    // password typed into this admin form is never emailed to them, and
-    // never needs to be (it's just what creates the account here).
     try {
-      await sendPasswordResetEmail(workerAuth, email);
+      await writeProfile(credential.user.uid);
     } catch (err) {
-      console.error("Activation email failed to send:", err);
+      await credential.user.delete().catch((e) => console.error("Rollback of new account failed:", e));
+      throw err;
+    }
+    // Parents have no in-app activation, so they get Firebase's password-reset
+    // email to set their own password. Teachers don't: they request that same
+    // email themselves from the app's "Activate my account" screen.
+    if (sendActivationEmail) {
+      try {
+        await sendPasswordResetEmail(workerAuth, email);
+      } catch (err) {
+        console.error("Activation email failed to send:", err);
+      }
     }
     return credential.user.uid;
   } finally {
@@ -1103,13 +996,28 @@ async function createAuthAccountWithoutSignOut(email, password) {
   }
 }
 
-function resetAccountPassword(email) {
+// Teacher logins on Gmail live under a "+teacher" alias so a parent and a
+// teacher can share one Gmail with different passwords (Firebase Auth allows
+// one login per email). Gmail delivers the alias to the same inbox. Must match
+// FirebaseAuthGateway.teacherAuthEmail in the Flutter app.
+function teacherAuthEmail(email) {
+  const normalized = email.trim().toLowerCase();
+  const at = normalized.lastIndexOf("@");
+  if (at <= 0) return normalized;
+  const local = normalized.slice(0, at);
+  const domain = normalized.slice(at + 1);
+  if (domain !== "gmail.com" && domain !== "googlemail.com") return normalized;
+  if (local.endsWith("+teacher")) return normalized;
+  return `${local}+teacher@${domain}`;
+}
+
+function resetAccountPassword(email, authEmail = email) {
   if (!email) {
     showToast("No email on file — cannot send reset link.", "error");
     return;
   }
   if (!window.confirm(`Send a password-reset email to ${email}?`)) return;
-  sendPasswordResetEmail(auth, email)
+  sendPasswordResetEmail(auth, authEmail)
     .then(() => showToast(`Password-reset email sent to ${email}`, "success"))
     .catch((err) => {
       console.error(err);
@@ -1123,6 +1031,11 @@ document.getElementById("form-parent").addEventListener("submit", async (event) 
   form.querySelector(".form-error").hidden = true;
   const submitBtn = form.querySelector("button[type=submit]");
   const data = new FormData(form);
+  const fullName = fullNameFrom(data);
+  if (!fullName) {
+    showFormError(form, "First and last name are required.");
+    return;
+  }
   submitBtn.disabled = true;
   showLoading("Checking connection...");
   if (!await requireInternetForAccountCreation(form)) {
@@ -1132,19 +1045,16 @@ document.getElementById("form-parent").addEventListener("submit", async (event) 
   }
   showLoading("Creating parent account...");
   try {
-    const firebaseUid = await createAuthAccountWithoutSignOut(
-      data.get("email").trim().toLowerCase(),
-      data.get("password")
+    const email = data.get("email").trim().toLowerCase();
+    await createAuthAccountWithoutSignOut(email, data.get("password"), (firebaseUid) =>
+      setDoc(doc(collection(db, "parents")), {
+        fullName,
+        email,
+        createdAt: new Date().toISOString(),
+        firebaseUid,
+      }),
+      { sendActivationEmail: true }
     );
-    const batch = writeBatch(db);
-    batch.set(doc(collection(db, "parents")), {
-      fullName: data.get("fullName").trim(),
-      email: data.get("email").trim().toLowerCase(),
-      mobileNumber: data.get("mobileNumber").trim() || null,
-      createdAt: new Date().toISOString(),
-      firebaseUid,
-    });
-    await batch.commit();
     form.hidden = true;
     form.reset();
     await loadAllData();
@@ -1160,11 +1070,16 @@ document.getElementById("form-parent").addEventListener("submit", async (event) 
   }
 });
 
+function teacherStatus(row) {
+  return row.verificationStatus ?? "approved";
+}
+
 // Teacher verification (SL-TEA/ADM-02): only admins may change this field —
 // firestore.rules rejects it from the teacher's own app session. "pending"
 // is how an admin lets a rejected teacher re-apply.
 async function setTeacherStatus(row, status, btn) {
-  if ((row.verificationStatus ?? "approved") === status) return;
+  if (teacherStatus(row) === status) return;
+  if (status === "rejected" && !window.confirm(`Reject ${row.fullName}? They can't use the teacher dashboard until approved.`)) return;
   btn.disabled = true;
   showLoading("Updating teacher status...");
   try {
@@ -1187,6 +1102,11 @@ document.getElementById("form-teacher").addEventListener("submit", async (event)
   form.querySelector(".form-error").hidden = true;
   const submitBtn = form.querySelector("button[type=submit]");
   const data = new FormData(form);
+  const fullName = fullNameFrom(data);
+  if (!fullName) {
+    showFormError(form, "First and last name are required.");
+    return;
+  }
   submitBtn.disabled = true;
   showLoading("Checking connection...");
   if (!await requireInternetForAccountCreation(form)) {
@@ -1196,21 +1116,18 @@ document.getElementById("form-teacher").addEventListener("submit", async (event)
   }
   showLoading("Creating teacher account...");
   try {
-    const firebaseUid = await createAuthAccountWithoutSignOut(
-      data.get("email").trim().toLowerCase(),
-      data.get("password")
+    const email = data.get("email").trim().toLowerCase();
+    const school = data.get("school").trim() || null;
+    await createAuthAccountWithoutSignOut(teacherAuthEmail(email), data.get("password"), (firebaseUid) =>
+      setDoc(doc(collection(db, "teachers")), {
+        fullName,
+        school,
+        email,
+        createdAt: new Date().toISOString(),
+        firebaseUid,
+        verificationStatus: "approved",
+      })
     );
-    const batch = writeBatch(db);
-    batch.set(doc(collection(db, "teachers")), {
-      fullName: data.get("fullName").trim(),
-      school: data.get("school").trim() || null,
-      email: data.get("email").trim().toLowerCase(),
-      mobileNumber: data.get("mobileNumber").trim() || null,
-      createdAt: new Date().toISOString(),
-      firebaseUid,
-      verificationStatus: "approved",
-    });
-    await batch.commit();
     form.hidden = true;
     form.reset();
     await loadAllData();
@@ -1236,17 +1153,18 @@ document.getElementById("form-principal").addEventListener("submit", async (even
   showLoading("Creating principal account...");
   try {
     const email = data.get("email").trim().toLowerCase();
-    const firebaseUid = await createAuthAccountWithoutSignOut(email, data.get("password"));
     // Unlike parents/teachers (random doc id), a principal's doc id is set
     // equal to their own Firebase Auth uid — see firestore.rules' PRINCIPAL
     // MONITORING note for why: it's what lets a principal prove "this is my
     // own doc" with a plain get() instead of an unprovable query.
-    await setDoc(doc(db, "principals", firebaseUid), {
-      fullName: data.get("fullName").trim(),
-      email,
-      firebaseUid,
-      createdAt: new Date().toISOString(),
-    });
+    await createAuthAccountWithoutSignOut(email, data.get("password"), (firebaseUid) =>
+      setDoc(doc(db, "principals", firebaseUid), {
+        fullName: data.get("fullName").trim(),
+        email,
+        firebaseUid,
+        createdAt: new Date().toISOString(),
+      })
+    );
     form.hidden = true;
     form.reset();
     await loadAllData();
@@ -1279,14 +1197,11 @@ document.getElementById("form-learner").addEventListener("submit", async (event)
     showFormError(form, "Add a parent first — a learner must belong to one.");
     return;
   }
-  const firstName = data.get("firstName").trim();
-  const lastName = data.get("lastName").trim();
-  if (!firstName || !lastName) {
+  const name = fullNameFrom(data);
+  if (!name) {
     showFormError(form, "First and last name are required.");
     return;
   }
-  const middleName = data.get("middleName").trim();
-  const name = middleName ? `${firstName} ${middleName} ${lastName}` : `${firstName} ${lastName}`;
   const age = data.get("age") === "custom" ? Number(data.get("ageCustom")) : Number(data.get("age"));
   if (!age || age < 1) {
     showFormError(form, "Please enter a valid age.");
@@ -1500,7 +1415,10 @@ async function confirmDeleteTeacher(row, btn) {
     const { id, ...teacherData } = row;
     archiveDocToTrashbinBatch(batch, "teachers", row.id, teacherData, batchId);
     batch.delete(doc(db, "teachers", row.id));
-    if (row.email) batch.delete(doc(db, "activatedTeachers", row.email.toLowerCase()));
+    if (row.email) {
+      batch.delete(doc(db, "activatedTeachers", row.email.toLowerCase()));
+      batch.delete(doc(db, "activatedTeachers", teacherAuthEmail(row.email)));
+    }
 
     await batch.commit();
     await loadAllData();
@@ -1797,8 +1715,8 @@ function renderGroupedAdminTrash(tableEl, entries) {
   remainingSingles.forEach((entry) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `<td></td>
-      <td>${entry.collection ? entry.collection.toUpperCase() : ""}</td>
-      <td>${getTrashDetails(entry)}</td>
+      <td>${escapeAttr(trashTypeLabel(entry.collection))}</td>
+      <td>${escapeAttr(getTrashDetails(entry))}</td>
       <td>${formatDate(entry.deletedAt)}</td>
       <td class="actions-cell">
         <button type="button" class="btn-view btn-small" data-action="restore-single" data-id="${entry.id}">Restore</button>
@@ -1807,16 +1725,17 @@ function renderGroupedAdminTrash(tableEl, entries) {
     tbody.appendChild(tr);
   });
 
-  // Event delegation — toggle expand
-  tableEl.addEventListener("click", (e) => {
+  // Assigned (not added) so a reload replaces the handler instead of stacking another one.
+  tableEl.onclick = (e) => {
     const toggle = e.target.closest(".trash-toggle");
-    if (!toggle) return;
+    if (!toggle) return handleTrashAction(e);
     const tr = toggle.closest("tr");
     const batchId = tr.dataset.batchId;
     const depth = parseInt(tr.dataset.depth || "0", 10);
     const order = tr.dataset.order || "0";
     const isExpanded = toggle.textContent === "\u25BC";
     toggle.textContent = isExpanded ? "\u25B6" : "\u25BC";
+    toggle.setAttribute("aria-expanded", String(!isExpanded));
 
     const childRows = tbody.querySelectorAll(
       `tr[data-batch-id="${batchId}"][data-depth="${depth + 1}"][data-parent-order="${order}"]`
@@ -1824,55 +1743,47 @@ function renderGroupedAdminTrash(tableEl, entries) {
     childRows.forEach((row) => {
       row.style.display = isExpanded ? "none" : "";
     });
-  });
+  };
+}
 
-  // Event delegation — action buttons
-  tableEl.addEventListener("click", async (e) => {
-    const btn = e.target.closest("button[data-action]");
-    if (!btn) return;
-    e.stopPropagation();
+async function handleTrashAction(e) {
+  const btn = e.target.closest("button[data-action]");
+  if (!btn) return;
+  e.stopPropagation();
 
-    const action = btn.dataset.action;
-    let label = "batch";
-    if (action === "restore-batch") label = "restore all";
-    else if (action === "delete-batch") label = "delete all";
-    else if (action === "restore-single") label = "restore";
-    else if (action === "delete-single") label = "delete";
+  const action = btn.dataset.action;
+  // Confirm before the overlay goes up, not underneath it.
+  if (action === "delete-batch" && !window.confirm("Permanently delete all items in this group? This cannot be undone.")) return;
+  if (action === "delete-single" && !window.confirm("Permanently delete this item from the trashbin? This cannot be undone.")) return;
+  showLoading(action.startsWith("restore") ? "Restoring..." : "Deleting...");
 
-    showLoading(`${label.charAt(0).toUpperCase() + label.slice(1)}ing...`);
-
-    try {
-      if (action === "restore-batch") {
-        await restoreBatch(btn.dataset.batch);
-        await loadAllData();
-        hideLoading();
-        showToast("All items restored successfully", "success");
-      } else if (action === "delete-batch") {
-        if (!window.confirm("Permanently delete all items in this group? This cannot be undone.")) {
-          hideLoading();
-          return;
-        }
-        await deleteBatchPermanently(btn.dataset.batch);
-        await loadAllData();
-        hideLoading();
-        showToast("All items permanently deleted", "success");
-      } else if (action === "restore-single") {
-        await restoreTrashItemById(btn.dataset.id);
-        await loadAllData();
-        hideLoading();
-        showToast("Item restored successfully", "success");
-      } else if (action === "delete-single") {
-        await deleteTrashItemByIdPermanently(btn.dataset.id);
-        await loadAllData();
-        hideLoading();
-        showToast("Item permanently deleted", "success");
-      }
-    } catch (err) {
-      console.error("Operation failed:", err.message, err.code, err);
+  try {
+    if (action === "restore-batch") {
+      await restoreBatch(btn.dataset.batch);
+      await loadAllData();
       hideLoading();
-      showToast("Operation failed: " + (err.message || "unknown"), "error");
+      showToast("All items restored successfully", "success");
+    } else if (action === "delete-batch") {
+      await deleteBatchPermanently(btn.dataset.batch);
+      await loadAllData();
+      hideLoading();
+      showToast("All items permanently deleted", "success");
+    } else if (action === "restore-single") {
+      await restoreTrashItemById(btn.dataset.id);
+      await loadAllData();
+      hideLoading();
+      showToast("Item restored successfully", "success");
+    } else if (action === "delete-single") {
+      await deleteTrashItemByIdPermanently(btn.dataset.id);
+      await loadAllData();
+      hideLoading();
+      showToast("Item permanently deleted", "success");
     }
-  });
+  } catch (err) {
+    console.error("Operation failed:", err.message, err.code, err);
+    hideLoading();
+    showToast("Operation failed: " + (err.message || "unknown"), "error");
+  }
 }
 
 function renderTreeRow(tbody, node, batchId, depth, isRoot, parentCol) {
@@ -1899,7 +1810,7 @@ function renderTreeRow(tbody, node, batchId, depth, isRoot, parentCol) {
   if (!isRoot) tr.style.display = isExpandedDefault ? "" : "none";
 
   const toggleHtml = hasChildren
-    ? `<span class="trash-toggle">${isExpandedDefault ? "\u25BC" : "\u25B6"}</span>`
+    ? `<button type="button" class="trash-toggle" aria-label="Show or hide related items" aria-expanded="${isExpandedDefault}">${isExpandedDefault ? "\u25BC" : "\u25B6"}</button>`
     : "";
 
   // Action buttons
@@ -1910,7 +1821,7 @@ function renderTreeRow(tbody, node, batchId, depth, isRoot, parentCol) {
       <button type="button" class="btn-danger btn-small" data-action="delete-batch" data-batch="${batchId}">Delete All</button>
     `;
   } else if (depth === 1 || parentCol === "learners" || parentCol === "parents") {
-    actionsHtml = `<span class="text-muted" style="font-size:0.78rem;">(restore with parent batch)</span>`;
+    actionsHtml = `<span class="text-muted">Restored with its group</span>`;
   } else {
     actionsHtml = `
       <button type="button" class="btn-view btn-small" data-action="restore-single" data-id="${e.id}">Restore</button>
@@ -1920,8 +1831,8 @@ function renderTreeRow(tbody, node, batchId, depth, isRoot, parentCol) {
 
   tr.innerHTML = `
     <td class="trash-toggle-cell">${toggleHtml}</td>
-    <td style="padding-left: ${depth * 24}px;">${prefix}<strong>${e.collection ? e.collection.toUpperCase() : ""}</strong></td>
-    <td>${getTrashDetails(e)}</td>
+    <td style="padding-left: ${16 + depth * 20}px;">${prefix}<strong>${escapeAttr(trashTypeLabel(e.collection))}</strong></td>
+    <td>${escapeAttr(getTrashDetails(e))}</td>
     <td>${formatDate(e.deletedAt)}</td>
     <td class="actions-cell">${actionsHtml}</td>
   `;
@@ -1946,23 +1857,19 @@ async function restoreBatch(batchId) {
   const midCols = new Set(["learners"]);
   const leafCols = new Set(["enrollments", "progress", "assigned_modules", "custom_lessons", "consents"]);
 
-  const runGroup = async (group, label) => {
+  const runGroup = async (group) => {
     if (group.length === 0) return;
     const b = writeBatch(db);
     group.forEach((e) => {
-      console.log(`[restore] batch.set ${e.collection}/${e.originalId}`, JSON.stringify(e.data));
-      console.log(`[restore]   keys:`, Object.keys(e.data));
       b.set(doc(db, e.collection, e.originalId), e.data);
-      console.log(`[restore] batch.delete trashbin/${e.id}`);
       b.delete(e.ref);
     });
     await b.commit();
-    console.log(`[restore] group "${label}" committed successfully (${group.length} items)`);
   };
 
-  await runGroup(entries.filter((e) => rootCols.has(e.collection)), "root");
-  await runGroup(entries.filter((e) => midCols.has(e.collection)), "mid");
-  await runGroup(entries.filter((e) => leafCols.has(e.collection)), "leaf");
+  await runGroup(entries.filter((e) => rootCols.has(e.collection)));
+  await runGroup(entries.filter((e) => midCols.has(e.collection)));
+  await runGroup(entries.filter((e) => leafCols.has(e.collection)));
 }
 
 async function deleteBatchPermanently(batchId) {
@@ -1977,7 +1884,6 @@ async function restoreTrashItemById(id) {
   const d = await getDoc(ref);
   if (!d.exists()) return;
   const data = d.data();
-  console.log(`[restore-single] ${data.collection}/${data.originalId}`, data.data);
   const batch = writeBatch(db);
   batch.set(doc(db, data.collection, data.originalId), data.data);
   batch.delete(ref);
@@ -1988,7 +1894,6 @@ async function deleteTrashItemByIdPermanently(id) {
   const ref = doc(db, "trashbin", id);
   const d = await getDoc(ref);
   if (!d.exists()) return;
-  if (!window.confirm("Permanently delete this item from the trashbin? This cannot be undone.")) return;
   await writeBatch(db).delete(ref).commit();
 }
 
@@ -2000,7 +1905,7 @@ function showClassStudents(classRow, enrollments, learners) {
 
   let studentsListHtml = "";
   if (enrolledIds.size === 0) {
-    studentsListHtml = `<p class="empty-row" style="text-align: center; color: var(--text-muted); padding: 20px 0;">No students enrolled in this class yet.</p>`;
+    studentsListHtml = `<p class="empty-text">No students enrolled in this class yet.</p>`;
   } else {
     const classEnrollments = enrollments.filter((e) => e.classId === classRow.id);
     const seenLearnerIds = new Set();
@@ -2051,10 +1956,10 @@ function showClassStudents(classRow, enrollments, learners) {
 
   const enrollFormHtml = availableLearners.length > 0
     ? `
-      <div class="enroll-form" style="display:flex;gap:8px;align-items:flex-end;margin-bottom:14px;">
-        <label style="flex:1;font-size:0.8rem;color:var(--text-muted);display:flex;flex-direction:column;gap:4px;">
+      <div class="enroll-form">
+        <label>
           Enroll a student
-          <select id="enroll-learner-select" style="font:inherit;padding:8px 10px;border:1px solid var(--cream-border);border-radius:var(--radius-sm);background:var(--cream);color:var(--ink);">
+          <select id="enroll-learner-select">
             <option value="">— Select —</option>
             ${learnerOptions}
           </select>
@@ -2062,7 +1967,7 @@ function showClassStudents(classRow, enrollments, learners) {
         <button type="button" class="btn-primary btn-small" id="enroll-btn" disabled>Enroll</button>
       </div>
     `
-    : `<p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:14px;">All learners are already enrolled in this class.</p>`;
+    : `<p class="modal-note">All learners are already enrolled in this class.</p>`;
 
   const modalOverlay = document.createElement("div");
   modalOverlay.className = "modal-overlay";
@@ -2071,7 +1976,7 @@ function showClassStudents(classRow, enrollments, learners) {
     <div class="modal-card">
       <div class="modal-header">
         <h3>Students in ${escapeAttr(classRow.name)}</h3>
-        <button class="modal-close" id="close-modal-btn">&times;</button>
+        <button type="button" class="modal-close" id="close-modal-btn" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body">
         ${enrollFormHtml}
@@ -2083,17 +1988,7 @@ function showClassStudents(classRow, enrollments, learners) {
     </div>
   `;
 
-  document.body.appendChild(modalOverlay);
-
-  const closeModal = () => {
-    modalOverlay.remove();
-  };
-
-  modalOverlay.querySelector("#close-modal-btn").addEventListener("click", closeModal);
-  modalOverlay.querySelector("#close-modal-footer-btn").addEventListener("click", closeModal);
-  modalOverlay.addEventListener("click", (e) => {
-    if (e.target === modalOverlay) closeModal();
-  });
+  const closeModal = openModal(modalOverlay);
 
   const select = modalOverlay.querySelector("#enroll-learner-select");
   const enrollBtn = modalOverlay.querySelector("#enroll-btn");
@@ -2164,11 +2059,11 @@ function showLearnerProgress(row) {
     <div class="modal-card modal-wide">
       <div class="modal-header">
         <h3>${escapeAttr(row.learnerName)} — Progress (${total} records)</h3>
-        <button class="modal-close" id="close-modal-btn">&times;</button>
+        <button type="button" class="modal-close" id="close-modal-btn" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body">
         <h4 class="mode-section-title">Classroom Mode (${row.classroomCount})</h4>
-        <div class="table-wrap" style="margin-bottom:20px;">
+        <div class="table-wrap modal-table">
           <table>
             <thead><tr>
               <th>Module</th><th>Accuracy</th><th>Errors</th><th>Time on Task</th><th>Completed</th>
@@ -2192,11 +2087,28 @@ function showLearnerProgress(row) {
     </div>
   `;
 
-  document.body.appendChild(modalOverlay);
-  const closeModal = () => modalOverlay.remove();
-  modalOverlay.querySelector("#close-modal-btn").addEventListener("click", closeModal);
-  modalOverlay.querySelector("#close-modal-footer-btn").addEventListener("click", closeModal);
-  modalOverlay.addEventListener("click", (e) => {
-    if (e.target === modalOverlay) closeModal();
+  openModal(modalOverlay);
+}
+
+function openModal(overlay) {
+  const opener = document.activeElement;
+  const onKey = (e) => {
+    if (e.key === "Escape") close();
+  };
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener("keydown", onKey);
+    opener?.focus?.();
+  };
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  document.body.appendChild(overlay);
+  overlay.querySelector("#close-modal-btn").addEventListener("click", close);
+  overlay.querySelector("#close-modal-footer-btn").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
   });
+  document.addEventListener("keydown", onKey);
+  overlay.querySelector("#close-modal-btn").focus();
+  return close;
 }

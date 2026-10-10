@@ -47,7 +47,7 @@ class ParentRepository {
       // account isn't permanently stuck — [linkToFirebase] can retry it
       // later with the parent re-entering their password.
       try {
-        final gateway = FirebaseAuthGateway();
+        final gateway = FirebaseAuthGateway(teacher: false);
         final credential = await gateway.signUp(
           email: normalizedEmail,
           password: password,
@@ -164,7 +164,7 @@ class ParentRepository {
 
     String firebaseUid;
     try {
-      final credential = await FirebaseAuthGateway().signUp(
+      final credential = await FirebaseAuthGateway(teacher: false).signUp(
         email: account.email!,
         password: password,
       );
@@ -175,7 +175,7 @@ class ParentRepository {
       // partially-successful registration attempt) — sign into it instead
       // of creating a duplicate.
       try {
-        final credential = await FirebaseAuthGateway().signIn(
+        final credential = await FirebaseAuthGateway(teacher: false).signIn(
           email: account.email!,
           password: password,
         );

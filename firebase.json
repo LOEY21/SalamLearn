@@ -9,9 +9,16 @@
       "ignore": [
         "firebase.json",
         "**/.*",
+        "**/.*/**",
         "**/node_modules/**",
         "(t.innerHTML",
         "batch.delete(d.ref))"
+      ],
+      "headers": [
+        {
+          "source": "**",
+          "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+        }
       ]
     },
     {

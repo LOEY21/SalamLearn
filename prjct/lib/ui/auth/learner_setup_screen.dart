@@ -1,5 +1,3 @@
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter/services.dart';
@@ -8,9 +6,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../logic/auth/session.dart';
 import '../theme/app_colors.dart';
+import '../widgets/child_profile_form.dart';
 
-/// Creates the Learner entity (FR-2.3). Redesigned into a premium, progressive
-/// 3-step setup wizard to optimize child profile onboarding.
+/// Creates the Learner entity (FR-2.3) as a 3-step setup: basic info,
+/// profile details (nickname + parent password check), then companion.
+/// Built from the shared child-form kit so it matches the Parent Hub and
+/// the Edit Child Profile screen.
 class LearnerSetupScreen extends ConsumerStatefulWidget {
   const LearnerSetupScreen({super.key});
 
@@ -34,37 +35,35 @@ class _CapitalizeFirstLetterFormatter extends TextInputFormatter {
   }
 }
 
-class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
-    with TickerProviderStateMixin {
+class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen> {
   final _firstNameC = TextEditingController();
   final _middleNameC = TextEditingController();
   final _lastNameC = TextEditingController();
   final _usernameC = TextEditingController();
-  final _customAgeC = TextEditingController();
 
   // Confirms parent's password to authorize child profile creation.
   final _parentPasswordC = TextEditingController();
 
   String? _gradeLevel;
   int _age = 7;
-  bool _isCustomAge = false;
   bool _submitting = false;
   String _avatar = 'boy_mascot'; // Default to boy mascot
   int _step = 0; // 0: Basic Info, 1: Profile details, 2: Avatar selection
 
-  late final AnimationController _mascotFloatController;
-
-  @override
-  void initState() {
-    super.initState();
-    _mascotFloatController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    );
-    if (kIsWeb || !Platform.environment.containsKey('FLUTTER_TEST')) {
-      _mascotFloatController.repeat(reverse: true);
-    }
-  }
+  static const _steps = [
+    (
+      title: 'Basic info',
+      subtitle: 'Tell us about your child to set up their Madrasah roadmap.',
+    ),
+    (
+      title: 'Profile details',
+      subtitle: 'Choose a nickname and confirm your parent password.',
+    ),
+    (
+      title: 'Choose a companion',
+      subtitle: "Pick Amir or Zara to be your child's learning companion.",
+    ),
+  ];
 
   @override
   void dispose() {
@@ -72,9 +71,7 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
     _middleNameC.dispose();
     _lastNameC.dispose();
     _usernameC.dispose();
-    _customAgeC.dispose();
     _parentPasswordC.dispose();
-    _mascotFloatController.dispose();
     super.dispose();
   }
 
@@ -84,21 +81,21 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
     final gradeLevel = _gradeLevel ?? '';
 
     if (firstName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter first name')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please enter first name')));
       return;
     }
     if (lastName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter last name')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please enter last name')));
       return;
     }
     if (gradeLevel.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter grade level')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please enter grade level')));
       return;
     }
 
@@ -124,9 +121,9 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
     if (!ref
         .read(sessionProvider.notifier)
         .verifyActiveParentPassword(parentPassword)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Incorrect password')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Incorrect password')));
       return;
     }
 
@@ -148,931 +145,191 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen>
     final from = GoRouterState.of(context).uri.queryParameters['from'];
     setState(() => _submitting = true);
     try {
-      await ref.read(sessionProvider.notifier).createLearner(
-          name: fullName,
-          age: _age,
-          avatar: _avatar,
-          gradeLevel: gradeLevel,
-          username: username,
-        );
+      await ref
+          .read(sessionProvider.notifier)
+          .createLearner(
+            name: fullName,
+            age: _age,
+            avatar: _avatar,
+            gradeLevel: gradeLevel,
+            username: username,
+          );
       if (mounted) router.go(from == 'parent' ? '/parent?tab=1' : '/hub');
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$error')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    void goBack() {
-      if (_step > 0) {
-        setState(() => _step--);
-      } else {
-        final from = GoRouterState.of(context).uri.queryParameters['from'];
-        context.go(from == 'parent' ? '/parent?tab=1' : '/hub');
-      }
+  void _goBack() {
+    if (_step > 0) {
+      setState(() => _step--);
+    } else {
+      final from = GoRouterState.of(context).uri.queryParameters['from'];
+      context.go(from == 'parent' ? '/parent?tab=1' : '/hub');
     }
-
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) goBack();
-      },
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          title: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              _step == 0
-                  ? 'Basic Info'
-                  : (_step == 1 ? 'Profile Details' : 'Choose Your Companion'),
-            ),
-          ),
-          backgroundColor: Colors.white,
-          foregroundColor: AppColors.ink,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: goBack,
-          ),
-        ),
-        body: SafeArea(
-          child: Column(
-            children: [
-              // Stepper progress indicator bar
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                child: _buildStepper(),
-              ),
-              Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  transitionBuilder: (Widget child, Animation<double> animation) {
-                    return SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0.15, 0.0),
-                        end: Offset.zero,
-                      ).animate(
-                        CurvedAnimation(
-                          parent: animation,
-                          curve: Curves.easeOutCubic,
-                        ),
-                      ),
-                      child: FadeTransition(
-                        opacity: animation,
-                        child: child,
-                      ),
-                    );
-                  },
-                  child: SingleChildScrollView(
-                    key: ValueKey<int>(_step),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                    child: _buildCurrentStepView(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
-  Widget _buildStepper() {
-    return Container(
-      height: 40,
-      margin: const EdgeInsets.only(bottom: 8),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final totalWidth = constraints.maxWidth;
-          // Progress bar spans half screen for Step 1, full screen for Step 2.
-          final progressWidth = totalWidth * (_step / 2.0);
-
-          return Stack(
-            alignment: Alignment.center,
-            children: [
-              // Unfilled progress indicator line
-              Container(
-                height: 4,
-                margin: const EdgeInsets.symmetric(horizontal: 20),
-                decoration: BoxDecoration(
-                  color: AppColors.creamBorder,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              // Filled progress indicator line
-              Positioned(
-                left: 20,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeOut,
-                  height: 4,
-                  width: progressWidth > 40 ? progressWidth - 40 : 0,
-                  decoration: BoxDecoration(
-                    color: AppColors.teal,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              // The circular progress step dots
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildStepDot(0, '1'),
-                  _buildStepDot(1, '2'),
-                  _buildStepDot(2, '3'),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildStepDot(int step, String label) {
-    final isActive = _step == step;
-    final isCompleted = _step > step;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: isCompleted
-            ? AppColors.teal
-            : (isActive ? Colors.white : AppColors.surface),
-        border: Border.all(
-          color: (isActive || isCompleted) ? AppColors.teal : AppColors.creamBorder,
-          width: 3,
-        ),
-        boxShadow: isActive
-            ? [
-                BoxShadow(
-                  color: AppColors.teal.withValues(alpha: 0.15),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
-                ),
-              ]
-            : null,
-      ),
-      alignment: Alignment.center,
-      child: isCompleted
-          ? const Icon(Icons.check_rounded, color: Colors.white, size: 16)
-          : Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
-                color: isCompleted
-                    ? Colors.white
-                    : (isActive ? AppColors.teal : AppColors.textMuted),
-              ),
-            ),
-    );
-  }
-
-  Widget _buildAgeSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          alignment: WrapAlignment.spaceBetween,
-          children: [
-            for (int age = 5; age <= 11; age++)
-              GestureDetector(
-                onTap: () => setState(() {
-                  _age = age;
-                  _isCustomAge = false;
-                }),
-                child: AnimatedScale(
-                  scale: !_isCustomAge && _age == age ? 1.15 : 1.0,
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOut,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: !_isCustomAge && _age == age
-                          ? AppColors.teal
-                          : Colors.white,
-                      border: Border.all(
-                        color: !_isCustomAge && _age == age
-                            ? AppColors.teal
-                            : AppColors.creamBorder,
-                        width: 2,
-                      ),
-                      boxShadow: !_isCustomAge && _age == age
-                          ? [
-                              BoxShadow(
-                                color: AppColors.teal.withValues(alpha: 0.25),
-                                blurRadius: 8,
-                                offset: const Offset(0, 3),
-                              ),
-                            ]
-                          : null,
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '$age',
-                      style: TextStyle(
-                        fontFamily: 'Outfit',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        color: !_isCustomAge && _age == age
-                            ? Colors.white
-                            : AppColors.textMuted,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            GestureDetector(
-              onTap: () => setState(() => _isCustomAge = true),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                height: 40,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: _isCustomAge ? AppColors.teal : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: _isCustomAge ? AppColors.teal : AppColors.creamBorder,
-                    width: 2,
-                  ),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  'Please specify',
-                  style: TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                    color: _isCustomAge ? Colors.white : AppColors.textMuted,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        if (_isCustomAge) ...[
-          const SizedBox(height: 12),
-          _TextField(
-            controller: _customAgeC,
-            label: 'Age',
-            hint: 'Enter age',
-            keyboardType: TextInputType.number,
-            onChanged: (v) {
-              final parsed = int.tryParse(v);
-              if (parsed != null) setState(() => _age = parsed);
-            },
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildCurrentStepView() {
-    switch (_step) {
-      case 0:
-        return Column(
-          key: const ValueKey<int>(0),
+  Widget _stepBody() {
+    return switch (_step) {
+      0 => ChildFormSection(
+        title: "Your child's details",
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _StepHeader(
-              title: 'Basic Learner Info',
-              subtitle: 'Tell us about your child to customize their Madrasah roadmap.',
-            ),
-            _TextField(
+            const ChildFieldLabel('First name'),
+            ChildTextField(
               controller: _firstNameC,
-              label: 'First Name',
+              hint: 'e.g. Nurhana',
               inputFormatters: [_CapitalizeFirstLetterFormatter()],
             ),
-            const SizedBox(height: 14),
-            _TextField(
+            const SizedBox(height: 16),
+            const ChildFieldLabel('Middle name (optional)'),
+            ChildTextField(
               controller: _middleNameC,
-              label: 'Middle Name (optional)',
               inputFormatters: [_CapitalizeFirstLetterFormatter()],
             ),
-            const SizedBox(height: 14),
-            _TextField(
+            const SizedBox(height: 16),
+            const ChildFieldLabel('Last name'),
+            ChildTextField(
               controller: _lastNameC,
-              label: 'Last Name',
+              hint: 'e.g. Ali',
               inputFormatters: [_CapitalizeFirstLetterFormatter()],
             ),
-            const SizedBox(height: 14),
-            const _FieldLabel('Grade Level'),
-            _GradeDropdown(
+            const SizedBox(height: 16),
+            const ChildFieldLabel('Grade level'),
+            GradePicker(
               value: _gradeLevel,
               onChanged: (v) => setState(() => _gradeLevel = v),
             ),
             const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Flexible(
-                  child: Text(
-                    'Age',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ink,
-                    ),
-                  ),
-                ),
-                Text(
-                  '$_age years old',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.teal,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            _buildAgeSelector(),
-            const SizedBox(height: 36),
-            SizedBox(
-              height: 54,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.teal,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                ),
-                onPressed: _onStep0Next,
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          'Next: Profile Details',
-                          style: TextStyle(
-                            fontSize: 15.5,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 8),
-                    Icon(Icons.arrow_forward_rounded, size: 18),
-                  ],
+            ChildFieldLabel(
+              'Age',
+              trailing: Text(
+                '$_age years old',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.teal,
                 ),
               ),
             ),
+            AgePicker(age: _age, onChanged: (a) => setState(() => _age = a)),
           ],
-        );
-      case 1:
-        return Column(
-          key: const ValueKey<int>(1),
+        ),
+      ),
+      1 => ChildFormSection(
+        title: 'Profile',
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _StepHeader(
-              title: 'Child Profile',
-              subtitle: 'Choose a nickname and confirm your parent password.',
+            const ChildFieldLabel(
+              'Profile nickname',
+              helper: 'Shown on the Learner Hub and to the teacher.',
             ),
-            _TextField(
-              controller: _usernameC,
-              label: 'Profile nickname',
+            ChildTextField(controller: _usernameC, hint: 'e.g. nurhana_ali'),
+            const SizedBox(height: 20),
+            const ChildFieldLabel(
+              'Confirm parent password',
+              helper:
+                  'Re-enter your account password to verify authority for '
+                  'creating new profiles.',
             ),
-            const SizedBox(height: 24),
-            const _FieldLabel('Confirm Parent Password'),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                "Re-enter your account password to verify authority for creating new profiles.",
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: AppColors.textMuted,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            _TextField(
+            ChildTextField(
               controller: _parentPasswordC,
               obscureText: true,
-            ),
-            const SizedBox(height: 36),
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 54,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.ink,
-                        side: const BorderSide(
-                          color: AppColors.creamBorder,
-                          width: 2,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                      onPressed: () => setState(() => _step = 0),
-                      child: const FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          'Back',
-                          style: TextStyle(
-                            fontSize: 15.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: SizedBox(
-                    height: 54,
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.teal,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                      onPressed: _onStep1Next,
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Flexible(
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                'Next',
-                                style: TextStyle(
-                                  fontSize: 15.5,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ),
-                          SizedBox(width: 6),
-                          Icon(Icons.arrow_forward_rounded, size: 18),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              autofillHints: const [AutofillHints.password],
             ),
           ],
-        );
-      case 2:
-      default:
-        return Column(
-          key: const ValueKey<int>(2),
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        ),
+      ),
+      _ => ChildFormSection(
+        title: 'Learning companion',
+        subtitle: 'You can change this later from Edit child profile.',
+        child: CompanionPicker(
+          avatar: _avatar,
+          onChanged: (a) => setState(() => _avatar = a),
+        ),
+      ),
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final step = _steps[_step];
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _goBack();
+      },
+      child: ChildFormScaffold(
+        header: ChildFormHeader(
+          title: step.title,
+          subtitle: step.subtitle,
+          onBack: _goBack,
+          step: _step,
+          stepCount: _steps.length,
+        ),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 260),
+                switchInCurve: Curves.easeOutQuart,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0.06, 0),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                ),
+                layoutBuilder: (current, previous) => Stack(
+                  alignment: Alignment.topCenter,
+                  children: [...previous, ?current],
+                ),
+                child: KeyedSubtree(key: ValueKey(_step), child: _stepBody()),
+              ),
+            ),
+          ),
+        ),
+        bottomBar: ChildFormBottomBar(
           children: [
-            const _StepHeader(
-              title: 'Choose Your Companion',
-              subtitle: 'Select Amir or Zara to be your child\'s learning companion!',
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _AvatarSelectionCard(
-                    imagePath: 'assets/images/boy_mascot_full_body.png',
-                    label: 'Amir (Boy)',
-                    isSelected: _avatar == 'boy_mascot',
-                    themeColor: AppColors.teal,
-                    floatAnimation: _mascotFloatController,
-                    onTap: () => setState(() => _avatar = 'boy_mascot'),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _AvatarSelectionCard(
-                    imagePath: 'assets/images/girl_mascot_full_body.png',
-                    label: 'Zara (Girl)',
-                    isSelected: _avatar == 'girl_mascot',
-                    themeColor: AppColors.gold,
-                    floatAnimation: _mascotFloatController,
-                    onTap: () => setState(() => _avatar = 'girl_mascot'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 48),
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 54,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.ink,
-                        side: const BorderSide(
-                          color: AppColors.creamBorder,
-                          width: 2,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                      onPressed: () => setState(() => _step = 1),
-                      child: const FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          'Back',
-                          style: TextStyle(
-                            fontSize: 15.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: SizedBox(
-                    height: 54,
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.gold,
-                        foregroundColor: AppColors.ink,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                      onPressed: _submitting ? null : _submitProfile,
-                      child: const FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          'Create Profile',
-                          style: TextStyle(
-                            fontSize: 15.5,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            if (_step > 0)
+              ChildFormButton(
+                label: 'Back',
+                primary: false,
+                onPressed: _goBack,
+              ),
+            switch (_step) {
+              0 => ChildFormButton(
+                label: 'Next: Profile details',
+                icon: Icons.arrow_forward_rounded,
+                onPressed: _onStep0Next,
+              ),
+              1 => ChildFormButton(
+                label: 'Next',
+                icon: Icons.arrow_forward_rounded,
+                onPressed: _onStep1Next,
+              ),
+              _ => ChildFormButton(
+                label: 'Create Profile',
+                color: AppColors.gold,
+                foreground: AppColors.ink,
+                busy: _submitting,
+                onPressed: _submitProfile,
+              ),
+            },
           ],
-        );
-    }
-  }
-}
-
-class _StepHeader extends StatelessWidget {
-  const _StepHeader({required this.title, required this.subtitle});
-
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontFamily: 'Outfit',
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: AppColors.ink,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            style: const TextStyle(
-              fontSize: 12.5,
-              color: AppColors.textMuted,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FieldLabel extends StatelessWidget {
-  const _FieldLabel(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: AppColors.ink,
-        ),
-      ),
-    );
-  }
-}
-
-class _TextField extends StatefulWidget {
-  const _TextField({
-    this.controller,
-    this.label,
-    this.hint,
-    this.obscureText = false,
-    this.keyboardType = TextInputType.text,
-    this.onChanged,
-    this.inputFormatters,
-  });
-
-  final TextEditingController? controller;
-
-  /// Floats up into the border on focus when set; falls back to a plain
-  /// hint (no float) when omitted, e.g. the inline custom-age field.
-  final String? label;
-  final String? hint;
-  final bool obscureText;
-  final TextInputType keyboardType;
-  final ValueChanged<String>? onChanged;
-  final List<TextInputFormatter>? inputFormatters;
-
-  @override
-  State<_TextField> createState() => _TextFieldState();
-}
-
-class _TextFieldState extends State<_TextField> {
-  late bool _obscured;
-  final _focusNode = FocusNode();
-  bool _focused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _obscured = widget.obscureText;
-    _focusNode.addListener(() {
-      setState(() => _focused = _focusNode.hasFocus);
-    });
-  }
-
-  @override
-  void dispose() {
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: _focused
-            ? [
-                BoxShadow(
-                  color: AppColors.teal.withValues(alpha: 0.18),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
-                ),
-              ]
-            : null,
-      ),
-      child: TextField(
-        controller: widget.controller,
-        focusNode: _focusNode,
-        obscureText: _obscured,
-        keyboardType: widget.keyboardType,
-        onChanged: widget.onChanged,
-        inputFormatters: widget.inputFormatters,
-        decoration: InputDecoration(
-          label: widget.label == null ? null : Text(widget.label!),
-          hintText: widget.hint?.tr,
-          labelStyle: const TextStyle(
-            color: AppColors.textMuted,
-            fontWeight: FontWeight.w700,
-          ),
-          floatingLabelStyle: const TextStyle(
-            color: AppColors.teal,
-            fontWeight: FontWeight.w700,
-          ),
-          filled: true,
-          fillColor: AppColors.neutralTint,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 14,
-          ),
-          suffixIcon: widget.obscureText
-              ? IconButton(
-                  icon: Icon(
-                    _obscured
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                    color: AppColors.textMuted,
-                    size: 20,
-                  ),
-                  onPressed: () => setState(() => _obscured = !_obscured),
-                )
-              : null,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(
-              color: AppColors.creamBorder,
-              width: 1.4,
-            ),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(
-              color: AppColors.creamBorder,
-              width: 1.4,
-            ),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.teal, width: 1.8),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GradeDropdown extends StatelessWidget {
-  const _GradeDropdown({required this.value, required this.onChanged});
-
-  final String? value;
-  final ValueChanged<String?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      initialValue: value,
-      isExpanded: true,
-      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textMuted),
-      decoration: InputDecoration(
-        hintText: 'Select grade'.tr,
-        filled: true,
-        fillColor: AppColors.neutralTint,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.creamBorder, width: 1.4),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.creamBorder, width: 1.4),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.teal, width: 1.6),
-        ),
-      ),
-      items: [
-        for (int grade = 1; grade <= 6; grade++)
-          DropdownMenuItem(value: 'Grade $grade', child: Text('Grade $grade')),
-      ],
-      onChanged: onChanged,
-    );
-  }
-}
-
-class _AvatarSelectionCard extends StatelessWidget {
-  const _AvatarSelectionCard({
-    required this.imagePath,
-    required this.label,
-    required this.isSelected,
-    required this.themeColor,
-    required this.floatAnimation,
-    required this.onTap,
-  });
-
-  final String imagePath;
-  final String label;
-  final bool isSelected;
-  final Color themeColor;
-  final Animation<double> floatAnimation;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedScale(
-        scale: isSelected ? 1.04 : 0.96,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.elasticOut,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: isSelected ? themeColor : AppColors.creamBorder,
-              width: isSelected ? 3.0 : 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isSelected
-                    ? themeColor.withValues(alpha: 0.15)
-                    : const Color(0x06000000),
-                blurRadius: isSelected ? 16 : 8,
-                offset: Offset(0, isSelected ? 6 : 4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              SizedBox(
-                height: 180,
-                child: AnimatedBuilder(
-                  animation: floatAnimation,
-                  builder: (context, child) {
-                    return Transform.translate(
-                      offset: Offset(
-                        0,
-                        isSelected ? -6 * floatAnimation.value : 0,
-                      ),
-                      child: child,
-                    );
-                  },
-                  child: Stack(
-                    alignment: Alignment.bottomCenter,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Container(
-                          height: 22,
-                          margin: const EdgeInsets.symmetric(horizontal: 18),
-                          decoration: BoxDecoration(
-                            color: themeColor.withValues(
-                              alpha: isSelected ? 0.16 : 0.08,
-                            ),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                        ),
-                      ),
-                      Positioned.fill(
-                        child: Image.asset(imagePath, fit: BoxFit.contain),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                  color: isSelected ? themeColor : AppColors.ink,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 6),
-              Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isSelected ? themeColor : Colors.transparent,
-                  border: Border.all(
-                    color: isSelected ? themeColor : AppColors.creamBorder,
-                    width: 2,
-                  ),
-                ),
-                alignment: Alignment.center,
-                child: isSelected
-                    ? const Icon(
-                        Icons.check_rounded,
-                        color: Colors.white,
-                        size: 13,
-                      )
-                    : null,
-              ),
-            ],
-          ),
         ),
       ),
     );

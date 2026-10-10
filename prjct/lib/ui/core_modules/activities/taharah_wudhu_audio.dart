@@ -10,7 +10,7 @@ class TaharahWudhuAudio {
     if (_disposed || !_enabled) return;
     try {
       await _music.setReleaseMode(ReleaseMode.loop);
-      await _music.setVolume(0.18);
+      await _music.setVolume(0.45);
       if (_disposed || !_enabled) return;
       await _music.play(
         AssetSource('audio/taharah_wudhu/audio_bgm_water_ambient.mp3'),

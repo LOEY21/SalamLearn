@@ -28,12 +28,16 @@ class LearnerRepository {
     }
     final normName = name.trim().toLowerCase();
     final normGrade = gradeLevel.trim().toLowerCase();
-    final duplicate = _box.values.any((l) =>
-        l.name.trim().toLowerCase() == normName &&
-        l.age == age &&
-        l.gradeLevel.trim().toLowerCase() == normGrade);
+    final duplicate = _box.values.any(
+      (l) =>
+          l.name.trim().toLowerCase() == normName &&
+          l.age == age &&
+          l.gradeLevel.trim().toLowerCase() == normGrade,
+    );
     if (duplicate) {
-      throw StateError('A learner with this name, age, and grade level already exists');
+      throw StateError(
+        'A learner with this name, age, and grade level already exists',
+      );
     }
     String? passwordHash;
     String? passwordSalt;
@@ -66,14 +70,18 @@ class LearnerRepository {
     return null;
   }
 
-  /// Case-insensitive exact match on the learner's full name — used by the
-  /// teacher's "Enroll Existing Learner" form, which asks for the child's
-  /// full name (not their username, which the teacher has no reason to
-  /// know). Returns every match since names aren't guaranteed unique across
-  /// families; the caller decides how to handle 0 or 2+ results.
-  List<LearnerProfile> findAllByName(String name) {
-    final normalized = name.trim().toLowerCase();
-    return _box.values.where((l) => l.name.trim().toLowerCase() == normalized).toList();
+  /// Teacher's "Enroll Existing Learner" lookup by Student ID (see
+  /// [studentIdFor]). Returns every match since the 8-digit ID can collide;
+  /// the caller decides how to handle 0 or 2+ results.
+  List<LearnerProfile> findAllByStudentId(String studentId) {
+    final normalized = normalizeStudentId(studentId);
+    return _box.values
+        .where(
+          (l) =>
+              l.id != null &&
+              normalizeStudentId(studentIdFor(l.id!)) == normalized,
+        )
+        .toList();
   }
 
   List<LearnerProfile> byParentId(String parentId) =>
@@ -142,8 +150,13 @@ class LearnerRepository {
   }
 
   bool verifyPassword(LearnerProfile profile, String candidate) {
-    if (profile.passwordHash == null || profile.passwordSalt == null) return false;
-    return CredentialHasher.verify(candidate, profile.passwordSalt!, profile.passwordHash!);
+    if (profile.passwordHash == null || profile.passwordSalt == null)
+      return false;
+    return CredentialHasher.verify(
+      candidate,
+      profile.passwordSalt!,
+      profile.passwordHash!,
+    );
   }
 
   /// FR-7.2 "sign in on any device" — saves a child profile pulled down

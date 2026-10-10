@@ -26,16 +26,17 @@ import '../../logic/sync/sync_manager.dart';
 import '../../logic/teacher/teacher_providers.dart';
 import '../theme/app_colors.dart';
 import '../widgets/auth_loading_overlay.dart';
+import '../widgets/child_profile_form.dart';
+import '../widgets/hub_kit.dart';
 import '../widgets/delete_account_dialog.dart';
 import '../settings/settings_screen.dart' show LanguageSettingRow;
 import '../widgets/change_pin_card.dart';
 import '../widgets/email_verification_card.dart';
-import '../widgets/flat_dashboard_header.dart';
 import '../widgets/learner_avatar.dart';
 import '../widgets/locked_tag.dart';
 import '../widgets/mock_icons.dart';
+import '../widgets/account_email_card.dart';
 import '../widgets/soft_card.dart';
-import '../widgets/top_tab_bar.dart';
 import '../../data/repositories/progress_repository.dart';
 import '../core_modules/module_registry.dart';
 
@@ -51,17 +52,23 @@ String _progressHeading(String name) =>
 /// which stays about the child). Falls back to the generic greeting if
 /// this account has no name on file yet (e.g. a bare PIN-only bootstrap
 /// account — see `SessionNotifier.activeAccountHasEmail`'s doc).
-String _parentGreeting(WidgetRef ref, {bool caps = false}) {
+String _parentGreeting(WidgetRef ref) {
   final parentName = ref.read(sessionProvider.notifier).activeParentFullName;
-  if (parentName == null || parentName.isEmpty) {
-    return caps
-        ? "ASSALAMU'ALAIKUM"
-        : "Assalamu'alaikum, here's this week's summary";
-  }
-  return caps
-      ? "ASSALAMU'ALAIKUM, ${parentName.toUpperCase()}"
-      : "Assalamu'alaikum, $parentName — here's this week's summary";
+  if (parentName == null || parentName.isEmpty) return "Assalamu'alaikum";
+  return "Assalamu'alaikum, $parentName";
 }
+
+/// Header title per tab — the Progress tab keeps the child-focused heading,
+/// the other two name what the tab is for instead of repeating it.
+String _tabHeading(int tab, String name) => switch (tab) {
+  0 => _progressHeading(name),
+  1 => 'Family & profile',
+  _ => 'Settings',
+};
+
+/// Display face for the Parent Hub's headings and numbers — shared with
+/// the child profile forms (see `child_profile_form.dart`).
+const _display = displayText;
 
 /// Live "synced" status line shown under the header title — same wording
 /// this used to render inside the (now removed) gradient hero.
@@ -235,132 +242,100 @@ class _PhoneLayoutState extends ConsumerState<_PhoneLayout>
     super.dispose();
   }
 
-  static const _tabs = [
-    TopTabItem(iconPath: MockIcons.progress, label: 'Progress'),
-    TopTabItem(iconPath: MockIcons.profile, label: 'Profile'),
-    TopTabItem(iconPath: MockIcons.settings, label: 'Settings'),
+  static const _tabs = <HubTab>[
+    (iconPath: MockIcons.progress, label: 'Progress'),
+    (iconPath: MockIcons.profile, label: 'Profile'),
+    (iconPath: MockIcons.settings, label: 'Settings'),
   ];
 
   @override
   Widget build(BuildContext context) {
     final learner = ref.watch(sessionProvider.select((s) => s.learner));
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark,
-      child: Scaffold(
-        backgroundColor: AppColors.surface,
-        body: SafeArea(
-          child: Column(
-            children: [
-              FadeTransition(
-                opacity: greet,
-                child: FlatDashboardHeader(
-                  avatar: GestureDetector(
-                    onTap: () => _switchTab(0),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.teal, width: 1.5),
-                      ),
-                      child: LearnerAvatar(
-                        avatar: learner?.avatar ?? '🧒',
-                        size: 34,
-                      ),
-                    ),
-                  ),
-                  eyebrow: _parentGreeting(ref, caps: true),
-                  title: _progressHeading(widget.name),
-                  statusLabel: _syncStatusLabel(ref),
-                  actions: [
-                    HeaderIconButton(
-                      iconPath: MockIcons.swap,
-                      tooltip: 'Switch user'.tr,
-                      onTap: () => _switchUser(context, ref),
-                    ),
+    return HubShell(
+      header: HubHeader(
+        fade: greet,
+        leading: LearnerAvatar(avatar: learner?.avatar ?? '🧒', size: 42),
+        onLeadingTap: () => _switchTab(0),
+        greeting: _parentGreeting(ref),
+        title: _tabHeading(_currentTab, widget.name),
+        statusLabel: _syncStatusLabel(ref),
+        tabs: _tabs,
+        activeTab: _currentTab,
+        onTabChanged: _switchTab,
+        onSwitchUser: () => _switchUser(context, ref),
+      ),
+      panelKey: ValueKey(_currentTab),
+      panel: switch (_currentTab) {
+        0 => const HubTabBody(
+          left: [
+            HubStaggerFadeIn(delay: Duration.zero, child: _KpiFocusRow()),
+            SizedBox(height: 16),
+            HubStaggerFadeIn(
+              delay: Duration(milliseconds: 35),
+              child: _PracticeNote(),
+            ),
+          ],
+          right: [
+            HubStaggerFadeIn(
+              delay: Duration(milliseconds: 70),
+              child: _AdventureBreakdownCard(),
+            ),
+            SizedBox(height: 16),
+            HubStaggerFadeIn(
+              delay: Duration(milliseconds: 105),
+              child: _TrendChartCard(),
+            ),
+          ],
+        ),
+        1 => HubTabBody(
+          left: [
+            HubStaggerFadeIn(
+              delay: Duration.zero,
+              child: _ChildSwitcher(onSwitched: () => _switchTab(0)),
+            ),
+            const HubStaggerFadeIn(
+              delay: Duration(milliseconds: 30),
+              child: _NoProfileEmptyState(),
+            ),
+            const HubStaggerFadeIn(
+              delay: Duration(milliseconds: 50),
+              child: _ManageProfileCard(),
+            ),
+            const _UnlinkedLearnersCard(),
+          ],
+          right: const [
+            HubStaggerFadeIn(
+              delay: Duration(milliseconds: 80),
+              child: _ClassSection(),
+            ),
+            HubStaggerFadeIn(
+              delay: Duration(milliseconds: 110),
+              child: HubSectionLabel('More for your family'),
+            ),
+            HubStaggerFadeIn(
+              delay: Duration(milliseconds: 130),
+              child: SoftCard(
+                radius: 20,
+                padding: EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  children: [
+                    _CreateNewProfileCard(),
+                    HubRowDivider(),
+                    _SyncProfileCard(),
                   ],
                 ),
               ),
-              TopTabBar(
-                items: _tabs,
-                activeIndex: _currentTab,
-                onChanged: _switchTab,
-              ),
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 560),
-                    child: _PanelRise(
-                      key: ValueKey(_currentTab),
-                      child: switch (_currentTab) {
-                        0 => ListView(
-                          padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
-                          children: [
-                            const _StaggerFadeIn(
-                              delay: Duration.zero,
-                              child: _KpiFocusRow(),
-                            ),
-                            const SizedBox(height: 14),
-                            const _StaggerFadeIn(
-                              delay: Duration(milliseconds: 35),
-                              child: _TrendChartCard(),
-                            ),
-                            const SizedBox(height: 14),
-                            const _StaggerFadeIn(
-                              delay: Duration(milliseconds: 70),
-                              child: _AdventureBreakdownCard(),
-                            ),
-                          ],
-                        ),
-                        1 => ListView(
-                          padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
-                          children: [
-                            _StaggerFadeIn(
-                              delay: const Duration(milliseconds: 25),
-                              child: _ChildSwitcher(
-                                onSwitched: () => _switchTab(0),
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            const _StaggerFadeIn(
-                              delay: Duration(milliseconds: 40),
-                              child: _NoProfileEmptyState(),
-                            ),
-                            const SizedBox(height: 14),
-                            const _StaggerFadeIn(
-                              delay: Duration(milliseconds: 60),
-                              child: _ManageProfileCard(),
-                            ),
-                            const _UnlinkedLearnersCard(),
-                            const SizedBox(height: 14),
-                            const _StaggerFadeIn(
-                              delay: Duration(milliseconds: 95),
-                              child: _ClassSection(),
-                            ),
-                            const SizedBox(height: 14),
-                            const _StaggerFadeIn(
-                              delay: Duration(milliseconds: 130),
-                              child: _CreateNewProfileCard(),
-                            ),
-                            const SizedBox(height: 14),
-                            const _StaggerFadeIn(
-                              delay: Duration(milliseconds: 165),
-                              child: _SyncProfileCard(),
-                            ),
-                          ],
-                        ),
-                        _ => const _SettingsTab(),
-                      },
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ),
+        _ => const _SettingsTab(),
+      },
     );
   }
 }
+
+const _scaledWidth = scaledExtent;
 
 /// Lets a parent with more than one child switch which one's dashboard
 /// (KPIs, streak, suggestions below, plus the "Edit Child Profile" form)
@@ -382,62 +357,72 @@ class _ChildSwitcher extends ConsumerWidget {
 
     final activeId = ref.watch(sessionProvider.select((s) => s.learner?.id));
 
-    return SizedBox(
-      height: 84,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: children.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 10),
-        itemBuilder: (context, index) {
-          final child = children[index];
-          final isActive = child.id == activeId;
-          return GestureDetector(
-            onTap: child.id == null || isActive
-                ? null
-                : () async {
-                    await runWithAuthLoadingOverlay(
-                      AuthLoadingAction.switchProfile,
-                      () => ref
-                          .read(sessionProvider.notifier)
-                          .switchActiveLearner(child.id!),
-                    );
-                    onSwitched();
-                  },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              width: 72,
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-              decoration: BoxDecoration(
-                color: isActive ? AppColors.goldTint : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isActive ? AppColors.gold : AppColors.creamBorder,
-                  width: isActive ? 2 : 1,
-                ),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  LearnerAvatar(avatar: child.avatar, size: 36),
-                  const SizedBox(height: 4),
-                  Text(
-                    child.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
-                      color: isActive
-                          ? const Color(0xFF8A5A12)
-                          : AppColors.textMuted,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const HubSectionLabel('Your children'),
+        // Wraps onto extra lines rather than scrolling sideways, so every
+        // child is visible at once on any width.
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final child in children)
+              Builder(
+                builder: (context) {
+                  final isActive = child.id == activeId;
+                  return Material(
+                    color: isActive ? AppColors.teal : AppColors.surface,
+                    shape: StadiumBorder(
+                      side: BorderSide(
+                        color: isActive
+                            ? AppColors.teal
+                            : AppColors.creamBorder,
+                      ),
                     ),
-                  ),
-                ],
+                    child: InkWell(
+                      customBorder: const StadiumBorder(),
+                      onTap: child.id == null || isActive
+                          ? null
+                          : () async {
+                              await runWithAuthLoadingOverlay(
+                                AuthLoadingAction.switchProfile,
+                                () => ref
+                                    .read(sessionProvider.notifier)
+                                    .switchActiveLearner(child.id!),
+                              );
+                              onSwitched();
+                            },
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(6, 6, 16, 6),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            LearnerAvatar(avatar: child.avatar, size: 38),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                child.name,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: isActive
+                                      ? Colors.white
+                                      : AppColors.ink,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
-            ),
-          );
-        },
-      ),
+          ],
+        ),
+        const SizedBox(height: 16),
+      ],
     );
   }
 }
@@ -455,28 +440,33 @@ class _NoProfileEmptyState extends ConsumerWidget {
     final learner = ref.watch(sessionProvider.select((s) => s.learner));
     if (learner != null) return const SizedBox.shrink();
 
-    return SoftCard(
-      padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 20),
-      child: Column(
-        children: [
-          SizedBox(
-            width: 120,
-            height: 120,
-            child: Lottie.asset('assets/lottie/add_profile.json'),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'No child profile yet',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            "Add your child's profile below to start tracking their "
-            'learning journey.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
-          ),
-        ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: SoftCard(
+        radius: 20,
+        padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 24),
+        child: Column(
+          children: [
+            SizedBox(
+              width: 120,
+              height: 120,
+              child: Lottie.asset('assets/lottie/add_profile.json'),
+            ),
+            const SizedBox(height: 6),
+            Text('No child profile yet', style: _display(20)),
+            const SizedBox(height: 6),
+            const Text(
+              "Add your child's profile below to start tracking their "
+              'learning journey.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.inkSoft,
+                fontSize: 14,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -497,61 +487,153 @@ class _ManageProfileCard extends ConsumerWidget {
     if (learner == null) {
       return const SizedBox.shrink();
     }
-    return SoftCard(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              LearnerAvatar(avatar: learner.avatar, size: 48),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
+    // Once the child is in an active class, the profile is locked to the
+    // teacher's roster — an archived class frees it up again.
+    final section = learner.id == null
+        ? null
+        : ref.watch(learnerClassProvider(learner.id!));
+    final enrolled = section != null && !section.isArchived;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: SoftCard(
+        radius: 20,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final small = _scaledWidth(context, constraints.maxWidth) < 300;
+                return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Child Profile',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${learner.name} · Age ${learner.age} · ${learner.gradeLevel}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textMuted,
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: const BoxDecoration(
+                        color: AppColors.goldTint,
+                        shape: BoxShape.circle,
                       ),
+                      child: LearnerAvatar(
+                        avatar: learner.avatar,
+                        size: small ? 46 : 60,
+                      ),
+                    ),
+                    SizedBox(width: small ? 12 : 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 4),
+                          LayoutBuilder(
+                            builder: (context, nameBox) => Text(
+                              learner.name,
+                              style: fitLongestWord(
+                                context,
+                                learner.name,
+                                _display(small ? 20 : 24, weight: 800),
+                                nameBox.maxWidth,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            'Child profile · Age ${learner.age} · ${learner.gradeLevel}',
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              color: AppColors.inkSoft,
+                            ),
+                          ),
+                          // Under the name rather than beside it, so a long
+                          // name never has to share its line with a button.
+                          if (!enrolled)
+                            TextButton.icon(
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.teal,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 0,
+                                  vertical: 4,
+                                ),
+                                textStyle: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              onPressed: () => context.go('/parent/edit-child'),
+                              icon: const Icon(Icons.edit_outlined, size: 17),
+                              label: const Text('Edit'),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+            // The ID a teacher asks for to enroll this child.
+            if (learner.studentId != null) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.fromLTRB(14, 8, 4, 8),
+                decoration: BoxDecoration(
+                  color: AppColors.neutralTint,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Student ID',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.inkSoft,
+                            ),
+                          ),
+                          HubFitText(
+                            learner.studentId!,
+                            style: _display(
+                              18,
+                              weight: 700,
+                            ).copyWith(letterSpacing: 1.2),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Copy Student ID'.tr,
+                      iconSize: 18,
+                      color: AppColors.teal,
+                      icon: const Icon(Icons.copy_rounded),
+                      onPressed: () {
+                        Clipboard.setData(
+                          ClipboardData(text: learner.studentId!),
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Student ID copied')),
+                        );
+                      },
                     ),
                   ],
                 ),
               ),
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.teal,
-                  side: const BorderSide(color: AppColors.creamBorder),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                onPressed: () => context.go('/parent/edit-child'),
-                child: const Text('Edit'),
-              ),
             ],
-          ),
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.gold,
-              foregroundColor: AppColors.ink,
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.gold,
+                foregroundColor: AppColors.ink,
+              ),
+              icon: const Icon(Icons.play_arrow_rounded),
+              label: const Text('Open Learner Hub'),
+              onPressed: () {
+                ref.read(sessionProvider.notifier).selectRole(UserRole.learner);
+                context.go('/hub');
+              },
             ),
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text('Open Learner Hub'),
-            onPressed: () {
-              ref.read(sessionProvider.notifier).selectRole(UserRole.learner);
-              context.go('/hub');
-            },
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -568,20 +650,18 @@ class _UnlinkedLearnersCard extends ConsumerWidget {
     if (profiles.isEmpty) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.only(bottom: 16),
       child: SoftCard(
-        padding: const EdgeInsets.all(18),
+        radius: 20,
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Existing child profiles',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('Existing child profiles', style: _display(18)),
             const SizedBox(height: 4),
             const Text(
               'Add a child profile saved on this device to your account.',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+              style: TextStyle(fontSize: 13.5, color: AppColors.inkSoft),
             ),
             const SizedBox(height: 12),
             for (final profile in profiles)
@@ -590,13 +670,15 @@ class _UnlinkedLearnersCard extends ConsumerWidget {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(
                     children: [
-                      LearnerAvatar(avatar: profile.avatar, size: 36),
-                      const SizedBox(width: 10),
+                      LearnerAvatar(avatar: profile.avatar, size: 40),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           profile.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                       OutlinedButton(
@@ -767,110 +849,132 @@ class _ClassSectionState extends ConsumerState<_ClassSection> {
     }
     final section = ref.watch(learnerClassProvider(learnerId));
 
-    return SoftCard(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Class', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 10),
-          if (section != null) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: section.isArchived
-                    ? AppColors.neutralTint
-                    : AppColors.mint,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: SoftCard(
+        radius: 20,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Class', style: _display(18)),
+            const SizedBox(height: 10),
+            if (section != null) ...[
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
                   color: section.isArchived
-                      ? AppColors.creamBorder
-                      : AppColors.mintBorder,
+                      ? AppColors.neutralTint
+                      : AppColors.mint,
+                  borderRadius: BorderRadius.circular(14),
                 ),
-              ),
-              child: Row(
-                children: [
-                  section.isArchived
-                      ? const Icon(
-                          Icons.archive_outlined,
-                          color: AppColors.textMuted,
-                          size: 18,
-                        )
-                      : const MockIcon(
-                          MockIcons.classBadge,
-                          color: AppColors.teal,
-                          size: 18,
+                child: Row(
+                  children: [
+                    section.isArchived
+                        ? const Icon(
+                            Icons.archive_outlined,
+                            color: AppColors.inkSoft,
+                            size: 20,
+                          )
+                        : const MockIcon(
+                            MockIcons.classBadge,
+                            color: AppColors.teal,
+                            size: 20,
+                          ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        section.isArchived
+                            ? "${section.name} has been archived by the teacher"
+                            : '${learner.name} is enrolled in ${section.name}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: section.isArchived
+                              ? AppColors.inkSoft
+                              : AppColors.tealDark,
                         ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      section.isArchived
-                          ? "${section.name} has been archived by the teacher"
-                          : '${learner.name} is enrolled in ${section.name}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: section.isArchived
-                            ? AppColors.textMuted
-                            : AppColors.ink,
                       ),
                     ),
+                  ],
+                ),
+              ),
+              if (section.isArchived) ...[
+                const SizedBox(height: 10),
+                const Text(
+                  'This class is no longer active. Enter a new invitation '
+                  'code below to join a different class.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: AppColors.inkSoft,
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              section.isArchived
-                  ? 'This class is no longer active. Enter a new invitation '
-                        'code below to join a different class.'
-                  : 'Enter a new invitation code below to join a different class.',
-              style: const TextStyle(
-                fontSize: 11.5,
-                color: AppColors.textMuted,
-              ),
-            ),
-          ] else ...[
-            const Text(
-              "Not in a class yet. Enter the invitation code your child's "
-              'teacher shared with you.',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
-            ),
-          ],
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _Input(controller: _codeC, label: 'Invitation code'),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                height: 42,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.teal,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  onPressed: _joining ? null : () => _join(learnerId),
-                  child: _joining
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('Join'),
+                ),
+              ],
+            ] else ...[
+              const Text(
+                "Not in a class yet. Enter the invitation code your child's "
+                'teacher shared with you.',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  height: 1.4,
+                  color: AppColors.inkSoft,
                 ),
               ),
             ],
-          ),
-        ],
+            if (section == null || section.isArchived) ...[
+              const SizedBox(height: 14),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final joinButton = ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.teal,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(72, 48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: _joining ? null : () => _join(learnerId),
+                      child: _joining
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Join'),
+                    ),
+                  );
+                  final input = _Input(
+                    controller: _codeC,
+                    label: 'Invitation code',
+                  );
+                  // Field and button side by side when there's room; stacked
+                  // full-width on narrow screens or with large text.
+                  if (_scaledWidth(context, constraints.maxWidth) < 280) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [input, const SizedBox(height: 10), joinButton],
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: input),
+                      const SizedBox(width: 10),
+                      joinButton,
+                    ],
+                  );
+                },
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -881,34 +985,15 @@ class _CreateNewProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SoftCard(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Create New Profile',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Set up a new learning journey for another child on this device.',
-            style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
-          ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.gold,
-              foregroundColor: AppColors.ink,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Add Child Profile'),
-            onPressed: () => context.go('/learner-setup?from=parent'),
-          ),
-        ],
+    return HubActionRow(
+      icon: Icons.person_add_alt_1_rounded,
+      iconColor: AppColors.gold,
+      title: 'Create New Profile',
+      subtitle:
+          'Set up a new learning journey for another child on this device.',
+      trailing: HubRowButton(
+        label: 'Add',
+        onPressed: () => context.go('/learner-setup?from=parent'),
       ),
     );
   }
@@ -926,67 +1011,32 @@ class _SyncProfileCardState extends ConsumerState<_SyncProfileCard> {
 
   @override
   Widget build(BuildContext context) {
-    return SoftCard(
-      color: AppColors.mint,
-      borderColor: AppColors.mintBorder,
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Synchronize Data',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Backup and sync progress data with the cloud server.',
-            style: TextStyle(fontSize: 12.5, color: AppColors.tealDark),
-          ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.teal,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            icon: _syncing
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : const Icon(Icons.sync, size: 18),
-            label: Text(_syncing ? 'Syncing...' : 'Sync Profile Data'),
-            onPressed: _syncing
-                ? null
-                : () async {
-                    setState(() => _syncing = true);
-                    try {
-                      await ref.read(syncManagerProvider).syncNow();
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Profile progress synchronized!'),
-                          ),
-                        );
-                      }
-                    } catch (error) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Sync failed: $error')),
-                        );
-                      }
-                    } finally {
-                      if (mounted) setState(() => _syncing = false);
-                    }
-                  },
-          ),
-        ],
+    return HubActionRow(
+      icon: Icons.cloud_sync_outlined,
+      title: 'Synchronize Data',
+      subtitle: 'Backup and sync progress data with the cloud server.',
+      trailing: HubRowButton(
+        label: 'Sync',
+        busy: _syncing,
+        onPressed: () async {
+          setState(() => _syncing = true);
+          try {
+            await ref.read(syncManagerProvider).syncNow();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Profile progress synchronized!')),
+              );
+            }
+          } catch (error) {
+            if (mounted) {
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('Sync failed: $error')));
+            }
+          } finally {
+            if (mounted) setState(() => _syncing = false);
+          }
+        },
       ),
     );
   }
@@ -1025,7 +1075,7 @@ class _InputState extends State<_Input> {
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: _focused
             ? [
                 BoxShadow(
@@ -1042,7 +1092,7 @@ class _InputState extends State<_Input> {
         decoration: InputDecoration(
           label: Text(widget.label),
           labelStyle: const TextStyle(
-            color: AppColors.textMuted,
+            color: AppColors.inkSoft,
             fontWeight: FontWeight.w700,
           ),
           floatingLabelStyle: const TextStyle(
@@ -1053,18 +1103,18 @@ class _InputState extends State<_Input> {
           fillColor: AppColors.neutralTint,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 12,
-            vertical: 10,
+            vertical: 14,
           ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: AppColors.creamBorder),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: AppColors.creamBorder),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: AppColors.teal, width: 1.6),
           ),
         ),
@@ -1074,18 +1124,16 @@ class _InputState extends State<_Input> {
 }
 // ------------------------------------------------------------- shared
 
-/// Radial accuracy dial + stacked time/error stat pills — replaces the flat
-/// 2x2 KPI grid with one focal metric (streak surfaces as a tappable badge
-/// notched onto the dial, not its own tile).
 class _KpiFocusRow extends ConsumerStatefulWidget {
-  const _KpiFocusRow({this.wide = false});
-
-  final bool wide;
+  const _KpiFocusRow();
 
   @override
   ConsumerState<_KpiFocusRow> createState() => _KpiFocusRowState();
 }
 
+/// "This week at a glance" sheet: the accuracy dial as the one focal
+/// number (streak notched onto it), time and errors as a ruled list beside
+/// it, and the full-report link as the sheet's footer row.
 class _KpiFocusRowState extends ConsumerState<_KpiFocusRow>
     with SingleTickerProviderStateMixin {
   bool _showMilestone = false;
@@ -1115,143 +1163,190 @@ class _KpiFocusRowState extends ConsumerState<_KpiFocusRow>
   @override
   Widget build(BuildContext context) {
     final kpis = ref.watch(parentKpiProvider);
-    final dialSize = widget.wide ? 168.0 : 128.0;
+    const dialSize = 132.0;
     final nextMilestone = ((kpis.streak ~/ 5) + 1) * 5;
     final daysToGo = nextMilestone - kpis.streak;
 
     return SoftCard(
-      padding: EdgeInsets.all(widget.wide ? 22 : 16),
+      radius: 20,
+      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              GestureDetector(
-                onTap: _onDialTap,
-                child: SizedBox(
-                  width: dialSize,
-                  height: dialSize,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    clipBehavior: Clip.none,
-                    children: [
-                      _AccuracyDial(
-                        size: dialSize,
-                        accuracyPct: kpis.accuracyPct,
-                        streak: kpis.streak,
-                      ),
-                      IgnorePointer(
-                        child: SizedBox(
-                          width: dialSize * 1.7,
-                          height: dialSize * 1.7,
-                          child: Lottie.asset(
-                            'assets/lottie/milestone_burst.json',
-                            controller: _burstController,
-                            onLoaded: (composition) {
-                              _burstController.duration = composition.duration;
-                            },
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+            child: Text('This week at a glance', style: _display(18)),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 20, 18),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final dial = Semantics(
+                  button: true,
+                  label: 'Show streak milestone',
+                  child: GestureDetector(
+                    onTap: _onDialTap,
+                    child: SizedBox(
+                      width: dialSize,
+                      height: dialSize,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        clipBehavior: Clip.none,
+                        children: [
+                          _AccuracyDial(
+                            size: dialSize,
+                            accuracyPct: kpis.accuracyPct,
+                            streak: kpis.streak,
                           ),
-                        ),
+                          IgnorePointer(
+                            child: SizedBox(
+                              width: dialSize * 1.7,
+                              height: dialSize * 1.7,
+                              child: Lottie.asset(
+                                'assets/lottie/milestone_burst.json',
+                                controller: _burstController,
+                                onLoaded: (composition) {
+                                  _burstController.duration =
+                                      composition.duration;
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-              SizedBox(width: widget.wide ? 26 : 16),
-              Expanded(
-                child: GestureDetector(
+                );
+                final stats = [
+                  _StatPill(
+                    iconPath: MockIcons.clock,
+                    iconColor: AppColors.gold,
+                    value: '${kpis.timeOnTaskMinutes}m',
+                    label: 'Time on task',
+                    trend: kpis.timeOnTaskTrend.text,
+                    trendUp: kpis.timeOnTaskTrend.up,
+                  ),
+                  _StatPill(
+                    iconPath: MockIcons.warningTriangle,
+                    iconColor: AppColors.coral,
+                    value: '${kpis.errorCount}',
+                    label: 'Errors',
+                    trend: kpis.errorTrend.text,
+                    trendUp: kpis.errorTrend.up,
+                  ),
+                ];
+                Widget tappable(Widget child) => GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => _showProgressDetailsDialog(context, ref),
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
-                    child: Column(
-                      children: [
-                        _StatPill(
-                          iconPath: MockIcons.clock,
-                          iconBg: AppColors.goldTint,
-                          iconColor: AppColors.gold,
-                          value: '${kpis.timeOnTaskMinutes}m',
-                          label: 'Time on task',
-                          trend: kpis.timeOnTaskTrend.text,
-                          trendUp: kpis.timeOnTaskTrend.up,
-                        ),
-                        const SizedBox(height: 10),
-                        _StatPill(
-                          iconPath: MockIcons.warningTriangle,
-                          iconBg: AppColors.coralTint,
-                          iconColor: AppColors.coral,
-                          value: '${kpis.errorCount}',
-                          label: 'Errors',
-                          trend: kpis.errorTrend.text,
-                          trendUp: kpis.errorTrend.up,
-                        ),
-                      ],
-                    ),
+                    child: child,
                   ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Center(
-            child: TextButton.icon(
-              onPressed: () => _showProgressDetailsDialog(context, ref),
-              icon: const Icon(
-                Icons.analytics_outlined,
-                size: 16,
-                color: AppColors.teal,
-              ),
-              label: const Text(
-                'View Detailed Progress Report',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.teal,
-                ),
-              ),
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
+                );
+                // Narrow (small phone or large text): dial on top, the two
+                // stats side by side underneath, so neither gets squeezed.
+                if (_scaledWidth(context, constraints.maxWidth) < 340) {
+                  return Column(
+                    children: [
+                      Center(child: dial),
+                      const SizedBox(height: 16),
+                      tappable(
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: stats[0]),
+                            const SizedBox(width: 16),
+                            Expanded(child: stats[1]),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    dial,
+                    const SizedBox(width: 18),
+                    Expanded(
+                      child: tappable(
+                        Column(
+                          children: [
+                            stats[0],
+                            const Divider(
+                              height: 20,
+                              color: AppColors.creamBorder,
+                            ),
+                            stats[1],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           AnimatedSize(
             duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOut,
+            curve: Curves.easeOutQuart,
             alignment: Alignment.topCenter,
             child: !_showMilestone || kpis.streak == 0
                 ? const SizedBox(width: double.infinity)
                 : Padding(
-                    padding: const EdgeInsets.only(top: 12),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 9,
+                        horizontal: 14,
+                        vertical: 11,
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.mint,
-                        borderRadius: BorderRadius.circular(12),
+                        color: AppColors.goldTint,
+                        borderRadius: BorderRadius.circular(14),
                       ),
                       child: Text(
                         daysToGo <= 0
                             ? "Milestone reached — masha'Allah!"
                             : '$daysToGo more day${daysToGo == 1 ? '' : 's'} to unlock the $nextMilestone-day streak badge.',
                         style: const TextStyle(
-                          fontSize: 11.5,
+                          fontSize: 13.5,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.tealDark,
+                          color: AppColors.ink,
                         ),
                       ),
                     ),
                   ),
+          ),
+          const Divider(height: 1, color: AppColors.creamBorder),
+          InkWell(
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(20),
+            ),
+            onTap: () => _showProgressDetailsDialog(context, ref),
+            child: const Padding(
+              padding: EdgeInsets.fromLTRB(20, 15, 16, 15),
+              child: Row(
+                children: [
+                  Icon(Icons.insights_rounded, size: 20, color: AppColors.teal),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'View Detailed Progress Report',
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.teal,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 18,
+                    color: AppColors.teal,
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -1259,10 +1354,11 @@ class _KpiFocusRowState extends ConsumerState<_KpiFocusRow>
   }
 }
 
+/// One ruled line of the glance sheet: small colored icon + label above,
+/// the value in the display face, and the week-over-week trend on the right.
 class _StatPill extends StatelessWidget {
   const _StatPill({
     required this.iconPath,
-    required this.iconBg,
     required this.iconColor,
     required this.value,
     required this.label,
@@ -1271,7 +1367,6 @@ class _StatPill extends StatelessWidget {
   });
 
   final String iconPath;
-  final Color iconBg;
   final Color iconColor;
   final String value;
   final String label;
@@ -1280,111 +1375,138 @@ class _StatPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.neutralTint,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: iconBg,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            alignment: Alignment.center,
-            child: MockIcon(iconPath, size: 15, color: iconColor),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.2,
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  MockIcon(iconPath, size: 14, color: iconColor),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.inkSoft,
+                      ),
+                    ),
                   ),
-                ),
-                Text(label, style: Theme.of(context).textTheme.labelSmall),
-              ],
-            ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              // Wrap: the trend drops under the value when there's no room
+              // beside it, instead of squeezing the label.
+              Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.end,
+                children: [
+                  Text(value, style: _display(26, weight: 800, height: 1.1)),
+                  if (trend.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          MockIcon(
+                            trendUp ? MockIcons.trendUp : MockIcons.trendDown,
+                            size: 12,
+                            color: trendUp ? AppColors.teal : AppColors.coral,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            trend,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              color: trendUp ? AppColors.teal : AppColors.coral,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ],
           ),
-          if (trend.isNotEmpty)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                MockIcon(
-                  trendUp ? MockIcons.trendUp : MockIcons.trendDown,
-                  size: 10,
-                  color: trendUp ? AppColors.teal : AppColors.coral,
-                ),
-                const SizedBox(width: 2),
-                Text(
-                  trend,
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    color: trendUp ? AppColors.teal : AppColors.coral,
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+}
+
+/// FR-5.2's Mediation Prompts Engine output, promoted to its own note right
+/// under the glance sheet — it's the one actionable thing on this tab, so
+/// it shouldn't sit at the bottom of the adventure list. Self-hiding when
+/// nothing has been flagged yet.
+class _PracticeNote extends ConsumerWidget {
+  const _PracticeNote();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mediation = ref.watch(parentMediationPromptProvider);
+    if (mediation == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: _MediationCard(prompt: mediation),
     );
   }
 }
 
 /// Telemetry Visualization component's per-adventure breakdown (FR-5.1) —
-/// a ring-per-adventure grid (weakest accuracy first) plus, when the
-/// Mediation Prompts Engine (FR-5.2) has flagged a real weak point, a
-/// single "practice this at home" prescription for that adventure below.
+/// one divided list (weakest accuracy first), each row opening that
+/// adventure's full detail screen.
 class _AdventureBreakdownCard extends ConsumerWidget {
   const _AdventureBreakdownCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final adventures = ref.watch(parentAdventureBreakdownProvider);
-    final mediation = ref.watch(parentMediationPromptProvider);
 
     return SoftCard(
-      padding: const EdgeInsets.all(18),
+      radius: 20,
+      padding: EdgeInsets.zero,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Adventures this week',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 2),
-          const Text(
-            'Progress by adventure, weakest first.',
-            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-          ),
-          const SizedBox(height: 14),
-          if (adventures.isEmpty)
-            const Text(
-              'Complete a lesson in the Learner Hub to see per-adventure progress here.',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
-            )
-          else
-            Column(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final progress in adventures) ...[
-                  _AdventureRingCard(progress: progress),
-                  if (progress != adventures.last) const SizedBox(height: 8),
-                ],
+                Text('Adventures this week', style: _display(18)),
+                const SizedBox(height: 2),
+                const Text(
+                  'Progress by adventure, weakest first.',
+                  style: TextStyle(fontSize: 13, color: AppColors.inkSoft),
+                ),
               ],
             ),
-          if (mediation != null) ...[
-            const SizedBox(height: 14),
-            _MediationCard(prompt: mediation),
+          ),
+          if (adventures.isEmpty)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 8, 20, 20),
+              child: Text(
+                'Complete a lesson in the Learner Hub to see per-adventure progress here.',
+                style: TextStyle(
+                  color: AppColors.inkSoft,
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+            )
+          else ...[
+            const SizedBox(height: 6),
+            for (final (i, progress) in adventures.indexed) ...[
+              if (i > 0) const HubRowDivider(),
+              _AdventureRingCard(
+                progress: progress,
+                isLast: i == adventures.length - 1,
+              ),
+            ],
           ],
         ],
       ),
@@ -1393,139 +1515,122 @@ class _AdventureBreakdownCard extends ConsumerWidget {
 }
 
 class _AdventureRingCard extends StatelessWidget {
-  const _AdventureRingCard({required this.progress});
+  const _AdventureRingCard({required this.progress, required this.isLast});
 
   final AdventureProgress progress;
+  final bool isLast;
 
   @override
   Widget build(BuildContext context) {
     final weak = progress.accuracyPct < 60;
-    final ringColor = weak ? AppColors.coral : AppColors.teal;
+    final color = weak ? AppColors.coral : AppColors.teal;
     final pct = (progress.accuracyPct / 100).clamp(0.0, 1.0);
-    return Container(
-      padding: const EdgeInsets.all(11),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.creamBorder),
+    final errors =
+        '${progress.errorCount} error${progress.errorCount == 1 ? '' : 's'}';
+    return InkWell(
+      borderRadius: isLast
+          ? const BorderRadius.vertical(bottom: Radius.circular(20))
+          : null,
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => _AdventureDetailScreen(progress: progress),
+        ),
       ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 40,
-            height: 40,
-            child: Stack(
-              alignment: Alignment.center,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 14),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = _scaledWidth(context, constraints.maxWidth) < 300;
+            final percent = '${progress.accuracyPct.round()}%';
+            return Row(
               children: [
-                TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0, end: pct),
-                  duration: const Duration(milliseconds: 700),
-                  curve: Curves.easeOutCubic,
-                  builder: (context, t, _) => CircularProgressIndicator(
-                    value: t,
-                    strokeWidth: 5,
-                    backgroundColor: AppColors.mint,
-                    valueColor: AlwaysStoppedAnimation(ringColor),
-                  ),
-                ),
-                Text(
-                  '${progress.accuracyPct.round()}%',
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w800,
-                    color: ringColor,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  progress.destination.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  '${progress.errorCount} error${progress.errorCount == 1 ? '' : 's'}',
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
-                  child: TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0, end: pct),
-                    duration: const Duration(milliseconds: 700),
-                    curve: Curves.easeOutCubic,
-                    builder: (context, t, _) => LinearProgressIndicator(
-                      value: t,
-                      minHeight: 4,
-                      backgroundColor: AppColors.mint,
-                      valueColor: AlwaysStoppedAnimation(ringColor),
+                if (!compact) ...[
+                  Container(
+                    width: 42,
+                    height: 42,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: weak ? AppColors.coralTint : AppColors.mint,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      progress.destination.icon,
+                      style: const TextStyle(fontSize: 20),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          if (weak) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: AppColors.coralTint,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Text(
-                'NEEDS REVIEW',
-                style: TextStyle(
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.coral,
-                ),
-              ),
-            ),
-          ],
-          const SizedBox(width: 8),
-          TextButton(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => _AdventureDetailScreen(progress: progress),
-              ),
-            ),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'See detail',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
-                    color: ringColor,
+                  const SizedBox(width: 14),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              progress.destination.name,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.ink,
+                              ),
+                            ),
+                          ),
+                          if (!compact) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              percent,
+                              style: _display(17, weight: 800, color: color),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(999),
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0, end: pct),
+                          duration: const Duration(milliseconds: 700),
+                          curve: Curves.easeOutQuart,
+                          builder: (context, t, _) => LinearProgressIndicator(
+                            value: t,
+                            minHeight: 6,
+                            backgroundColor: weak
+                                ? AppColors.coralTint
+                                : AppColors.mint,
+                            valueColor: AlwaysStoppedAnimation(color),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        [
+                          if (compact) percent,
+                          weak
+                              ? 'Needs review · $errors'
+                              : '$errors · See detail',
+                        ].join(' · '),
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: weak ? FontWeight.w700 : FontWeight.w500,
+                          color: weak ? AppColors.coral : AppColors.inkSoft,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 2),
-                Icon(Icons.chevron_right, size: 14, color: ringColor),
+                const SizedBox(width: 6),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 22,
+                  color: AppColors.inkSoft,
+                ),
               ],
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -1640,18 +1745,13 @@ class _AdventureDetailScreen extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Text(destination.name, style: _display(21)),
                           const Text(
-                            'ADVENTURE DETAIL',
+                            'Adventure detail',
                             style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.6,
-                              color: AppColors.textMuted,
+                              fontSize: 13,
+                              color: AppColors.inkSoft,
                             ),
-                          ),
-                          Text(
-                            destination.name,
-                            style: Theme.of(context).textTheme.titleLarge,
                           ),
                         ],
                       ),
@@ -1660,126 +1760,136 @@ class _AdventureDetailScreen extends ConsumerWidget {
                 ],
               ),
             ),
-            // Redesigned Floating Stats Hero Card
-            Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.creamBorder),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x0C20241F),
-                    blurRadius: 30,
-                    offset: Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 76,
-                    height: 76,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        TweenAnimationBuilder<double>(
-                          tween: Tween(
-                            begin: 0,
-                            end: totalLessons == 0
-                                ? 0
-                                : doneLessons / totalLessons,
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                child: Column(
+                  children: [
+                    // Summary card
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppColors.creamBorder),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x0C20241F),
+                            blurRadius: 30,
+                            offset: Offset(0, 8),
                           ),
-                          duration: const Duration(milliseconds: 700),
-                          curve: Curves.easeOutCubic,
-                          builder: (context, t, _) => SizedBox(
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          SizedBox(
                             width: 76,
                             height: 76,
-                            child: CircularProgressIndicator(
-                              value: t,
-                              strokeWidth: 6,
-                              backgroundColor: AppColors.mint,
-                              valueColor: const AlwaysStoppedAnimation(
-                                AppColors.teal,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                TweenAnimationBuilder<double>(
+                                  tween: Tween(
+                                    begin: 0,
+                                    end: totalLessons == 0
+                                        ? 0
+                                        : doneLessons / totalLessons,
+                                  ),
+                                  duration: const Duration(milliseconds: 700),
+                                  curve: Curves.easeOutCubic,
+                                  builder: (context, t, _) => SizedBox(
+                                    width: 76,
+                                    height: 76,
+                                    child: CircularProgressIndicator(
+                                      value: t,
+                                      strokeWidth: 6,
+                                      backgroundColor: AppColors.mint,
+                                      valueColor: const AlwaysStoppedAnimation(
+                                        AppColors.teal,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  '$completionPct%',
+                                  style: const TextStyle(
+                                    fontFamily: 'Baloo2Var',
+                                    fontVariations: [
+                                      FontVariation('wght', 800),
+                                    ],
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 15,
+                                    color: AppColors.teal,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _DetailStatRow(
+                                  value: '$doneLessons/$totalLessons',
+                                  label: 'lessons done',
+                                ),
+                                const SizedBox(height: 8),
+                                _DetailStatRow(
+                                  value: '${progress.accuracyPct.round()}%',
+                                  label: 'accuracy',
+                                ),
+                                const SizedBox(height: 8),
+                                _DetailStatRow(
+                                  value: '${progress.errorCount}',
+                                  label: 'errors logged',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Caveat footnote banner
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: AppColors.goldTint,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.goldSoft.withValues(alpha: 0.25),
+                        ),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      child: const Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.touch_app_outlined,
+                            size: 18,
+                            color: AppColors.inkSoft,
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Tap a finished game to see its grade, what it '
+                              'practises, and feedback.',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: AppColors.inkSoft,
+                                height: 1.4,
                               ),
                             ),
                           ),
-                        ),
-                        Text(
-                          '$completionPct%',
-                          style: const TextStyle(
-                            fontFamily: 'Outfit',
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15,
-                            color: AppColors.teal,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _DetailStatRow(
-                          value: '$doneLessons/$totalLessons',
-                          label: 'lessons done',
-                        ),
-                        const SizedBox(height: 8),
-                        _DetailStatRow(
-                          value: '${progress.accuracyPct.round()}%',
-                          label: 'accuracy',
-                        ),
-                        const SizedBox(height: 8),
-                        _DetailStatRow(
-                          value: '${progress.errorCount}',
-                          label: 'errors logged',
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Caveat footnote banner
-            Container(
-              margin: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
-              decoration: BoxDecoration(
-                color: AppColors.goldTint,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: AppColors.goldSoft.withValues(alpha: 0.25),
-                ),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: const Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('ℹ️', style: TextStyle(fontSize: 12)),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Tap a finished game to see its grade, what it '
-                      'practises, and feedback.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textMuted,
-                        height: 1.4,
+                        ],
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            // Levels
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-                child: Column(
-                  children: [
+                    // Levels
                     for (var li = 0; li < levels.length; li++) ...[
                       if (li > 0) const SizedBox(height: 16),
                       _AdventureLevelSection(
@@ -1821,26 +1931,31 @@ class _DetailStatRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
+    // Wrap: the label drops under the number when they don't fit side by
+    // side (narrow phone / large text) instead of breaking the word.
+    return Wrap(
+      spacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.end,
       children: [
         Text(
           value,
           style: const TextStyle(
-            fontFamily: 'Outfit',
+            fontFamily: 'Baloo2Var',
+            fontVariations: [FontVariation('wght', 800)],
             fontWeight: FontWeight.w800,
             fontSize: 17,
             color: AppColors.ink,
           ),
         ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-            color: AppColors.textMuted,
+        Padding(
+          padding: const EdgeInsets.only(bottom: 3),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              color: AppColors.inkSoft,
+            ),
           ),
         ),
       ],
@@ -1912,7 +2027,8 @@ class _AdventureLevelSectionState extends State<_AdventureLevelSection> {
                           child: Text(
                             widget.meta.label,
                             style: TextStyle(
-                              fontFamily: 'Fredoka',
+                              fontFamily: 'Baloo2Var',
+                              fontVariations: [FontVariation('wght', 700)],
                               fontWeight: FontWeight.w700,
                               fontSize: 13.5,
                               color: widget.meta.color,
@@ -1923,15 +2039,15 @@ class _AdventureLevelSectionState extends State<_AdventureLevelSection> {
                           const Icon(
                             Icons.lock,
                             size: 13,
-                            color: AppColors.textMuted,
+                            color: AppColors.inkSoft,
                           )
                         else ...[
                           Text(
                             '$done/${widget.lessons.length}',
                             style: const TextStyle(
-                              fontSize: 11,
+                              fontSize: 12.5,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.textMuted,
+                              color: AppColors.inkSoft,
                             ),
                           ),
                           const SizedBox(width: 6),
@@ -1973,17 +2089,20 @@ class _AdventureLevelSectionState extends State<_AdventureLevelSection> {
             ),
             if (!widget.unlocked)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 13,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: [
-                    const Icon(Icons.lock, size: 14, color: AppColors.textMuted),
+                    const Icon(Icons.lock, size: 14, color: AppColors.inkSoft),
                     const SizedBox(width: 7),
                     Expanded(
                       child: Text(
                         widget.lockedMessage,
                         style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textMuted,
+                          fontSize: 12.5,
+                          color: AppColors.inkSoft,
                         ),
                       ),
                     ),
@@ -2065,93 +2184,169 @@ class _AdventureGameRow extends StatelessWidget {
           color: done ? AppColors.mint.withValues(alpha: 0.5) : null,
           border: const Border(top: BorderSide(color: AppColors.creamBorder)),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 30,
-              height: 30,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppColors.cream,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(activity.icon, style: const TextStyle(fontSize: 15)),
+        child: _RowWithStatus(
+          leading: Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.cream,
+              borderRadius: BorderRadius.circular(10),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    activity.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    record == null
-                        ? '${_activityTypeLabel(activity.type)} · +${activity.xp}xp'
-                        : '${_activityTypeLabel(activity.type)} · Tap for feedback',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (record != null) ...[
-              _GradeChip(scorePct: record.strokeAccuracyPct),
-              const Icon(
-                Icons.chevron_right,
-                size: 16,
-                color: AppColors.textMuted,
-              ),
-            ] else if (done)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.teal,
-                  borderRadius: BorderRadius.circular(999),
+            child: Text(activity.icon, style: const TextStyle(fontSize: 15)),
+          ),
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                activity.title,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
                 ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.check, size: 10, color: Colors.white),
-                    SizedBox(width: 3),
-                    Text(
-                      'Done',
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
+              ),
+              Text(
+                record == null
+                    ? '${_activityTypeLabel(activity.type)} · +${activity.xp}xp'
+                    : '${_activityTypeLabel(activity.type)} · Tap for feedback',
+                style: const TextStyle(fontSize: 12, color: AppColors.inkSoft),
+              ),
+            ],
+          ),
+          trailingIcon: record == null
+              ? null
+              : const Icon(
+                  Icons.chevron_right,
+                  size: 16,
+                  color: AppColors.inkSoft,
+                ),
+          status: record != null
+              ? _GradeChip(scorePct: record.strokeAccuracyPct)
+              : done
+              ? Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.teal,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check, size: 12, color: Colors.white),
+                      SizedBox(width: 3),
+                      Flexible(
+                        child: Text(
+                          'Done',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
+                    ],
+                  ),
+                )
+              : Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: AppColors.creamBorder),
+                  ),
+                  child: const Text(
+                    'Not started',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.inkSoft,
                     ),
-                  ],
-                ),
-              )
-            else
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: AppColors.creamBorder),
-                ),
-                child: const Text(
-                  'Not started',
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textMuted,
                   ),
                 ),
-              ),
-          ],
         ),
       ),
+    );
+  }
+}
+
+/// A list row's text plus a trailing status chip (grade, Done, Locked…).
+/// The chip sits on the right when there's room, and drops under the text
+/// on narrow screens or with large system text, so the title never gets
+/// squeezed into mid-word breaks.
+class _RowWithStatus extends StatelessWidget {
+  const _RowWithStatus({
+    required this.body,
+    required this.status,
+    this.leading,
+    this.trailingIcon,
+  });
+
+  final Widget? leading;
+  final Widget body;
+  final Widget status;
+  final Widget? trailingIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = _scaledWidth(context, constraints.maxWidth) < 330;
+        return Row(
+          children: [
+            if (leading != null) ...[leading!, const SizedBox(width: 10)],
+            Expanded(
+              child: compact
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [body, const SizedBox(height: 6), status],
+                    )
+                  : body,
+            ),
+            if (!compact) ...[
+              const SizedBox(width: 8),
+              Flexible(child: status),
+            ],
+            ?trailingIcon,
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Equal-width tiles that fit as many per row as [minTileWidth] (scaled
+/// by the system text size) allows — 3 or 2 across on most phones, 1 on
+/// the narrowest screens or with very large text.
+class _AdaptiveTiles extends StatelessWidget {
+  const _AdaptiveTiles({required this.children, required this.minTileWidth});
+
+  final List<Widget> children;
+  final double minTileWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    const gap = 8.0;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 3.0);
+        final perRow =
+            ((constraints.maxWidth + gap) / (minTileWidth * scale + gap))
+                .floor()
+                .clamp(1, children.length);
+        final width = (constraints.maxWidth - gap * (perRow - 1)) / perRow;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final child in children) SizedBox(width: width, child: child),
+          ],
+        );
+      },
     );
   }
 }
@@ -2205,10 +2400,10 @@ class _GradeChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
-      child: Text(
+      child: HubFitText(
         '${scorePct.round()}% · ${band.label}',
         style: TextStyle(
-          fontSize: 9.5,
+          fontSize: 11,
           fontWeight: FontWeight.w800,
           color:
               band == GradeBand.satisfactory ||
@@ -2314,7 +2509,8 @@ class _GameReportSheet extends StatelessWidget {
                       Text(
                         title,
                         style: const TextStyle(
-                          fontFamily: 'Fredoka',
+                          fontFamily: 'Baloo2Var',
+                          fontVariations: [FontVariation('wght', 700)],
                           fontWeight: FontWeight.w700,
                           fontSize: 17,
                           color: AppColors.ink,
@@ -2326,8 +2522,8 @@ class _GameReportSheet extends StatelessWidget {
                                 ? 'Classroom activity'
                                 : _activityTypeLabel(type)),
                         style: const TextStyle(
-                          fontSize: 11.5,
-                          color: AppColors.textMuted,
+                          fontSize: 13,
+                          color: AppColors.inkSoft,
                         ),
                       ),
                     ],
@@ -2364,7 +2560,8 @@ class _GameReportSheet extends StatelessWidget {
                         Text(
                           '${score.round()}%',
                           style: const TextStyle(
-                            fontFamily: 'Outfit',
+                            fontFamily: 'Baloo2Var',
+                            fontVariations: [FontVariation('wght', 800)],
                             fontWeight: FontWeight.w800,
                             fontSize: 17,
                             color: AppColors.ink,
@@ -2379,18 +2576,18 @@ class _GameReportSheet extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'GRADE',
+                          'Grade',
                           style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.8,
-                            color: AppColors.textMuted,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.inkSoft,
                           ),
                         ),
                         Text(
                           band.label,
                           style: const TextStyle(
-                            fontFamily: 'Fredoka',
+                            fontFamily: 'Baloo2Var',
+                            fontVariations: [FontVariation('wght', 700)],
                             fontWeight: FontWeight.w700,
                             fontSize: 19,
                             color: AppColors.ink,
@@ -2399,8 +2596,8 @@ class _GameReportSheet extends StatelessWidget {
                         Text(
                           'Score ${score.round()} out of 100',
                           style: const TextStyle(
-                            fontSize: 11.5,
-                            color: AppColors.textMuted,
+                            fontSize: 13,
+                            color: AppColors.inkSoft,
                           ),
                         ),
                       ],
@@ -2410,27 +2607,20 @@ class _GameReportSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            Row(
+            _AdaptiveTiles(
+              minTileWidth: 104,
               children: [
-                Expanded(
-                  child: _ReportStat(
-                    label: 'Mistakes',
-                    value: '${record.sequencingErrors}',
-                  ),
+                _ReportStat(
+                  label: 'Mistakes',
+                  value: '${record.sequencingErrors}',
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _ReportStat(
-                    label: 'Time spent',
-                    value: formatDuration(record.timeOnTaskSeconds),
-                  ),
+                _ReportStat(
+                  label: 'Time spent',
+                  value: formatDuration(record.timeOnTaskSeconds),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _ReportStat(
-                    label: 'Played on',
-                    value: _shortDate(record.completedAt),
-                  ),
+                _ReportStat(
+                  label: 'Played on',
+                  value: _shortDate(record.completedAt),
                 ),
               ],
             ),
@@ -2438,7 +2628,7 @@ class _GameReportSheet extends StatelessWidget {
               const SizedBox(height: 8),
               const Text(
                 'Assigned by the teacher.',
-                style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                style: TextStyle(fontSize: 12.5, color: AppColors.inkSoft),
               ),
             ],
             if (type != null) ...[
@@ -2495,10 +2685,9 @@ class _ReportStat extends StatelessWidget {
         children: [
           Text(
             value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontFamily: 'Outfit',
+              fontFamily: 'Baloo2Var',
+              fontVariations: [FontVariation('wght', 800)],
               fontWeight: FontWeight.w800,
               fontSize: 14,
               color: AppColors.ink,
@@ -2506,7 +2695,7 @@ class _ReportStat extends StatelessWidget {
           ),
           Text(
             label,
-            style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+            style: const TextStyle(fontSize: 12, color: AppColors.inkSoft),
           ),
         ],
       ),
@@ -2602,10 +2791,10 @@ class _GradeScaleLegend extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
+                    child: HubFitText(
                       band.label,
                       style: TextStyle(
-                        fontSize: 11.5,
+                        fontSize: 13,
                         fontWeight: band == current
                             ? FontWeight.w800
                             : FontWeight.w500,
@@ -2616,11 +2805,11 @@ class _GradeScaleLegend extends StatelessWidget {
                   Text(
                     band.range,
                     style: TextStyle(
-                      fontSize: 11.5,
+                      fontSize: 13,
                       fontWeight: band == current
                           ? FontWeight.w800
                           : FontWeight.w500,
-                      color: AppColors.textMuted,
+                      color: AppColors.inkSoft,
                     ),
                   ),
                 ],
@@ -2687,87 +2876,78 @@ class _GameGroupCardState extends State<_GameGroupCard> {
             onTap: () => setState(() => _open = !_open),
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Opacity(
-                    opacity: allLocked ? 0.45 : 1,
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: AppColors.cream,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        game.icon,
-                        style: const TextStyle(fontSize: 19),
-                      ),
+              child: _RowWithStatus(
+                leading: Opacity(
+                  opacity: allLocked ? 0.45 : 1,
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.cream,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      game.icon,
+                      style: const TextStyle(fontSize: 19),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          game.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.ink,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${played.length} of $total session${total == 1 ? '' : 's'} played'
-                          '${lockedCount > 0 && !allLocked ? ' · $lockedCount locked' : ''}',
-                          style: const TextStyle(
-                            fontSize: 10.5,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(999),
-                          child: LinearProgressIndicator(
-                            value: played.length / total,
-                            minHeight: 4,
-                            backgroundColor: AppColors.mint,
-                            valueColor: const AlwaysStoppedAnimation(
-                              AppColors.teal,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (average != null)
-                    _GradeChip(scorePct: average)
-                  else if (allLocked)
-                    const LockedTag()
-                  else
-                    const Text(
-                      'Not started',
-                      style: TextStyle(
-                        fontSize: 10,
+                ),
+                body: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      game.name,
+                      style: const TextStyle(
+                        fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textMuted,
+                        color: AppColors.ink,
                       ),
                     ),
-                  AnimatedRotation(
-                    turns: _open ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down,
-                      size: 18,
-                      color: AppColors.textMuted,
+                    const SizedBox(height: 2),
+                    Text(
+                      '${played.length} of $total session${total == 1 ? '' : 's'} played'
+                      '${lockedCount > 0 && !allLocked ? ' · $lockedCount locked' : ''}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.inkSoft,
+                      ),
                     ),
+                    const SizedBox(height: 5),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        value: played.length / total,
+                        minHeight: 4,
+                        backgroundColor: AppColors.mint,
+                        valueColor: const AlwaysStoppedAnimation(
+                          AppColors.teal,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                status: average != null
+                    ? _GradeChip(scorePct: average)
+                    : allLocked
+                    ? const LockedTag()
+                    : const Text(
+                        'Not started',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.inkSoft,
+                        ),
+                      ),
+                trailingIcon: AnimatedRotation(
+                  turns: _open ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: const Icon(
+                    Icons.keyboard_arrow_down,
+                    size: 20,
+                    color: AppColors.inkSoft,
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -2823,7 +3003,7 @@ class _ProgressGroupsSectionState extends State<_ProgressGroupsSection> {
           child: Text(
             label,
             style: TextStyle(
-              fontSize: 11.5,
+              fontSize: 13,
               fontWeight: FontWeight.w700,
               color: active ? Colors.white : AppColors.teal,
             ),
@@ -2835,31 +3015,33 @@ class _ProgressGroupsSectionState extends State<_ProgressGroupsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
+        // Wrap: the Games/Stages toggle drops below the heading when the
+        // dialog is too narrow for both on one line.
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          runSpacing: 8,
           children: [
-            const Expanded(
-              child: Text(
-                'PROGRESS',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textMuted,
-                  letterSpacing: 0.8,
-                ),
-              ),
+            Text(
+              _byStage ? 'Progress by stage' : 'Progress by game',
+              style: _display(17),
             ),
-            Container(
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.teal, width: 1.2),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  segment('12 Games', false),
-                  segment('7 Stages', true),
-                ],
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.teal, width: 1.2),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    segment('12 Games', false),
+                    segment('7 Stages', true),
+                  ],
+                ),
               ),
             ),
           ],
@@ -2871,7 +3053,7 @@ class _ProgressGroupsSectionState extends State<_ProgressGroupsSection> {
                     'its full grade and feedback.'
               : 'Tap a game to see its sessions, then tap a session for '
                     'its full grade and feedback.',
-          style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+          style: const TextStyle(fontSize: 12.5, color: AppColors.inkSoft),
         ),
         const SizedBox(height: 8),
         for (final group in _byStage ? curriculumStages() : curriculumGames())
@@ -2931,49 +3113,43 @@ class _SessionRow extends StatelessWidget {
           color: record == null ? null : AppColors.mint.withValues(alpha: 0.35),
           border: const Border(top: BorderSide(color: AppColors.creamBorder)),
         ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ink,
-                    ),
-                  ),
-                  Text(
-                    detail,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (record != null) ...[
-              _GradeChip(scorePct: record.strokeAccuracyPct),
-              const Icon(
-                Icons.chevron_right,
-                size: 16,
-                color: AppColors.textMuted,
-              ),
-            ] else if (locked)
-              const LockedTag()
-            else
-              const Text(
-                'Not played yet',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textMuted,
+        child: _RowWithStatus(
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.ink,
                 ),
               ),
-          ],
+              Text(
+                detail,
+                style: const TextStyle(fontSize: 12, color: AppColors.inkSoft),
+              ),
+            ],
+          ),
+          status: record != null
+              ? _GradeChip(scorePct: record.strokeAccuracyPct)
+              : locked
+              ? const LockedTag()
+              : const Text(
+                  'Not played yet',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.inkSoft,
+                  ),
+                ),
+          trailingIcon: record == null
+              ? null
+              : const Icon(
+                  Icons.chevron_right,
+                  size: 16,
+                  color: AppColors.inkSoft,
+                ),
         ),
       ),
     );
@@ -3025,39 +3201,29 @@ class _GameResultCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Text(icon, style: const TextStyle(fontSize: 20)),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.ink,
-                            ),
-                          ),
-                          Text(
-                            subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 10.5,
-                              color: AppColors.textMuted,
-                            ),
-                          ),
-                        ],
+                _RowWithStatus(
+                  leading: Text(icon, style: const TextStyle(fontSize: 20)),
+                  body: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    _GradeChip(scorePct: record.strokeAccuracyPct),
-                  ],
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.inkSoft,
+                        ),
+                      ),
+                    ],
+                  ),
+                  status: _GradeChip(scorePct: record.strokeAccuracyPct),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -3066,10 +3232,8 @@ class _GameResultCard extends StatelessWidget {
                     mistakes: record.sequencingErrors,
                     name: learnerName,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 11.5,
+                    fontSize: 13,
                     height: 1.4,
                     color: AppColors.ink,
                   ),
@@ -3081,19 +3245,22 @@ class _GameResultCard extends StatelessWidget {
                       const Text(
                         'HOMEWORK',
                         style: TextStyle(
-                          fontSize: 9,
+                          fontSize: 11,
                           fontWeight: FontWeight.w800,
                           color: AppColors.tealDark,
                           letterSpacing: 0.3,
                         ),
                       ),
                     const Spacer(),
-                    const Text(
-                      'See full report',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.teal,
+                    const Flexible(
+                      child: Text(
+                        'See full report',
+                        textAlign: TextAlign.end,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.teal,
+                        ),
                       ),
                     ),
                     const Icon(
@@ -3120,38 +3287,44 @@ class _MediationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       decoration: BoxDecoration(
-        color: AppColors.mint,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.mintBorder),
+        color: AppColors.goldTint,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.goldSoft.withValues(alpha: 0.6)),
       ),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Text('🖊️', style: TextStyle(fontSize: 14)),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Icon(Icons.home_rounded, size: 22, color: AppColors.coral),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Try this at home', style: _display(17)),
+                const SizedBox(height: 2),
+                Text(
                   "This week's practice routine — ${prompt.destination.name}",
                   style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.tealDark,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.inkSoft,
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            prompt.routine,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.tealDark,
-              height: 1.35,
+                const SizedBox(height: 8),
+                Text(
+                  prompt.routine,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.ink,
+                    height: 1.45,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -3185,59 +3358,63 @@ class _AccuracyDial extends StatelessWidget {
           TweenAnimationBuilder<double>(
             tween: Tween(begin: 0, end: (accuracyPct / 100).clamp(0.0, 1.0)),
             duration: const Duration(milliseconds: 900),
-            curve: Curves.easeOutCubic,
+            curve: Curves.easeOutQuart,
             builder: (context, t, _) => CustomPaint(
               size: Size(size, size),
               painter: _DialPainter(progress: t),
             ),
           ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${accuracyPct.round()}%',
-                style: TextStyle(
-                  fontSize: size * 0.22,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
-                ),
+          // Kept inside the ring at any text scale.
+          SizedBox(
+            width: size * 0.64,
+            height: size * 0.5,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${accuracyPct.round()}%',
+                    style: _display(size * 0.25, weight: 800, height: 1),
+                  ),
+                  Text(
+                    'Accuracy',
+                    style: TextStyle(
+                      fontSize: size * 0.1,
+                      color: AppColors.inkSoft,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
-              Text(
-                'Accuracy',
-                style: TextStyle(
-                  fontSize: size * 0.09,
-                  color: AppColors.textMuted,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
+            ),
           ),
           if (streak > 0)
             Positioned(
-              top: -4,
-              right: -6,
+              top: -2,
+              right: -8,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                 decoration: BoxDecoration(
                   color: AppColors.gold,
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: Colors.white, width: 2),
+                  border: Border.all(color: AppColors.surface, width: 2.5),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(
-                      Icons.bolt_rounded,
-                      size: 12,
-                      color: Colors.white,
+                      Icons.local_fire_department_rounded,
+                      size: 14,
+                      color: AppColors.ink,
                     ),
                     const SizedBox(width: 2),
                     Text(
                       '$streak',
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 13,
                         fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                        color: AppColors.ink,
                       ),
                     ),
                   ],
@@ -3258,32 +3435,21 @@ class _DialPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.shortestSide - 12) / 2;
+    final radius = (size.shortestSide - 14) / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
     final track = Paint()
       ..color = AppColors.mint
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 10
-      ..strokeCap = StrokeCap.round;
+      ..strokeWidth = 12;
     canvas.drawCircle(center, radius, track);
 
     if (progress > 0) {
       final fill = Paint()
-        ..shader = SweepGradient(
-          startAngle: -pi / 2,
-          endAngle: -pi / 2 + 2 * pi,
-          colors: const [AppColors.teal, AppColors.gold, AppColors.teal],
-          transform: const GradientRotation(-pi / 2),
-        ).createShader(Rect.fromCircle(center: center, radius: radius))
+        ..color = AppColors.teal
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 10
+        ..strokeWidth = 12
         ..strokeCap = StrokeCap.round;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        -pi / 2,
-        2 * pi * progress,
-        false,
-        fill,
-      );
+      canvas.drawArc(rect, -pi / 2, 2 * pi * progress, false, fill);
     }
   }
 
@@ -3292,10 +3458,10 @@ class _DialPainter extends CustomPainter {
       oldDelegate.progress != progress;
 }
 
-/// Draw-in line chart matching the approved top-tab mock exactly: grid +
-/// gradient area fill + a teal line that draws itself in on every reveal
-/// (fresh [_draw] controller each time this tab remounts), reading real
-/// per-day activity from [parentWeeklyChartProvider] (no invented numbers).
+/// Draw-in line chart: grid + soft area fill + a teal line that draws
+/// itself in on every reveal (fresh [_draw] controller each time this tab
+/// remounts), reading real per-day activity from [parentWeeklyChartProvider]
+/// (no invented numbers). The latest day gets a ringed end-point dot.
 class _TrendChartCard extends ConsumerStatefulWidget {
   const _TrendChartCard();
 
@@ -3347,42 +3513,39 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
     final entries = chartData;
 
     return SoftCard(
-      padding: const EdgeInsets.all(18),
+      radius: 20,
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const MockIcon(MockIcons.trend, size: 16, color: AppColors.teal),
-              const SizedBox(width: 7),
-              Flexible(
-                child: Text(
-                  'Weekly trend',
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
-            ],
-          ),
+          Text('Weekly trend', style: _display(18)),
           const SizedBox(height: 2),
           const Text(
             'Time spent playing, day by day',
-            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+            style: TextStyle(fontSize: 13, color: AppColors.inkSoft),
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final (i, label) in _ranges.indexed)
-                _RangePill(
-                  label: label,
-                  active: i == _range,
-                  onTap: () => _selectRange(i),
-                ),
-            ],
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: AppColors.neutralTint,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: AppColors.creamBorder),
+            ),
+            child: Row(
+              children: [
+                for (final (i, label) in _ranges.indexed)
+                  Expanded(
+                    child: _RangePill(
+                      label: label,
+                      active: i == _range,
+                      onTap: () => _selectRange(i),
+                    ),
+                  ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           if (entries.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
@@ -3394,16 +3557,13 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
                       height: 72,
                       child: Lottie.asset(
                         'assets/lottie/empty_chart.json',
-                        repeat: true,
+                        repeat: false,
                       ),
                     ),
                     const SizedBox(height: 4),
                     const Text(
                       'No activity yet this week',
-                      style: TextStyle(
-                        color: AppColors.textMuted,
-                        fontSize: 12.5,
-                      ),
+                      style: TextStyle(color: AppColors.inkSoft, fontSize: 14),
                     ),
                   ],
                 ),
@@ -3412,17 +3572,18 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
           else
             LayoutBuilder(
               builder: (context, constraints) {
-                const height = 116.0;
+                const height = 128.0;
                 const topPad = 20.0;
                 const bottomPad = 8.0;
+                const edge = 6.0;
                 final width = constraints.maxWidth;
                 final values = entries.map((e) => e.value).toList();
                 final n = values.length;
-                final dx = n > 1 ? width / (n - 1) : 0.0;
+                final dx = n > 1 ? (width - edge * 2) / (n - 1) : 0.0;
                 final points = [
                   for (var i = 0; i < n; i++)
                     Offset(
-                      i * dx,
+                      edge + i * dx,
                       topPad + (1 - values[i]) * (height - topPad - bottomPad),
                     ),
                 ];
@@ -3437,7 +3598,7 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
                 }.toList()..sort();
                 // Each label gets the gap to its neighbour (not a fixed 28px)
                 // so full day names fit, shrinking only on very narrow charts.
-                final slotW = (dx * step).clamp(28.0, 64.0).clamp(0.0, width);
+                final slotW = (dx * step).clamp(30.0, 64.0).clamp(0.0, width);
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -3455,9 +3616,9 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
                         );
                       },
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     SizedBox(
-                      height: 14,
+                      height: 16,
                       width: width,
                       child: Stack(
                         children: [
@@ -3473,9 +3634,14 @@ class _TrendChartCardState extends ConsumerState<_TrendChartCard>
                                 child: Text(
                                   entries[i].label,
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 9,
-                                    color: AppColors.textMuted,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: i == n - 1
+                                        ? FontWeight.w800
+                                        : FontWeight.w500,
+                                    color: i == n - 1
+                                        ? AppColors.teal
+                                        : AppColors.inkSoft,
                                   ),
                                 ),
                               ),
@@ -3506,20 +3672,35 @@ class _RangePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: active ? AppColors.teal : AppColors.neutralTint,
-      borderRadius: BorderRadius.circular(999),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(999),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              color: active ? Colors.white : AppColors.textMuted,
+    return Semantics(
+      button: true,
+      selected: active,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutQuart,
+        decoration: BoxDecoration(
+          color: active ? AppColors.teal : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: active ? Colors.white : AppColors.inkSoft,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -3528,8 +3709,8 @@ class _RangePill extends StatelessWidget {
   }
 }
 
-/// Grid + gradient area fill + drawn line — matches the approved top-tab
-/// mock's chart exactly (`.chart-grid` / `.chart-area` / `.chart-line`).
+/// Grid + soft area fill + drawn polyline, with a ringed dot on the most
+/// recent day once the line has drawn all the way in.
 class _TrendPainter extends CustomPainter {
   _TrendPainter({
     required this.points,
@@ -3545,18 +3726,20 @@ class _TrendPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (points.isEmpty) return;
 
-    // 1. Solid horizontal gridlines behind the curve.
+    // 1. Dashed horizontal gridlines behind the curve.
     final gridPaint = Paint()
       ..color = AppColors.creamBorder
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
-
     for (var i = 1; i <= 3; i++) {
       final y = bottom * i / 4;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+      for (var x = 0.0; x < size.width; x += 8) {
+        canvas.drawLine(Offset(x, y), Offset(x + 4, y), gridPaint);
+      }
     }
+    canvas.drawLine(Offset(0, bottom), Offset(size.width, bottom), gridPaint);
 
-    // 2. Straight-segment line (mock uses a plain polyline, not a spline).
+    // 2. Straight-segment line.
     final path = Path()..moveTo(points.first.dx, points.first.dy);
     for (var i = 1; i < points.length; i++) {
       path.lineTo(points[i].dx, points[i].dy);
@@ -3566,7 +3749,7 @@ class _TrendPainter extends CustomPainter {
     canvas.save();
     canvas.clipRect(Rect.fromLTWH(0, 0, size.width * reveal, size.height + 40));
 
-    // 3. Gradient area fill, fading from the line down to the baseline.
+    // 3. Area fill, fading from the line down to the baseline.
     final fillPath = Path.from(path)
       ..lineTo(points.last.dx, bottom)
       ..lineTo(points.first.dx, bottom)
@@ -3576,7 +3759,7 @@ class _TrendPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          AppColors.teal.withValues(alpha: 0.16),
+          AppColors.teal.withValues(alpha: 0.18),
           AppColors.teal.withValues(alpha: 0.0),
         ],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
@@ -3586,11 +3769,25 @@ class _TrendPainter extends CustomPainter {
     final linePaint = Paint()
       ..color = AppColors.teal
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5
+      ..strokeWidth = 3
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
     canvas.drawPath(path, linePaint);
     canvas.restore();
+
+    // 5. End-point marker for the latest day.
+    if (reveal >= 1) {
+      final last = points.last;
+      canvas.drawCircle(last, 6.5, Paint()..color = AppColors.surface);
+      canvas.drawCircle(
+        last,
+        6.5,
+        Paint()
+          ..color = AppColors.teal
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3,
+      );
+    }
   }
 
   @override
@@ -3598,6 +3795,10 @@ class _TrendPainter extends CustomPainter {
       oldDelegate.progress != progress || oldDelegate.points != points;
 }
 
+/// Settings grouped into three labeled sections on the cream canvas —
+/// account cards (shared with the Teacher dashboard, so left as-is), sound
+/// and language, then a single divided sheet for sync / log out / delete
+/// with the destructive action last.
 class _SettingsTab extends ConsumerWidget {
   const _SettingsTab();
 
@@ -3606,212 +3807,100 @@ class _SettingsTab extends ConsumerWidget {
     final volumes = ref.watch(volumeProvider);
     final volumeNotifier = ref.read(volumeProvider.notifier);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _StaggerFadeIn(
-              delay: const Duration(milliseconds: 25),
-              child: SoftCard(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 34,
-                          height: 34,
-                          decoration: BoxDecoration(
-                            color: AppColors.mint,
-                            borderRadius: BorderRadius.circular(11),
-                          ),
-                          alignment: Alignment.center,
-                          child: const Icon(
-                            Icons.volume_up_rounded,
-                            size: 17,
-                            color: AppColors.teal,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Flexible(
-                          child: Text(
-                            'Sound & Voice',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _VolumeSlider(
-                      icon: Icons.music_note_outlined,
-                      label: 'Background Music',
-                      value: volumes.background,
-                      onChanged: volumeNotifier.setBackground,
-                    ),
-                    const SizedBox(height: 14),
-                    _VolumeSlider(
-                      icon: Icons.notifications_none,
-                      label: 'UI Sound Effects',
-                      value: volumes.effects,
-                      onChanged: volumeNotifier.setEffects,
-                    ),
-                    const SizedBox(height: 14),
-                    _VolumeSlider(
-                      icon: Icons.mic_none,
-                      label: 'Pronunciation Voice',
-                      value: volumes.voice,
-                      onChanged: volumeNotifier.setVoice,
-                    ),
-                  ],
+    return HubTabBody(
+      left: const [
+        HubStaggerFadeIn(
+          delay: Duration.zero,
+          child: HubSectionLabel('Account'),
+        ),
+        HubStaggerFadeIn(
+          delay: Duration(milliseconds: 20),
+          child: AccountEmailCard(),
+        ),
+        SizedBox(height: 12),
+        HubStaggerFadeIn(
+          delay: Duration(milliseconds: 40),
+          child: EmailVerificationCard(),
+        ),
+        HubStaggerFadeIn(
+          delay: Duration(milliseconds: 55),
+          child: _LinkFirebaseCard(),
+        ),
+        SizedBox(height: 12),
+        HubStaggerFadeIn(
+          delay: Duration(milliseconds: 70),
+          child: ChangePinCard(),
+        ),
+        SizedBox(height: 12),
+      ],
+      right: [
+        const HubStaggerFadeIn(
+          delay: Duration(milliseconds: 85),
+          child: HubSectionLabel('Sound & language'),
+        ),
+        HubStaggerFadeIn(
+          delay: const Duration(milliseconds: 100),
+          child: SoftCard(
+            radius: 20,
+            padding: const EdgeInsets.fromLTRB(20, 18, 14, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _VolumeSlider(
+                  icon: Icons.music_note_outlined,
+                  label: 'Background Music',
+                  value: volumes.background,
+                  onChanged: volumeNotifier.setBackground,
                 ),
-              ),
+                const SizedBox(height: 6),
+                _VolumeSlider(
+                  icon: Icons.notifications_none,
+                  label: 'UI Sound Effects',
+                  value: volumes.effects,
+                  onChanged: volumeNotifier.setEffects,
+                ),
+                const SizedBox(height: 6),
+                _VolumeSlider(
+                  icon: Icons.mic_none,
+                  label: 'Pronunciation Voice',
+                  value: volumes.voice,
+                  onChanged: volumeNotifier.setVoice,
+                ),
+              ],
             ),
-            const SizedBox(height: 20),
-            const _StaggerFadeIn(
-              delay: Duration(milliseconds: 65),
-              child: SoftCard(
-                padding: EdgeInsets.all(6),
-                child: LanguageSettingRow(),
-              ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        const HubStaggerFadeIn(
+          delay: Duration(milliseconds: 115),
+          child: SoftCard(
+            radius: 20,
+            padding: EdgeInsets.all(6),
+            child: LanguageSettingRow(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        const HubStaggerFadeIn(
+          delay: Duration(milliseconds: 130),
+          child: HubSectionLabel('Data & session'),
+        ),
+        const HubStaggerFadeIn(
+          delay: Duration(milliseconds: 145),
+          child: SoftCard(
+            radius: 20,
+            padding: EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              children: [
+                _SyncCard(),
+                HubRowDivider(),
+                _ExitSettingsCard(),
+                HubRowDivider(),
+                _DeleteAccountCard(),
+              ],
             ),
-            const SizedBox(height: 20),
-            const _StaggerFadeIn(
-              delay: Duration(milliseconds: 65),
-              child: _SyncCard(),
-            ),
-            const SizedBox(height: 20),
-            const _StaggerFadeIn(
-              delay: Duration(milliseconds: 80),
-              child: EmailVerificationCard(),
-            ),
-            const SizedBox(height: 20),
-            const _StaggerFadeIn(
-              delay: Duration(milliseconds: 95),
-              child: _LinkFirebaseCard(),
-            ),
-            const SizedBox(height: 20),
-            const _StaggerFadeIn(
-              delay: Duration(milliseconds: 110),
-              child: ChangePinCard(),
-            ),
-            const SizedBox(height: 20),
-            const _StaggerFadeIn(
-              delay: Duration(milliseconds: 125),
-              child: _DeleteAccountCard(),
-            ),
-            const SizedBox(height: 20),
-            const _StaggerFadeIn(
-              delay: Duration(milliseconds: 155),
-              child: _ExitSettingsCard(),
-            ),
-          ],
+          ),
         ),
       ],
-    );
-  }
-}
-
-/// Tab-panel entrance used by the top-tab shell — matches the mock's
-/// per-panel "rise" (fade + slide-up, 320ms, cubic-bezier(.2,.7,.3,1)).
-/// Deliberately does NOT crossfade with the outgoing panel the way
-/// `AnimatedSwitcher` does: when [Widget.key] changes (new tab selected),
-/// the old panel's Element is disposed and removed from the tree
-/// immediately — normal Flutter rebuild semantics, no exit transition —
-/// and only the new panel plays this one-shot entrance. That's what the
-/// mock does too (`panel.hidden = true` on the old one, then the new one
-/// gets its `rise` animation) — an `AnimatedSwitcher` here would keep both
-/// panels visible and overlapping for the transition's duration instead.
-class _PanelRise extends StatefulWidget {
-  const _PanelRise({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  State<_PanelRise> createState() => _PanelRiseState();
-}
-
-class _PanelRiseState extends State<_PanelRise>
-    with SingleTickerProviderStateMixin {
-  late final _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 200),
-  )..forward();
-  late final _curved = CurvedAnimation(
-    parent: _c,
-    curve: const Cubic(0.2, 0.7, 0.3, 1.0),
-  );
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _curved,
-      child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, 0.03),
-          end: Offset.zero,
-        ).animate(_curved),
-        child: widget.child,
-      ),
-    );
-  }
-}
-
-/// Self-contained staggered entrance (fade + slide-up) — mirrors the
-/// Teacher Dashboard's own `_StaggerFadeIn` (each file keeps its own copy,
-/// same convention as `_FadeUp` already being duplicated per-dashboard-file).
-class _StaggerFadeIn extends StatefulWidget {
-  const _StaggerFadeIn({required this.delay, required this.child});
-
-  final Duration delay;
-  final Widget child;
-
-  @override
-  State<_StaggerFadeIn> createState() => _StaggerFadeInState();
-}
-
-class _StaggerFadeInState extends State<_StaggerFadeIn>
-    with SingleTickerProviderStateMixin {
-  late final _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 280),
-  );
-  late final _fade = CurvedAnimation(
-    parent: _c,
-    curve: const Cubic(0.2, 0.7, 0.3, 1.0),
-  );
-  late final _slide = Tween<Offset>(
-    begin: const Offset(0, 0.04),
-    end: Offset.zero,
-  ).animate(_fade);
-
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(widget.delay, () {
-      if (mounted) _c.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _fade,
-      child: SlideTransition(position: _slide, child: widget.child),
     );
   }
 }
@@ -3893,46 +3982,73 @@ class _LinkFirebaseCardState extends ConsumerState<_LinkFirebaseCard> {
     // what's typed in, since `verifyPassword` can never succeed against a
     // null hash.
     if (_linked || !_hasEmail) return const SizedBox.shrink();
-    return SoftCard(
-      color: AppColors.goldTint,
-      borderColor: AppColors.goldSoft,
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Link to Cloud', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 6),
-          const Text(
-            'This account isn\'t linked to the cloud yet, so "Sync now" '
-            'won\'t work until you link it. Re-enter your password to link it.',
-            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _passwordC,
-            obscureText: true,
-            decoration: InputDecoration(
-              hintText: 'Account password'.tr,
-              border: OutlineInputBorder(),
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: SoftCard(
+        radius: 20,
+        color: AppColors.goldTint,
+        borderColor: AppColors.goldSoft.withValues(alpha: 0.6),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.cloud_off_rounded,
+                  size: 22,
+                  color: AppColors.coral,
+                ),
+                const SizedBox(width: 10),
+                Flexible(child: Text('Link to Cloud', style: _display(18))),
+              ],
             ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _linking ? null : _link,
-              icon: _linking
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.link, size: 16),
-              label: Text(_linking ? 'Linking...' : 'Link to Cloud'),
-              style: FilledButton.styleFrom(backgroundColor: AppColors.teal),
+            const SizedBox(height: 6),
+            const Text(
+              'This account isn\'t linked to the cloud yet, so "Sync now" '
+              'won\'t work until you link it. Re-enter your password to link it.',
+              style: TextStyle(
+                fontSize: 13.5,
+                height: 1.4,
+                color: AppColors.inkSoft,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 14),
+            TextField(
+              controller: _passwordC,
+              obscureText: true,
+              decoration: InputDecoration(
+                hintText: 'Account password'.tr,
+                filled: true,
+                fillColor: AppColors.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.creamBorder),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.creamBorder),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _linking ? null : _link,
+                icon: _linking
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.link, size: 16),
+                label: Text(_linking ? 'Linking...' : 'Link to Cloud'),
+                style: FilledButton.styleFrom(backgroundColor: AppColors.teal),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -3965,44 +4081,54 @@ class _VolumeSlider extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        // Wrap: the level chip drops under the label when both don't fit
+        // on one line (narrow phone / large text).
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 4,
           children: [
-            Expanded(
-              child: Row(
-                children: [
-                  Icon(icon, size: 16, color: AppColors.textMuted),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                      ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 20, color: AppColors.teal),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            Text(
-              _getVolumeLabel(value),
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: AppColors.teal,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                color: value == 0 ? AppColors.neutralTint : AppColors.mint,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                _getVolumeLabel(value),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                  color: value == 0 ? AppColors.inkSoft : AppColors.tealDark,
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 4),
         Slider(
           value: value,
           min: 0.0,
           max: 1.0,
           activeColor: AppColors.teal,
-          inactiveColor: AppColors.creamBorder,
+          inactiveColor: AppColors.mint,
           onChanged: onChanged,
         ),
       ],
@@ -4022,80 +4148,32 @@ class _SyncCardState extends ConsumerState<_SyncCard> {
 
   @override
   Widget build(BuildContext context) {
-    return SoftCard(
-      padding: const EdgeInsets.all(18),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: AppColors.mint,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            alignment: Alignment.center,
-            child: const Icon(
-              Icons.sync_rounded,
-              size: 18,
-              color: AppColors.teal,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Sync Now', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 2),
-                const Text(
-                  'Sync local device progress with cloud servers.',
-                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 14),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.teal,
-              side: const BorderSide(color: AppColors.teal),
-            ),
-            icon: _syncing
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      color: AppColors.teal,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : const Icon(Icons.sync, size: 16),
-            label: Text(_syncing ? 'Syncing...' : 'Sync'),
-            onPressed: _syncing
-                ? null
-                : () async {
-                    setState(() => _syncing = true);
-                    try {
-                      await ref.read(syncManagerProvider).syncNow();
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Sync completed successfully!'),
-                          ),
-                        );
-                      }
-                    } catch (error) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Sync failed: $error')),
-                        );
-                      }
-                    } finally {
-                      if (mounted) setState(() => _syncing = false);
-                    }
-                  },
-          ),
-        ],
+    return HubActionRow(
+      icon: Icons.sync_rounded,
+      title: 'Sync Now',
+      subtitle: 'Sync local device progress with cloud servers.',
+      trailing: HubRowButton(
+        label: _syncing ? 'Syncing...' : 'Sync',
+        busy: _syncing,
+        onPressed: () async {
+          setState(() => _syncing = true);
+          try {
+            await ref.read(syncManagerProvider).syncNow();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Sync completed successfully!')),
+              );
+            }
+          } catch (error) {
+            if (mounted) {
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('Sync failed: $error')));
+            }
+          } finally {
+            if (mounted) setState(() => _syncing = false);
+          }
+        },
       ),
     );
   }
@@ -4106,51 +4184,15 @@ class _DeleteAccountCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return SoftCard(
-      padding: const EdgeInsets.all(18),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: AppColors.coralTint,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            alignment: Alignment.center,
-            child: const Icon(
-              Icons.delete_outline_rounded,
-              size: 18,
-              color: AppColors.coral,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Delete Account',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 2),
-                const Text(
-                  'Permanently delete your account and all its data.',
-                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 14),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.coral,
-              side: const BorderSide(color: AppColors.coral),
-            ),
-            onPressed: () => showDeleteAccountDialog(context, ref),
-            child: const Text('Delete'),
-          ),
-        ],
+    return HubActionRow(
+      icon: Icons.delete_outline_rounded,
+      iconColor: AppColors.coral,
+      title: 'Delete Account',
+      subtitle: 'Permanently delete your account and all its data.',
+      trailing: HubRowButton(
+        label: 'Delete',
+        color: AppColors.coral,
+        onPressed: () => showDeleteAccountDialog(context, ref),
       ),
     );
   }
@@ -4198,53 +4240,15 @@ class _ExitSettingsCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return SoftCard(
-      padding: const EdgeInsets.all(18),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: const BoxDecoration(
-              color: AppColors.coralTint,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: const Icon(
-              Icons.logout_rounded,
-              color: AppColors.coral,
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'Exit Settings',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.ink,
-                  ),
-                ),
-                Text(
-                  'Exit settings and lock admin areas',
-                  style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-                ),
-              ],
-            ),
-          ),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.coral,
-              side: const BorderSide(color: AppColors.coral),
-            ),
-            onPressed: () => _confirmLogout(context, ref),
-            child: const Text('Logout'),
-          ),
-        ],
+    return HubActionRow(
+      icon: Icons.logout_rounded,
+      iconColor: AppColors.inkSoft,
+      title: 'Exit Settings',
+      subtitle: 'Exit settings and lock admin areas',
+      trailing: HubRowButton(
+        label: 'Logout',
+        color: AppColors.ink,
+        onPressed: () => _confirmLogout(context, ref),
       ),
     );
   }
@@ -4331,7 +4335,10 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: MediaQuery.sizeOf(context).width < 400 ? 12 : 20,
+        vertical: 24,
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480, maxHeight: 680),
         child: Material(
@@ -4344,49 +4351,50 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
               // Header
               Container(
                 padding: const EdgeInsets.fromLTRB(20, 18, 12, 18),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [AppColors.teal, AppColors.tealDark],
+                decoration: const BoxDecoration(color: AppColors.teal),
+                child: CustomPaint(
+                  painter: const KhatamPatternPainter(),
+                  child: Row(
+                    children: [
+                      LearnerAvatar(avatar: learnerAvatar, size: 40),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            LayoutBuilder(
+                              builder: (context, box) => Text(
+                                learnerName,
+                                style: fitLongestWord(
+                                  context,
+                                  learnerName,
+                                  _display(20, color: Colors.white),
+                                  box.maxWidth,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'Learning Progress Report',
+                              style: TextStyle(
+                                color: Color(0xE6FFFFFF),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close'.tr,
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                child: Row(
-                  children: [
-                    LearnerAvatar(avatar: learnerAvatar, size: 40),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            learnerName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16.5,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          const Text(
-                            'Learning Progress Report',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
                 ),
               ),
               // Body
@@ -4396,66 +4404,44 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Overview Stats Row
-                      Row(
+                      // Overview stats: 2 per row, 1 when narrow.
+                      _AdaptiveTiles(
+                        minTileWidth: 150,
                         children: [
-                          Expanded(
-                            child: _buildOverviewTile(
-                              icon: Icons.check_circle_outline_rounded,
-                              value: '${kpis.accuracyPct.round()}%',
-                              label: 'Avg. Accuracy',
-                              color: AppColors.teal,
-                              bg: AppColors.mint,
-                            ),
+                          _buildOverviewTile(
+                            icon: Icons.check_circle_outline_rounded,
+                            value: '${kpis.accuracyPct.round()}%',
+                            label: 'Avg. Accuracy',
+                            color: AppColors.teal,
+                            bg: AppColors.mint,
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _buildOverviewTile(
-                              icon: Icons.error_outline_rounded,
-                              value: '${kpis.errorCount}',
-                              label: 'Total Errors',
-                              color: AppColors.coral,
-                              bg: AppColors.coralTint,
-                            ),
+                          _buildOverviewTile(
+                            icon: Icons.error_outline_rounded,
+                            value: '${kpis.errorCount}',
+                            label: 'Total Errors',
+                            color: AppColors.coral,
+                            bg: AppColors.coralTint,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildOverviewTile(
-                              icon: Icons.schedule_rounded,
-                              value: '${kpis.timeOnTaskMinutes}m',
-                              label: 'Time on Task',
-                              color: AppColors.gold,
-                              bg: AppColors.goldTint,
-                            ),
+                          _buildOverviewTile(
+                            icon: Icons.schedule_rounded,
+                            value: '${kpis.timeOnTaskMinutes}m',
+                            label: 'Time on Task',
+                            color: AppColors.gold,
+                            bg: AppColors.goldTint,
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _buildOverviewTile(
-                              icon: Icons.local_fire_department_rounded,
-                              value: '${kpis.streak}d',
-                              label: 'Active Streak',
-                              color: Colors.orange,
-                              bg: Colors.orange.withOpacity(0.1),
-                            ),
+                          _buildOverviewTile(
+                            icon: Icons.local_fire_department_rounded,
+                            value: '${kpis.streak}d',
+                            label: 'Active Streak',
+                            color: AppColors.coral,
+                            bg: AppColors.goldTint,
                           ),
                         ],
                       ),
                       const SizedBox(height: 22),
 
                       // Section: Adventure Mastery
-                      const Text(
-                        'ADVENTURE MASTERY',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textMuted,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
+                      Text('Adventure mastery', style: _display(17)),
                       const SizedBox(height: 8),
                       if (moduleSummaries.isEmpty)
                         Container(
@@ -4468,7 +4454,7 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                             'No adventure history yet.',
                             style: TextStyle(
                               fontSize: 12.5,
-                              color: AppColors.textMuted,
+                              color: AppColors.inkSoft,
                             ),
                           ),
                         )
@@ -4490,80 +4476,76 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
+                                  Wrap(
+                                    alignment: WrapAlignment.spaceBetween,
+                                    spacing: 8,
+                                    runSpacing: 2,
                                     children: [
-                                      Expanded(
-                                        child: Text(
-                                          title,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppColors.ink,
-                                          ),
+                                      Text(
+                                        title,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.ink,
                                         ),
                                       ),
                                       Text(
                                         '${mod.sessionCount} session${mod.sessionCount == 1 ? '' : 's'}',
                                         style: const TextStyle(
-                                          fontSize: 11,
-                                          color: AppColors.textMuted,
+                                          fontSize: 12.5,
+                                          color: AppColors.inkSoft,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
                                     ],
                                   ),
                                   const SizedBox(height: 8),
-                                  Row(
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
                                     children: [
-                                      Expanded(
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            99,
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(99),
+                                        child: TweenAnimationBuilder<double>(
+                                          tween: Tween<double>(
+                                            begin: 0.0,
+                                            end: mod.accuracyPct / 100.0,
                                           ),
-                                          child: TweenAnimationBuilder<double>(
-                                            tween: Tween<double>(
-                                              begin: 0.0,
-                                              end: mod.accuracyPct / 100.0,
-                                            ),
-                                            duration: const Duration(
-                                              milliseconds: 900,
-                                            ),
-                                            curve: Curves.easeOutCubic,
-                                            builder: (context, val, child) {
-                                              return LinearProgressIndicator(
-                                                value: val,
-                                                backgroundColor:
-                                                    Colors.grey.shade200,
-                                                valueColor:
-                                                    AlwaysStoppedAnimation<
-                                                      Color
-                                                    >(
-                                                      mod.accuracyPct >= 80
-                                                          ? AppColors.teal
-                                                          : (mod.accuracyPct >=
-                                                                    60
-                                                                ? AppColors.gold
-                                                                : AppColors
-                                                                      .coral),
-                                                    ),
-                                                minHeight: 6,
-                                              );
-                                            },
+                                          duration: const Duration(
+                                            milliseconds: 900,
                                           ),
+                                          curve: Curves.easeOutCubic,
+                                          builder: (context, val, child) {
+                                            return LinearProgressIndicator(
+                                              value: val,
+                                              backgroundColor:
+                                                  Colors.grey.shade200,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                    mod.accuracyPct >= 80
+                                                        ? AppColors.teal
+                                                        : (mod.accuracyPct >= 60
+                                                              ? AppColors.gold
+                                                              : AppColors
+                                                                    .coral),
+                                                  ),
+                                              minHeight: 6,
+                                            );
+                                          },
                                         ),
                                       ),
-                                      const SizedBox(width: 12),
+                                      const SizedBox(height: 6),
                                       Text(
                                         '${mod.accuracyPct.round()}% · ${GradeBand.forScore(mod.accuracyPct).label}',
                                         style: TextStyle(
-                                          fontSize: 12,
+                                          fontSize: 12.5,
                                           fontWeight: FontWeight.w700,
+                                          // Gold text fails contrast on
+                                          // white; ink carries the middle band.
                                           color: mod.accuracyPct >= 80
                                               ? AppColors.tealDark
                                               : (mod.accuracyPct >= 60
-                                                    ? AppColors.gold
+                                                    ? AppColors.ink
                                                     : AppColors.coral),
                                         ),
                                       ),
@@ -4574,7 +4556,7 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                                     Text(
                                       '${mod.errorCount} mistake${mod.errorCount == 1 ? '' : 's'} this week',
                                       style: const TextStyle(
-                                        fontSize: 11,
+                                        fontSize: 12.5,
                                         color: AppColors.coral,
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -4600,15 +4582,7 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
                       ),
                       if (classroomRecords.isNotEmpty) ...[
                         const SizedBox(height: 14),
-                        const Text(
-                          'CLASSROOM ACTIVITIES',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textMuted,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
+                        Text('Classroom activities', style: _display(17)),
                         const SizedBox(height: 8),
                         for (final rec in classroomRecords.take(10))
                           _GameResultCard(
@@ -4654,32 +4628,18 @@ class _ParentStudentProgressDetailsDialog extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: Colors.white24,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 18, color: color),
-          ),
+          Icon(icon, size: 22, color: color),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                    color: AppColors.ink,
-                  ),
-                ),
+                Text(value, style: _display(20, weight: 800)),
                 Text(
                   label,
                   style: const TextStyle(
-                    fontSize: 10.5,
-                    color: AppColors.textMuted,
+                    fontSize: 12,
+                    color: AppColors.inkSoft,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
