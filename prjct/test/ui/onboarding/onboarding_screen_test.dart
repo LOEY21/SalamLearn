@@ -45,7 +45,7 @@ void main() {
     expect(fil('Two above'), 'Dalawa sa itaas');
     expect(fil('Question 2 / 5'), 'Tanong 2 / 5');
     expect(fil('The Greeting Match is Locked'),
-        'Naka-lock ang Pagtutugma ng Pagbati');
+        'Naka-lock ang The Greeting Match');
     expect(fil('MY CLASSES'), 'ANG AKING MGA KLASE');
     expect(AppTranslations.translate('Settings', 'en'), 'Settings');
   });

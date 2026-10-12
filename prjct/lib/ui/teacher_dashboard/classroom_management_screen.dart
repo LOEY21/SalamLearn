@@ -38,7 +38,10 @@ class _ClassroomManagementScreenState
 
   bool get _selecting => _selectedIds.isNotEmpty;
 
-  void _goBack(BuildContext context) => context.go('/teacher?tab=1');
+  // Opened on top of the hub: pop so this screen slides back out the way
+  // it came in. Reached any other way (deep link), fall back to the hub.
+  void _goBack(BuildContext context) =>
+      context.canPop() ? context.pop() : context.go('/teacher?tab=1');
 
   void _exitSelection() => setState(_selectedIds.clear);
 
@@ -294,7 +297,7 @@ class _ClassRow extends ConsumerWidget {
             .switchClass(section.id),
       );
     }
-    if (context.mounted) context.go('/teacher/classes/${section.id}');
+    if (context.mounted) context.push('/teacher/classes/${section.id}');
   }
 
   @override

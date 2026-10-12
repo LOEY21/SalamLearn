@@ -275,6 +275,29 @@ class ParentRepository {
   bool verifyPin(ParentAccount account, String candidate) =>
       CredentialHasher.verify(candidate, account.pinSalt, account.pinHash);
 
+  /// Settings "Personal information": the editable contact details. Email
+  /// stays as-is — it's the sign-in identity, tied to Firebase Auth.
+  Future<ParentAccount> updateProfile({
+    required ParentAccount account,
+    required String fullName,
+    required String? mobileNumber,
+  }) async {
+    final updated = ParentAccount(
+      id: account.id,
+      fullName: fullName,
+      email: account.email,
+      mobileNumber: mobileNumber,
+      passwordHash: account.passwordHash,
+      passwordSalt: account.passwordSalt,
+      pinHash: account.pinHash,
+      pinSalt: account.pinSalt,
+      createdAt: account.createdAt,
+      firebaseUid: account.firebaseUid,
+    );
+    await _box.put(account.id, updated);
+    return updated;
+  }
+
   /// Settings "Change PIN". Local only — PINs are never mirrored.
   Future<ParentAccount> updatePin({
     required ParentAccount account,

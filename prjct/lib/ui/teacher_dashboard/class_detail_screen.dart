@@ -48,6 +48,12 @@ class _ClassDetailScreenState extends ConsumerState<ClassDetailScreen> {
   }
 
   void _goBack() {
+    // Opened on top of the class list (or the hub's "See all"): pop so it
+    // slides back out the way it came in.
+    if (context.canPop()) {
+      context.pop();
+      return;
+    }
     final fromHome =
         GoRouterState.of(context).uri.queryParameters['from'] == 'home';
     context.go(fromHome ? '/teacher' : '/teacher/classes');

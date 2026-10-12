@@ -169,7 +169,7 @@ const allStudentBadges = <BadgeItem>[
     id: 'purification_pro',
     name: 'Purification Pro Badge',
     requirement:
-        'Complete the hygiene sorting game and master both parts of the Wudhu Sequence.',
+        'Master the full Wudhu Sequence in Taharah Adventure.',
     category: BadgeCategory.milestone,
     icon: Icons.water_drop_rounded,
     emoji: '💧',

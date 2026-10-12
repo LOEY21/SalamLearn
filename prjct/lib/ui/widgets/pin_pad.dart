@@ -2,10 +2,12 @@ import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../theme/app_colors.dart';
+import 'child_profile_form.dart' show displayText;
 
 /// 4-digit PIN pad — filled digit boxes (lift + accent border when filled)
-/// above a borderless circular numpad, floating free on white rather than
-/// inside a card. Shake + red boxes on wrong entry.
+/// above a numpad of white round keys on the cream canvas. Keys grow with
+/// the text size and the whole pad scales down to fit a narrow window.
+/// Shake + red boxes on wrong entry.
 class PinPad extends StatefulWidget {
   const PinPad({
     super.key,
@@ -65,6 +67,10 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    // Room for the digit at the reader's text size (capped so the pad stays
+    // a pad), then FittedBox shrinks the whole thing if the window is narrow.
+    final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.8);
+    final keySize = 72.0 * textScale;
     return FittedBox(
       fit: BoxFit.scaleDown,
       child: Column(
@@ -74,7 +80,11 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
             animation: _shake,
             builder: (context, child) {
               final t = _shake.value;
-              final dx = t == 0 ? 0.0 : (t * 4).floor().isEven ? 7.0 : -7.0;
+              final dx = t == 0
+                  ? 0.0
+                  : (t * 4).floor().isEven
+                  ? 7.0
+                  : -7.0;
               return Transform.translate(offset: Offset(dx, 0), child: child);
             },
             child: Row(
@@ -92,7 +102,7 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
               ],
             ),
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 28),
           for (final row in const [
             ['1', '2', '3'],
             ['4', '5', '6'],
@@ -100,17 +110,18 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
             ['', '0', '<'],
           ])
             Padding(
-              padding: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.only(bottom: 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   for (final key in row)
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 9),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
                       child: key.isEmpty
-                          ? const SizedBox(width: 76, height: 76)
+                          ? SizedBox(width: keySize, height: keySize)
                           : _PinKey(
                               label: key,
+                              size: keySize,
                               onTap: key == '<' ? _backspace : () => _tap(key),
                             ),
                     ),
@@ -143,13 +154,13 @@ class _PinBox extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       curve: Curves.easeOut,
-      width: 46,
-      height: 54,
+      width: 50,
+      height: 58,
       transform: Matrix4.translationValues(0, filled && !error ? -2 : 0, 0),
       decoration: BoxDecoration(
         color: error
             ? const Color(0xFFFEF2F2)
-            : (filled ? AppColors.surface : AppColors.neutralTint),
+            : (filled ? AppColors.surface : AppColors.creamDark),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: borderColor, width: 1.5),
         boxShadow: filled && !error
@@ -177,59 +188,42 @@ class _PinBox extends StatelessWidget {
   }
 }
 
-class _PinKey extends StatefulWidget {
-  const _PinKey({required this.label, required this.onTap});
+class _PinKey extends StatelessWidget {
+  const _PinKey({required this.label, required this.size, required this.onTap});
 
   final String label;
+  final double size;
   final VoidCallback onTap;
 
   @override
-  State<_PinKey> createState() => _PinKeyState();
-}
-
-class _PinKeyState extends State<_PinKey> {
-  bool _handledOnPointerDown = false;
-
-  @override
   Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: (_) {
-        _handledOnPointerDown = true;
-        widget.onTap();
-      },
-      onPointerCancel: (_) => _handledOnPointerDown = false,
-      child: Material(
-        color: Colors.transparent,
-        shape: const CircleBorder(),
-        child: InkWell(
-          onTap: () {
-            if (_handledOnPointerDown) {
-              _handledOnPointerDown = false;
-            } else {
-              widget.onTap();
-            }
-          },
-          onTapCancel: () => _handledOnPointerDown = false,
-          customBorder: const CircleBorder(),
-          child: SizedBox(
-            width: 76,
-            height: 76,
-            child: Center(
-              child: widget.label == '<'
-                  ? const Icon(
+    return Material(
+      color: label == '<' ? Colors.transparent : AppColors.surface,
+      shape: CircleBorder(
+        side: label == '<'
+            ? BorderSide.none
+            : const BorderSide(color: AppColors.creamBorder, width: 1.4),
+      ),
+      child: InkWell(
+        // Fires on tap-down for snappy entry, but only once the touch is
+        // known to be a tap — a drag that scrolls the page types nothing.
+        onTapDown: (_) => onTap(),
+        onTap: () {},
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Center(
+            child: label == '<'
+                ? Tooltip(
+                    message: 'Delete'.tr,
+                    child: const Icon(
                       Icons.backspace_outlined,
-                      color: AppColors.textMuted,
+                      color: AppColors.inkSoft,
                       size: 26,
-                    )
-                  : Text(
-                      widget.label,
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                      ),
                     ),
-            ),
+                  )
+                : Text(label, style: displayText(28, weight: 700, height: 1)),
           ),
         ),
       ),

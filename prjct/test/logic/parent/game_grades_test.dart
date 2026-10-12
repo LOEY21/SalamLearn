@@ -35,10 +35,10 @@ void main() {
     );
   });
 
-  test('curriculum groups into 12 games holding all 40 sessions', () {
+  test('curriculum groups into 12 games holding all 38 sessions', () {
     final games = curriculumGames();
     expect(games, hasLength(12));
-    expect(games.expand((g) => g.sessions), hasLength(40));
+    expect(games.expand((g) => g.sessions), hasLength(38));
     final tracer = games.firstWhere((g) => g.name == 'Magic Sand Tracer');
     expect(tracer.sessions.map((s) => sessionLabel(s.lesson)), [
       'Session 1 (Alif to Kha)',
@@ -48,11 +48,11 @@ void main() {
     ]);
   });
 
-  test('curriculum groups into 7 stages holding all 40 sessions', () {
+  test('curriculum groups into 7 stages holding all 38 sessions', () {
     final stages = curriculumStages();
     expect(stages, hasLength(7));
     expect(stages.every((s) => s.isStage), isTrue);
-    expect(stages.expand((s) => s.sessions), hasLength(40));
+    expect(stages.expand((s) => s.sessions), hasLength(38));
     expect(stages.first.name, 'Stage 1: Welcome to Madrasah');
   });
 

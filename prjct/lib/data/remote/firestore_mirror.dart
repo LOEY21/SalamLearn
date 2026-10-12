@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../local/hive_boxes.dart';
 import 'firebase_role_app.dart';
 import '../models/assigned_module.dart';
+import '../models/badge_award.dart';
 import '../models/class_section.dart';
 import '../models/consent_record.dart';
 import '../models/custom_lesson.dart';
@@ -331,6 +332,36 @@ class FirestoreMirror {
       subs.clear();
     };
     return controller.stream;
+  }
+
+  Future<void> pushBadge(BadgeAward award) {
+    return _db
+        .collection(HiveBoxes.badges)
+        .doc('${award.learnerId}:${award.badgeId}')
+        .set({
+          'learnerId': award.learnerId,
+          'badgeId': award.badgeId,
+          'earnedAt': award.earnedAt.toIso8601String(),
+        });
+  }
+
+  /// Read side of [pushBadge] — so a learner's Backpack follows them to
+  /// another device the same way their progress records do.
+  Future<List<BadgeAward>> fetchBadgesForLearner(String learnerId) async {
+    final snapshot = await _db
+        .collection(HiveBoxes.badges)
+        .where('learnerId', isEqualTo: learnerId)
+        .get();
+    return [
+      for (final doc in snapshot.docs)
+        BadgeAward(
+          learnerId: doc.data()['learnerId'] as String? ?? learnerId,
+          badgeId: doc.data()['badgeId'] as String? ?? '',
+          earnedAt:
+              DateTime.tryParse(doc.data()['earnedAt'] as String? ?? '') ??
+              DateTime.now(),
+        ),
+    ];
   }
 
   ProgressRecord _progressFromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {

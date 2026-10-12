@@ -290,6 +290,31 @@ class TeacherRepository {
   bool verifyPin(TeacherAccount account, String candidate) =>
       CredentialHasher.verify(candidate, account.pinSalt, account.pinHash);
 
+  /// See `ParentRepository.updateProfile` — plus the teacher's school.
+  Future<TeacherAccount> updateProfile({
+    required TeacherAccount account,
+    required String fullName,
+    required String? mobileNumber,
+    required String? school,
+  }) async {
+    final updated = TeacherAccount(
+      id: account.id,
+      fullName: fullName,
+      school: school,
+      email: account.email,
+      mobileNumber: mobileNumber,
+      passwordHash: account.passwordHash,
+      passwordSalt: account.passwordSalt,
+      pinHash: account.pinHash,
+      pinSalt: account.pinSalt,
+      createdAt: account.createdAt,
+      firebaseUid: account.firebaseUid,
+      verificationStatus: account.verificationStatus,
+    );
+    await _box.put(account.id, updated);
+    return updated;
+  }
+
   /// Settings "Change PIN". Local only — PINs are never mirrored.
   Future<TeacherAccount> updatePin({
     required TeacherAccount account,

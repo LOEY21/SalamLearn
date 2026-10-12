@@ -124,6 +124,9 @@ double _once(double t, double dur, [double delay = 0]) =>
 
 FontWeight _fw(double w) => FontWeight.values[(w / 100).round() - 1];
 
+/// I'm ready's dark-brown lettering, as on the button art.
+const _kReadyInk = Color(0xFF441800);
+
 TextStyle _baloo(
   double size,
   double weight,
@@ -1291,11 +1294,44 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                 Positioned.fill(
                   child: Image.asset('$_kA/howto_panel.png', fit: BoxFit.fill),
                 ),
+                // Each step's words, written beside its picture on the
+                // art's step card so they follow the app language.
+                for (final (top, bottom, text) in const [
+                  (.385, .487, 'Listen to the full ayah first.'),
+                  (.566, .663, 'Tap a card to hear its word.'),
+                  (.736, .871, 'Drag the words into the correct order.'),
+                ])
+                  Positioned(
+                    left: panelW * .565,
+                    width: panelW * (.915 - .565),
+                    top: panelH * top,
+                    height: panelH * (bottom - top),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: SizedBox(
+                          width: panelW * (.915 - .565),
+                          child: Text(
+                            text,
+                            style: _baloo(
+                              14,
+                              700,
+                              const Color(0xFF082879),
+                              height: 1.15,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 // The board's empty teal bar spans 11%-92% across and
-                // 91%-98.6% down the art.
+                // 91%-98.6% down the art; the text keeps clear of the
+                // stars at its two ends (they reach 17.8% and 82.1%).
                 Positioned(
-                  left: panelW * .109,
-                  width: panelW * (.922 - .109),
+                  left: panelW * .2,
+                  width: panelW * (.8 - .2),
                   top: panelH * .910,
                   height: panelH * (.986 - .910),
                   child: Center(
@@ -1338,11 +1374,47 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
                 fromScale: .6,
                 _Press(
                   onTap: _onReady,
-                  builder: (pressed) => Image.asset(
-                    '$_kA/btn_ready_${pressed ? 'down' : 'up'}.png',
-                    fit: BoxFit.fill,
-                    gaplessPlayback: true,
-                    semanticLabel: "I'm ready",
+                  builder: (pressed) => Semantics(
+                    button: true,
+                    label: "I'm ready".tr,
+                    excludeSemantics: true,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.asset(
+                          '$_kA/btn_ready_${pressed ? 'down' : 'up'}.png',
+                          fit: BoxFit.fill,
+                          gaplessPlayback: true,
+                        ),
+                        // The label sits a touch lower on the pressed art.
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            48,
+                            pressed ? 10 : 7,
+                            48,
+                            pressed ? 8 : 11,
+                          ),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  "I'm ready",
+                                  style: _baloo(28, 800, _kReadyInk),
+                                ),
+                                const SizedBox(width: 10),
+                                const Icon(
+                                  Icons.arrow_forward_rounded,
+                                  size: 28,
+                                  color: _kReadyInk,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1528,11 +1600,57 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
               fromScale: .6,
               _Press(
                 onTap: _onSkipToPuzzle,
-                builder: (pressed) => Image.asset(
-                  '$_kA/btn_start_building_${pressed ? 'down' : 'up'}.png',
-                  fit: BoxFit.fill,
-                  gaplessPlayback: true,
-                  semanticLabel: 'Start building',
+                builder: (pressed) => Semantics(
+                  button: true,
+                  label: 'Start building'.tr,
+                  excludeSemantics: true,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.asset(
+                        '$_kA/btn_start_building_${pressed ? 'down' : 'up'}.png',
+                        fit: BoxFit.fill,
+                        gaplessPlayback: true,
+                      ),
+                      // Between the art's sparkles; a touch lower and
+                      // narrower on the pressed frame.
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          pressed ? 68 : 62,
+                          pressed ? 17 : 16,
+                          pressed ? 62 : 60,
+                          pressed ? 12 : 13,
+                        ),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Stack(
+                            children: [
+                              Text(
+                                'Start building',
+                                style: TextStyle(
+                                  fontFamily: 'Baloo2Var',
+                                  fontSize: 24,
+                                  fontWeight: _fw(800),
+                                  fontVariations: [
+                                    ui.FontVariation.weight(800),
+                                  ],
+                                  foreground: Paint()
+                                    ..style = PaintingStyle.stroke
+                                    ..strokeWidth = 5
+                                    ..strokeJoin = StrokeJoin.round
+                                    ..color = const Color(0xFF0B2A6E),
+                                ),
+                              ),
+                              Text(
+                                'Start building',
+                                style: _baloo(24, 800, Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

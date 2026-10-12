@@ -7,8 +7,8 @@ import '../widgets/route_entrance.dart';
 import '../../logic/auth/session.dart';
 import '../theme/app_colors.dart';
 import '../widgets/pin_pad.dart';
-import '../widgets/role_icons.dart';
 import 'forgot_pin_sheet.dart';
+import 'pin_gate_frame.dart';
 
 class PinVerifyScreen extends ConsumerStatefulWidget {
   const PinVerifyScreen({super.key});
@@ -57,7 +57,13 @@ class _PinVerifyScreenState extends ConsumerState<PinVerifyScreen>
         return;
       }
       if (redirect.contains('/parent') || redirect.contains('/teacher')) {
-        context.go('/roles');
+        // Opened on top of the role picker: pop so this screen slides back
+        // out the way it came in, revealing the picker underneath.
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go('/roles');
+        }
         return;
       }
     }
@@ -68,30 +74,29 @@ class _PinVerifyScreenState extends ConsumerState<PinVerifyScreen>
   @override
   Widget build(BuildContext context) {
     final role = ref.watch(
-        sessionProvider.select((s) => s.activeRole ?? UserRole.parent));
+      sessionProvider.select((s) => s.activeRole ?? UserRole.parent),
+    );
     final redirect = GoRouterState.of(context).uri.queryParameters['redirect'];
 
     final isTeacher = role == UserRole.asatidz;
     final isParent = role == UserRole.parent;
     final isLearner = role == UserRole.learner;
-    final accentColor = (isTeacher || isLearner) ? AppColors.gold : AppColors.teal;
+    final accentColor = (isTeacher || isLearner)
+        ? AppColors.gold
+        : AppColors.teal;
 
     String headingText;
     String subtitleText;
-    String roleLabel;
 
     if (isTeacher) {
       headingText = 'Asatidz PIN Gate';
       subtitleText = 'Enter your 4-digit PIN to open the Teacher Dashboard';
-      roleLabel = 'TEACHER GATE';
     } else if (isParent) {
       headingText = 'Parent PIN Gate';
       subtitleText = 'Enter your 4-digit PIN to open the Parent Dashboard';
-      roleLabel = 'PARENT GATE';
     } else {
       headingText = 'Enter 4-digit PIN';
       subtitleText = 'This unlocks settings and grown-up areas';
-      roleLabel = 'LEARNER GATE';
     }
 
     return PopScope(
@@ -99,215 +104,68 @@ class _PinVerifyScreenState extends ConsumerState<PinVerifyScreen>
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) _handleBack(redirect, role);
       },
-      child: Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 14, 18, 0),
-              child: Row(
-                children: [
-                  _BackButton(onTap: () => _handleBack(redirect, role)),
-                  Expanded(
-                    child: Text(
-                      roleLabel,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.6,
-                        color: AppColors.textMuted,
+      child: PinGateFrame(
+        role: role,
+        title: headingText,
+        subtitle: subtitleText,
+        spin: _spin,
+        onBack: () => _handleBack(redirect, role),
+        pad: PinPad(
+          accentColor: accentColor,
+          onSubmit: (pin) {
+            final ok = ref.read(sessionProvider.notifier).verifyPin(pin);
+            if (ok) {
+              context.go(
+                redirect ?? (role == UserRole.asatidz ? '/teacher' : '/parent'),
+              );
+            }
+            return ok;
+          },
+        ),
+        footer: [
+          if (!isLearner)
+            TextButton(
+              key: const ValueKey('forgot-pin'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.inkSoft,
+                minimumSize: const Size(0, 48),
+              ),
+              onPressed: () async {
+                final done = await showForgotPinSheet(
+                  context,
+                  accentColor: accentColor,
+                );
+                if (done && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'PIN updated. Enter your new PIN to continue.',
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 34),
-                ],
-              ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 340),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 10),
-                        _RoleRingHero(role: role, spin: _spin),
-                        const SizedBox(height: 24),
-                        Text(
-                          headingText,
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.ink,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          subtitleText,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 12.5,
-                            color: AppColors.textMuted,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 28),
-                        PinPad(
-                          accentColor: accentColor,
-                          onSubmit: (pin) {
-                            final ok = ref
-                                .read(sessionProvider.notifier)
-                                .verifyPin(pin);
-                            if (ok) {
-                              context.go(redirect ??
-                                  (role == UserRole.asatidz
-                                      ? '/teacher'
-                                      : '/parent'));
-                            }
-                            return ok;
-                          },
-                        ),
-                        if (!isLearner) ...[
-                          const SizedBox(height: 8),
-                          TextButton(
-                            key: const ValueKey('forgot-pin'),
-                            onPressed: () async {
-                              final done = await showForgotPinSheet(
-                                context,
-                                accentColor: accentColor,
-                              );
-                              if (done && context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'PIN updated. Enter your new PIN to continue.',
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                            child: const Text(
-                              'Forgot PIN?',
-                              style: TextStyle(
-                                color: AppColors.textMuted,
-                                fontWeight: FontWeight.w700,
-                                decoration: TextDecoration.underline,
-                              ),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 12),
-                        TextButton(
-                          onPressed: () => _handleBack(redirect, role),
-                          child: Text(
-                            'Cancel — back to Student Hub',
-                            style: TextStyle(
-                              color: accentColor,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  );
+                }
+              },
+              child: const Text(
+                'Forgot PIN?',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                  decoration: TextDecoration.underline,
                 ),
               ),
             ),
-          ],
-        ),
-      ),
-      ),
-    );
-  }
-}
-
-class _BackButton extends StatelessWidget {
-  const _BackButton({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.creamBorder, width: 1.4),
-          ),
-          child: const Icon(Icons.arrow_back, color: AppColors.ink, size: 18),
-        ),
-      ),
-    );
-  }
-}
-
-/// Rotating conic-gradient ring around a white icon disc — the ring's
-/// motion is the "locked" affordance, replacing the old static pulse +
-/// coral lock badge.
-class _RoleRingHero extends StatelessWidget {
-  const _RoleRingHero({required this.role, required this.spin});
-
-  final UserRole role;
-  final Animation<double> spin;
-
-  @override
-  Widget build(BuildContext context) {
-    final isLearner = role == UserRole.learner;
-    final isTeacher = role == UserRole.asatidz;
-    final primaryColor =
-        isTeacher ? AppColors.gold : (isLearner ? AppColors.gold : AppColors.teal);
-    final primaryColor2 = isTeacher || isLearner
-        ? const Color(0xFFF7C25A)
-        : const Color(0xFF14A17F);
-
-    Widget getIcon(Color color, double size) {
-      if (isTeacher) return graduationCapIcon(color, size: size);
-      if (isLearner) return backpackIcon(color, size: size);
-      return familyIcon(color, size: size);
-    }
-
-    return SizedBox(
-      width: 108,
-      height: 108,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          AnimatedBuilder(
-            animation: spin,
-            builder: (context, child) => Transform.rotate(
-              angle: spin.value * 6.28319,
-              child: child,
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.tealDark,
+              minimumSize: const Size(0, 48),
             ),
-            child: Container(
-              width: 108,
-              height: 108,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: SweepGradient(
-                  colors: [primaryColor, primaryColor2, primaryColor],
-                ),
-              ),
+            onPressed: () => _handleBack(redirect, role),
+            child: const Text(
+              'Cancel — back to Student Hub',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
             ),
-          ),
-          Container(
-            width: 92,
-            height: 92,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white,
-            ),
-            alignment: Alignment.center,
-            child: getIcon(primaryColor, 36),
           ),
         ],
       ),

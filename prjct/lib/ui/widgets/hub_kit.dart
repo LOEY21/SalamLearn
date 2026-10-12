@@ -205,11 +205,23 @@ class HubHeader extends StatelessWidget {
                   duration: const Duration(milliseconds: 200),
                   layoutBuilder: (current, previous) => Stack(
                     alignment: Alignment.centerLeft,
-                    children: [...previous, ?current],
+                    children: [
+                      Opacity(
+                        opacity: 0,
+                        child: Text(
+                          ' \n ',
+                          style: displayText(24, weight: 800),
+                        ),
+                      ),
+                      ...previous,
+                      ?current,
+                    ],
                   ),
                   child: Text(
                     title,
                     key: ValueKey(title),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: fitLongestWord(
                       context,
                       title,

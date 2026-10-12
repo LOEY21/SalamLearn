@@ -1252,6 +1252,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
       fit: BoxFit.fill,
     );
     return Semantics(
+      container: true,
       button: true,
       label: semantics,
       excludeSemantics: label != null,
@@ -1724,20 +1725,23 @@ class _CreationHuntGameState extends State<CreationHuntGame>
                   fit: BoxFit.fill,
                 ),
                 Positioned(
-                  left: plateW * 0.31,
-                  right: plateW * 0.11,
+                  left: plateW * 0.33,
+                  right: plateW * 0.19,
                   top: 0,
                   bottom: 0,
                   child: Center(
-                    child: Text(
-                      'Found: ${_found.length}/$_total',
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      style: _t(
-                        20,
-                        FontWeight.w800,
-                        _creamBright,
-                        shadow: true,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Found: ${_found.length}/$_total',
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        style: _t(
+                          20,
+                          FontWeight.w800,
+                          _creamBright,
+                          shadow: true,
+                        ),
                       ),
                     ),
                   ),
@@ -2142,15 +2146,29 @@ class _CreationHuntGameState extends State<CreationHuntGame>
                       height: keepW / 3,
                       child: _pressImage(
                         pressed: _keepPressed,
-                        up: '$_kA/btn_keephunt_up.png',
-                        down: '$_kA/btn_keephunt_down.png',
+                        up: '$_kA/btn_keephunt_blank_up.png',
+                        down: '$_kA/btn_keephunt_blank_down.png',
                         width: keepW,
                         height: keepW / 3,
                         pressedScale: 0.95,
                         onDown: () => setState(() => _keepPressed = true),
                         onUp: () => setState(() => _keepPressed = false),
                         onTap: _closeReveal,
-                        semantics: 'Keep hunting',
+                        semantics: 'Keep hunting'.tr,
+                        label: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            keepW * 0.14,
+                            keepW / 3 * 0.24,
+                            keepW * 0.14,
+                            keepW / 3 * 0.28,
+                          ),
+                          child: const _OutlinedLabel(
+                            'Keep hunting',
+                            size: 26,
+                            fill: Colors.white,
+                            stroke: Color(0xFF1D6B12),
+                          ),
+                        ),
                       ),
                     ),
                   if (!right)
@@ -2161,15 +2179,29 @@ class _CreationHuntGameState extends State<CreationHuntGame>
                       height: tryW / 3,
                       child: _pressImage(
                         pressed: _keepPressed,
-                        up: '$_kA/btn_tryagain_up.png',
-                        down: '$_kA/btn_tryagain_down.png',
+                        up: '$_kA/btn_tryagain_blank_up.png',
+                        down: '$_kA/btn_tryagain_blank_down.png',
                         width: tryW,
                         height: tryW / 3,
                         pressedScale: 0.95,
                         onDown: () => setState(() => _keepPressed = true),
                         onUp: () => setState(() => _keepPressed = false),
                         onTap: _closeReveal,
-                        semantics: 'Try again',
+                        semantics: 'Try again'.tr,
+                        label: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            tryW * 0.14,
+                            tryW / 3 * 0.26,
+                            tryW * 0.14,
+                            tryW / 3 * 0.26,
+                          ),
+                          child: const _OutlinedLabel(
+                            'Try again',
+                            size: 26,
+                            fill: Colors.white,
+                            stroke: Color(0xFF7A3E0E),
+                          ),
+                        ),
                       ),
                     ),
                 ],

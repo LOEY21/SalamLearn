@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 import 'greeting_match_audio.dart';
+import '../../widgets/arc_text_painter.dart';
 
 enum _Screen { start, howTo, countdown, play, done }
 
@@ -915,31 +916,30 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                               ),
                             ),
                             Positioned(
+                              // Centred on the ribbon's blue face (art
+                              // rows 810-930 of 1008, i.e. y 358-412 here).
                               left: 84,
                               right: 84,
-                              top: 368,
-                              bottom: 20,
-                              child: Center(
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    widget.session.title,
-                                    textAlign: TextAlign.center,
-                                    maxLines: 1,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 27,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 0.3,
-                                      shadows: [
-                                        Shadow(
-                                          color: Color(0xCC0B2A7A),
-                                          offset: Offset(0, 2),
-                                          blurRadius: 3,
-                                        ),
-                                      ],
-                                    ),
+                              top: 356,
+                              bottom: 32,
+                              // Bent along the ribbon's own arch.
+                              child: CustomPaint(
+                                painter: ArcTextPainter(
+                                  widget.session.title.tr,
+                                  const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 27,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.3,
+                                    shadows: [
+                                      Shadow(
+                                        color: Color(0xCC0B2A7A),
+                                        offset: Offset(0, 2),
+                                        blurRadius: 3,
+                                      ),
+                                    ],
                                   ),
+                                  radius: 990,
                                 ),
                               ),
                             ),
@@ -1142,9 +1142,18 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                     Positioned(
                       left: 30,
                       top: 10,
-                      child: _reveal(
-                        _TitleBadge(title: widget.session.title),
-                        dy: -0.4,
+                      // Stops short of the stars bar so a long title
+                      // shrinks instead of running underneath it.
+                      width:
+                          (canvasW - _StarsBar.widthFor(_questions.length)) /
+                              2 -
+                          46,
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: _reveal(
+                          _TitleBadge(title: widget.session.title),
+                          dy: -0.4,
+                        ),
                       ),
                     ),
                     Positioned(
@@ -1515,17 +1524,20 @@ class _TitleBadge extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _word(
-              'Greetings',
-              const Color(0xFF26A146),
-              const Color(0xFF0D5222),
-            ),
-            const SizedBox(width: 14),
-            _word('Match', const Color(0xFFFF9A1F), const Color(0xFF9A4A00)),
-          ],
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _word(
+                'Greetings',
+                const Color(0xFF26A146),
+                const Color(0xFF0D5222),
+              ),
+              const SizedBox(width: 14),
+              _word('Match', const Color(0xFFFF9A1F), const Color(0xFF9A4A00)),
+            ],
+          ),
         ),
         Transform.translate(
           offset: const Offset(0, -8),
@@ -1533,16 +1545,20 @@ class _TitleBadge extends StatelessWidget {
             painter: const _RibbonPainter(),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(64, 8, 64, 12),
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontFamily: _kUiFont,
-                  fontSize: 30,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                  shadows: [
-                    Shadow(color: Color(0x80093A16), offset: Offset(0, 2)),
-                  ],
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontFamily: _kUiFont,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    shadows: [
+                      Shadow(color: Color(0x80093A16), offset: Offset(0, 2)),
+                    ],
+                  ),
                 ),
               ),
             ),

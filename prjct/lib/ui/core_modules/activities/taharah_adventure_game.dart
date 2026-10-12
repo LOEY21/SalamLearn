@@ -9,6 +9,7 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 import 'taharah_wudhu_audio.dart';
+import '../../widgets/arc_text_painter.dart';
 
 /// Taharah Adventure — ported 1:1 from the supplied "Taharah Adventure"
 /// prototypes:
@@ -19,6 +20,8 @@ import 'taharah_wudhu_audio.dart';
 ///   hands, mouth, nose, face and arms in order.
 /// * [TaharahSession.wudhuPart2] — Session 3, Wudhu Part 2: left arm, head,
 ///   ears, right foot, left foot.
+/// * [TaharahSession.wudhu] — the whole wudhu, all ten steps in one session.
+///   This is the one the curriculum plays (Cleanliness & Character).
 ///
 /// The prototypes are authored against a fixed 390x844 phone frame, so each
 /// screen is laid out inside that virtual stage and scaled to fit, while the
@@ -61,6 +64,13 @@ class TaharahAdventureGame extends StatelessWidget {
     ),
     TaharahSession.wudhuPart2 => _Wudhu(
       part: _kPart2,
+      xp: xp,
+      onComplete: onComplete,
+      onEnding: onEnding,
+      onExit: onExit,
+    ),
+    TaharahSession.wudhu => _Wudhu(
+      part: _kWudhuFull,
       xp: xp,
       onComplete: onComplete,
       onEnding: onEnding,
@@ -3541,6 +3551,131 @@ class _WPart {
   final List<_Zone> rings;
 }
 
+const _kSteps1 = [
+  _WStep(
+    'hands',
+    1,
+    'Wash Hands',
+    'hands',
+    '$_kA/boy-hands.png',
+    'Mumtaz! Hands washed.',
+  ),
+  _WStep(
+    'mouth',
+    2,
+    'Rinse Mouth',
+    'mouth',
+    '$_kA/boy-mouth.png',
+    'Mumtaz! Mouth rinsed.',
+  ),
+  _WStep(
+    'nose',
+    3,
+    'Rinse Nose',
+    'nose',
+    '$_kA/boy-nose.png',
+    'Mumtaz! Nose rinsed.',
+  ),
+  _WStep(
+    'face',
+    4,
+    'Wash Face',
+    'face',
+    '$_kA/boy-face.png',
+    'Mumtaz! Face washed.',
+  ),
+  _WStep(
+    'right_arm',
+    5,
+    'Wash Right Arm',
+    'right arm',
+    '$_kA/boy-rightarm.png',
+    'Mumtaz! Right arm washed.',
+  ),
+];
+
+const _kSteps2 = [
+  _WStep(
+    'left_arm',
+    6,
+    'Wash Left Arm',
+    'left arm',
+    '$_kA/boy-arms.png',
+    'Mumtaz! Left arm washed.',
+  ),
+  _WStep(
+    'head',
+    7,
+    'Wipe Head',
+    'head',
+    '$_kA/boy-head.png',
+    'Mumtaz! Head wiped.',
+  ),
+  _WStep(
+    'ears',
+    8,
+    'Wipe Ears',
+    'ears',
+    '$_kA/boy-ears.png',
+    'Mumtaz! Ears wiped.',
+  ),
+  _WStep(
+    'right_foot',
+    9,
+    'Wash Right Foot',
+    'right foot',
+    '$_kA/boy-leftfoot.png',
+    'Mumtaz! Right foot washed.',
+  ),
+  _WStep(
+    'left_foot',
+    10,
+    'Wash Left Foot',
+    'left foot',
+    '$_kA/boy-rightfoot.png',
+    'Mumtaz! Left foot washed. Wudhu complete!',
+  ),
+];
+
+// Circles measured on boy-stand.png (canvas px): face, his right forearm
+// (screen left, since he faces us), hands, nose, mouth. Later zones sit on
+// top, so nose/mouth win over the face.
+const _kZones1 = [
+  _Zone.circle('face', 497, 425, 190),
+  _Zone.circle('right_arm', 282, 868, 80),
+  _Zone.circle('hands', 257, 985, 86),
+  _Zone.circle('hands', 749, 988, 86),
+  _Zone.circle('nose', 488, 440, 36),
+  _Zone.circle('mouth', 490, 508, 52),
+];
+const _kRings1 = [
+  _Zone.circle('hands', 257, 985, 82),
+  _Zone.circle('hands', 749, 988, 82),
+  _Zone.circle('mouth', 490, 503, 62),
+  _Zone.circle('nose', 488, 444, 38),
+  _Zone.circle('face', 497, 425, 185),
+  _Zone.circle('right_arm', 282, 868, 72),
+];
+
+// Circles measured on boy-stand.png (canvas px): forearm, head, ears,
+// feet. Sides follow the art as the prototype had them.
+const _kZones2 = [
+  _Zone.circle('left_arm', 725, 868, 80),
+  _Zone.circle('head', 507, 175, 160),
+  _Zone.circle('ears', 287, 445, 62),
+  _Zone.circle('ears', 712, 452, 62),
+  _Zone.circle('right_foot', 355, 1395, 115),
+  _Zone.circle('left_foot', 670, 1395, 115),
+];
+const _kRings2 = [
+  _Zone.circle('left_arm', 725, 868, 72),
+  _Zone.circle('head', 507, 175, 155),
+  _Zone.circle('ears', 287, 445, 60),
+  _Zone.circle('ears', 712, 452, 60),
+  _Zone.circle('right_foot', 355, 1395, 112),
+  _Zone.circle('left_foot', 670, 1395, 112),
+];
+
 const _kPart1 = _WPart(
   sessionNo: 2,
   stage: 5,
@@ -3555,67 +3690,12 @@ const _kPart1 = _WPart(
   doneLine: 'You learned Wudhu Part 1',
   firstAsk: 'What should I wash first?',
   lastAsk: "Last step! Let's do it.",
-  steps: [
-    _WStep(
-      'hands',
-      1,
-      'Wash Hands',
-      'hands',
-      '$_kA/boy-hands.png',
-      'Mumtaz! Hands washed.',
-    ),
-    _WStep(
-      'mouth',
-      2,
-      'Rinse Mouth',
-      'mouth',
-      '$_kA/boy-mouth.png',
-      'Mumtaz! Mouth rinsed.',
-    ),
-    _WStep(
-      'nose',
-      3,
-      'Rinse Nose',
-      'nose',
-      '$_kA/boy-nose.png',
-      'Mumtaz! Nose rinsed.',
-    ),
-    _WStep(
-      'face',
-      4,
-      'Wash Face',
-      'face',
-      '$_kA/boy-face.png',
-      'Mumtaz! Face washed.',
-    ),
-    _WStep(
-      'right_arm',
-      5,
-      'Wash Right Arm',
-      'right arm',
-      '$_kA/boy-rightarm.png',
-      'Mumtaz! Right arm washed. Part 1 complete!',
-    ),
-  ],
+  steps: _kSteps1,
   // Circles measured on boy-stand.png (canvas px): face, his right forearm
   // (screen left, since he faces us), hands, nose, mouth. Later zones sit on
   // top, so nose/mouth win over the face.
-  zones: [
-    _Zone.circle('face', 497, 425, 190),
-    _Zone.circle('right_arm', 282, 868, 80),
-    _Zone.circle('hands', 257, 985, 86),
-    _Zone.circle('hands', 749, 988, 86),
-    _Zone.circle('nose', 488, 440, 36),
-    _Zone.circle('mouth', 490, 508, 52),
-  ],
-  rings: [
-    _Zone.circle('hands', 257, 985, 82),
-    _Zone.circle('hands', 749, 988, 82),
-    _Zone.circle('mouth', 490, 503, 62),
-    _Zone.circle('nose', 488, 444, 38),
-    _Zone.circle('face', 497, 425, 185),
-    _Zone.circle('right_arm', 282, 868, 72),
-  ],
+  zones: _kZones1,
+  rings: _kRings1,
 );
 
 // The prototype pairs "right foot" with boy-leftfoot.png and vice versa —
@@ -3633,66 +3713,33 @@ const _kPart2 = _WPart(
   doneLine: 'Your wudhu is complete',
   firstAsk: 'What comes next in wudhu?',
   lastAsk: "Last step! Let's finish.",
-  steps: [
-    _WStep(
-      'left_arm',
-      6,
-      'Wash Left Arm',
-      'left arm',
-      '$_kA/boy-arms.png',
-      'Mumtaz! Left arm washed.',
-    ),
-    _WStep(
-      'head',
-      7,
-      'Wipe Head',
-      'head',
-      '$_kA/boy-head.png',
-      'Mumtaz! Head wiped.',
-    ),
-    _WStep(
-      'ears',
-      8,
-      'Wipe Ears',
-      'ears',
-      '$_kA/boy-ears.png',
-      'Mumtaz! Ears wiped.',
-    ),
-    _WStep(
-      'right_foot',
-      9,
-      'Wash Right Foot',
-      'right foot',
-      '$_kA/boy-leftfoot.png',
-      'Mumtaz! Right foot washed.',
-    ),
-    _WStep(
-      'left_foot',
-      10,
-      'Wash Left Foot',
-      'left foot',
-      '$_kA/boy-rightfoot.png',
-      'Mumtaz! Left foot washed. Wudhu complete!',
-    ),
-  ],
+  steps: _kSteps2,
   // Circles measured on boy-stand.png (canvas px): forearm, head, ears,
   // feet. Sides follow the art as the prototype had them.
-  zones: [
-    _Zone.circle('left_arm', 725, 868, 80),
-    _Zone.circle('head', 507, 175, 160),
-    _Zone.circle('ears', 287, 445, 62),
-    _Zone.circle('ears', 712, 452, 62),
-    _Zone.circle('right_foot', 355, 1395, 115),
-    _Zone.circle('left_foot', 670, 1395, 115),
-  ],
-  rings: [
-    _Zone.circle('left_arm', 725, 868, 72),
-    _Zone.circle('head', 507, 175, 155),
-    _Zone.circle('ears', 287, 445, 60),
-    _Zone.circle('ears', 712, 452, 60),
-    _Zone.circle('right_foot', 355, 1395, 112),
-    _Zone.circle('left_foot', 670, 1395, 112),
-  ],
+  zones: _kZones2,
+  rings: _kRings2,
+);
+
+/// The whole wudhu as one session — Part 1's five steps, then Part 2's.
+/// Part 2's zones go underneath, so where the head and ears touch the face
+/// circle the face (and nose/mouth on top of it) still win.
+const _kWudhuFull = _WPart(
+  sessionNo: 1,
+  stage: 5,
+  title: 'Wudhu',
+  range: 'Steps 1 to 10',
+  startBoy: '$_kA/boy-cheer.png',
+  instructBoy: '$_kA/boy-cheer2.png',
+  goal: 'Learning goal: demonstrate the steps of wudhu in the correct order.',
+  instruction:
+      'Tap the body parts in the correct order to complete wudhu. There are 10 steps!',
+  playLabel: 'Start Wudhu',
+  doneLine: 'Your wudhu is complete',
+  firstAsk: 'What should I wash first?',
+  lastAsk: "Last step! Let's finish.",
+  steps: [..._kSteps1, ..._kSteps2],
+  zones: [..._kZones2, ..._kZones1],
+  rings: [..._kRings2, ..._kRings1],
 );
 
 /// Figure box: `top: 150px; bottom: 108px; aspect-ratio: 1024 / 1536`.
@@ -4041,14 +4088,19 @@ class _WudhuState extends State<_Wudhu> {
                           fit: StackFit.expand,
                           children: [
                             Image.asset('$_kA/s2_logo.png', fit: BoxFit.fill),
-                            // Bent along the plank's own arch.
+                            // Bent along the plank's own arch, centred on
+                            // the plank (midway between its nails, art x
+                            // 668 of 1300) rather than on the whole logo.
                             Align(
-                              alignment: const Alignment(0, .73),
+                              alignment: const Alignment(
+                                (668 / 1300 * 685 - 685 / 2) / ((685 - 270) / 2),
+                                .73,
+                              ),
                               child: SizedBox(
                                 width: 270,
                                 height: 50,
                                 child: CustomPaint(
-                                  painter: _ArcTextPainter(
+                                  painter: ArcTextPainter(
                                     'Cleanliness & Wudhu'.tr,
                                     _baloo(38, const Color(0xFF5A2A0E)),
                                     radius: 800,
@@ -4255,29 +4307,44 @@ class _WudhuState extends State<_Wudhu> {
       duration: Duration(milliseconds: total),
       builder: (t, _) {
         final ms = t * total;
-        return IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < _steps.length; i++) ...[
-                if (i > 0) const SizedBox(width: 7),
-                Expanded(
-                  child: _rise(
-                    const Duration(milliseconds: 420),
-                    delay: Duration(milliseconds: 180 + 90 * i),
-                    _stepTile(
-                      _steps[i],
-                      glow: math.sin(
-                        math.pi *
-                            ((ms - _kTourStart - i * _kTourStep) / _kTourStep)
-                                .clamp(0.0, 1.0),
-                      ),
-                    ),
+        Widget tile(int i) => _rise(
+          const Duration(milliseconds: 420),
+          delay: Duration(milliseconds: 180 + 90 * i),
+          _stepTile(
+            _steps[i],
+            glow: math.sin(
+              math.pi *
+                  ((ms - _kTourStart - i * _kTourStep) / _kTourStep).clamp(
+                    0.0,
+                    1.0,
                   ),
-                ),
-              ],
-            ],
+            ),
           ),
+        );
+        // Five tiles to a row, so the full ten-step wudhu wraps onto a
+        // second row instead of squeezing every label.
+        const perRow = 5;
+        return Column(
+          children: [
+            for (var r = 0; r * perRow < _steps.length; r++) ...[
+              if (r > 0) const SizedBox(height: 10),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var c = 0; c < perRow; c++) ...[
+                      if (c > 0) const SizedBox(width: 7),
+                      Expanded(
+                        child: r * perRow + c < _steps.length
+                            ? tile(r * perRow + c)
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ],
         );
       },
     );
@@ -4669,27 +4736,64 @@ class _WudhuState extends State<_Wudhu> {
         final w = 1024 * k * sc;
         final h = 1536 * k * sc;
         final figure = _figureBox(w, h);
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            const _LiveWashroom(),
-            _ceilingLight(),
-            _runningTaps(sc, dx, dy),
-            Positioned(
-              left: dx + left * sc,
-              top: dy + top * sc,
-              width: w,
-              height: h,
-              child: _toast != null && !_toast!.good
-                  ? _shake(
-                      const Duration(milliseconds: 400),
-                      figure,
-                      key: ValueKey('shake$_shakeN'),
-                      times: _shakeN,
-                    )
-                  : figure,
-            ),
-          ],
+        // Face steps: the camera pushes in on his face and glides it to the
+        // middle of the screen, so the small circles there are easy to see
+        // and to tap. The whole room moves with him; the HUD on top doesn't.
+        // While he acts out the step just answered, the camera holds on that
+        // step; it only moves for the next one once the pose is over.
+        final active = _pose != null && _idx > 0
+            ? _steps[_idx - 1].id
+            : _idx < _steps.length
+            ? _steps[_idx].id
+            : null;
+        final face = Offset(
+          dx + left * sc + w * _kFaceAt.dx,
+          dy + top * sc + h * _kFaceAt.dy,
+        );
+        final centre = Offset(box.maxWidth / 2, box.maxHeight * .5);
+        return TweenAnimationBuilder<double>(
+          tween: Tween(end: _kFaceSteps.contains(active) ? 1 : 0),
+          duration: const Duration(milliseconds: 650),
+          curve: Curves.easeInOutCubic,
+          builder: (context, z, child) {
+            final s = 1 + (_kFaceZoom - 1) * z;
+            // Maps the face to a point sliding from where it stands to the
+            // screen's centre, everything else scaled about it.
+            final to = Offset.lerp(face, centre, z)!;
+            return Transform(
+              transform: Matrix4.identity()
+                ..translateByDouble(
+                  to.dx - s * face.dx,
+                  to.dy - s * face.dy,
+                  0,
+                  1,
+                )
+                ..scaleByDouble(s, s, 1, 1),
+              child: child,
+            );
+          },
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              const _LiveWashroom(),
+              _ceilingLight(),
+              _runningTaps(sc, dx, dy),
+              Positioned(
+                left: dx + left * sc,
+                top: dy + top * sc,
+                width: w,
+                height: h,
+                child: _toast != null && !_toast!.good
+                    ? _shake(
+                        const Duration(milliseconds: 400),
+                        figure,
+                        key: ValueKey('shake$_shakeN'),
+                        times: _shakeN,
+                      )
+                    : figure,
+              ),
+            ],
+          ),
         );
       },
     );
@@ -4793,12 +4897,13 @@ class _WudhuState extends State<_Wudhu> {
                 ),
               ),
               const SizedBox(width: 8),
+              // Ten steps get smaller, tighter dots so the label still fits.
               for (var i = 0; i < _steps.length; i++) ...[
-                if (i > 0) const SizedBox(width: 7),
+                if (i > 0) SizedBox(width: _steps.length > 5 ? 3 : 7),
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
-                  width: 17,
-                  height: 17,
+                  width: _steps.length > 5 ? 12 : 17,
+                  height: _steps.length > 5 ? 12 : 17,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: _vGrad(
@@ -4915,6 +5020,29 @@ class _WudhuState extends State<_Wudhu> {
     double? rad(double? r) => r == null ? null : r * f;
     Rect px(Rect r) =>
         Rect.fromLTWH(r.left * w, r.top * h, r.width * w, r.height * h);
+    return _figureLayers(w, h, posing, active, shadow, rad, px);
+  }
+
+  /// The ids of the steps done on his face, which get the close-up.
+  static const _kFaceSteps = {'mouth', 'nose', 'face', 'ears'};
+
+  /// How far the camera pushes in for them — wide enough to keep both ears
+  /// in view.
+  static const double _kFaceZoom = 1.7;
+
+  /// The middle of his face on boy-stand.png (497,425 of its 1024x1536
+  /// canvas), as a fraction of the figure.
+  static const _kFaceAt = Offset(497 / 1024, 425 / 1536);
+
+  Widget _figureLayers(
+    double w,
+    double h,
+    bool posing,
+    String? active,
+    Color shadow,
+    double? Function(double?) rad,
+    Rect Function(Rect) px,
+  ) {
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -5269,14 +5397,16 @@ class _WudhuState extends State<_Wudhu> {
       ),
     );
 
+    // The rows share the space five used to take: more steps, thinner rows.
+    final f = 5 / math.max(5, _steps.length);
     Widget stepRow(int i) {
       final st = _steps[i];
-      final top = 360.0 + i * 128;
+      final top = 360.0 + i * 128 * f;
       return at(
         131,
         top,
         685,
-        114,
+        114 * f,
         land(
           i + 1,
           Stack(
@@ -5289,10 +5419,10 @@ class _WudhuState extends State<_Wudhu> {
                 i.isEven ? const Color(0xFF6EE265) : const Color(0xFF5CC3F2),
               ),
               Positioned(
-                left: 22,
-                top: 17,
-                width: 80,
-                height: 80,
+                left: 22 * f,
+                top: 17 * f,
+                width: 80 * f,
+                height: 80 * f,
                 child: Container(
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
@@ -5301,17 +5431,17 @@ class _WudhuState extends State<_Wudhu> {
                       Color(0xFF3FCB5E),
                       Color(0xFF1B8C38),
                     ]),
-                    border: Border.all(color: Colors.white, width: 5),
+                    border: Border.all(color: Colors.white, width: 5 * f),
                   ),
                   child: Text(
                     '${st.n}',
-                    style: _baloo(44, Colors.white, height: 1),
+                    style: _baloo(44 * f, Colors.white, height: 1),
                   ),
                 ),
               ),
               Positioned(
-                left: 124,
-                right: 110,
+                left: 124 * f,
+                right: 110 * f,
                 top: 0,
                 bottom: 0,
                 child: Align(
@@ -5323,21 +5453,17 @@ class _WudhuState extends State<_Wudhu> {
                 ),
               ),
               Positioned(
-                right: 26,
-                top: 22,
-                width: 70,
-                height: 70,
+                right: 26 * f,
+                top: 22 * f,
+                width: 70 * f,
+                height: 70 * f,
                 child: Container(
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: _cream,
-                    border: Border.all(color: _green, width: 5),
+                    border: Border.all(color: _green, width: 5 * f),
                   ),
-                  child: const Icon(
-                    Icons.check_rounded,
-                    color: _green,
-                    size: 50,
-                  ),
+                  child: Icon(Icons.check_rounded, color: _green, size: 50 * f),
                 ),
               ),
             ],
@@ -5434,51 +5560,4 @@ class _WudhuState extends State<_Wudhu> {
       ),
     );
   }
-}
-
-/// One line of text laid letter by letter along an arch of [radius], its
-/// middle at the box centre, shrunk to fit the box's width.
-class _ArcTextPainter extends CustomPainter {
-  const _ArcTextPainter(this.text, this.style, {required this.radius});
-
-  final String text;
-  final TextStyle style;
-  final double radius;
-
-  TextPainter _layout(String s, TextStyle st) => TextPainter(
-    text: TextSpan(text: s, style: st),
-    textDirection: TextDirection.ltr,
-  )..layout();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final full = _layout(text, style).width;
-    final k = math.min(1.0, size.width / full);
-    final st = style.copyWith(fontSize: style.fontSize! * k);
-    final glyphs = [for (final c in text.characters) _layout(c, st)];
-    final total = glyphs.fold<double>(0, (a, g) => a + g.width);
-    // Centre on the letters, not the line box: Baloo's deep descent would
-    // otherwise sit the lettering high. Its caps stand ~0.72em tall.
-    final baseline = glyphs.first.computeDistanceToActualBaseline(
-      TextBaseline.alphabetic,
-    );
-    final lift = baseline - 0.36 * st.fontSize!;
-    final centre = Offset(size.width / 2, size.height / 2 + radius);
-    var s = -total / 2;
-    for (final g in glyphs) {
-      final a = (s + g.width / 2) / radius;
-      canvas
-        ..save()
-        ..translate(centre.dx, centre.dy)
-        ..rotate(a)
-        ..translate(0, -radius);
-      g.paint(canvas, Offset(-g.width / 2, -lift));
-      canvas.restore();
-      s += g.width;
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ArcTextPainter old) =>
-      old.text != text || old.style != style || old.radius != radius;
 }

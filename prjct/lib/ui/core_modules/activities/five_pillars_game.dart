@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
+import '../../widgets/arc_text_painter.dart';
 
 /// The Five Pillars — drag the five pillar columns onto the mosque wall.
 /// Ported 1:1 from the supplied "Five Pillars" (Session 1, Scenarios) and
@@ -1103,9 +1104,34 @@ class _FivePillarsGameState extends State<FivePillarsGame>
                           ),
                           child: Transform.scale(
                             scale: (0.85 + 0.15 * logo) * (1 - 0.08 * out),
-                            child: Image.asset(
-                              _kStartLogo,
-                              fit: BoxFit.contain,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Image.asset(_kStartLogo, fit: BoxFit.contain),
+                                // The scroll's line, so it follows the app
+                                // language: across the scroll's whole face
+                                // (art x 130-630), centred on its band (art
+                                // y 616-686 in the middle).
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    42,
+                                    201,
+                                    42,
+                                    17,
+                                  ),
+                                  child: CustomPaint(
+                                    painter: ArcTextPainter(
+                                      'Build Your Faith'.tr,
+                                      _baloo(
+                                        24,
+                                        800,
+                                        const Color(0xFF5D2001),
+                                      ),
+                                      radius: 520,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -1160,9 +1186,38 @@ class _FivePillarsGameState extends State<FivePillarsGame>
                         opacity: caption * (1 - out),
                         child: Transform.translate(
                           offset: Offset(0, 20 * (1 - caption) + 20 * out),
-                          child: Image.asset(
-                            _kStartCaption,
-                            fit: BoxFit.contain,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.asset(_kStartCaption, fit: BoxFit.contain),
+                              // Between the two flowers, as the art had it.
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  60,
+                                  11,
+                                  60,
+                                  13,
+                                ),
+                                child: LayoutBuilder(
+                                  builder: (context, c) => FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: SizedBox(
+                                      width: c.maxWidth,
+                                      child: Text(
+                                        'The Five Pillars are the foundation of our faith!',
+                                        textAlign: TextAlign.center,
+                                        style: _baloo(
+                                          15.5,
+                                          800,
+                                          const Color(0xFF582103),
+                                          height: 1.05,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -1236,13 +1291,30 @@ class _FivePillarsGameState extends State<FivePillarsGame>
       );
     }
 
-    Widget at(double x, double y, double w, Widget child, [double d = 0]) =>
-        Positioned(
-          left: x * k,
-          top: y * k,
-          width: w * k,
-          child: fadeIn(d, child),
-        );
+    /// A step's words in the slot above its picture ([x],[y] to [bottom],
+    /// art px): they wrap at the slot's width and only shrink if a longer
+    /// (e.g. Tagalog) line still won't fit, instead of running into the art.
+    Widget at(
+      double x,
+      double y,
+      double w,
+      double bottom,
+      Widget child, [
+      double d = 0,
+    ]) => Positioned(
+      left: x * k,
+      top: y * k,
+      width: w * k,
+      height: (bottom - y) * k,
+      child: fadeIn(
+        d,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.topLeft,
+          child: SizedBox(width: w * k, child: child),
+        ),
+      ),
+    );
     Widget centred(double cx, double cy, Widget child, [double d = 0]) =>
         Positioned(
           left: cx * k - 60,
@@ -1270,7 +1342,8 @@ class _FivePillarsGameState extends State<FivePillarsGame>
       children: [
         Text(h, style: head.copyWith(shadows: halo)),
         const SizedBox(height: 1),
-        Text(b, style: body),
+        // Wraps on its own: the English line breaks don't fit Tagalog.
+        Text(b.tr.replaceAll('\n', ' '), style: body),
       ],
     );
     Widget label(_Pillar p) {
@@ -1329,22 +1402,27 @@ class _FivePillarsGameState extends State<FivePillarsGame>
                   top: 150 * k,
                   child: const Center(child: _HowTitle()),
                 ),
+                // Bent along the cream scroll and centred on its band
+                // (middle ~304px down the art, arching ~18px to the ends).
                 Positioned(
-                  left: 0,
-                  right: 0,
-                  top: 292 * k,
-                  height: 66 * k,
-                  child: Center(
-                    child: Text(
-                      s1 ? 'Build the Five Pillars' : 'Order the Five Pillars',
-                      style: _baloo(17, 800, _howInk),
+                  left: 190 * k,
+                  width: 560 * k,
+                  top: 274 * k,
+                  height: 60 * k,
+                  child: CustomPaint(
+                    painter: ArcTextPainter(
+                      (s1 ? 'Build the Five Pillars' : 'Order the Five Pillars')
+                          .tr,
+                      _baloo(17, 800, _howInk),
+                      radius: 2000 * k,
                     ),
                   ),
                 ),
                 at(
                   205,
-                  406,
+                  400,
                   690,
+                  s1 ? 522 : 528,
                   step(
                     s1 ? 'Listen to the question' : 'Listen to the instruction',
                     'Tap the sound button and\nlisten carefully.',
@@ -1407,8 +1485,9 @@ class _FivePillarsGameState extends State<FivePillarsGame>
                   ),
                 at(
                   205,
-                  s1 ? 736 : 748,
+                  s1 ? 724 : 736,
                   690,
+                  s1 ? 834 : 842,
                   step(
                     s1 ? 'Drag the correct pillar' : 'Drag each pillar',
                     s1
@@ -1419,8 +1498,9 @@ class _FivePillarsGameState extends State<FivePillarsGame>
                 ),
                 at(
                   205,
-                  s1 ? 1148 : 1170,
+                  s1 ? 1136 : 1158,
                   690,
+                  s1 ? 1256 : 1262,
                   step(
                     s1 ? 'Build all 5 pillars' : 'Put them in order',
                     s1

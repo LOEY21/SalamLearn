@@ -22,6 +22,7 @@ import '../settings/settings_screen.dart' show LanguageSettingRow;
 import '../widgets/change_pin_card.dart';
 import '../widgets/mock_icons.dart';
 import '../widgets/account_email_card.dart';
+import '../settings/personal_info_screen.dart' show PersonalInfoRow;
 import '../widgets/soft_card.dart';
 import '../widgets/child_profile_form.dart'
     show KhatamPatternPainter, displayText, scaledExtent;
@@ -78,6 +79,9 @@ final progressionOverrideProvider =
 /// back to the generic greeting for a bare PIN-only bootstrap account with
 /// no name on file yet.
 String _teacherGreeting(WidgetRef ref) {
+  // Watched so a name edited in Settings → Personal information shows
+  // here straight away.
+  ref.watch(sessionProvider);
   final name = ref.read(sessionProvider.notifier).activeTeacherFullName;
   if (name == null || name.isEmpty) return "Assalamu'alaikum";
   return "Assalamu'alaikum, $name";
@@ -560,7 +564,7 @@ class _RosterSection extends ConsumerWidget {
                     ),
                   ),
                   onPressed: () =>
-                      context.go('/teacher/classes/$activeClassId?from=home'),
+                      context.push('/teacher/classes/$activeClassId?from=home'),
                   child: const Text('See all'),
                 ),
         ),
@@ -2596,7 +2600,9 @@ class _ClassManagementEntryCard extends ConsumerWidget {
       subtitle: classCount == 0
           ? 'No classes yet'
           : '$classCount class${classCount == 1 ? '' : 'es'} · manage students',
-      onTap: () => context.go('/teacher/classes'),
+      // Pushed over the hub, so Back slides it off again (see
+      // ClassroomManagementScreen._goBack).
+      onTap: () => context.push('/teacher/classes'),
     );
   }
 }
@@ -4010,6 +4016,10 @@ class _SettingsTab extends ConsumerWidget {
         HubStaggerFadeIn(
           delay: Duration.zero,
           child: HubSectionLabel('Account'),
+        ),
+        HubStaggerFadeIn(
+          delay: Duration(milliseconds: 10),
+          child: PersonalInfoRow(),
         ),
         HubStaggerFadeIn(
           delay: Duration(milliseconds: 20),

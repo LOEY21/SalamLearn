@@ -11,6 +11,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
+import '../../widgets/arc_text_painter.dart';
 
 const _kA = 'assets/images/sound_detective';
 
@@ -1016,10 +1017,10 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
           }),
         ),
         Positioned(
-          left: 201 - 150,
-          top: 248,
-          width: 300,
-          height: 60,
+          left: 201 - 170,
+          top: 244,
+          width: 340,
+          height: 68,
           child: _pop(
             at + .6,
             .5,
@@ -1027,13 +1028,15 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
               fit: StackFit.expand,
               children: [
                 img('start_scroll'),
+                // Bent along the scroll's own arch, centred on its cream
+                // band and clear of the sound waves on the rolled ends.
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(54, 8, 54, 16),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      'Listen and find the right sound!',
-                      style: _baloo(14, 800, const Color(0xFF5A2E0E)),
+                  padding: const EdgeInsets.fromLTRB(40, 9, 40, 27),
+                  child: CustomPaint(
+                    painter: ArcTextPainter(
+                      'Listen and find the right sound!'.tr,
+                      _baloo(16, 800, const Color(0xFF5A2E0E)),
+                      radius: 745,
                     ),
                   ),
                 ),
@@ -1157,7 +1160,7 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
 
     /// A step on the leafy step board: its number in the board's green
     /// circle, the demo beside it, then the words.
-    Widget step(int n, Widget icon, String en, String ar) {
+    Widget step(int n, Widget icon, String en) {
       const w = 366.0, h = w / 3.782;
       return SizedBox(
         width: w,
@@ -1204,22 +1207,10 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
                   fit: BoxFit.scaleDown,
                   child: SizedBox(
                     width: w * .505,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          en,
-                          textAlign: TextAlign.center,
-                          style: _baloo(14.5, 800, _kInk, height: 1.15),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          ar,
-                          textAlign: TextAlign.center,
-                          textDirection: TextDirection.rtl,
-                          style: _naskh(13, const Color(0xFF6B4A26)),
-                        ),
-                      ],
+                    child: Text(
+                      en,
+                      textAlign: TextAlign.center,
+                      style: _baloo(14.5, 800, _kInk, height: 1.15),
                     ),
                   ),
                 ),
@@ -1346,15 +1337,9 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
               'board_howto',
               350,
               const EdgeInsets.fromLTRB(.1, .17, .1, .23),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'How to Play',
-                    style: _baloo(30, 800, _kInk, height: 1.1),
-                  ),
-                  _ar('كيف تلعب', _naskh(18, _kInk, bold: true)),
-                ],
+              Text(
+                'How to Play',
+                style: _baloo(30, 800, _kInk, height: 1.1),
               ),
             ),
           ),
@@ -1367,7 +1352,7 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
             children: [
               rise(
                 .2,
-                step(1, listen, 'Listen to the sound.', 'استمع إلى الصوت'),
+                step(1, listen, 'Listen to the sound.'),
               ),
               const SizedBox(height: 8),
               rise(
@@ -1376,11 +1361,10 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
                   2,
                   tap,
                   'Tap the animal holding the right letter.',
-                  'اضغط على الحيوان الصحيح',
                 ),
               ),
               const SizedBox(height: 8),
-              rise(.5, step(3, star, 'Get it right, win a star!', 'اربح نجمة')),
+              rise(.5, step(3, star, 'Get it right, win a star!')),
             ],
           ),
         ),
@@ -1408,7 +1392,8 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
             _boardText(
               'board_bubble',
               262,
-              const EdgeInsets.fromLTRB(.11, .19, .07, .18),
+              // Off the wood rim and the corner leaves.
+              const EdgeInsets.fromLTRB(.16, .22, .11, .22),
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1420,10 +1405,6 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
                   _ar(
                     'ب   ت   ث',
                     _naskh(26, _kGreen, bold: true).copyWith(height: 1.25),
-                  ),
-                  _ar(
-                    'انظر إلى النقاط جيداً',
-                    _naskh(13, const Color(0xFF6B4A26)),
                   ),
                 ],
               ),

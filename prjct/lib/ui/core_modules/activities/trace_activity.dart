@@ -1084,7 +1084,7 @@ class _TraceActivityState extends State<TraceActivity>
             ),
           ),
           _at(
-            585,
+            _kW - 45 - 105,
             60,
             105,
             105,
@@ -1591,18 +1591,22 @@ class _TraceActivityState extends State<TraceActivity>
         asset: '$_kA/game_check',
         lift: 6,
         onTap: on,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _disc(icon, 72),
-            const SizedBox(width: 18),
-            Flexible(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(label, style: _f(38, Colors.white)),
+        // Inset off the rounded caps so a long label shrinks inside them.
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _disc(icon, 72),
+              const SizedBox(width: 18),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(label, style: _f(38, Colors.white)),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
 

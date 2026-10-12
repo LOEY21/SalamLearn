@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:salamlearn/data/models/badge_award.dart';
+import 'package:salamlearn/data/models/progress_record.dart';
 import 'package:salamlearn/data/repositories/progress_repository.dart';
 
 import '../../test_helpers/hive_test_setup.dart';
@@ -63,22 +65,69 @@ void main() {
       );
 
       // Main game map should ONLY have main-map-lesson-1
-      expect(
-        repo.completedLessonIds('learner-1'),
-        {'main-map-lesson-1'},
-      );
+      expect(repo.completedLessonIds('learner-1'), {'main-map-lesson-1'});
 
       // Homework should ONLY have hw-lesson-1
-      expect(
-        repo.completedHomeworkLessonIds('learner-1'),
-        {'hw-lesson-1'},
-      );
+      expect(repo.completedHomeworkLessonIds('learner-1'), {'hw-lesson-1'});
 
       // Including assigned returns both
-      expect(
-        repo.completedLessonIds('learner-1', includeAssigned: true),
-        {'hw-lesson-1', 'main-map-lesson-1'},
-      );
+      expect(repo.completedLessonIds('learner-1', includeAssigned: true), {
+        'hw-lesson-1',
+        'main-map-lesson-1',
+      });
     },
   );
+
+  test(
+    'streak comes from progress records synced from another device',
+    () async {
+      final repo = ProgressRepository();
+      final now = DateTime.now();
+      ProgressRecord played(String id, int daysAgo) => ProgressRecord(
+        id: id,
+        learnerId: 'kid',
+        moduleId: '1',
+        strokeAccuracyPct: 90,
+        sequencingErrors: 0,
+        timeOnTaskSeconds: 30,
+        completedAt: DateTime(now.year, now.month, now.day - daysAgo, 12),
+      );
+
+      expect(repo.currentStreak('kid'), 0);
+      await repo.mergeRemote([
+        played('a', 1),
+        played('b', 2),
+        played('c', 2),
+        played('d', 4),
+      ]);
+      expect(repo.currentStreak('kid'), 2);
+      expect(repo.activeStreak('kid'), 2);
+      expect(repo.streakAfterPlayingToday('kid'), 3);
+
+      await repo.mergeRemote([played('e', 0)]);
+      expect(repo.activeStreak('kid'), 3);
+    },
+  );
+
+  test('badges from another device merge without duplicating', () async {
+    final repo = ProgressRepository();
+    await repo.awardBadge('kid', 'First Steps Badge');
+    await repo.mergeRemoteBadges([
+      BadgeAward(
+        learnerId: 'kid',
+        badgeId: 'First Steps Badge',
+        earnedAt: DateTime(2026),
+      ),
+      BadgeAward(
+        learnerId: 'kid',
+        badgeId: 'Curious Spark Badge (3-Day Streak)',
+        earnedAt: DateTime(2026),
+      ),
+    ]);
+    expect(repo.badgesFor('kid').map((b) => b.badgeId).toSet(), {
+      'First Steps Badge',
+      'Curious Spark Badge (3-Day Streak)',
+    });
+    expect(repo.badgesFor('kid'), hasLength(2));
+  });
 }

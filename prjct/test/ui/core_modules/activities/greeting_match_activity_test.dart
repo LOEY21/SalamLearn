@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:salamlearn/data/curriculum_data.dart';
 import 'package:salamlearn/data/models/curriculum/curriculum_models.dart';
 import 'package:salamlearn/ui/core_modules/activities/greeting_match_activity.dart';
+import 'package:salamlearn/ui/widgets/arc_text_painter.dart';
 
 void main() {
   const testSession = GreetingMatchSession(
@@ -114,7 +115,16 @@ void main() {
     await tester.pumpWidget(buildTestWidget());
     await tester.pump();
 
-    expect(find.text('Session 2: Madrasah Manners'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is CustomPaint &&
+            w.painter is ArcTextPainter &&
+            (w.painter! as ArcTextPainter).text ==
+                'Session 2: Madrasah Manners',
+      ),
+      findsOneWidget,
+    );
     expect(
       find.text('Learn polite Islamic greetings and classroom manners.'),
       findsOneWidget,

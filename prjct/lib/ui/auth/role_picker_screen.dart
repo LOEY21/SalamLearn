@@ -56,9 +56,14 @@ class _RolePickerScreenState extends ConsumerState<RolePickerScreen>
       // send it to `/pin/verify` (just the PIN) instead of routing
       // through the full sign-up/sign-in hub again, which would wrongly
       // ask for email + password on a device that's already signed in.
+      //
+      // Pushed (not `go`) so the PIN screen sits on top of this one: its
+      // Back pops it, and the slide-in plays in reverse instead of this
+      // screen sliding in again as if it were a new page.
       final hasPin = ref.read(sessionProvider).hasPin;
       if (hasPin) {
-        context.go(role == UserRole.asatidz ? '/teacher' : '/parent');
+        final dashboard = role == UserRole.asatidz ? '/teacher' : '/parent';
+        context.push('/pin/verify?redirect=${Uri.encodeComponent(dashboard)}');
       } else {
         context.go('/auth');
       }
@@ -85,99 +90,99 @@ class _RolePickerScreenState extends ConsumerState<RolePickerScreen>
         if (!didPop) context.go('/consent');
       },
       child: SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(26, 34, 26, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: FadeTransition(
-                opacity: mark,
-                child: ScaleTransition(
-                  scale: mark.drive(Tween(begin: 0.8, end: 1.0)),
-                  child: Container(
-                    width: 100,
-                    height: 100,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Colors.white, AppColors.creamDark],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.teal.withValues(alpha: 0.14),
-                          blurRadius: 24,
-                          offset: const Offset(0, 10),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(26, 34, 26, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: FadeTransition(
+                  opacity: mark,
+                  child: ScaleTransition(
+                    scale: mark.drive(Tween(begin: 0.8, end: 1.0)),
+                    child: Container(
+                      width: 100,
+                      height: 100,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Colors.white, AppColors.creamDark],
                         ),
-                      ],
-                    ),
-                    child: ClipOval(
-                      child: Image.asset(
-                        'assets/images/logo.png',
-                        cacheWidth: 200,
-                        fit: BoxFit.contain,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.teal.withValues(alpha: 0.14),
+                            blurRadius: 24,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/images/logo.png',
+                          cacheWidth: 200,
+                          fit: BoxFit.contain,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
-            _FadeUp(
-              animation: heading,
-              child: const Text(
-                "Who's using SalamLearn?",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 27,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.ink,
+              const SizedBox(height: 20),
+              _FadeUp(
+                animation: heading,
+                child: const Text(
+                  "Who's using SalamLearn?",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 27,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.ink,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 6),
-            _FadeUp(
-              animation: subhead,
-              child: const Text(
-                'Choose an account to continue',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 15, color: AppColors.textMuted),
+              const SizedBox(height: 6),
+              _FadeUp(
+                animation: subhead,
+                child: const Text(
+                  'Choose an account to continue',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 15, color: AppColors.textMuted),
+                ),
               ),
-            ),
-            const SizedBox(height: 28),
-            _FadeUp(
-              animation: card1,
-              child: _RoleCard(
-                badgeColor: AppColors.mint,
-                icon: familyIcon,
-                iconColor: AppColors.teal,
-                title: 'Parent / Guardian',
-                subtitle: 'Add children and track their progress',
-                tagIcon: Icons.lock_outline_rounded,
-                tagText: 'Requires PIN',
-                onTap: () => pick(UserRole.parent),
+              const SizedBox(height: 28),
+              _FadeUp(
+                animation: card1,
+                child: _RoleCard(
+                  badgeColor: AppColors.mint,
+                  icon: familyIcon,
+                  iconColor: AppColors.teal,
+                  title: 'Parent / Guardian',
+                  subtitle: 'Add children and track their progress',
+                  tagIcon: Icons.lock_outline_rounded,
+                  tagText: 'Requires PIN',
+                  onTap: () => pick(UserRole.parent),
+                ),
               ),
-            ),
-            const SizedBox(height: 14),
-            _FadeUp(
-              animation: card2,
-              child: _RoleCard(
-                badgeColor: AppColors.mint,
-                icon: graduationCapIcon,
-                iconColor: AppColors.teal,
-                title: 'Asatidz (Teacher)',
-                subtitle: 'Classes, casting & assignments',
-                tagIcon: Icons.lock_outline_rounded,
-                tagText: 'Requires PIN',
-                onTap: () => pick(UserRole.asatidz),
+              const SizedBox(height: 14),
+              _FadeUp(
+                animation: card2,
+                child: _RoleCard(
+                  badgeColor: AppColors.mint,
+                  icon: graduationCapIcon,
+                  iconColor: AppColors.teal,
+                  title: 'Asatidz (Teacher)',
+                  subtitle: 'Classes, casting & assignments',
+                  tagIcon: Icons.lock_outline_rounded,
+                  tagText: 'Requires PIN',
+                  onTap: () => pick(UserRole.asatidz),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -240,10 +245,7 @@ class _RoleCard extends StatelessWidget {
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: Colors.white,
-            border: Border.all(
-              color: AppColors.creamBorder,
-              width: 1.6,
-            ),
+            border: Border.all(color: AppColors.creamBorder, width: 1.6),
             borderRadius: BorderRadius.circular(22),
           ),
           child: Row(
@@ -293,11 +295,7 @@ class _RoleCard extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            tagIcon,
-                            size: 13,
-                            color: AppColors.textMuted,
-                          ),
+                          Icon(tagIcon, size: 13, color: AppColors.textMuted),
                           const SizedBox(width: 5),
                           Flexible(
                             child: Text(

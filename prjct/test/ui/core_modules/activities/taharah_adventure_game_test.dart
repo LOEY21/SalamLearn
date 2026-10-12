@@ -42,19 +42,19 @@ void main() {
     ),
   );
 
-  test('each session lands on its designated lesson', () {
-    Activity actFor(String id) => curriculum
-        .expand((d) => d.lessons)
-        .expand((l) => l.activities)
-        .firstWhere((a) => a.id == id);
-    for (final (id, session) in [
-      ('dest4-s6-act', TaharahSession.cleanOrDirty),
-      ('dest5-s4-act', TaharahSession.wudhuPart1),
-      ('dest6-s3-act', TaharahSession.wudhuPart2),
-    ]) {
-      expect(actFor(id).type, ActivityType.taharahAdventure);
-      expect(actFor(id).taharahSession, session);
-    }
+  test('the curriculum plays the whole wudhu once, in Cleanliness & Character',
+      () {
+    final taharah = [
+      for (final d in curriculum)
+        for (final l in d.lessons)
+          for (final a in l.activities)
+            if (a.type == ActivityType.taharahAdventure) (d, a),
+    ];
+    expect(taharah, hasLength(1));
+    final (dest, act) = taharah.single;
+    expect(dest.name, 'Cleanliness & Character');
+    expect(act.id, 'dest5-s4-act');
+    expect(act.taharahSession, TaharahSession.wudhu);
   });
 
   testWidgets('Clean or Dirty: sort all six cards and finish', (tester) async {

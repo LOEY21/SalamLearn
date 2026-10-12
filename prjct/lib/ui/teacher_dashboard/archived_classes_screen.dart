@@ -16,19 +16,23 @@ import '../widgets/soft_card.dart';
 class ArchivedClassesScreen extends StatelessWidget {
   const ArchivedClassesScreen({super.key});
 
+  // Pushed over the class list, so pop back to it.
+  void _goBack(BuildContext context) =>
+      context.canPop() ? context.pop() : context.go('/teacher/classes');
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) context.go('/teacher/classes');
+        if (!didPop) _goBack(context);
       },
       child: Scaffold(
         backgroundColor: AppColors.surface,
         body: SafeArea(
           child: Column(
             children: [
-              _ArchivedAppBar(onBack: () => context.go('/teacher/classes')),
+              _ArchivedAppBar(onBack: () => _goBack(context)),
               const Divider(height: 1, color: AppColors.creamBorder),
               const Expanded(child: _ArchivedList()),
             ],
@@ -104,8 +108,18 @@ class _ArchivedList extends ConsumerWidget {
   const _ArchivedList();
 
   static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
   static String _formatDate(DateTime dt) =>

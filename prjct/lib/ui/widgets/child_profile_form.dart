@@ -516,6 +516,7 @@ InputDecoration _fieldDecoration({
   String? hint,
   Widget? suffix,
   bool readOnly = false,
+  String? prefixText,
 }) {
   OutlineInputBorder border(Color color, double width) => OutlineInputBorder(
     borderRadius: BorderRadius.circular(14),
@@ -524,6 +525,8 @@ InputDecoration _fieldDecoration({
   return InputDecoration(
     hintText: hint?.tr,
     hintStyle: const TextStyle(color: AppColors.inkSoft),
+    prefixText: prefixText,
+    prefixStyle: const TextStyle(fontSize: 15.5, color: AppColors.inkSoft),
     filled: true,
     fillColor: readOnly ? AppColors.creamDark : AppColors.neutralTint,
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
@@ -549,6 +552,7 @@ class ChildTextField extends StatefulWidget {
     this.inputFormatters,
     this.autofillHints,
     this.wrap = false,
+    this.prefixText,
   });
 
   final TextEditingController? controller;
@@ -561,6 +565,9 @@ class ChildTextField extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final List<TextInputFormatter>? inputFormatters;
   final Iterable<String>? autofillHints;
+
+  /// Fixed text before the value that isn't part of it (e.g. `+63 `).
+  final String? prefixText;
 
   /// Grow onto more lines instead of scrolling sideways, so a long name is
   /// always fully visible. Read-only fields always wrap.
@@ -597,6 +604,7 @@ class _ChildTextFieldState extends State<ChildTextField> {
       decoration: _fieldDecoration(
         hint: widget.hint,
         readOnly: widget.readOnly,
+        prefixText: widget.prefixText,
         suffix: widget.obscureText
             ? IconButton(
                 tooltip: _obscured ? 'Show password'.tr : 'Hide password'.tr,

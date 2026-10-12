@@ -36,6 +36,7 @@ import '../widgets/learner_avatar.dart';
 import '../widgets/locked_tag.dart';
 import '../widgets/mock_icons.dart';
 import '../widgets/account_email_card.dart';
+import '../settings/personal_info_screen.dart' show PersonalInfoRow;
 import '../widgets/soft_card.dart';
 import '../../data/repositories/progress_repository.dart';
 import '../core_modules/module_registry.dart';
@@ -53,6 +54,9 @@ String _progressHeading(String name) =>
 /// this account has no name on file yet (e.g. a bare PIN-only bootstrap
 /// account — see `SessionNotifier.activeAccountHasEmail`'s doc).
 String _parentGreeting(WidgetRef ref) {
+  // Watched so a name edited in Settings → Personal information shows
+  // here straight away.
+  ref.watch(sessionProvider);
   final parentName = ref.read(sessionProvider.notifier).activeParentFullName;
   if (parentName == null || parentName.isEmpty) return "Assalamu'alaikum";
   return "Assalamu'alaikum, $parentName";
@@ -1199,16 +1203,24 @@ class _KpiFocusRowState extends ConsumerState<_KpiFocusRow>
                             streak: kpis.streak,
                           ),
                           IgnorePointer(
-                            child: SizedBox(
-                              width: dialSize * 1.7,
-                              height: dialSize * 1.7,
-                              child: Lottie.asset(
-                                'assets/lottie/milestone_burst.json',
-                                controller: _burstController,
-                                onLoaded: (composition) {
-                                  _burstController.duration =
-                                      composition.duration;
-                                },
+                            child: ListenableBuilder(
+                              listenable: _burstController,
+                              builder: (context, child) => Visibility(
+                                visible: _burstController.isAnimating,
+                                maintainState: true,
+                                child: child!,
+                              ),
+                              child: SizedBox(
+                                width: dialSize * 1.7,
+                                height: dialSize * 1.7,
+                                child: Lottie.asset(
+                                  'assets/lottie/milestone_burst.json',
+                                  controller: _burstController,
+                                  onLoaded: (composition) {
+                                    _burstController.duration =
+                                        composition.duration;
+                                  },
+                                ),
                               ),
                             ),
                           ),
@@ -3812,6 +3824,10 @@ class _SettingsTab extends ConsumerWidget {
         HubStaggerFadeIn(
           delay: Duration.zero,
           child: HubSectionLabel('Account'),
+        ),
+        HubStaggerFadeIn(
+          delay: Duration(milliseconds: 10),
+          child: PersonalInfoRow(),
         ),
         HubStaggerFadeIn(
           delay: Duration(milliseconds: 20),

@@ -1252,6 +1252,81 @@ class SessionNotifier extends Notifier<SessionState> {
     return _teachers.findById(id)?.fullName;
   }
 
+  /// The active parent's/teacher's editable details for Settings →
+  /// Personal information. `school` is always null for a parent.
+  ({String fullName, String? email, String? mobileNumber, String? school})?
+  get activeProfile {
+    if (state.activeRole == UserRole.asatidz) {
+      final id = state.activeTeacherId;
+      final t = id == null ? null : _teachers.findById(id);
+      if (t == null) return null;
+      return (
+        fullName: t.fullName,
+        email: activeAccountEmail,
+        mobileNumber: t.mobileNumber,
+        school: t.school,
+      );
+    }
+    final id = state.activeParentId;
+    final p = id == null ? null : _parents.findById(id);
+    if (p == null) return null;
+    return (
+      fullName: p.fullName,
+      email: activeAccountEmail,
+      mobileNumber: p.mobileNumber,
+      school: null,
+    );
+  }
+
+  /// Saves Settings → Personal information on this device, then mirrors it
+  /// to the cloud when the account is linked. Returns false when the cloud
+  /// copy couldn't be updated (offline) — the local save still stands and
+  /// the next sync pushes it.
+  Future<bool> updateActiveProfile({
+    required String fullName,
+    String? mobileNumber,
+    String? school,
+  }) async {
+    var synced = true;
+    if (state.activeRole == UserRole.asatidz) {
+      final id = state.activeTeacherId;
+      final account = id == null ? null : _teachers.findById(id);
+      if (account == null) return false;
+      final updated = await _teachers.updateProfile(
+        account: account,
+        fullName: fullName,
+        mobileNumber: mobileNumber,
+        school: school,
+      );
+      if (updated.firebaseUid != null) {
+        try {
+          await FirestoreMirror(teacher: true).pushTeacher(updated);
+        } catch (_) {
+          synced = false;
+        }
+      }
+    } else {
+      final id = state.activeParentId;
+      final account = id == null ? null : _parents.findById(id);
+      if (account == null) return false;
+      final updated = await _parents.updateProfile(
+        account: account,
+        fullName: fullName,
+        mobileNumber: mobileNumber,
+      );
+      if (updated.firebaseUid != null) {
+        try {
+          await FirestoreMirror(teacher: false).pushParent(updated);
+        } catch (_) {
+          synced = false;
+        }
+      }
+    }
+    // Same session, fresh object — rebuilds everything showing the name.
+    state = state.copyWith();
+    return synced;
+  }
+
   /// Whether the active account even has an email/password to link with in
   /// the first place — false for a bare PIN-only account created via
   /// `createPinOnly` (the router's `/pin/setup` fallback, reached when a

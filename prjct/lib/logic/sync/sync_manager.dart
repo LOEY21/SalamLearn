@@ -200,6 +200,9 @@ class SyncManager {
       await _progress.mergeRemote(
         await _mirror.fetchProgressForLearner(learnerId),
       );
+      await _progress.mergeRemoteBadges(
+        await _mirror.fetchBadgesForLearner(learnerId),
+      );
     } catch (e) {
       debugPrint('SyncManager: pulling progress for $learnerId failed: $e');
     }
@@ -209,7 +212,8 @@ class SyncManager {
   /// [syncNow], so without this a teacher's new assignment (or a class the
   /// child was enrolled in from another device) never reaches the hub.
   /// Pulls the learner's enrollments first, since assignments are looked
-  /// up per enrolled class. Best-effort: offline just keeps what's local.
+  /// up per enrolled class. Also pulls progress and badges earned on
+  /// another device. Best-effort: offline just keeps what's local.
   Future<void> pullLearnerHomework(String learnerId) async {
     try {
       for (final e in await _mirror.fetchEnrollmentsForLearner(learnerId)) {
@@ -220,6 +224,7 @@ class SyncManager {
       debugPrint('SyncManager: pulling learner enrollments failed: $e');
     }
     await _pullLearnerAssignments(learnerId);
+    await _pullProgressForLearner(learnerId);
   }
 
   Future<void> _pullLearnerAssignments(String learnerId) async {

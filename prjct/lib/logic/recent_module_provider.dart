@@ -2,8 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
 
 import '../data/local/hive_boxes.dart';
+import '../data/models/badge_award.dart';
 import '../data/repositories/progress_repository.dart';
 import 'auth/session.dart';
+import 'progress_providers.dart';
 
 class RecentModuleNotifier extends Notifier<String?> {
   @override
@@ -24,7 +26,8 @@ class LearnerStreakNotifier extends Notifier<int> {
   @override
   int build() {
     final learnerId = ref.watch(sessionProvider.select((s) => s.learner?.id));
-    if (learnerId == null || !Hive.isBoxOpen(HiveBoxes.streaks)) return 0;
+    if (learnerId == null || !Hive.isBoxOpen(HiveBoxes.progress)) return 0;
+    ref.watch(progressChangesProvider);
     return ProgressRepository().activeStreak(learnerId);
   }
 
@@ -32,7 +35,7 @@ class LearnerStreakNotifier extends Notifier<int> {
   /// progress write right after stores the same value).
   void increment() {
     final learnerId = ref.read(sessionProvider).learner?.id;
-    if (learnerId == null || !Hive.isBoxOpen(HiveBoxes.streaks)) return;
+    if (learnerId == null || !Hive.isBoxOpen(HiveBoxes.progress)) return;
     state = ProgressRepository().streakAfterPlayingToday(learnerId);
   }
 }
@@ -59,6 +62,7 @@ class UnlockedBadgesNotifier extends Notifier<List<String>> {
   List<String> build() {
     final learnerId = ref.watch(sessionProvider.select((s) => s.learner?.id));
     if (learnerId == null || !Hive.isBoxOpen(HiveBoxes.badges)) return const [];
+    ref.watch(_badgeChangesProvider);
     final awards = ProgressRepository().badgesFor(learnerId)
       ..sort((a, b) => a.earnedAt.compareTo(b.earnedAt));
     return [for (final a in awards) a.badgeId];
@@ -73,6 +77,11 @@ class UnlockedBadgesNotifier extends Notifier<List<String>> {
     }
   }
 }
+
+/// Emits on every badge write, including badges pulled from another device.
+final _badgeChangesProvider = StreamProvider<BoxEvent>(
+  (ref) => Hive.box<BadgeAward>(HiveBoxes.badges).watch(),
+);
 
 final unlockedBadgesProvider =
     NotifierProvider<UnlockedBadgesNotifier, List<String>>(

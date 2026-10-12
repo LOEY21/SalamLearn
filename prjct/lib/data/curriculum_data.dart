@@ -3527,6 +3527,73 @@ const CreationHuntStage forestHuntStage = CreationHuntStage(
       radius: CreationHuntRadius.blob,
       icon: '💧',
     ),
+    // The rest of the river's winding course, waterfall to the bottom
+    // edge, so a tap anywhere on the water counts.
+    CreationHuntSpot(
+      id: 'river_waterfall',
+      group: 'river',
+      alias: true,
+      isCreation: true,
+      x: 0.500,
+      y: 0.450,
+      w: 0.110,
+      h: 0.070,
+      radius: CreationHuntRadius.soft,
+      icon: '💧',
+      label: 'river',
+    ),
+    CreationHuntSpot(
+      id: 'river_upper',
+      group: 'river',
+      alias: true,
+      isCreation: true,
+      x: 0.400,
+      y: 0.500,
+      w: 0.300,
+      h: 0.050,
+      radius: CreationHuntRadius.blob,
+      icon: '💧',
+      label: 'river',
+    ),
+    CreationHuntSpot(
+      id: 'river_middle',
+      group: 'river',
+      alias: true,
+      isCreation: true,
+      x: 0.545,
+      y: 0.550,
+      w: 0.490,
+      h: 0.060,
+      radius: CreationHuntRadius.blob,
+      icon: '💧',
+      label: 'river',
+    ),
+    CreationHuntSpot(
+      id: 'river_lower',
+      group: 'river',
+      alias: true,
+      isCreation: true,
+      x: 0.390,
+      y: 0.620,
+      w: 0.320,
+      h: 0.080,
+      radius: CreationHuntRadius.blob,
+      icon: '💧',
+      label: 'river',
+    ),
+    CreationHuntSpot(
+      id: 'river_bottom',
+      group: 'river',
+      alias: true,
+      isCreation: true,
+      x: 0.680,
+      y: 0.6825,
+      w: 0.640,
+      h: 0.085,
+      radius: CreationHuntRadius.blob,
+      icon: '💧',
+      label: 'river',
+    ),
     CreationHuntSpot(
       id: 'car',
       isCreation: false,
@@ -4398,7 +4465,7 @@ const List<QuranEtiquetteSession> etiquetteSessions = [
 ];
 
 // ─────────────────────────────────────────────────────────────
-// FULL CURRICULUM ARRAY -- Journey Map (7 stages, 40 sessions)
+// FULL CURRICULUM ARRAY -- Journey Map (7 stages, 38 sessions)
 // ─────────────────────────────────────────────────────────────
 
 const List<Destination> curriculum = [
@@ -4859,24 +4926,6 @@ const List<Destination> curriculum = [
           ),
         ],
       ),
-      Lesson(
-        id: 'dest4-s6',
-        title: 'Taharah Adventure - Session 1 (Hygiene Basics)',
-        titleAr: 'مُغَامَرَةُ الطَّهَارَة 1 (أَسَاسِيَّاتُ النَّظَافَة)',
-        icon: '🧼',
-        color: '#D85A30',
-        xp: 30,
-        activities: [
-          Activity(
-            id: 'dest4-s6-act',
-            type: ActivityType.taharahAdventure,
-            title: 'Taharah Adventure (Hygiene Basics)',
-            icon: '🧼',
-            xp: 30,
-            taharahSession: TaharahSession.cleanOrDirty,
-          ),
-        ],
-      ),
     ],
   ),
 
@@ -4949,8 +4998,8 @@ const List<Destination> curriculum = [
       ),
       Lesson(
         id: 'dest5-s4',
-        title: 'Taharah Adventure - Session 2 (Wudhu Pt 1)',
-        titleAr: 'مُغَامَرَةُ الطَّهَارَة 2 (الوُضُوء ١)',
+        title: 'Taharah Adventure - Session 1 (Wudhu)',
+        titleAr: 'مُغَامَرَةُ الطَّهَارَة (الوُضُوء)',
         icon: '🚿',
         color: '#D85A30',
         xp: 40,
@@ -4958,10 +5007,10 @@ const List<Destination> curriculum = [
           Activity(
             id: 'dest5-s4-act',
             type: ActivityType.taharahAdventure,
-            title: 'Taharah Adventure (Wudhu Pt 1)',
+            title: 'Taharah Adventure (Wudhu)',
             icon: '🚿',
             xp: 40,
-            taharahSession: TaharahSession.wudhuPart1,
+            taharahSession: TaharahSession.wudhu,
           ),
         ],
       ),
@@ -5050,24 +5099,6 @@ const List<Destination> curriculum = [
             icon: '🤝',
             xp: 30,
             heroesSession: heroesResponsibilitySession,
-          ),
-        ],
-      ),
-      Lesson(
-        id: 'dest6-s3',
-        title: 'Taharah Adventure - Session 3 (Wudhu Pt 2)',
-        titleAr: 'مُغَامَرَةُ الطَّهَارَة 3 (الوُضُوء ٢)',
-        icon: '🚿',
-        color: '#D85A30',
-        xp: 40,
-        activities: [
-          Activity(
-            id: 'dest6-s3-act',
-            type: ActivityType.taharahAdventure,
-            title: 'Taharah Adventure (Wudhu Pt 2)',
-            icon: '🚿',
-            xp: 40,
-            taharahSession: TaharahSession.wudhuPart2,
           ),
         ],
       ),

@@ -5,6 +5,7 @@ import '../../data/curriculum_data.dart';
 import '../../data/local/hive_boxes.dart';
 import '../../data/repositories/progress_repository.dart';
 import '../auth/session.dart';
+import '../progress_providers.dart';
 
 /// Total XP the active learner has earned: the XP of every lesson they've
 /// actually finished (only a first completion is recorded, matching how
@@ -16,6 +17,7 @@ class LearnerXpNotifier extends Notifier<int> {
   int build() {
     final learnerId = ref.watch(sessionProvider.select((s) => s.learner?.id));
     if (learnerId == null || !Hive.isBoxOpen(HiveBoxes.progress)) return 0;
+    ref.watch(progressChangesProvider);
     final done = ProgressRepository().completedLessonIds(learnerId);
     return xpForLessons(done);
   }

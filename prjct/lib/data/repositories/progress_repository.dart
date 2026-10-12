@@ -5,7 +5,6 @@ import 'package:uuid/uuid.dart';
 import '../local/hive_boxes.dart';
 import '../models/badge_award.dart';
 import '../models/progress_record.dart';
-import '../models/streak_state.dart';
 import '../remote/firestore_mirror.dart';
 
 /// FR-5.1 rollup: accuracy/time-on-task/error totals over a window.
@@ -48,12 +47,11 @@ class ModuleSummary {
 }
 
 /// Hive-backed CRUD for [ProgressRecord] (the SRS's `ProgressBox`) plus the
-/// [StreakState]/[BadgeAward] side-state that gets updated alongside it on
+/// [BadgeAward] side-state that gets updated alongside it on
 /// every completed activity (FR-3.2, FR-3.3, FR-5.1, FR-5.2, FR-6.2).
 class ProgressRepository {
   Box<ProgressRecord> get _progress =>
       Hive.box<ProgressRecord>(HiveBoxes.progress);
-  Box<StreakState> get _streaks => Hive.box<StreakState>(HiveBoxes.streaks);
   Box<BadgeAward> get _badges => Hive.box<BadgeAward>(HiveBoxes.badges);
 
   Future<ProgressRecord> writeProgress({
@@ -78,15 +76,11 @@ class ProgressRepository {
       lessonId: lessonId,
       isClassroomMode: isClassroomMode,
     );
-    // Streak first: dashboards recompute on the progress box's change
-    // event, and should read the streak this record just earned. Both puts
-    // start before either is awaited — Hive applies them in memory at call
-    // time — so a caller reading right after this (the level sheet reopening
-    // as the lesson closes) already sees the lesson as completed.
-    final streakSaved = _bumpStreak(learnerId);
-    final progressSaved = _progress.put(record.id, record);
-    await streakSaved;
-    await progressSaved;
+    // Hive applies the put in memory at call time, so a caller reading
+    // right after this (the level sheet reopening as the lesson closes)
+    // already sees the lesson as completed. The streak is derived from
+    // these records (see [_streak]), so it follows them to other devices.
+    await _progress.put(record.id, record);
     // Push now instead of waiting for the next SyncManager run, so a
     // parent/teacher on another device sees it live. Not awaited — an
     // offline Firestore write only completes once the server acks it.
@@ -284,57 +278,42 @@ class ProgressRepository {
   /// FR-5.2 — curriculum-aligned practice prompts, generated from whichever
   /// module has accumulated the most sequencing errors recently. Falls back
   /// to a generic prompt when there isn't enough history yet.
-  Future<void> _bumpStreak(String learnerId) async {
-    final today = DateTime.now();
-    final todayDate = DateTime(today.year, today.month, today.day);
-    final existing = _streaks.get(learnerId);
-    if (existing == null) {
-      await _streaks.put(
-        learnerId,
-        StreakState(
-          learnerId: learnerId,
-          currentStreak: 1,
-          lastPlayedDate: todayDate,
-        ),
-      );
-      return;
+  /// Consecutive play days ending at the learner's latest play day, read
+  /// from their progress records — which sync across devices, unlike a
+  /// separately stored counter would.
+  ({int run, DateTime? last}) _streak(String learnerId) {
+    final days = {
+      for (final p in _progress.values)
+        if (p.learnerId == learnerId)
+          DateTime(p.completedAt.year, p.completedAt.month, p.completedAt.day),
+    };
+    if (days.isEmpty) return (run: 0, last: null);
+    final last = days.reduce((a, b) => a.isAfter(b) ? a : b);
+    var run = 1;
+    while (days.contains(DateTime(last.year, last.month, last.day - run))) {
+      run++;
     }
-    final lastDate = DateTime(
-      existing.lastPlayedDate.year,
-      existing.lastPlayedDate.month,
-      existing.lastPlayedDate.day,
-    );
-    if (lastDate == todayDate) return; // already counted today
-    final isConsecutive = todayDate.difference(lastDate).inDays == 1;
-    await _streaks.put(
-      learnerId,
-      StreakState(
-        learnerId: learnerId,
-        currentStreak: isConsecutive ? existing.currentStreak + 1 : 1,
-        lastPlayedDate: todayDate,
-      ),
-    );
+    return (run: run, last: last);
   }
 
-  int currentStreak(String learnerId) =>
-      _streaks.get(learnerId)?.currentStreak ?? 0;
+  int currentStreak(String learnerId) => _streak(learnerId).run;
 
   /// The streak a learner has right now: their run if they played today or
   /// yesterday, 0 once a day has been missed (or they never played).
   int activeStreak(String learnerId) {
-    final s = _streaks.get(learnerId);
-    if (s == null) return 0;
-    return _daysSince(s.lastPlayedDate) <= 1 ? s.currentStreak : 0;
+    final s = _streak(learnerId);
+    if (s.last == null) return 0;
+    return _daysSince(s.last!) <= 1 ? s.run : 0;
   }
 
-  /// What the streak becomes once [learnerId] plays today — the same rule
-  /// [_bumpStreak] stores (same day: unchanged; next day: +1; else 1).
+  /// What the streak becomes once [learnerId] plays today (same day:
+  /// unchanged; next day: +1; else 1).
   int streakAfterPlayingToday(String learnerId) {
-    final s = _streaks.get(learnerId);
-    if (s == null) return 1;
-    return switch (_daysSince(s.lastPlayedDate)) {
-      0 => s.currentStreak,
-      1 => s.currentStreak + 1,
+    final s = _streak(learnerId);
+    if (s.last == null) return 1;
+    return switch (_daysSince(s.last!)) {
+      0 => s.run,
+      1 => s.run + 1,
       _ => 1,
     };
   }
@@ -351,14 +330,26 @@ class ProgressRepository {
   Future<void> awardBadge(String learnerId, String badgeId) async {
     final key = '$learnerId:$badgeId';
     if (_badges.containsKey(key)) return;
-    await _badges.put(
-      key,
-      BadgeAward(
-        learnerId: learnerId,
-        badgeId: badgeId,
-        earnedAt: DateTime.now(),
-      ),
+    final award = BadgeAward(
+      learnerId: learnerId,
+      badgeId: badgeId,
+      earnedAt: DateTime.now(),
     );
+    await _badges.put(key, award);
+    // Same live push as [writeProgress], so the badge shows up on the
+    // learner's other devices.
+    Future.sync(
+      () => FirestoreMirror().pushBadge(award),
+    ).catchError((Object e) => debugPrint('awardBadge: push failed: $e'));
+  }
+
+  /// Adds badges earned on another device. A badge is only ever earned
+  /// once, so an existing key is already up to date.
+  Future<void> mergeRemoteBadges(Iterable<BadgeAward> awards) async {
+    for (final award in awards) {
+      final key = '${award.learnerId}:${award.badgeId}';
+      if (!_badges.containsKey(key)) await _badges.put(key, award);
+    }
   }
 
   List<BadgeAward> badgesFor(String learnerId) =>
@@ -370,6 +361,9 @@ class ProgressRepository {
   Future<void> pushAll(FirestoreMirror mirror) async {
     for (final record in _progress.values) {
       await mirror.pushProgress(record);
+    }
+    for (final award in _badges.values) {
+      await mirror.pushBadge(award);
     }
   }
 }

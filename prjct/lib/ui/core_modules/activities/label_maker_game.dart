@@ -8,6 +8,7 @@ import 'label_maker_audio.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
+import '../../widgets/arc_text_painter.dart';
 import 'bend_sprite.dart';
 
 const _kA = 'assets/images/label_maker';
@@ -334,12 +335,14 @@ TextStyle _fredoka(double size, Color color) => TextStyle(
   height: 1.1,
 );
 
+/// A line tall enough for Scheherazade's stacked vowel marks, so a
+/// shrink-to-fit counts them and they never spill past their box.
 TextStyle _arabic(double size) => TextStyle(
   fontFamily: 'ScheherazadeNew',
   fontWeight: FontWeight.w700,
   fontSize: size,
   color: _kNavy,
-  height: 1.25,
+  height: 2,
 );
 
 /// Label Maker — hear an Arabic word, drag the speaker badge onto the
@@ -767,6 +770,37 @@ class _LabelMakerGameState extends State<LabelMakerGame>
 
   Widget _img(String n) => Image.asset('$_kA/$n.png', fit: BoxFit.fill);
 
+  /// A start-screen word tag: the art keeps its Arabic, the English word
+  /// under it is drawn here so it follows the app language. [l]..[h] is
+  /// the word's slot on the tag, [angle] the tag's own tilt.
+  Widget _tag(
+    String art,
+    String word,
+    double l,
+    double t,
+    double w,
+    double h, [
+    double angle = 0,
+  ]) => Stack(
+    fit: StackFit.expand,
+    children: [
+      _img(art),
+      Positioned(
+        left: l,
+        top: t,
+        width: w,
+        height: h,
+        child: Transform.rotate(
+          angle: angle,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(word, style: _fredoka(30, const Color(0xFF012782))),
+          ),
+        ),
+      ),
+    ],
+  );
+
   /// One potted plant in the start room, bending in a slow indoor draught
   /// with the odd stronger breath; tips move most, leaves flutter out of
   /// step. [light] runs 0..1 over the 12s loop.
@@ -878,9 +912,27 @@ class _LabelMakerGameState extends State<LabelMakerGame>
         // on top as sprites that sway. Inside the stage so they line up.
         Positioned.fill(child: _img('bg_plate')),
         for (final pl in _kPlants.where((p) => !p.front)) _plant(pl, light),
-        _at(118, 128, 262, 142, bob(0, 6, _img('label_house'))),
-        _at(1430, 96, 232, 112, bob(2, 6, _img('label_head'))),
-        _at(1590, 356, 236, 114, bob(4, 6, _img('label_book'))),
+        _at(
+          118,
+          128,
+          262,
+          142,
+          bob(0, 6, _tag('label_house', 'house', 146, 75, 84, 32, -0.12)),
+        ),
+        _at(
+          1430,
+          96,
+          232,
+          112,
+          bob(2, 6, _tag('label_head', 'head', 134, 70, 68, 30)),
+        ),
+        _at(
+          1590,
+          356,
+          236,
+          114,
+          bob(4, 6, _tag('label_book', 'book', 134, 69, 72, 29)),
+        ),
         ..._groundShadow(290, 255, 358, 480, 'girl'),
         ..._groundShadow(1250, 240, 297, 500, 'boy'),
         _at(290, 255, 358, 480, _img('girl')),
@@ -895,16 +947,17 @@ class _LabelMakerGameState extends State<LabelMakerGame>
             fit: StackFit.expand,
             children: [
               _img('logo'),
+              // Bent along the cream banner's arch, inside its rounded ends.
               Positioned(
-                left: 80,
-                right: 80,
-                top: 385,
-                bottom: 18,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    'Learn Arabic Words',
-                    style: _fredoka(38, _kNavy),
+                left: 104,
+                right: 104,
+                top: 384,
+                bottom: 26,
+                child: CustomPaint(
+                  painter: ArcTextPainter(
+                    'Learn Arabic Words'.tr,
+                    _fredoka(38, _kNavy),
+                    radius: 1756,
                   ),
                 ),
               ),
@@ -1794,13 +1847,21 @@ class _LabelMakerGameState extends State<LabelMakerGame>
                     painter: _BubblePainter(),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(26, 16, 26, 46),
-                      child: Center(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            _cheer,
-                            textAlign: TextAlign.center,
-                            style: _fredoka(34, _kNavy),
+                      // Wraps at the bubble's width first, so a long
+                      // (e.g. Tagalog) line breaks instead of shrinking the
+                      // whole message; only shrinks if still too tall.
+                      child: LayoutBuilder(
+                        builder: (context, c) => Center(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: SizedBox(
+                              width: c.maxWidth,
+                              child: Text(
+                                _cheer,
+                                textAlign: TextAlign.center,
+                                style: _fredoka(34, _kNavy),
+                              ),
+                            ),
                           ),
                         ),
                       ),

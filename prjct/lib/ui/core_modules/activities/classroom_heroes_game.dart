@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
+import '../../widgets/arc_text_painter.dart';
 import 'classroom_heroes_audio.dart';
 
 /// Classroom Heroes — pick the hero choice in three classroom scenarios.
@@ -108,6 +109,9 @@ const Curve _easeOut = Curves.easeOut;
 const Curve _easeInOut = Curves.easeInOut;
 const Curve _linear = Curves.linear;
 const Curve _popOut = Cubic(0.3, 1.5, 0.5, 1); // ch-pop / ch-fill
+
+/// ease-out-quart: the end board's calm, no-overshoot arrival.
+const Curve _quart = Cubic(0.25, 1, 0.5, 1);
 const Curve _burstOut = Cubic(0.3, 1.6, 0.5, 1); // MUMTAZ pop
 const Curve _curtainCurve = Cubic(0.65, 0, 0.35, 1);
 
@@ -145,8 +149,17 @@ double _loop(double t, double dur) {
 }
 
 /// The prototype's own timings, in seconds.
-const double _kCurtain = 1.0;
-const double _kNarrateDelay = 0.62;
+/// The curtain wipe, on Sirah Stories' timeline (seconds): it shuts over
+/// the current screen, the question plate comes up and **holds for 4
+/// seconds**, then goes and the curtain opens. What is behind it changes at
+/// the very end of the hold, so the prompt starts as the curtain opens.
+const double _kWipeShut = 0.9; // curtain closed by here
+const double _kPlateIn = 0.6; // plate starts to swell in
+const double _kPlateUp = 1.1; // plate fully up
+const double _kPlateHold = 4.0; // time it sits there, readable
+const double _kPlateGone = _kPlateUp + _kPlateHold + 0.5;
+const double _kCurtain = _kPlateGone + 0.9; // curtain drawn back by here
+const double _kCurtainMid = _kPlateGone - 0.1;
 const double _kMumtaz = 1.7;
 
 enum _Screen { start, play }
@@ -189,6 +202,9 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   bool _wrong = false;
   bool _mumtaz = false;
   bool _curtain = false;
+
+  /// The question number the curtain announces (the one coming up).
+  int _curtainQ = 1;
   bool _narrating = false;
   bool _finished = false;
   bool _heroLeft = true;
@@ -201,6 +217,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   final _results = <bool>[];
 
   Timer? _curtainTimer;
+  Timer? _curtainMidTimer;
   Timer? _mumtazTimer;
   Timer? _narrateDelayTimer;
   Timer? _narrateEndTimer;
@@ -230,6 +247,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   @override
   void dispose() {
     _curtainTimer?.cancel();
+    _curtainMidTimer?.cancel();
     _mumtazTimer?.cancel();
     _stopNarration();
     if (_audio != null) unawaited(_audio!.dispose());
@@ -246,12 +264,24 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   // Flow
   // -------------------------------------------------------------------------
 
-  /// The prototype's `wipe()` — a 1s curtain across the question change.
-  void _wipe() {
+  /// True while a curtain is shutting over the old question — taps on it
+  /// would act on a question that is about to be swapped out.
+  bool get _swapping => _curtainMidTimer?.isActive ?? false;
+
+  /// The curtain across a question change: it shuts over what is on screen,
+  /// announces question [number], and opens on whatever [atMidpoint] put
+  /// behind it.
+  void _wipe(int number, VoidCallback atMidpoint) {
     _curtainTimer?.cancel();
+    _curtainMidTimer?.cancel();
     setState(() {
       _curtain = true;
       _curtainT0 = _now;
+      _curtainQ = number;
+    });
+    _curtainMidTimer = Timer(_ms(_kCurtainMid), () {
+      if (!mounted) return;
+      atMidpoint();
     });
     _curtainTimer = Timer(_ms(_kCurtain), () {
       if (!mounted) return;
@@ -339,30 +369,35 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   static Duration _ms(double seconds) =>
       Duration(milliseconds: (seconds * 1000).round());
 
+  /// Behind the closed curtain: deal the cards and read the prompt as the
+  /// curtain opens.
   void _beginQuestion() {
     _heroLeft = _rng.nextBool();
-    _wipe();
-    _narrate(_kNarrateDelay);
+    _narrate(_kPlateGone - _kCurtainMid);
   }
 
   void _play() {
-    setState(() {
-      _screen = _Screen.play;
-      _screenT0 = _now;
-      _index = 0;
-      _correct = 0;
-      _answered = false;
-      _wrong = false;
-      _mumtaz = false;
-      _finished = false;
-      _errors = 0;
-      _results.clear();
+    if (_swapping) return;
+    _wipe(1, () {
+      setState(() {
+        _screen = _Screen.play;
+        _screenT0 = _now;
+        _index = 0;
+        _correct = 0;
+        _answered = false;
+        _wrong = false;
+        _mumtaz = false;
+        _finished = false;
+        _errors = 0;
+        _results.clear();
+      });
+      _beginQuestion();
     });
-    _beginQuestion();
   }
 
   void _backToStart() {
     _curtainTimer?.cancel();
+    _curtainMidTimer?.cancel();
     _mumtazTimer?.cancel();
     _stopNarration();
     setState(() {
@@ -381,7 +416,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   }
 
   void _pick(bool good) {
-    if (_answered) return;
+    if (_answered || _swapping) return;
     if (_audio != null) unawaited(_audio!.stopVoice());
     if (good) {
       HapticFeedback.mediumImpact();
@@ -417,6 +452,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   }
 
   void _next() {
+    if (_swapping) return;
     if (_index + 1 >= _items.length) {
       _mumtazTimer?.cancel();
       _stopNarration();
@@ -428,13 +464,15 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       widget.onEnding?.call();
       return;
     }
-    setState(() {
-      _index += 1;
-      _answered = false;
-      _wrong = false;
-      _mumtaz = false;
+    _wipe(_index + 2, () {
+      setState(() {
+        _index += 1;
+        _answered = false;
+        _wrong = false;
+        _mumtaz = false;
+      });
+      _beginQuestion();
     });
-    _beginQuestion();
   }
 
   void _readAgain() => _narrate(0);
@@ -583,11 +621,33 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
                 child: Align(
                   alignment: Alignment.center,
                   widthFactor: p,
-                  child: Image.asset(
-                    '$_kA/ribbon.png',
+                  child: SizedBox(
                     width: 667,
                     height: 222,
-                    fit: BoxFit.fill,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.asset('$_kA/ribbon.png', fit: BoxFit.fill),
+                        // Bent along the band between its two stars:
+                        // dark green outline under the white fill.
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(122, 62, 122, 100),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              for (final style in _ribbonStyles)
+                                CustomPaint(
+                                  painter: ArcTextPainter(
+                                    'Ready to Be a Hero Today?'.tr,
+                                    style,
+                                    radius: 1848,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -633,6 +693,9 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       builder: (down) => Image.asset(
         down ? '$_kA/play_btn_down.png' : '$_kA/play_btn.png',
         width: 460,
+        // Sized up front (art is 1319x517) so the button doesn't measure
+        // zero until the image decodes.
+        height: 460 * 517 / 1319,
         gaplessPlayback: true,
       ),
     );
@@ -1023,9 +1086,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
                     fontSize: 32,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFFFFFBE9),
-                    shadows: [
-                      Shadow(color: _goldShade, offset: Offset(0, 2)),
-                    ],
+                    shadows: [Shadow(color: _goldShade, offset: Offset(0, 2))],
                   ),
                 ),
               ],
@@ -1340,11 +1401,33 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       child: IgnorePointer(
         child: ClipRect(
           child: _fx((_) {
-            final t = _now - _curtainT0;
-            final p = _once(t, _kCurtain);
-            // 0%,42% at rest, then out to ±104%.
-            final slide = _kf(p, [0, 0.42, 1], [0, 0, 1.04], _curtainCurve);
-            final badge = _once(t, 1.0);
+            // Timeline in seconds, so the plate's reading time is exact.
+            final e = (_now - _curtainT0).clamp(0.0, _kCurtain);
+            final cover = _kf(
+              e,
+              [0, _kWipeShut, _kPlateGone, _kCurtain],
+              [0, 1, 1, 0],
+              _curtainCurve,
+            );
+            final slide = 1 - cover;
+            final plate = _kf(
+              e,
+              [_kPlateIn, _kPlateUp, _kPlateUp + _kPlateHold, _kPlateGone],
+              [0, 1, 1, 0],
+              Curves.easeOut,
+            );
+            final plateScale = _kf(
+              e,
+              [
+                _kPlateIn,
+                _kPlateUp - 0.15,
+                _kPlateUp,
+                _kPlateUp + _kPlateHold,
+                _kPlateGone,
+              ],
+              [0.7, 1.04, 1, 1, 0.92],
+              Curves.easeOut,
+            );
             return Stack(
               children: [
                 Positioned(
@@ -1389,25 +1472,13 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
                     ),
                   ),
                 ),
-                // ch-badge 1s ease-out — swells in, holds, shrinks away.
+                // Swells in, holds 4s to be read, shrinks away.
                 Positioned.fill(
                   child: Center(
                     child: Opacity(
-                      opacity: _kf(
-                        badge,
-                        [0, 0.22, 0.55, 0.72, 1],
-                        [0, 1, 1, 0, 0],
-                        _easeOut,
-                      ),
+                      opacity: _c01(plate),
                       child: Transform.scale(
-                        scale:
-                            k *
-                            _kf(
-                              badge,
-                              [0, 0.22, 0.55, 0.72, 1],
-                              [0.6, 1.04, 1, 0.9, 0.9],
-                              _easeOut,
-                            ),
+                        scale: k * plateScale,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 62,
@@ -1439,7 +1510,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
                               ),
                               const SizedBox(height: 14),
                               Text(
-                                'Question ${_index + 1}',
+                                'Question $_curtainQ',
                                 style: const TextStyle(
                                   fontFamily: _kBaloo,
                                   fontSize: 62,
@@ -1468,47 +1539,53 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   // =========================================================================
 
   Widget _buildFinish() {
+    final still = MediaQuery.of(context).disableAnimations;
     return Positioned.fill(
       child: _fx((_) {
-        final t = _now - _finishT0;
-        final reveal = _easeOut.transform(_once(t, 0.45));
-        final card = _once(t, 0.55);
+        // Reduced motion lands straight on the settled board.
+        final t = still ? 99.0 : _now - _finishT0;
+        // One calm, staged arrival: the room fades in, the board rises,
+        // then the cheering friends step up and the confetti starts.
+        final room = _quart.transform(_once(t, 0.35));
+        final card = _quart.transform(_once(t, 0.55, 0.05));
+        final kids = _quart.transform(_once(t, 0.55, 0.35));
+        final party = _once(t, 0.8, 0.6);
         return Opacity(
-          opacity: reveal,
+          opacity: room,
           child: Stack(
             children: [
-              Positioned.fill(child: _confetti()),
+              Positioned.fill(
+                child: Opacity(opacity: party, child: _confetti()),
+              ),
               Positioned(
                 left: 0,
                 right: 0,
                 top: 22,
                 child: Center(child: _heroMeter(still: true)),
               ),
-              // Amina and Ahmad, cheering either side of the card.
+              // Amina and Ahmad, cheering either side of the board.
               Positioned(
                 left: 24,
                 bottom: 14,
-                child: _cheer('amina_celebrate', 320, 489),
+                child: _riseIn(kids, 70, _cheer('amina_celebrate', 320, 489)),
               ),
               Positioned(
                 right: 24,
                 bottom: 14,
-                child: _cheer('ahmad_celebrate', 316, 489),
+                child: _riseIn(kids, 70, _cheer('ahmad_celebrate', 316, 489)),
               ),
               Positioned(
                 left: (_kW - 900) / 2,
                 top: 236,
                 width: 900,
                 child: Opacity(
-                  opacity: _kf(card, [0, 0.55, 1], [0, 1, 1]),
-                  child: Transform.scale(
-                    scale: _kf(
-                      card,
-                      [0, 0.55, 0.75, 1],
-                      [0.3, 1.08, 0.97, 1],
-                      _popOut,
+                  opacity: card,
+                  child: Transform.translate(
+                    offset: Offset(0, 48 * (1 - card)),
+                    child: Transform.scale(
+                      scale: 0.96 + 0.04 * card,
+                      child: _badgePanel(t),
                     ),
-                    child: _badgePanel(),
                   ),
                 ),
               ),
@@ -1518,6 +1595,12 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       }),
     );
   }
+
+  /// Fades [child] in while it rises [dy] px into place; [p] is 0..1.
+  static Widget _riseIn(double p, double dy, Widget child) => Opacity(
+    opacity: p,
+    child: Transform.translate(offset: Offset(0, dy * (1 - p)), child: child),
+  );
 
   /// A cheering character - static.
   Widget _cheer(String asset, double w, double h) =>
@@ -1573,151 +1656,172 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     _ => 'Good try! Play again to earn more stars!',
   };
 
-  Widget _badgePanel() {
-    final n = _items.length;
-    final pct = n == 0 ? 100 : (_correct / n * 100).round();
-    return Stack(
-      clipBehavior: Clip.none,
-      alignment: Alignment.topCenter,
-      children: [
-        Image.asset(
-          '$_kA/badge_frame.png',
-          width: 900,
-          height: 539,
-          fit: BoxFit.fill,
-        ),
-        Positioned.fill(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(90, 34, 90, 40),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: SizedBox(
-                width: 720,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Image.asset(
-                      '$_kA/ribbon_hero.png',
-                      width: 500,
-                      height: 127,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _verdict,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontFamily: _kBaloo,
-                        fontSize: 36,
-                        fontWeight: FontWeight.w800,
-                        height: 1.15,
-                        color: _deepGreen,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _session.finishText,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontFamily: _kBaloo,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        height: 1.2,
-                        color: _inkGreen,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Row(
+  /// The end board, read top to bottom: the CLASSROOM HERO! ribbon on the
+  /// frame's top edge, the stars earned, how it went, one mark per
+  /// question, and Continue on the bottom edge. [t] staggers each in.
+  Widget _badgePanel(double t) {
+    Widget step(double delay, Widget child) =>
+        _riseIn(_quart.transform(_once(t, 0.45, delay)), 16, child);
+    Widget starIn(int i, Widget star) {
+      final p = _quart.transform(_once(t, 0.45, 0.55 + i * 0.12));
+      return Opacity(
+        opacity: p,
+        child: Transform.scale(scale: 0.6 + 0.4 * p, child: star),
+      );
+    }
+
+    // Tall enough to hold Continue where it straddles the frame's bottom
+    // edge — a tap only lands inside its parent's bounds.
+    return SizedBox(
+      width: 900,
+      height: 539 + 56,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
+        children: [
+          Image.asset(
+            '$_kA/badge_frame.png',
+            width: 900,
+            height: 539,
+            fit: BoxFit.fill,
+          ),
+          // Inside the frame's starry border, under the ribbon and above
+          // the button. Copy wraps first and only shrinks if it must.
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: 539,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(120, 92, 120, 74),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  width: 660,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
                         mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          _statChip(
-                            Icons.check_circle,
-                            _leafGreenDeep,
-                            '$_correct right',
+                          starIn(0, _star(76, 1.1, on: _stars >= 1)),
+                          const SizedBox(width: 10),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 14),
+                            child: starIn(1, _star(96, 1.3, on: _stars >= 2)),
                           ),
-                          const SizedBox(width: 14),
-                          _statChip(
-                            Icons.cancel,
-                            _meterWrongDeep,
-                            '$_errors wrong',
-                          ),
-                          const SizedBox(width: 14),
-                          _statChip(
-                            Icons.track_changes,
-                            _amber,
-                            '$pct% correct',
-                          ),
+                          const SizedBox(width: 10),
+                          starIn(2, _star(76, 1.5, on: _stars >= 3)),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Semantics(
-                      button: true,
-                      label: 'Continue to Next Lesson',
-                      child: _Push(
-                        onTap: _finish,
-                        dy: 3,
-                        builder: (down) => Image.asset(
-                          down
-                              ? '$_kA/continue_btn_down.png'
-                              : '$_kA/continue_btn.png',
-                          width: 330,
-                          height: 105,
-                          gaplessPlayback: true,
+                      const SizedBox(height: 18),
+                      step(
+                        0.8,
+                        Text(
+                          _verdict,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontFamily: _kBaloo,
+                            fontSize: 38,
+                            fontWeight: FontWeight.w800,
+                            height: 1.12,
+                            color: _deepGreen,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 10),
+                      step(
+                        0.9,
+                        Text(
+                          _session.finishText,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontFamily: _kBaloo,
+                            fontSize: 25,
+                            fontWeight: FontWeight.w600,
+                            height: 1.25,
+                            color: _inkGreen,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      step(1.0, _resultMarks()),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        Positioned(
-          top: -62,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _star(88, 1.1, on: _stars >= 1),
-              const SizedBox(width: 2),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: _star(112, 1.3, on: _stars >= 2),
-              ),
-              const SizedBox(width: 2),
-              _star(88, 1.5, on: _stars >= 3),
-            ],
+          Positioned(
+            top: -58,
+            child: step(
+              0.3,
+              Image.asset('$_kA/ribbon_hero.png', width: 470, height: 119),
+            ),
           ),
-        ),
-      ],
+          Positioned(
+            bottom: 0,
+            child: step(
+              1.1,
+              Semantics(
+                button: true,
+                label: 'Continue to Next Lesson',
+                child: _Push(
+                  onTap: _finish,
+                  dy: 3,
+                  builder: (down) => Image.asset(
+                    down
+                        ? '$_kA/continue_btn_down.png'
+                        : '$_kA/continue_btn.png',
+                    width: 316,
+                    height: 101,
+                    gaplessPlayback: true,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  /// One fact on the badge's score line: icon, then its value.
-  Widget _statChip(IconData icon, Color color, String text) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 8, 20, 8),
-      decoration: BoxDecoration(
-        color: _creamChip,
-        border: Border.all(color: _creamEdge, width: 3),
-        borderRadius: BorderRadius.circular(999),
-      ),
+  /// One mark per question, in the order played: a green tick for a hero
+  /// choice, a red cross for a miss.
+  Widget _resultMarks() {
+    return Semantics(
+      label: '$_correct of ${_items.length}',
+      excludeSemantics: true,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 30, color: color),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: TextStyle(
-              fontFamily: _kNunito,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: color,
+          for (final (i, ok) in _results.indexed) ...[
+            if (i > 0) const SizedBox(width: 16),
+            Container(
+              width: 54,
+              height: 54,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: ok ? _leafGreenDeep : _meterWrongDeep,
+                border: Border.all(color: Colors.white, width: 4),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x33000000),
+                    offset: Offset(0, 3),
+                    blurRadius: 6,
+                  ),
+                ],
+              ),
+              child: Icon(
+                ok ? Icons.check_rounded : Icons.close_rounded,
+                size: 34,
+                color: Colors.white,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -1887,3 +1991,21 @@ class _StrokedTitle extends StatelessWidget {
     );
   }
 }
+
+/// The start ribbon's lettering: a dark green outline, then white.
+final _ribbonStyles = [
+  for (final fill in [false, true])
+    TextStyle(
+      fontFamily: _kBaloo,
+      fontSize: 34,
+      fontWeight: FontWeight.w800,
+      color: fill ? Colors.white : null,
+      foreground: fill
+          ? null
+          : (Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 6
+              ..strokeJoin = StrokeJoin.round
+              ..color = const Color(0xFF0C4A1A)),
+    ),
+];

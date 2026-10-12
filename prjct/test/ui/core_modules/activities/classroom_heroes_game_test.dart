@@ -78,7 +78,8 @@ void main() {
     final dynamic playButton = tester.widget(find.byKey(const ValueKey('ch-play')));
     (playButton.onTap as VoidCallback)();
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 700));
+    // The prompt waits for the curtain to start opening (5.6s).
+    await tester.pump(const Duration(milliseconds: 5700));
     expect(audio.played.last, clips.prompt);
 
     audio.complete();
@@ -104,7 +105,8 @@ void main() {
   });
 
   Future<void> skipNarration(WidgetTester tester) async {
-    await tester.pump(const Duration(milliseconds: 700));
+    // The narration bar arrives as the curtain starts to open (5.6s).
+    await tester.pump(const Duration(milliseconds: 5700));
     await tester.tap(find.text('Skip'));
     await tester.pump(const Duration(milliseconds: 400));
   }
@@ -115,7 +117,9 @@ void main() {
     WidgetTester tester,
     ClassroomHeroesSession session,
   ) async {
+    // Play has finished easing in by 2.4s.
     await tester.pump(const Duration(milliseconds: 1400));
+    await tester.pump(const Duration(milliseconds: 1000));
     await tester.tap(find.byKey(const ValueKey('ch-play')));
     await tester.pump();
     await skipNarration(tester);
@@ -227,9 +231,13 @@ void main() {
     expect(find.text(session.finishText), findsOneWidget);
     // 2 of 3 right: two stars and the round's tally.
     expect(find.text('Great job! Keep being a classroom hero!'), findsOneWidget);
-    expect(find.text('2 right'), findsOneWidget);
-    expect(find.text('1 wrong'), findsOneWidget);
-    expect(find.text('67% correct'), findsOneWidget);
+    // One mark per question on the board: 2 ticks and a cross.
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.label == '2 of 3',
+      ),
+      findsOneWidget,
+    );
     expect(xp, isNull, reason: 'the badge waits for the continue button');
 
     await tester.tap(find.bySemanticsLabel('Continue to Next Lesson'));

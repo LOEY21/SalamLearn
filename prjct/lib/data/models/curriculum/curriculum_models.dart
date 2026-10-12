@@ -36,9 +36,10 @@ enum FivePillarsMode { scenarios, ordering }
 /// Flowers & Fruits (Session 2).
 enum GoodDeedTreeSession { rootsAndBranches, flowersAndFruits }
 
-/// Taharah Adventure's three sessions: Clean or Dirty? (Session 1), Wudhu
-/// Part 1 (Session 2, steps 1-5) and Wudhu Part 2 (Session 3, steps 6-10).
-enum TaharahSession { cleanOrDirty, wudhuPart1, wudhuPart2 }
+/// Taharah Adventure's sessions: Clean or Dirty?, Wudhu Part 1 (steps 1-5),
+/// Wudhu Part 2 (steps 6-10) and the whole wudhu in one ([wudhu], steps
+/// 1-10) — the only one the curriculum plays now.
+enum TaharahSession { cleanOrDirty, wudhuPart1, wudhuPart2, wudhu }
 
 /// Label Maker's three sessions: My Home (Stage 2), My Body (Stage 3) and
 /// My Madrasah (Stage 5), ten Arabic words each.

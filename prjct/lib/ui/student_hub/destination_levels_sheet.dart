@@ -374,6 +374,8 @@ class _StageHeader extends StatelessWidget {
                             shadows: hubTextShadow,
                           ),
                         ),
+                        // Room for the Arabic's tall vowel marks.
+                        const SizedBox(height: 8),
                         Text(
                           destination.nameAr,
                           textDirection: TextDirection.rtl,
@@ -401,6 +403,9 @@ class _StageHeader extends StatelessWidget {
                       ),
                     ),
                   ),
+                  // Keeps the text clear of the close button (48 wide,
+                  // 10 from the edge) above it.
+                  const SizedBox(width: 46),
                 ],
               ),
             ),

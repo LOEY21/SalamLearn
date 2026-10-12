@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:flutter/services.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
+import '../../widgets/arc_text_painter.dart';
 import 'sirah_story_audio.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
@@ -71,6 +72,25 @@ const double _kLogoW = 0.50 * _kW;
 const double _kLogoAspect = 1773 / 869;
 const double _kRibbonW = 0.36 * _kW;
 const double _kRibbonAspect = 2105 / 683;
+
+/// The start ribbon's title lettering: a dark green outline, then white.
+final _ribbonTitleStyles = [
+  for (final fill in [false, true])
+    TextStyle(
+      fontFamily: 'Baloo2Var',
+      fontSize: 52,
+      fontWeight: FontWeight.w800,
+      fontVariations: const [ui.FontVariation.weight(800)],
+      color: fill ? const Color(0xFFFFFDF3) : null,
+      foreground: fill
+          ? null
+          : (Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 8
+              ..strokeJoin = StrokeJoin.round
+              ..color = const Color(0xFF0B4A1C)),
+    ),
+];
 const double _kPlayW = 0.30 * _kW;
 const double _kPlayAspect = 2066 / 696;
 
@@ -875,11 +895,42 @@ class _SirahStoryGameState extends State<SirahStoryGame>
                 child: Transform.scale(
                   scaleX: 0.86 + 0.14 * p,
                   scaleY: 0.94 + 0.06 * p,
-                  child: Image.asset(
-                    'assets/images/sirah_story/title_ribbon.png',
+                  child: SizedBox(
                     width: _kRibbonW,
                     height: _kRibbonW / _kRibbonAspect,
-                    fit: BoxFit.fill,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.asset(
+                          'assets/images/sirah_story/title_ribbon.png',
+                          fit: BoxFit.fill,
+                        ),
+                        // Bent along the green band (its middle sits 40.5%
+                        // down the art and arches ~1134 px wide here),
+                        // outline pass under the white fill.
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            _kRibbonW * .14,
+                            _kRibbonW / _kRibbonAspect * .267,
+                            _kRibbonW * .14,
+                            _kRibbonW / _kRibbonAspect * .457,
+                          ),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              for (final style in _ribbonTitleStyles)
+                                CustomPaint(
+                                  painter: ArcTextPainter(
+                                    "A Prophet's Adventure".tr,
+                                    style,
+                                    radius: 1134,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1492,17 +1543,67 @@ class _SirahStoryGameState extends State<SirahStoryGame>
     required String asset,
     required double width,
     required double aspect,
+    Widget Function(bool down)? label,
   }) {
     return _Push(
       key: key,
       onTap: onTap,
       dy: 3,
-      builder: (down) => Image.asset(
-        'assets/images/sirah_story/$asset${down ? '_down' : ''}.png',
-        width: width,
-        height: width / aspect,
-        fit: BoxFit.fill,
-        gaplessPlayback: true,
+      builder: (down) {
+        final art = Image.asset(
+          'assets/images/sirah_story/$asset${down ? '_down' : ''}.png',
+          width: width,
+          height: width / aspect,
+          fit: BoxFit.fill,
+          gaplessPlayback: true,
+        );
+        if (label == null) return art;
+        return Stack(
+          children: [
+            art,
+            Positioned.fill(child: label(down)),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Replay Narration's words, beside the art's own icon, so they follow
+  /// the app language. The pressed art drops its divider and sits the
+  /// words a little further left.
+  Widget _replayLabel(bool down) {
+    const h = _kReplayW / _kReplayAspect;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        down ? 134 : 152,
+        h * .2,
+        _kReplayW - (down ? 298 : 300),
+        h * .22,
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: SizedBox(
+          width: down ? 164 : 148,
+          child: Text(
+            'Replay Narration',
+            style: const TextStyle(
+              fontFamily: 'Baloo2Var',
+              fontSize: 30,
+              fontWeight: FontWeight.w800,
+              fontVariations: [ui.FontVariation.weight(800)],
+              height: 1.0,
+              color: Color(0xFFFCF4D3),
+              shadows: [
+                Shadow(
+                  color: Color(0xCC3A1E06),
+                  offset: Offset(0, 2),
+                  blurRadius: 3,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1528,6 +1629,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
               asset: 'replay_btn',
               width: _kReplayW,
               aspect: _kReplayAspect,
+              label: _replayLabel,
             ),
           ),
         ),
@@ -1817,7 +1919,9 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   }
 
   Widget _option(bool isCorrect, int index) {
-    final won = isCorrect && _answered && !_missed;
+    // The right answer is always revealed once answered — after a miss it
+    // gets its tick alongside the wrong pick's cross.
+    final won = isCorrect && _answered;
     final lost = !isCorrect && _missed;
     // The tile is the painted pill; the label sits on it and the win state
     // is a gold glow and a tick rather than a repaint of the art.
@@ -2160,11 +2264,49 @@ class _SirahStoryGameState extends State<SirahStoryGame>
               _inPlaque,
               rise: -0.35,
               from: 1.1,
-              child: Image.asset(
-                '$asset/end_plaque.png',
+              child: SizedBox(
                 width: _kEndPlaqueW,
                 height: plaqueH,
-                fit: BoxFit.fill,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.asset('$asset/end_plaque.png', fit: BoxFit.fill),
+                    // The two lines under MUMTAZ!, where the art had them
+                    // (78%-94% down), so they follow the app language.
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        _kEndPlaqueW * .15,
+                        plaqueH * .775,
+                        _kEndPlaqueW * .14,
+                        plaqueH * .06,
+                      ),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'You completed',
+                              style: _endStyle(
+                                _kEndPlaqueW * .046,
+                                800,
+                                const Color(0xFF6C3103),
+                              ).copyWith(height: 1.05),
+                            ),
+                            Text(
+                              "Muhammad's Journey!",
+                              style: _endStyle(
+                                _kEndPlaqueW * .058,
+                                800,
+                                const Color(0xFF034B29),
+                              ).copyWith(height: 1.05),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

@@ -682,8 +682,9 @@ void main() {
       await openQuestion(tester);
       await tester.tap(find.text(page.decoy));
       await tester.pump();
+      // The wrong pick gets its cross and the right answer its tick.
       expect(find.byIcon(Icons.close_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.check_rounded), findsNothing);
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget);
       await advance(tester);
     }
 

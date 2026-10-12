@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
+import '../../widgets/arc_text_painter.dart';
 import 'bend_sprite.dart';
 import 'quran_etiquette_audio.dart';
 
@@ -842,11 +843,36 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
   /// The subtitle ribbon unrolls outward from its centre once the logo
   /// lands, sitting across the plaque's lower rim just under "Etiquette".
   Widget _startRibbon() {
-    final ribbon = Image.asset(
-      '$_kA/start_ribbon.png',
+    final ribbon = SizedBox(
       width: 546,
       height: 119,
-      fit: BoxFit.fill,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset('$_kA/start_ribbon.png', fit: BoxFit.fill),
+          // Between the two stars, on the band's cream face.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(108, 22, 108, 26),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: SizedBox(
+                width: 330,
+                child: Text(
+                  'Learn and Love Proper Qur\'an Manners',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: _kBaloo,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w800,
+                    height: 1.05,
+                    color: Color(0xFF03403B),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
     return Positioned(
       left: 0,
@@ -975,7 +1001,7 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
   /// A wrong pick shows the Try Again! badge in the same spot instead.
   Widget _buildMumtaz() {
     final w = _missed ? 480.0 : 540.0;
-    final h = _missed ? w * 443 / 800 : w * 401 / 900;
+    final h = _missed ? w * 826 / 1432 : w * 401 / 900;
     return IgnorePointer(
       child: ClipRect(
         child: FittedBox(
@@ -1025,11 +1051,41 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
   /// sweeping across it and sparkles twinkling at its corners.
   Widget _glowingMumtaz(double t, double w, double h) {
     final glow = t > 0.5 ? _wave(t - 0.5, 1.2) : 0.0;
-    final art = Image.asset(
-      _missed ? '$_kA/try_again.png' : '$_kA/mumtaz_correct.png',
-      width: w,
-      height: h,
-    );
+    final art = _missed
+        ? SizedBox(
+            width: w,
+            height: h,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset('$_kA/try_again.png', fit: BoxFit.fill),
+                // Bent along the red banner's arch: a dark outline pass
+                // under the yellow fill.
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    w * 0.15,
+                    h * 0.57,
+                    w * 0.15,
+                    h * 0.21,
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      for (final style in _tryAgainStyles(h))
+                        CustomPaint(
+                          painter: ArcTextPainter(
+                            'Try Again!'.tr,
+                            style,
+                            radius: w * 1.5,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )
+        : Image.asset('$_kA/mumtaz_correct.png', width: w, height: h);
     final sweep = _loop(math.max(0, t - 0.6), 1.8) / 0.45;
     final x = -0.3 + 1.6 * _easeInOut.transform(_c01(sweep));
     return Stack(
@@ -1096,6 +1152,25 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
         Positioned(right: w * 0.18, bottom: -8, child: _sparkle(34, 1.6, 0.2)),
       ],
     );
+  }
+
+  /// Try Again!'s lettering: a dark red outline pass, then the yellow fill.
+  static List<TextStyle> _tryAgainStyles(double h) {
+    final base = TextStyle(
+      fontFamily: _kBaloo,
+      fontSize: h * 0.24,
+      fontWeight: FontWeight.w800,
+    );
+    return [
+      base.copyWith(
+        foreground: Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = h * 0.035
+          ..strokeJoin = StrokeJoin.round
+          ..color = const Color(0xFF7A1204),
+      ),
+      base.copyWith(color: const Color(0xFFFFE14D)),
+    ];
   }
 
   /// Scales RGB by [k] — a simple brightness lift for the MUMTAZ! art.
@@ -1897,65 +1972,76 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
               fit: BoxFit.fill,
             ),
           ),
+          // Kept inside the card's rim: longer (e.g. Tagalog) copy shrinks
+          // the whole summary rather than spilling past the bottom.
           Positioned(
             left: 110,
             right: 110,
             top: 380,
-            child: Column(
-              children: [
-                Text(
-                  _lowScore
-                      ? 'Nice try! You earned $_correct of $n stars.'
-                      : 'You made $_correct of $n respectful choices '
-                            '${_session.title.toLowerCase()}!',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontFamily: _kBaloo,
-                    fontSize: 52,
-                    fontWeight: FontWeight.w800,
-                    height: 1.15,
-                    color: _endInk,
-                  ),
-                ),
-                if (_lowScore) ...[
-                  const SizedBox(height: 6),
-                  const Text(
-                    "Keep practicing — you can do it, in shaa Allah!",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontFamily: _kBaloo,
-                      fontSize: 38,
-                      fontWeight: FontWeight.w700,
-                      height: 1.15,
-                      color: Color(0xFFB8741A),
+            bottom: 110,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                width: 880,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _lowScore
+                          ? 'Nice try! You earned $_correct of $n stars.'
+                          : 'You made $_correct of $n respectful choices '
+                                '${_session.title.toLowerCase()}!',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontFamily: _kBaloo,
+                        fontSize: 52,
+                        fontWeight: FontWeight.w800,
+                        height: 1.15,
+                        color: _endInk,
+                      ),
                     ),
-                  ),
-                ],
-                const SizedBox(height: 22),
-                Container(
-                  width: 780,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: const Color(0x66E9DAB4),
-                    borderRadius: BorderRadius.circular(44),
-                    border: Border.all(
-                      color: const Color(0xFFE3CF9F),
-                      width: 4,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      for (var i = 0; i < n; i++) ...[
-                        if (i > 0) const SizedBox(width: 26),
-                        _endStar(i, t),
-                      ],
+                    if (_lowScore) ...[
+                      const SizedBox(height: 6),
+                      const Text(
+                        "Keep practicing — you can do it, in shaa Allah!",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: _kBaloo,
+                          fontSize: 38,
+                          fontWeight: FontWeight.w700,
+                          height: 1.15,
+                          color: Color(0xFFB8741A),
+                        ),
+                      ),
                     ],
-                  ),
+                    const SizedBox(height: 22),
+                    Container(
+                      width: 780,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        color: const Color(0x66E9DAB4),
+                        borderRadius: BorderRadius.circular(44),
+                        border: Border.all(
+                          color: const Color(0xFFE3CF9F),
+                          width: 4,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          for (var i = 0; i < n; i++) ...[
+                            if (i > 0) const SizedBox(width: 26),
+                            _endStar(i, t),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 26),
+                    _learnedBox(),
+                  ],
                 ),
-                const SizedBox(height: 26),
-                _learnedBox(),
-              ],
+              ),
             ),
           ),
         ],
@@ -2052,16 +2138,21 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
           ),
         ),
         const SizedBox(width: 18),
+        // One line, as before; a long (e.g. Tagalog) lesson shrinks just
+        // enough to fit instead of being cut off.
         Expanded(
-          child: Text(
-            lesson,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontFamily: _kNunito,
-              fontSize: 32,
-              fontWeight: FontWeight.w700,
-              color: _endInk,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              lesson,
+              maxLines: 1,
+              style: const TextStyle(
+                fontFamily: _kNunito,
+                fontSize: 32,
+                fontWeight: FontWeight.w700,
+                color: _endInk,
+              ),
             ),
           ),
         ),

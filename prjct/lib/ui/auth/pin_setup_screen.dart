@@ -7,7 +7,7 @@ import '../widgets/route_entrance.dart';
 import '../../logic/auth/session.dart';
 import '../theme/app_colors.dart';
 import '../widgets/pin_pad.dart';
-import '../widgets/role_icons.dart';
+import 'pin_gate_frame.dart';
 
 class PinSetupScreen extends ConsumerStatefulWidget {
   const PinSetupScreen({super.key});
@@ -113,10 +113,9 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
     final isTeacher = role == UserRole.asatidz;
     final isParent = role == UserRole.parent;
     final isLearner = role == UserRole.learner;
-    final accentColor = (isTeacher || isLearner) ? AppColors.gold : AppColors.teal;
-    final roleLabel = isTeacher
-        ? 'TEACHER GATE'
-        : (isParent ? 'PARENT GATE' : 'LEARNER GATE');
+    final accentColor = (isTeacher || isLearner)
+        ? AppColors.gold
+        : AppColors.teal;
 
     String headingText;
     String subtitleText;
@@ -154,225 +153,52 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) _handleBack(redirect, role);
       },
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        body: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 14, 18, 0),
-                child: Row(
-                  children: [
-                    _BackButton(onTap: () => _handleBack(redirect, role)),
-                    Expanded(
-                      child: Text(
-                        roleLabel,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.6,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 34),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 340),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 10),
-                          FadeTransition(
-                            opacity: lock,
-                            child: ScaleTransition(
-                              scale: lock.drive(Tween(begin: 0.9, end: 1.0)),
-                              child: _RoleRingHero(role: role, spin: _spin),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          FadeTransition(
-                            opacity: heading,
-                            child: Text(
-                              headingText,
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w900,
-                                color: AppColors.ink,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          FadeTransition(
-                            opacity: subhead,
-                            child: Text(
-                              subtitleText,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                color: AppColors.textMuted,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-                          FadeTransition(
-                            opacity: pad,
-                            child: PinPad(
-                              key: ValueKey(confirming),
-                              accentColor: accentColor,
-                              onSubmit: (pin) {
-                                if (!remoteLinked && !confirming) {
-                                  setState(() => _firstEntry = pin);
-                                  return true;
-                                }
-                                if (!remoteLinked && pin != _firstEntry) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        "PINs didn't match — try again",
-                                      ),
-                                    ),
-                                  );
-                                  setState(() => _firstEntry = null);
-                                  return false;
-                                }
-                                final notifier = ref.read(
-                                  sessionProvider.notifier,
-                                );
-                                final destination =
-                                    redirect ??
-                                    (role == UserRole.asatidz
-                                        ? '/teacher'
-                                        : '/parent');
-                                notifier
-                                    .createPin(pin)
-                                    .then((_) {
-                                      if (context.mounted) {
-                                        context.go(destination);
-                                      }
-                                    })
-                                    .catchError((Object error) {
-                                      if (context.mounted) {
-                                        setState(() => _firstEntry = null);
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(content: Text('$error')),
-                                        );
-                                      }
-                                    });
-                                return true;
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+      child: PinGateFrame(
+        role: role,
+        title: headingText,
+        subtitle: subtitleText,
+        spin: _spin,
+        heroIn: lock,
+        titleIn: heading,
+        subtitleIn: subhead,
+        padIn: pad,
+        onBack: () => _handleBack(redirect, role),
+        pad: PinPad(
+          key: ValueKey(confirming),
+          accentColor: accentColor,
+          onSubmit: (pin) {
+            if (!remoteLinked && !confirming) {
+              setState(() => _firstEntry = pin);
+              return true;
+            }
+            if (!remoteLinked && pin != _firstEntry) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("PINs didn't match — try again")),
+              );
+              setState(() => _firstEntry = null);
+              return false;
+            }
+            final notifier = ref.read(sessionProvider.notifier);
+            final destination =
+                redirect ?? (role == UserRole.asatidz ? '/teacher' : '/parent');
+            notifier
+                .createPin(pin)
+                .then((_) {
+                  if (context.mounted) {
+                    context.go(destination);
+                  }
+                })
+                .catchError((Object error) {
+                  if (context.mounted) {
+                    setState(() => _firstEntry = null);
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('$error')));
+                  }
+                });
+            return true;
+          },
         ),
-      ),
-    );
-  }
-}
-
-class _BackButton extends StatelessWidget {
-  const _BackButton({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.creamBorder, width: 1.4),
-          ),
-          child: const Icon(Icons.arrow_back, color: AppColors.ink, size: 18),
-        ),
-      ),
-    );
-  }
-}
-
-/// Rotating conic-gradient ring around a white icon disc — the ring's
-/// motion is the "locked" affordance, replacing the old static glow +
-/// coral lock badge.
-class _RoleRingHero extends StatelessWidget {
-  const _RoleRingHero({required this.role, required this.spin});
-
-  final UserRole role;
-  final Animation<double> spin;
-
-  @override
-  Widget build(BuildContext context) {
-    final isLearner = role == UserRole.learner;
-    final isTeacher = role == UserRole.asatidz;
-    final primaryColor = isTeacher
-        ? AppColors.gold
-        : (isLearner ? AppColors.gold : AppColors.teal);
-    final primaryColor2 = isTeacher || isLearner
-        ? const Color(0xFFF7C25A)
-        : const Color(0xFF14A17F);
-
-    Widget getIcon(Color color, double size) {
-      if (isTeacher) return graduationCapIcon(color, size: size);
-      if (isLearner) return backpackIcon(color, size: size);
-      return familyIcon(color, size: size);
-    }
-
-    return SizedBox(
-      width: 108,
-      height: 108,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          AnimatedBuilder(
-            animation: spin,
-            builder: (context, child) => Transform.rotate(
-              angle: spin.value * 6.28319,
-              child: child,
-            ),
-            child: Container(
-              width: 108,
-              height: 108,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: SweepGradient(
-                  colors: [primaryColor, primaryColor2, primaryColor],
-                ),
-              ),
-            ),
-          ),
-          Container(
-            width: 92,
-            height: 92,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white,
-            ),
-            alignment: Alignment.center,
-            child: getIcon(primaryColor, 36),
-          ),
-        ],
       ),
     );
   }

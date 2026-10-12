@@ -6,6 +6,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:salamlearn/data/curriculum_data.dart';
 import 'package:salamlearn/data/models/curriculum/curriculum_models.dart';
 import 'package:salamlearn/ui/core_modules/activities/label_maker_game.dart';
+import 'package:salamlearn/ui/widgets/arc_text_painter.dart';
+
+/// The start banner's title is painted along an arch, not a Text widget.
+Finder _arcText(String text) => find.byWidgetPredicate(
+  (w) =>
+      w is CustomPaint &&
+      w.painter is ArcTextPainter &&
+      (w.painter! as ArcTextPainter).text == text,
+);
 
 /// A point inside each My Home object, in the 1870x841 stage.
 const _home = {
@@ -63,7 +72,7 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('Learn Arabic Words'), findsOneWidget);
+    expect(_arcText('Learn Arabic Words'), findsOneWidget);
 
     // Music toggles the game's sounds off and back on.
     await tester.tap(find.byKey(const ValueKey('lm-music')));
@@ -82,7 +91,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('How to Play'), findsNothing);
-    expect(find.text('Learn Arabic Words'), findsOneWidget);
+    expect(_arcText('Learn Arabic Words'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('lm-play')));
     await tester.pump();
     expect(find.text('How to Play'), findsOneWidget);
