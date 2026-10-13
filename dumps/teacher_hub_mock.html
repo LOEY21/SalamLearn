@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Teacher Hub Mock</title>
+<style>
+  :root{
+    --cream:#FAF6EC;
+    --teal:#0F6E56;
+    --teal-dark:#0A4F3E;
+    --gold:#EF9F27;
+    --gold-tint:#FDF1DE;
+    --gold-soft:#F7C86F;
+    --coral:#D85A30;
+    --coral-tint:#FBE9E2;
+    --ink:#20241F;
+    --mint:#E7F3EF;
+    --mint-border:#BFDCD2;
+    --cream-border:#ECEEEC;
+    --text-muted:#7A8079;
+    --neutral-tint:#F7F8F7;
+    --surface:#FFFFFF;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:#e5e5e5;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:24px;
+    gap:16px;
+  }
+  .switcher{
+    display:flex;gap:8px;flex-wrap:wrap;justify-content:center;
+    max-width:390px;
+  }
+  .switcher button{
+    border:1px solid #ccc;background:#fff;border-radius:8px;
+    padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;color:#333;
+  }
+  .switcher button.active{background:var(--teal);color:#fff;border-color:var(--teal);}
+
+  .phone{
+    width:390px;
+    height:844px;
+    background:var(--surface);
+    border-radius:36px;
+    box-shadow:0 10px 40px rgba(0,0,0,.3);
+    overflow:hidden;
+    border:8px solid #111;
+    display:flex;
+    flex-direction:column;
+    position:relative;
+  }
+  .statusbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:14px 20px 4px;
+    font-size:14px;
+    font-weight:600;
+    color:var(--ink);
+    flex-shrink:0;
+    background:var(--surface);
+    position:relative;
+    z-index:2;
+  }
+  .statusbar .icons{display:flex;gap:5px;align-items:center;font-size:13px;}
+
+  .tabpanel{display:none;flex:1;min-height:0;flex-direction:column;}
+  .tabpanel.active{display:flex;}
+
+  /* ---- flat header (Home tab) ---- */
+  .header{
+    display:flex;
+    align-items:flex-start;
+    gap:12px;
+    padding:10px 14px 12px 18px;
+    flex-shrink:0;
+  }
+  .avatar-box{
+    width:34px;height:34px;border-radius:10px;
+    border:1.5px solid var(--teal);background:var(--mint);
+    display:flex;align-items:center;justify-content:center;
+    font-size:17px;flex-shrink:0;
+  }
+  .header-text{flex:1;min-width:0;}
+  .eyebrow{
+    font-size:10px;font-weight:700;letter-spacing:.4px;color:var(--text-muted);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .title{
+    font-size:15px;font-weight:800;letter-spacing:-0.2px;color:var(--ink);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;
+  }
+  .status-row{display:flex;align-items:center;gap:5px;margin-top:2px;}
+  .dot{width:5px;height:5px;border-radius:50%;background:var(--teal);animation:pulse 1s ease-in-out infinite alternate;}
+  @keyframes pulse{from{opacity:1;}to{opacity:.35;}}
+  .status-label{font-size:9.5px;font-weight:700;color:var(--teal);}
+  .icon-btn{
+    width:34px;height:34px;border-radius:11px;background:var(--neutral-tint);
+    display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--ink);flex-shrink:0;
+  }
+
+  /* ---- top tab bar ---- */
+  .tabs{display:flex;border-bottom:1px solid var(--cream-border);flex-shrink:0;position:relative;}
+  .tab{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;
+    padding:12px 4px 11px;font-size:10.5px;font-weight:700;color:var(--text-muted);
+    background:none;border:none;cursor:pointer;font-family:inherit;
+  }
+  .tab.active{color:var(--teal);}
+  .tab .icon{font-size:17px;height:24px;display:flex;align-items:center;}
+  .tab-indicator{
+    position:absolute;bottom:0;height:3px;border-radius:2px;background:var(--teal);
+    width:calc(33.333% - 44px);left:22px;transition:left .17s ease-out;
+  }
+  .tabs[data-active="1"] .tab-indicator{left:calc(33.333% + 22px);}
+  .tabs[data-active="2"] .tab-indicator{left:calc(66.666% + 22px);}
+
+  /* ---- scrollable content ---- */
+  .content{flex:1;min-height:0;overflow-y:auto;padding:16px 18px 24px;}
+
+  .card{
+    background:var(--surface);border:1px solid var(--cream-border);border-radius:18px;
+    padding:18px;margin-bottom:14px;
+  }
+  .section-label{font-size:10.5px;font-weight:800;letter-spacing:.6px;color:var(--text-muted);margin-bottom:10px;}
+
+  /* ---- Class Pulse ring card (Home tab) ---- */
+  .pulse-row{display:flex;gap:16px;align-items:center;}
+  .ring{
+    width:96px;height:96px;border-radius:50%;flex-shrink:0;
+    background:conic-gradient(var(--teal) 0deg 260deg, var(--gold) 260deg 300deg, var(--mint) 300deg 360deg);
+    display:flex;align-items:center;justify-content:center;position:relative;
+  }
+  .ring::before{content:"";position:absolute;width:76px;height:76px;border-radius:50%;background:var(--surface);}
+  .ring-label{position:relative;text-align:center;}
+  .ring-pct{font-size:21px;font-weight:800;color:var(--ink);letter-spacing:-.3px;}
+  .ring-sub{font-size:8.5px;color:var(--text-muted);margin-top:1px;font-weight:700;}
+
+  .chip-list{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0;}
+  .chip{display:flex;align-items:center;gap:8px;background:var(--neutral-tint);border-radius:12px;padding:8px 12px;}
+  .chip .dotc{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .chip .clabel{flex:1;font-size:12px;font-weight:700;color:var(--ink);}
+  .chip .cnum{font-size:14px;font-weight:800;}
+
+  /* ---- roster ---- */
+  .student-card{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--cream-border);border-radius:16px;padding:12px 14px;margin-bottom:10px;}
+  .student-avatar{
+    width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:14px;font-weight:700;color:#fff;flex-shrink:0;
+  }
+  .student-ring{padding:2.5px;border-radius:50%;border:2px solid var(--teal);}
+  .student-main{flex:1;min-width:0;}
+  .student-name{font-size:14px;font-weight:700;color:var(--ink);}
+  .student-sub{font-size:10.5px;font-weight:700;color:var(--text-muted);margin:3px 0 5px;}
+  .bar-track{height:6px;border-radius:6px;background:#E4DCC8;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:6px;background:var(--teal);}
+  .mastery-pill{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:8px;font-size:10px;font-weight:700;color:var(--ink);flex-shrink:0;}
+  .mastery-pill .pdot{width:6px;height:6px;border-radius:50%;}
+
+  .see-all{font-size:12px;font-weight:700;color:var(--teal);}
+  .row-between{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+
+  /* ---- quick action tiles ---- */
+  .action-tile{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--cream-border);border-radius:14px;padding:12px 14px;margin-bottom:10px;}
+  .action-icon{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+  .action-label{flex:1;font-size:13px;font-weight:700;color:var(--ink);}
+  .chevron{color:var(--text-muted);font-size:16px;}
+
+  /* ---- Classroom hero ---- */
+  .hero{
+    background:linear-gradient(135deg,var(--teal),var(--teal-dark));
+    padding:20px 20px 40px;color:#fff;flex-shrink:0;position:relative;overflow:hidden;
+  }
+  .hero-top{display:flex;align-items:center;gap:14px;position:relative;z-index:1;}
+  .hero-icon{width:46px;height:46px;border-radius:14px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+  .hero-title{font-size:19px;font-weight:700;letter-spacing:-.2px;}
+  .hero-sub{font-size:11.5px;color:rgba(255,255,255,.7);margin-top:2px;}
+  .hero-stats{display:flex;gap:10px;margin-top:18px;position:relative;z-index:1;}
+  .hero-stat{flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:10px 12px;display:flex;align-items:center;gap:9px;}
+  .hero-stat .hval{font-size:16px;font-weight:800;line-height:1;}
+  .hero-stat .hlab{font-size:9.5px;font-weight:700;color:rgba(255,255,255,.65);letter-spacing:.3px;}
+  .blob{position:absolute;border-radius:50%;background:#fff;opacity:.06;}
+  .blob1{width:190px;height:190px;top:-95px;right:-50px;}
+  .blob2{width:130px;height:130px;bottom:-70px;left:-36px;background:var(--gold);opacity:.08;}
+
+  .entry-card{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--cream-border);border-radius:16px;padding:16px;margin-bottom:10px;}
+  .entry-icon{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+  .entry-title{font-size:14px;font-weight:800;color:var(--ink);}
+  .entry-sub{font-size:11.5px;color:var(--text-muted);margin-top:2px;}
+
+  /* ---- Class Health rows ---- */
+  .health-header{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
+  .health-badge{display:flex;align-items:center;gap:5px;padding:3px 8px 3px 6px;border-radius:999px;background:var(--mint);border:1px solid var(--mint-border);font-size:9.5px;font-weight:700;color:var(--teal);letter-spacing:.2px;}
+  .health-note{font-size:10.5px;color:var(--text-muted);margin-bottom:12px;}
+  .health-row{margin-bottom:14px;}
+  .health-row:last-of-type{margin-bottom:8px;}
+  .health-top{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+  .health-letter{font-size:16px;font-weight:700;color:var(--teal-dark);}
+  .health-name{flex:1;font-size:13px;font-weight:700;color:var(--ink);}
+  .health-meta{font-size:10.5px;color:var(--text-muted);margin-top:4px;}
+  .health-see{display:flex;justify-content:flex-end;align-items:center;gap:2px;font-size:11.5px;font-weight:700;color:var(--teal);}
+
+  /* ---- Create class card ---- */
+  .create-class{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--cream-border);border-radius:16px;padding:16px;}
+
+  /* ---- Class Pass ticket ---- */
+  .pass{
+    background:linear-gradient(135deg,var(--teal),var(--teal-dark));
+    border-radius:18px;padding:16px 18px 18px;color:#fff;
+    box-shadow:0 10px 22px rgba(15,110,86,.35);position:relative;
+  }
+  .pass-top{display:flex;justify-content:space-between;align-items:center;}
+  .pass-label{display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:700;letter-spacing:.4px;color:var(--gold-soft);}
+  .pass-copy{font-size:10.5px;font-weight:700;color:#fff;background:rgba(255,255,255,.14);padding:5px 10px;border-radius:8px;}
+  .pass-code{font-size:30px;font-weight:900;letter-spacing:3px;margin:14px 0 4px;font-family:'Courier New',monospace;}
+  .pass-class{font-size:11.5px;color:rgba(255,255,255,.7);}
+  .pass-perf{position:absolute;top:50%;left:-8px;width:16px;height:16px;border-radius:50%;background:#e5e5e5;transform:translateY(-50%);}
+  .pass-perf.right{left:auto;right:-8px;}
+
+  .empty-note{font-size:12.5px;color:var(--text-muted);line-height:1.5;}
+
+  /* ---- Settings tab ---- */
+  .setting-icon{width:34px;height:34px;border-radius:11px;background:var(--mint);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--teal);flex-shrink:0;}
+  .setting-icon.coral{background:var(--coral-tint);color:var(--coral);}
+  .setting-icon.circle{border-radius:50%;}
+  .setting-title-row{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+  .volume-row{margin-bottom:14px;}
+  .volume-row:last-child{margin-bottom:0;}
+  .volume-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+  .volume-label{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--ink);}
+  .volume-value{font-size:12px;font-weight:800;color:var(--teal);}
+  input[type=range]{width:100%;accent-color:var(--teal);}
+
+  .row-card{display:flex;align-items:center;gap:14px;}
+  .row-main{flex:1;min-width:0;}
+  .row-title{font-size:16px;font-weight:700;color:var(--ink);}
+  .row-sub{font-size:11.5px;color:var(--text-muted);margin-top:2px;}
+  .btn-outline{
+    padding:11px 16px;border-radius:12px;border:1.2px solid var(--cream-border);
+    background:none;color:var(--teal);font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;flex-shrink:0;
+  }
+  .btn-outline.coral{color:var(--coral);border-color:var(--coral);}
+  .btn-filled{
+    padding:11px 16px;border-radius:12px;border:none;background:var(--teal);color:#fff;
+    font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;width:100%;
+    display:flex;align-items:center;justify-content:center;gap:6px;
+  }
+  .input-field{
+    width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--cream-border);
+    background:var(--neutral-tint);font-size:13px;font-family:inherit;color:var(--ink);margin-bottom:12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="switcher" id="tabSwitcher">
+  <button data-tab="0" class="active">Home</button>
+  <button data-tab="1">Classroom</button>
+  <button data-tab="2">Settings</button>
+</div>
+
+<div class="phone">
+  <div class="statusbar">
+    <span>8:00</span>
+    <span class="icons">▂▄▆ 📶 🔋</span>
+  </div>
+
+  <div class="header">
+    <div class="avatar-box">🏫</div>
+    <div class="header-text">
+      <div class="eyebrow">GRADE 1 - SABLAY</div>
+      <div class="title">Class overview</div>
+      <div class="status-row">
+        <span class="dot"></span>
+        <span class="status-label">24 students synced</span>
+      </div>
+    </div>
+    <div class="icon-btn">⇄</div>
+  </div>
+
+  <div class="tabs" data-active="0" id="tabsBar">
+    <button class="tab active" data-tab="0"><span class="icon">🏠</span><span>Home</span></button>
+    <button class="tab" data-tab="1"><span class="icon">👥</span><span>Classroom</span></button>
+    <button class="tab" data-tab="2"><span class="icon">⚙️</span><span>Settings</span></button>
+    <div class="tab-indicator"></div>
+  </div>
+
+  <!-- ============ HOME TAB ============ -->
+  <div class="tabpanel active" id="tabpanel-0">
+    <div class="content">
+      <div class="card">
+        <div class="pulse-row">
+          <div class="ring">
+            <div class="ring-label">
+              <div class="ring-pct">72%</div>
+              <div class="ring-sub">Avg. mastery</div>
+            </div>
+          </div>
+          <div class="chip-list">
+            <div class="chip">
+              <span class="dotc" style="background:var(--teal);"></span>
+              <span class="clabel">High mastery</span>
+              <span class="cnum" style="color:var(--teal);">14</span>
+            </div>
+            <div class="chip">
+              <span class="dotc" style="background:#8A5A12;"></span>
+              <span class="clabel">Medium mastery</span>
+              <span class="cnum" style="color:#8A5A12;">7</span>
+            </div>
+            <div class="chip">
+              <span class="dotc" style="background:var(--coral);"></span>
+              <span class="clabel">Needs help</span>
+              <span class="cnum" style="color:var(--coral);">3</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row-between">
+        <div class="section-label" style="margin:0;">STUDENTS</div>
+        <div class="see-all">See all</div>
+      </div>
+      <div class="student-card">
+        <div class="student-ring">
+          <div class="student-avatar" style="background:#3FA98A;">A</div>
+        </div>
+        <div class="student-main">
+          <div class="student-name">Amina Yusof</div>
+          <div class="student-sub">Ba tracing · active Hot Seat</div>
+          <div class="bar-track"><div class="bar-fill" style="width:88%;"></div></div>
+        </div>
+        <div class="mastery-pill" style="background:var(--mint);"><span class="pdot" style="background:var(--teal);"></span>HIGH</div>
+      </div>
+      <div class="student-card">
+        <div class="student-ring" style="border-color:var(--gold);">
+          <div class="student-avatar" style="background:var(--gold-soft);">F</div>
+        </div>
+        <div class="student-main">
+          <div class="student-name">Frenzen Dilan</div>
+          <div class="student-sub">Ta tracing · active Choral</div>
+          <div class="bar-track"><div class="bar-fill" style="width:58%;background:var(--gold);"></div></div>
+        </div>
+        <div class="mastery-pill" style="background:var(--gold-tint);color:#8A5A12;"><span class="pdot" style="background:#8A5A12;"></span>MEDIUM</div>
+      </div>
+      <div class="student-card">
+        <div class="student-ring" style="border-color:var(--coral);">
+          <div class="student-avatar" style="background:var(--coral);">Z</div>
+        </div>
+        <div class="student-main">
+          <div class="student-name">Zayd Rahman</div>
+          <div class="student-sub">Tha tracing · active Hot Seat</div>
+          <div class="bar-track"><div class="bar-fill" style="width:31%;background:var(--coral);"></div></div>
+        </div>
+        <div class="mastery-pill" style="background:var(--coral-tint);"><span class="pdot" style="background:var(--coral);"></span>NEEDS HELP</div>
+      </div>
+
+      <div class="section-label" style="margin-top:8px;">⚡ QUICK ACTIONS</div>
+      <div class="action-tile">
+        <div class="action-icon" style="background:var(--mint);color:var(--teal);">📝</div>
+        <div class="action-label">Assign homework</div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="action-tile">
+        <div class="action-icon" style="background:var(--gold-tint);color:var(--gold);">🪑</div>
+        <div class="action-label">Hot seat</div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="action-tile">
+        <div class="action-icon" style="background:var(--coral-tint);color:var(--coral);">🎙️</div>
+        <div class="action-label">Choral controller</div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="action-tile">
+        <div class="action-icon" style="background:var(--mint);color:var(--teal);">🔓</div>
+        <div class="action-label">Progression override</div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="action-tile">
+        <div class="action-icon" style="background:var(--coral-tint);color:var(--coral);">🗂️</div>
+        <div class="action-label">Module library</div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="action-tile">
+        <div class="action-icon" style="background:var(--mint);color:var(--teal);">📣</div>
+        <div class="action-label">Cast Greeting Match</div>
+        <span class="chevron">›</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ CLASSROOM TAB ============ -->
+  <div class="tabpanel" id="tabpanel-1">
+    <div class="content" style="padding:0;">
+      <div class="hero">
+        <div class="blob blob1"></div>
+        <div class="blob blob2"></div>
+        <div class="hero-top">
+          <div class="hero-icon">🏷️</div>
+          <div>
+            <div class="hero-title">Class Administration</div>
+            <div class="hero-sub">Manage rosters, codes &amp; enrollment</div>
+          </div>
+        </div>
+        <div class="hero-stats">
+          <div class="hero-stat"><span style="font-size:15px;">🏫</span><div><div class="hval">3</div><div class="hlab">CLASSES</div></div></div>
+          <div class="hero-stat"><span style="font-size:15px;">👥</span><div><div class="hval">67</div><div class="hlab">STUDENTS</div></div></div>
+        </div>
+      </div>
+
+      <div style="padding:24px 18px 28px;margin-top:-24px;">
+        <div class="entry-card">
+          <div class="entry-icon" style="background:var(--mint);color:var(--teal);">👥</div>
+          <div style="flex:1;">
+            <div class="entry-title">Classroom Management</div>
+            <div class="entry-sub">3 classes · manage students</div>
+          </div>
+          <span class="chevron">›</span>
+        </div>
+        <div class="entry-card">
+          <div class="entry-icon" style="background:var(--gold-tint);color:var(--gold);">🏠</div>
+          <div style="flex:1;">
+            <div class="entry-title">Home Mode Insights</div>
+            <div class="entry-sub">View longitudinal tracking &amp; mastery trends</div>
+          </div>
+          <span class="chevron">›</span>
+        </div>
+
+        <div class="section-label" style="margin-top:22px;">CLASS HEALTH</div>
+        <div class="card" style="margin-bottom:0;">
+          <div class="health-header">
+            <div style="flex:1;font-size:11px;font-weight:700;letter-spacing:.6px;color:var(--text-muted);">CLASS HEALTH INDEX</div>
+            <div class="health-badge">📡 CLASSROOM MODE</div>
+          </div>
+          <div class="health-note">Hot Seat tracing attempts from live Cast sessions — not Adventure Map/Student Hub solo play.</div>
+
+          <div class="health-row">
+            <div class="health-top">
+              <span class="health-letter">ب</span>
+              <span class="health-name">Ba</span>
+              <span style="color:var(--teal);">↑</span>
+              <span class="mastery-pill" style="background:var(--mint);"><span class="pdot" style="background:var(--teal);"></span>HIGH</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" style="width:82%;"></div></div>
+            <div class="health-meta">88% avg stroke accuracy · 42 attempts · 6 students up</div>
+          </div>
+          <div class="health-row">
+            <div class="health-top">
+              <span class="health-letter">ت</span>
+              <span class="health-name">Ta</span>
+              <span style="color:var(--coral);">↓</span>
+              <span class="mastery-pill" style="background:var(--gold-tint);color:#8A5A12;"><span class="pdot" style="background:#8A5A12;"></span>MEDIUM</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" style="width:54%;background:var(--gold);"></div></div>
+            <div class="health-meta">61% avg stroke accuracy · 29 attempts · 2 students up</div>
+          </div>
+          <div class="health-row">
+            <span class="health-letter">ث</span>
+            <span class="health-name" style="margin-left:6px;">Tha</span>
+            <span style="float:right;font-size:11.5px;color:var(--text-muted);">Not cast yet this week</span>
+          </div>
+          <div class="health-see">See details ›</div>
+        </div>
+
+        <div class="section-label" style="margin-top:22px;">CREATE A CLASS</div>
+        <div class="create-class">
+          <div class="entry-icon" style="background:var(--gold-tint);color:var(--gold);">➕</div>
+          <div style="flex:1;">
+            <div class="entry-title">Create New Class</div>
+            <div class="entry-sub">Set up a class and get a fresh invitation code</div>
+          </div>
+        </div>
+
+        <div class="section-label" style="margin-top:22px;">CLASS PASS</div>
+        <div class="pass">
+          <span class="pass-perf"></span><span class="pass-perf right"></span>
+          <div class="pass-top">
+            <div class="pass-label">🎫 INVITATION CODE</div>
+            <div class="pass-copy">Copy</div>
+          </div>
+          <div class="pass-code">SBL-427</div>
+          <div class="pass-class">Grade 1 - Sablay</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SETTINGS TAB ============ -->
+  <div class="tabpanel" id="tabpanel-2">
+    <div class="content">
+      <div class="card">
+        <div class="setting-title-row">
+          <div class="setting-icon">🔊</div>
+          <div style="font-size:16.5px;font-weight:700;color:var(--ink);">Sound &amp; Voice</div>
+        </div>
+        <div class="volume-row">
+          <div class="volume-top">
+            <span class="volume-label">🎵 Background Music</span>
+            <span class="volume-value">Medium</span>
+          </div>
+          <input type="range" value="60">
+        </div>
+        <div class="volume-row">
+          <div class="volume-top">
+            <span class="volume-label">🔔 UI Sound Effects</span>
+            <span class="volume-value">Loud</span>
+          </div>
+          <input type="range" value="80">
+        </div>
+        <div class="volume-row">
+          <div class="volume-top">
+            <span class="volume-label">🎙️ Pronunciation Voice</span>
+            <span class="volume-value">Max</span>
+          </div>
+          <input type="range" value="100">
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row-card">
+          <div class="setting-icon circle">🔄</div>
+          <div class="row-main">
+            <div class="row-title" style="font-size:15px;">Sync Now</div>
+            <div class="row-sub">Sync local device progress with cloud servers.</div>
+          </div>
+          <button class="btn-outline">Sync</button>
+        </div>
+      </div>
+
+      <div class="card" style="background:var(--gold-tint);border-color:var(--gold-soft);">
+        <div style="font-size:15.5px;font-weight:800;color:var(--ink);margin-bottom:4px;">Link to Cloud</div>
+        <div class="empty-note" style="margin-bottom:14px;">This account isn't linked to the cloud yet, so "Sync now" won't work until you link it. Re-enter your password to link it.</div>
+        <input class="input-field" type="password" placeholder="Account password">
+        <button class="btn-filled">🔗 Link to Cloud</button>
+      </div>
+
+      <div class="card">
+        <div class="row-card">
+          <div class="setting-icon coral circle">🗑️</div>
+          <div class="row-main">
+            <div class="row-title" style="font-size:15px;">Erase Local Data</div>
+            <div class="row-sub">Permanently delete all stored classes and progress data.</div>
+          </div>
+          <button class="btn-outline coral">Delete</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row-card">
+          <div class="setting-icon coral circle">🚪</div>
+          <div class="row-main">
+            <div class="row-title" style="font-size:15px;">Exit Settings</div>
+            <div class="row-sub">Exit settings and lock admin areas</div>
+          </div>
+          <button class="btn-outline coral">Logout</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showTab(i){
+    document.querySelectorAll('.tabpanel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tabpanel-' + i).classList.add('active');
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab == i));
+    document.getElementById('tabsBar').dataset.active = i;
+    document.querySelectorAll('#tabSwitcher button').forEach(b => b.classList.toggle('active', b.dataset.tab == i));
+  }
+  document.getElementById('tabsBar').addEventListener('click', e => {
+    const btn = e.target.closest('.tab');
+    if (btn) showTab(btn.dataset.tab);
+  });
+  document.getElementById('tabSwitcher').addEventListener('click', e => {
+    if (e.target.dataset.tab !== undefined) showTab(e.target.dataset.tab);
+  });
+</script>
+</body>
+</html>

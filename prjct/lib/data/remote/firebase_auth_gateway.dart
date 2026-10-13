@@ -47,6 +47,11 @@ class FirebaseAuthGateway {
 
   Future<void> signOut() => _auth.signOut();
 
+  /// Settings "Change password". Firebase only allows this right after a
+  /// sign-in, so `SessionNotifier.changePassword` re-signs in first.
+  Future<void> updatePassword(String newPassword) =>
+      _auth.currentUser!.updatePassword(newPassword);
+
   User? get currentUser => _auth.currentUser;
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();

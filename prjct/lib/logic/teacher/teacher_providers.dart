@@ -7,6 +7,7 @@ import '../../data/models/assigned_module.dart';
 import '../../data/models/class_section.dart';
 import '../../data/models/curriculum/curriculum_models.dart';
 import '../../data/models/custom_lesson.dart';
+import '../../data/models/learner_profile.dart' show studentIdFor;
 import '../../data/models/lesson_folder.dart';
 import '../../data/models/progress_record.dart';
 import '../../data/repositories/class_repository.dart';
@@ -338,6 +339,7 @@ final classRosterProvider = Provider.family<List<Map<String, dynamic>>, String>(
     roster.add({
       'learnerId': enrollment.learnerId,
       'name': learner.name,
+      'studentId': studentIdFor(enrollment.learnerId),
       // Share of curriculum lessons finished — not accuracy, which is
       // already shown as 'tracing'/mastery.
       'completion': allLessonIds.isEmpty

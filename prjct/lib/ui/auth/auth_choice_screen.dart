@@ -443,7 +443,7 @@ _PasswordStrength _scorePassword(String password) {
 
 /// Required password rules for grown-up sign-up — shown as a live
 /// checklist under the strength meter and enforced on submit.
-final _passwordRules = <(String, bool Function(String))>[
+final passwordRules = <(String, bool Function(String))>[
   ('At least 8 characters', (p) => p.length >= 8),
   ('One lowercase letter (a-z)', (p) => RegExp(r'[a-z]').hasMatch(p)),
   ('One uppercase letter (A-Z)', (p) => RegExp(r'[A-Z]').hasMatch(p)),
@@ -452,8 +452,8 @@ final _passwordRules = <(String, bool Function(String))>[
       (p) => RegExp(r'[^A-Za-z0-9\s]').hasMatch(p)),
 ];
 
-class _PasswordRequirements extends StatelessWidget {
-  const _PasswordRequirements({required this.password});
+class PasswordRequirements extends StatelessWidget {
+  const PasswordRequirements({super.key, required this.password});
 
   final String password;
 
@@ -462,7 +462,7 @@ class _PasswordRequirements extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final (label, test) in _passwordRules)
+        for (final (label, test) in passwordRules)
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Row(
@@ -993,7 +993,7 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
           _PasswordStrengthMeter(strength: _passwordStrength),
         ],
         const SizedBox(height: 8),
-        _PasswordRequirements(password: _passwordC.text),
+        PasswordRequirements(password: _passwordC.text),
         const SizedBox(height: 14),
         _TextField(
           controller: _confirmPasswordC,
@@ -1055,7 +1055,7 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
                 );
                 return;
               }
-              if (!_passwordRules.every((r) => r.$2(password))) {
+              if (!passwordRules.every((r) => r.$2(password))) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text(

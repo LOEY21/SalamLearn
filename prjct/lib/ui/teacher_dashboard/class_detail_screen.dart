@@ -523,6 +523,7 @@ class _StudentRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = student['name'] as String;
     final mastery = student['mastery'] as String;
+    final studentId = student['studentId'] as String?;
 
     return InkWell(
       onTap: onTap,
@@ -563,6 +564,14 @@ class _StudentRow extends StatelessWidget {
                             color: AppColors.ink,
                           ),
                         ),
+                        if (studentId != null)
+                          Text(
+                            'ID $studentId',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.inkSoft,
+                            ),
+                          ),
                         if (compact) ...[const SizedBox(height: 6), pill],
                       ],
                     ),

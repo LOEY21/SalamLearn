@@ -305,6 +305,44 @@ void main() {
       },
     );
 
+    test('logging out one role keeps the other role signed in', () async {
+      final container = onlineContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(sessionProvider.notifier);
+
+      notifier.setLanguage('en');
+      await notifier.giveConsent();
+      notifier.stageParentRegistration(
+        fullName: 'Parent Test',
+        email: 'parent@example.com',
+        password: 'Password123',
+      );
+      await notifier.createPin('1234');
+      notifier.stageTeacherRegistration(
+        fullName: 'Teacher Test',
+        school: 'School',
+        email: 'teacher@example.com',
+        password: 'Password123',
+      );
+      await notifier.createPin('5678');
+
+      var state = container.read(sessionProvider);
+      final parentId = state.activeParentId;
+      final teacherId = state.activeTeacherId;
+      expect(parentId, isNotNull);
+      expect(teacherId, isNotNull);
+
+      await notifier.logout();
+      state = container.read(sessionProvider);
+      expect(state.activeTeacherId, isNull);
+      expect(state.activeParentId, parentId);
+
+      notifier.selectRole(UserRole.parent);
+      await notifier.logout();
+      state = container.read(sessionProvider);
+      expect(state.activeParentId, isNull);
+    });
+
     test(
       'previously selected child is preserved and restored after logout and login',
       () async {

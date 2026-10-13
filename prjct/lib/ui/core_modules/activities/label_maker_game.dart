@@ -2581,22 +2581,36 @@ class _Label extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         Image.asset('$_kA/board_label.png', fit: BoxFit.fill),
+        // The Arabic and the English each get a fixed share of the label,
+        // so the Arabic's tall line (room for its vowel marks) can't shrink
+        // the English word with it.
         FractionallySizedBox(
           widthFactor: .8,
-          heightFactor: .74,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  word.ar,
-                  textDirection: TextDirection.rtl,
-                  style: _arabic(40),
+          heightFactor: .8,
+          child: Column(
+            children: [
+              Expanded(
+                flex: 3,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    word.ar,
+                    textDirection: TextDirection.rtl,
+                    style: _arabic(40),
+                  ),
                 ),
-                Text(word.en, style: _fredoka(22, const Color(0xFF5E4630))),
-              ],
-            ),
+              ),
+              Expanded(
+                flex: 2,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    word.en,
+                    style: _fredoka(22, const Color(0xFF5E4630)),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],

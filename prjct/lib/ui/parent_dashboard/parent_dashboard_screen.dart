@@ -28,7 +28,6 @@ import '../theme/app_colors.dart';
 import '../widgets/auth_loading_overlay.dart';
 import '../widgets/child_profile_form.dart';
 import '../widgets/hub_kit.dart';
-import '../widgets/delete_account_dialog.dart';
 import '../settings/settings_screen.dart' show LanguageSettingRow;
 import '../widgets/change_pin_card.dart';
 import '../widgets/email_verification_card.dart';
@@ -36,6 +35,8 @@ import '../widgets/learner_avatar.dart';
 import '../widgets/locked_tag.dart';
 import '../widgets/mock_icons.dart';
 import '../widgets/account_email_card.dart';
+import '../settings/account_security_screen.dart' show AccountSecurityRow;
+import '../settings/change_password_screen.dart' show ChangePasswordRow;
 import '../settings/personal_info_screen.dart' show PersonalInfoRow;
 import '../widgets/soft_card.dart';
 import '../../data/repositories/progress_repository.dart';
@@ -3808,9 +3809,9 @@ class _TrendPainter extends CustomPainter {
 }
 
 /// Settings grouped into three labeled sections on the cream canvas —
-/// account cards (shared with the Teacher dashboard, so left as-is), sound
-/// and language, then a single divided sheet for sync / log out / delete
-/// with the destructive action last.
+/// one Account & security row (its sub-page holds the account cards and
+/// Delete account), sound and language, then a divided sheet for sync /
+/// log out.
 class _SettingsTab extends ConsumerWidget {
   const _SettingsTab();
 
@@ -3827,27 +3828,20 @@ class _SettingsTab extends ConsumerWidget {
         ),
         HubStaggerFadeIn(
           delay: Duration(milliseconds: 10),
-          child: PersonalInfoRow(),
+          child: AccountSecurityRow(
+            children: [
+              PersonalInfoRow(),
+              AccountEmailCard(),
+              SizedBox(height: 12),
+              EmailVerificationCard(),
+              _LinkFirebaseCard(),
+              SizedBox(height: 12),
+              ChangePinCard(),
+              SizedBox(height: 12),
+              ChangePasswordRow(),
+            ],
+          ),
         ),
-        HubStaggerFadeIn(
-          delay: Duration(milliseconds: 20),
-          child: AccountEmailCard(),
-        ),
-        SizedBox(height: 12),
-        HubStaggerFadeIn(
-          delay: Duration(milliseconds: 40),
-          child: EmailVerificationCard(),
-        ),
-        HubStaggerFadeIn(
-          delay: Duration(milliseconds: 55),
-          child: _LinkFirebaseCard(),
-        ),
-        SizedBox(height: 12),
-        HubStaggerFadeIn(
-          delay: Duration(milliseconds: 70),
-          child: ChangePinCard(),
-        ),
-        SizedBox(height: 12),
       ],
       right: [
         const HubStaggerFadeIn(
@@ -3910,8 +3904,6 @@ class _SettingsTab extends ConsumerWidget {
                 _SyncCard(),
                 HubRowDivider(),
                 _ExitSettingsCard(),
-                HubRowDivider(),
-                _DeleteAccountCard(),
               ],
             ),
           ),
@@ -4195,25 +4187,6 @@ class _SyncCardState extends ConsumerState<_SyncCard> {
   }
 }
 
-class _DeleteAccountCard extends ConsumerWidget {
-  const _DeleteAccountCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return HubActionRow(
-      icon: Icons.delete_outline_rounded,
-      iconColor: AppColors.coral,
-      title: 'Delete Account',
-      subtitle: 'Permanently delete your account and all its data.',
-      trailing: HubRowButton(
-        label: 'Delete',
-        color: AppColors.coral,
-        onPressed: () => showDeleteAccountDialog(context, ref),
-      ),
-    );
-  }
-}
-
 class _ExitSettingsCard extends ConsumerWidget {
   const _ExitSettingsCard();
 
@@ -4263,7 +4236,7 @@ class _ExitSettingsCard extends ConsumerWidget {
       subtitle: 'Exit settings and lock admin areas',
       trailing: HubRowButton(
         label: 'Logout',
-        color: AppColors.ink,
+        color: AppColors.danger,
         onPressed: () => _confirmLogout(context, ref),
       ),
     );

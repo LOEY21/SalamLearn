@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart' hide Text, TextSpan;
-import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
@@ -41,8 +40,8 @@ class PersonalInfoRow extends ConsumerWidget {
   }
 }
 
-/// Lets a parent or teacher edit their own details: full name, mobile
-/// number and (teachers) school. Email is shown but not editable — it's
+/// Lets a parent or teacher edit their own details: first, middle and
+/// last name and (teachers) school. Email is shown but not editable — it's
 /// the sign-in identity, tied to the Firebase Auth account. Saves on this
 /// device first, then syncs to the cloud when the account is linked.
 class PersonalInfoScreen extends ConsumerStatefulWidget {
@@ -56,44 +55,57 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
   late final _profile = ref.read(sessionProvider.notifier).activeProfile;
   late final _isTeacher =
       ref.read(sessionProvider).activeRole == UserRole.asatidz;
-  late final _nameC = TextEditingController(text: _profile?.fullName ?? '');
-  late final _mobileC = TextEditingController(
-    text: _localMobile(_profile?.mobileNumber),
-  );
+  late final _nameParts = _splitName(_profile?.fullName ?? '');
+  late final _firstC = TextEditingController(text: _nameParts.first);
+  late final _middleC = TextEditingController(text: _nameParts.middle);
+  late final _lastC = TextEditingController(text: _nameParts.last);
   late final _schoolC = TextEditingController(text: _profile?.school ?? '');
   late final _emailC = TextEditingController(text: _profile?.email ?? '');
 
-  String? _nameError;
-  String? _mobileError;
+  String? _firstError;
+  String? _lastError;
   bool _saving = false;
 
-  /// Stored as `+63` + the local digits (see registration); edited without
-  /// the `+63`, which the field shows as a fixed prefix.
-  static String _localMobile(String? stored) {
-    if (stored == null) return '';
-    return stored.startsWith('+63') ? stored.substring(3) : stored;
+  /// Registration joins first/middle/last into one stored `fullName`, so
+  /// this splits it back: last word = last name, the word before it =
+  /// middle name (3+ words), the rest = first name.
+  // ponytail: guesses wrong for multi-word last names ("Dela Cruz") — the
+  // user can fix it here; store the parts separately if that matters.
+  static ({String first, String middle, String last}) _splitName(String full) {
+    final words = full.trim().split(RegExp(r'\s+'));
+    if (words.length < 2) return (first: words.first, middle: '', last: '');
+    if (words.length == 2) return (first: words[0], middle: '', last: words[1]);
+    return (
+      first: words.sublist(0, words.length - 2).join(' '),
+      middle: words[words.length - 2],
+      last: words.last,
+    );
   }
+
+  static String _clean(TextEditingController c) =>
+      c.text.trim().replaceAll(RegExp(r'\s+'), ' ');
 
   @override
   void dispose() {
-    _nameC.dispose();
-    _mobileC.dispose();
+    _firstC.dispose();
+    _middleC.dispose();
+    _lastC.dispose();
     _schoolC.dispose();
     _emailC.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
-    final name = _nameC.text.trim().replaceAll(RegExp(r'\s+'), ' ');
-    var digits = _mobileC.text.trim();
-    if (digits.startsWith('0')) digits = digits.substring(1);
+    final first = _clean(_firstC);
+    final last = _clean(_lastC);
     setState(() {
-      _nameError = name.isEmpty ? 'Please enter your full name' : null;
-      _mobileError = digits.isNotEmpty && digits.length != 10
-          ? 'Enter a 10-digit mobile number, e.g. 912 345 6789'
-          : null;
+      _firstError = first.isEmpty ? 'Please enter your first name' : null;
+      _lastError = last.isEmpty ? 'Please enter your last name' : null;
     });
-    if (_nameError != null || _mobileError != null) return;
+    if (_firstError != null || _lastError != null) return;
+    final name = [first, _clean(_middleC), last]
+        .where((part) => part.isNotEmpty)
+        .join(' ');
 
     setState(() => _saving = true);
     final school = _schoolC.text.trim();
@@ -101,7 +113,8 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
         .read(sessionProvider.notifier)
         .updateActiveProfile(
           fullName: name,
-          mobileNumber: digits.isEmpty ? null : '+63$digits',
+          // No longer editable here — keep whatever registration stored.
+          mobileNumber: _profile?.mobileNumber,
           school: _isTeacher && school.isNotEmpty ? school : null,
         );
     if (!mounted) return;
@@ -123,7 +136,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
     return HubSubpage(
       header: HubSubpageHeader(
         title: 'Personal information',
-        subtitle: 'Your name and contact details on this account.',
+        subtitle: 'Your name and details on this account.',
         onBack: () => Navigator.of(context).pop(),
       ),
       bottomBar: ChildFormBottomBar(
@@ -145,34 +158,40 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const ChildFieldLabel('Full name'),
+                const ChildFieldLabel('First name'),
                 ChildTextField(
-                  controller: _nameC,
-                  hint: 'e.g. Aisha Mohammad Santos',
+                  controller: _firstC,
+                  hint: 'e.g. Aisha',
                   textCapitalization: TextCapitalization.words,
-                  autofillHints: const [AutofillHints.name],
+                  autofillHints: const [AutofillHints.givenName],
                   wrap: true,
                   onChanged: (_) {
-                    if (_nameError != null) setState(() => _nameError = null);
+                    if (_firstError != null) setState(() => _firstError = null);
                   },
                 ),
-                _FieldError(_nameError),
+                SettingsFieldError(_firstError),
                 const SizedBox(height: 16),
-                const ChildFieldLabel('Mobile number (optional)'),
+                const ChildFieldLabel('Middle name (optional)'),
                 ChildTextField(
-                  controller: _mobileC,
-                  hint: '912 345 6789',
-                  prefixText: '+63 ',
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  autofillHints: const [AutofillHints.telephoneNumberNational],
+                  controller: _middleC,
+                  hint: 'e.g. Mohammad',
+                  textCapitalization: TextCapitalization.words,
+                  autofillHints: const [AutofillHints.middleName],
+                  wrap: true,
+                ),
+                const SizedBox(height: 16),
+                const ChildFieldLabel('Last name'),
+                ChildTextField(
+                  controller: _lastC,
+                  hint: 'e.g. Santos',
+                  textCapitalization: TextCapitalization.words,
+                  autofillHints: const [AutofillHints.familyName],
+                  wrap: true,
                   onChanged: (_) {
-                    if (_mobileError != null) {
-                      setState(() => _mobileError = null);
-                    }
+                    if (_lastError != null) setState(() => _lastError = null);
                   },
                 ),
-                _FieldError(_mobileError),
+                SettingsFieldError(_lastError),
                 if (_isTeacher) ...[
                   const SizedBox(height: 16),
                   const ChildFieldLabel('School (optional)'),
@@ -209,8 +228,8 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
   }
 }
 
-class _FieldError extends StatelessWidget {
-  const _FieldError(this.message);
+class SettingsFieldError extends StatelessWidget {
+  const SettingsFieldError(this.message, {super.key});
 
   final String? message;
 

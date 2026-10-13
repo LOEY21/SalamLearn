@@ -59,6 +59,9 @@ enum SignInResult {
 /// Outcome of [SessionNotifier.confirmAccountPassword].
 enum DeleteAccountCheck { ok, wrongPassword, noInternet }
 
+/// Outcome of [SessionNotifier.changePassword].
+enum ChangePasswordResult { ok, wrongPassword, noInternet, failed }
+
 /// Session state backed by real Hive-persisted accounts (Phase 4 of the
 /// backend plan) — [activeParentId]/[activeTeacherId] point at whichever
 /// [ParentAccount]/[TeacherAccount] is currently signed in on this device;
@@ -1597,14 +1600,25 @@ class SessionNotifier extends Notifier<SessionState> {
   /// `role_picker_screen.dart`). [signIn]'s "restore last child" note now
   /// only applies within a single still-logged-in session, not across a
   /// logout.
+  ///
+  /// Only signs out the active role's account — a parent and a teacher can
+  /// both be signed in on one device, and logging out of one must leave
+  /// the other signed in.
   Future<void> logout() async {
+    final teacher = state.activeRole == UserRole.asatidz;
     await _settings.delete('activeRole');
-    await _settings.delete('activeParentId');
-    await _settings.delete('activeTeacherId');
-    await _settings.delete('activeLearnerId');
+    if (teacher) {
+      await _settings.delete('activeTeacherId');
+    } else {
+      await _settings.delete('activeParentId');
+      await _settings.delete('activeLearnerId');
+    }
     state = SessionState(
       languageCode: state.languageCode,
       consent: state.consent,
+      activeParentId: teacher ? state.activeParentId : null,
+      activeTeacherId: teacher ? null : state.activeTeacherId,
+      learner: teacher ? state.learner : null,
     );
   }
 
@@ -1656,6 +1670,47 @@ class SessionNotifier extends Notifier<SessionState> {
           ? DeleteAccountCheck.noInternet
           : DeleteAccountCheck.wrongPassword;
     }
+  }
+
+  /// Settings "Change password". [current] is checked the same way as
+  /// [confirmAccountPassword] — for a cloud-linked account that re-signs
+  /// into Firebase, which is also the recent sign-in `updatePassword`
+  /// needs. Firebase changes first and the local hash second, so a failed
+  /// cloud update never leaves this device and the cloud on different
+  /// passwords.
+  Future<ChangePasswordResult> changePassword({
+    required String current,
+    required String next,
+  }) async {
+    final check = await confirmAccountPassword(current);
+    if (check == DeleteAccountCheck.wrongPassword) {
+      return ChangePasswordResult.wrongPassword;
+    }
+    if (check == DeleteAccountCheck.noInternet) {
+      return ChangePasswordResult.noInternet;
+    }
+    final (_, firebaseUid, _) = _activeGrownUp();
+    if (firebaseUid != null) {
+      try {
+        await FirebaseAuthGateway().updatePassword(next);
+      } on FirebaseAuthException catch (e) {
+        return e.code == 'network-request-failed'
+            ? ChangePasswordResult.noInternet
+            : ChangePasswordResult.failed;
+      }
+    }
+    if (state.activeRole == UserRole.asatidz) {
+      final id = state.activeTeacherId;
+      final account = id == null ? null : _teachers.findById(id);
+      if (account == null) return ChangePasswordResult.failed;
+      await _teachers.updatePasswordLocally(account: account, newPassword: next);
+    } else {
+      final id = state.activeParentId;
+      final account = id == null ? null : _parents.findById(id);
+      if (account == null) return ChangePasswordResult.failed;
+      await _parents.updatePasswordLocally(account: account, newPassword: next);
+    }
+    return ChangePasswordResult.ok;
   }
 
   /// FR-7.3 "Right to be Forgotten" — step 2 of Settings "Delete account",

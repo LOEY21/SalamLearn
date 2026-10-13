@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
+import '../../widgets/arc_text_painter.dart';
 import 'good_deed_tree_audio.dart';
 
 /// The Good Deed Tree — sort daily actions: good deeds to the tree, wrong
@@ -896,18 +897,15 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
           _animTray(200, 450, const Cubic(0.4, 0, 0.7, 0.4));
           _trayT = _later(470, () => setState(() => _trayGone = true));
         });
-        _later(
-          3400,
-          () {
-            setState(() {
-              _screen = _Screen.done;
-              _clock.stop();
-              _fb = null;
-              _burst = false;
-            });
-            widget.onEnding?.call();
-          },
-        );
+        _later(3400, () {
+          setState(() {
+            _screen = _Screen.done;
+            _clock.stop();
+            _fb = null;
+            _burst = false;
+          });
+          widget.onEnding?.call();
+        });
       }
     });
   }
@@ -1337,7 +1335,42 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
                     ),
                     child: Transform.scale(
                       scale: 1 + math.sin(t * 1.6 + 1) * 0.012,
-                      child: Image.asset(_kStartLogo, fit: BoxFit.fill),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image.asset(_kStartLogo, fit: BoxFit.fill),
+                          // The banner's line, so it follows the app
+                          // language: bent along the banner's arch (its
+                          // middle 632 art px down in the centre, 644 at
+                          // the ends — ~4600 art px radius) and filling the
+                          // space between its two leaf sprigs (art x
+                          // 160-840 of 1000).
+                          LayoutBuilder(
+                            builder: (context, box) {
+                              final u = box.maxWidth / 1000;
+                              return Padding(
+                                padding: EdgeInsets.fromLTRB(
+                                  160 * u,
+                                  box.maxHeight * 600 / 750,
+                                  160 * u,
+                                  box.maxHeight * (750 - 664) / 750,
+                                ),
+                                child: CustomPaint(
+                                  painter: ArcTextPainter(
+                                    'Grow the tree with your good deeds!'.tr,
+                                    _f(
+                                      46 * u,
+                                      w: FontWeight.w700,
+                                      color: const Color(0xFF471203),
+                                    ),
+                                    radius: 4600 * u,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1720,20 +1753,43 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             child: Row(
               children: [
-                // Shrinks to fit beside the dots when the top bar is tight.
+                // Wraps onto a second line before it shrinks, so a longer
+                // (e.g. Tagalog) label stays readable beside the dots.
                 Expanded(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Good Deed Meter',
-                      style: _f(
+                  child: LayoutBuilder(
+                    builder: (context, c) {
+                      final style = _f(
                         12,
                         w: FontWeight.w700,
                         color: _green,
                         ls: 0.48,
-                      ),
-                    ),
+                        h: 1.05,
+                      );
+                      // Lay it out a little wider (then scale it back down)
+                      // until the whole label fits in two lines — nothing
+                      // is ever cut off, and it shrinks only as needed.
+                      var k = 1.0;
+                      while (k > 0.55) {
+                        final tp = TextPainter(
+                          text: TextSpan(
+                            text: 'Good Deed Meter'.tr,
+                            style: style,
+                          ),
+                          textDirection: TextDirection.ltr,
+                          maxLines: 2,
+                        )..layout(maxWidth: c.maxWidth / k);
+                        if (!tp.didExceedMaxLines) break;
+                        k -= 0.05;
+                      }
+                      return FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: SizedBox(
+                          width: c.maxWidth / k,
+                          child: Text('Good Deed Meter', style: style),
+                        ),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -1831,22 +1887,29 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
                     right: c.maxWidth * 0.05,
                     top: 0,
                     bottom: 0,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        fb.text,
-                        maxLines: 2,
-                        style: _f(
-                          c.maxHeight * 0.22,
-                          w: FontWeight.w700,
-                          h: 1.15,
-                          color: Colors.white,
-                          sh: const [
-                            Shadow(
-                              color: Color(0x80205A08),
-                              offset: Offset(0, 1.5),
+                    // Wraps at the banner's width, then shrinks only if a
+                    // long (e.g. Tagalog) line still won't fit its height.
+                    child: LayoutBuilder(
+                      builder: (context, area) => FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: SizedBox(
+                          width: area.maxWidth,
+                          child: Text(
+                            fb.text,
+                            style: _f(
+                              c.maxHeight * 0.22,
+                              w: FontWeight.w700,
+                              h: 1.15,
+                              color: Colors.white,
+                              sh: const [
+                                Shadow(
+                                  color: Color(0x80205A08),
+                                  offset: Offset(0, 1.5),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -2159,15 +2222,40 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
   Widget _cardFace(int i) {
     final c = _d.cards[i];
     final picked = _sel == i;
-    final label = Text(
-      c.text,
-      textAlign: TextAlign.center,
-      overflow: _d.fixedText ? TextOverflow.clip : null,
-      style: _f(
-        _d.fixedText ? 9.5 : 10.5,
-        w: FontWeight.w600,
-        h: _d.fixedText ? 1.15 : 1.1,
-      ),
+    // Every card's words get the same box, and the text is sized so its
+    // longest word fits on one line — Tagalog words like "Pakikipag-away"
+    // would otherwise break mid-word and leave the cards uneven.
+    final label = LayoutBuilder(
+      builder: (context, box) {
+        final style = _f(
+          _d.fixedText ? 9.5 : 10.5,
+          w: FontWeight.w600,
+          h: _d.fixedText ? 1.15 : 1.1,
+        );
+        var widest = 0.0;
+        for (final word in c.text.tr.split(RegExp(r'\s+'))) {
+          final tp = TextPainter(
+            text: TextSpan(text: word, style: style),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          widest = math.max(widest, tp.width);
+        }
+        final k = widest > box.maxWidth ? box.maxWidth / widest : 1.0;
+        return Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: SizedBox(
+              width: box.maxWidth,
+              child: Text(
+                c.text,
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                style: style.copyWith(fontSize: style.fontSize! * k),
+              ),
+            ),
+          ),
+        );
+      },
     );
     return Stack(
       clipBehavior: Clip.none,
@@ -2211,16 +2299,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
                 ),
               ),
               const SizedBox(height: 3),
-              if (_d.fixedText)
-                SizedBox(
-                  height: 36,
-                  child: ClipRect(child: Center(child: label)),
-                )
-              else
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 26),
-                  child: Center(child: label),
-                ),
+              SizedBox(height: 38, child: label),
             ],
           ),
         ),
@@ -2642,7 +2721,6 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
                           width: 92,
                           child: Text(
                             label,
-                            maxLines: 2,
                             style: _f(
                               11,
                               w: FontWeight.w600,
@@ -3015,14 +3093,22 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Text(
-                            c.text,
-                            maxLines: 2,
-                            style: _f(
-                              14.5,
-                              w: FontWeight.w600,
-                              color: const Color(0xFF2B2B2B),
-                              h: 1.15,
+                          child: LayoutBuilder(
+                            builder: (context, area) => FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: SizedBox(
+                                width: area.maxWidth,
+                                child: Text(
+                                  c.text,
+                                  style: _f(
+                                    14.5,
+                                    w: FontWeight.w600,
+                                    color: const Color(0xFF2B2B2B),
+                                    h: 1.15,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -3119,16 +3205,21 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
                         Positioned.fill(
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(44, 12, 44, 12),
-                            child: Center(
-                              child: Text(
-                                _d.footer,
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                style: _f(
-                                  13.5,
-                                  w: FontWeight.w700,
-                                  color: const Color(0xFF3A2410),
-                                  h: 1.2,
+                            child: LayoutBuilder(
+                              builder: (context, area) => FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: SizedBox(
+                                  width: area.maxWidth,
+                                  child: Text(
+                                    _d.footer,
+                                    textAlign: TextAlign.center,
+                                    style: _f(
+                                      13.5,
+                                      w: FontWeight.w700,
+                                      color: const Color(0xFF3A2410),
+                                      h: 1.2,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),

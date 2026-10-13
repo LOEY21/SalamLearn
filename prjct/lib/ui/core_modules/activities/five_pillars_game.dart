@@ -1358,11 +1358,13 @@ class _FivePillarsGameState extends State<FivePillarsGame>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(parts[0], style: _baloo(7.5, 800, _howInk, height: 1)),
+            // As large as fits: at these sizes the widest label (with its
+            // padding) stays just narrower than the gap between two pillars.
+            Text(parts[0], style: _baloo(9.5, 800, _howInk, height: 1)),
             if (parts.length > 1)
               Text(
                 '(${parts[1]}',
-                style: _baloo(5.2, 700, _howInk, height: 1.1),
+                style: _baloo(8, 700, _howInk, height: 1.1),
               ),
           ],
         ),

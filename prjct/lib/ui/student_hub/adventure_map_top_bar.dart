@@ -9,6 +9,7 @@ import '../../logic/learner/noor_energy_provider.dart';
 import '../../logic/recent_module_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/streak_tracker.dart';
+import 'hub_info_sheet.dart';
 import 'noor_energy_info_sheet.dart';
 import 'tutorial/tutorial_anchors.dart';
 
@@ -33,6 +34,7 @@ class AdventureMapTopBar extends ConsumerWidget {
           _Pill(
             key: anchors.streakPillKey,
             index: 0,
+            onTap: () => showStreakInfoSheet(context),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -51,6 +53,7 @@ class AdventureMapTopBar extends ConsumerWidget {
           ),
           _Pill(
             index: 1,
+            onTap: () => showStarsInfoSheet(context),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

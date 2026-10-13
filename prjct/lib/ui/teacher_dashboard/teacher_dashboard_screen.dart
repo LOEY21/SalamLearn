@@ -17,11 +17,12 @@ import '../../logic/sync/sync_manager.dart';
 import '../../logic/teacher/teacher_providers.dart';
 import '../theme/app_colors.dart';
 import '../widgets/auth_loading_overlay.dart';
-import '../widgets/delete_account_dialog.dart';
 import '../settings/settings_screen.dart' show LanguageSettingRow;
 import '../widgets/change_pin_card.dart';
 import '../widgets/mock_icons.dart';
 import '../widgets/account_email_card.dart';
+import '../settings/account_security_screen.dart' show AccountSecurityRow;
+import '../settings/change_password_screen.dart' show ChangePasswordRow;
 import '../settings/personal_info_screen.dart' show PersonalInfoRow;
 import '../widgets/soft_card.dart';
 import '../widgets/child_profile_form.dart'
@@ -1696,6 +1697,7 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
         currentStudent['assignmentsDetail'] as List<dynamic>? ?? [];
     final name = currentStudent['name'] as String;
     final mastery = currentStudent['mastery'] as String;
+    final studentId = currentStudent['studentId'] as String?;
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -1754,6 +1756,15 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
                                   ),
                                 ),
                               ),
+                              if (studentId != null)
+                                Text(
+                                  'Student ID: $studentId',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white.withValues(alpha: 0.85),
+                                  ),
+                                ),
                               const SizedBox(height: 4),
                               Container(
                                 padding: const EdgeInsets.symmetric(
@@ -4008,9 +4019,9 @@ class _SettingsTab extends ConsumerWidget {
     final volumes = ref.watch(volumeProvider);
     final volumeNotifier = ref.read(volumeProvider.notifier);
 
-    // Same three groups as the Parent Hub's Settings: account cards
-    // (shared widgets), sound & language, then one divided sheet for
-    // sync / log out / delete with the destructive action last.
+    // Same three groups as the Parent Hub's Settings: Account & security
+    // (its sub-page holds the account cards and Delete account), sound &
+    // language, then one divided sheet for sync / log out.
     return HubTabBody(
       left: const [
         HubStaggerFadeIn(
@@ -4019,22 +4030,18 @@ class _SettingsTab extends ConsumerWidget {
         ),
         HubStaggerFadeIn(
           delay: Duration(milliseconds: 10),
-          child: PersonalInfoRow(),
+          child: AccountSecurityRow(
+            children: [
+              PersonalInfoRow(),
+              AccountEmailCard(),
+              _TeacherLinkFirebaseCard(),
+              SizedBox(height: 12),
+              ChangePinCard(accentColor: AppColors.gold),
+              SizedBox(height: 12),
+              ChangePasswordRow(),
+            ],
+          ),
         ),
-        HubStaggerFadeIn(
-          delay: Duration(milliseconds: 20),
-          child: AccountEmailCard(),
-        ),
-        HubStaggerFadeIn(
-          delay: Duration(milliseconds: 40),
-          child: _TeacherLinkFirebaseCard(),
-        ),
-        SizedBox(height: 12),
-        HubStaggerFadeIn(
-          delay: Duration(milliseconds: 60),
-          child: ChangePinCard(accentColor: AppColors.gold),
-        ),
-        SizedBox(height: 12),
       ],
       right: [
         const HubStaggerFadeIn(
@@ -4099,11 +4106,10 @@ class _SettingsTab extends ConsumerWidget {
                 subtitle: 'Exit settings and lock admin areas',
                 trailing: HubRowButton(
                   label: 'Logout',
-                  color: AppColors.ink,
+                  color: AppColors.danger,
                   onPressed: () => _confirmLogout(context, ref),
                 ),
               ),
-              const _DeleteAccountCard(),
             ],
           ),
         ),
@@ -4376,25 +4382,6 @@ class _TeacherLinkFirebaseCardState
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _DeleteAccountCard extends ConsumerWidget {
-  const _DeleteAccountCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return HubActionRow(
-      icon: Icons.delete_outline_rounded,
-      iconColor: AppColors.coral,
-      title: 'Delete Account',
-      subtitle: 'Permanently delete your account and all its data.',
-      trailing: HubRowButton(
-        label: 'Delete',
-        color: AppColors.coral,
-        onPressed: () => showDeleteAccountDialog(context, ref),
       ),
     );
   }

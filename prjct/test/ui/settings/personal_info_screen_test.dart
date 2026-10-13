@@ -107,60 +107,60 @@ void main() {
     await settle(tester);
   }
 
-  testWidgets('parent edits name and mobile; email stays read-only', (
+  testWidgets('parent edits name; no mobile field; email stays read-only', (
     tester,
   ) async {
     await pumpRow(tester, UserRole.parent);
     expect(find.text('Aisha Santos'), findsOneWidget);
     await open(tester);
 
-    // Prefilled, mobile shown without its +63 (that's the fixed prefix).
-    expect(find.widgetWithText(TextField, 'Aisha Santos'), findsOneWidget);
-    expect(find.widgetWithText(TextField, '9171234567'), findsOneWidget);
+    // Stored full name split back into its parts.
+    expect(find.widgetWithText(TextField, 'Aisha'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Santos'), findsOneWidget);
+    expect(find.textContaining('Mobile number'), findsNothing);
     expect(find.text('School (optional)'), findsNothing);
     final email = tester.widget<TextField>(
       find.widgetWithText(TextField, 'aisha@example.com'),
     );
     expect(email.readOnly, isTrue);
 
-    // Empty name and a short number are caught before anything is saved.
-    await tester.enterText(find.widgetWithText(TextField, 'Aisha Santos'), '');
-    await tester.enterText(find.widgetWithText(TextField, '9171234567'), '123');
+    // Empty first and last names are caught before anything is saved.
+    await tester.enterText(find.widgetWithText(TextField, 'Aisha'), '');
+    await tester.enterText(find.widgetWithText(TextField, 'Santos'), '');
     await save(tester);
-    expect(find.text('Please enter your full name'), findsOneWidget);
-    expect(
-      find.textContaining('Enter a 10-digit mobile number'),
-      findsOneWidget,
-    );
+    expect(find.text('Please enter your first name'), findsOneWidget);
+    expect(find.text('Please enter your last name'), findsOneWidget);
     expect(
       Hive.box<ParentAccount>(HiveBoxes.parents).get('parent-1')!.fullName,
       'Aisha Santos',
     );
 
-    await tester.enterText(
-      find.byType(TextField).at(0),
-      '  Aisha   M. Santos ',
-    );
-    await tester.enterText(find.byType(TextField).at(1), '09181112222');
+    await tester.enterText(find.byType(TextField).at(0), '  Aisha   Mae ');
+    await tester.enterText(find.byType(TextField).at(1), 'M.');
+    await tester.enterText(find.byType(TextField).at(2), 'Santos');
     await save(tester);
 
     final saved = Hive.box<ParentAccount>(HiveBoxes.parents).get('parent-1')!;
-    expect(saved.fullName, 'Aisha M. Santos');
-    expect(saved.mobileNumber, '+639181112222');
+    expect(saved.fullName, 'Aisha Mae M. Santos');
+    // Kept from registration, even though it's no longer shown here.
+    expect(saved.mobileNumber, '+639171234567');
     expect(saved.email, 'aisha@example.com');
     expect(saved.pinHash, 'x');
     // Back on Settings, which already shows the new name.
     expect(find.text('Save changes'), findsNothing);
-    expect(find.text('Aisha M. Santos'), findsOneWidget);
+    expect(find.text('Aisha Mae M. Santos'), findsOneWidget);
     expect(find.text('Personal information saved'), findsOneWidget);
   });
 
-  testWidgets('teacher can also edit their school and clear the mobile', (
+  testWidgets('teacher can also edit their school', (
     tester,
   ) async {
     await pumpRow(tester, UserRole.asatidz);
     await open(tester);
     expect(find.text('School (optional)'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Ustadh Yusuf'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Abdurrahman'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Al-Farouqi'), findsOneWidget);
 
     await tester.enterText(
       find.widgetWithText(
@@ -175,7 +175,6 @@ void main() {
       HiveBoxes.teachers,
     ).get('teacher-1')!;
     expect(saved.school, 'Madrasah An-Nur');
-    expect(saved.mobileNumber, isNull);
     expect(saved.fullName, 'Ustadh Yusuf Abdurrahman Al-Farouqi');
   });
 
@@ -201,7 +200,7 @@ void main() {
           await save(tester);
           await scrollUntilFound(
             tester,
-            find.text('Please enter your full name'),
+            find.text('Please enter your first name'),
             towardsTop: true,
           );
           await scrollThroughChecking(tester, 'Errors $role $label');

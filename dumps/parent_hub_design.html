@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SalamLearn — Parent Hub Design Mock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --cream:#FAF6EC; --teal:#0F6E56; --teal-dark:#0A4F3E; --gold:#EF9F27; --coral:#D85A30; --ink:#20241F;
+  --surface:#FFFFFF; --danger:#DC2626; --mint:#E7F3EF; --mint-border:#BFDCD2; --gold-tint:#FDF1DE;
+  --gold-soft:#F7C86F; --mint-green:#5BC4A0; --coral-tint:#FBE9E2; --cream-border:#ECEEEC; --cream-dark:#F1EADA;
+  --text-muted:#7A8079; --neutral-tint:#F7F8F7;
+  --font-head:'Fredoka',sans-serif; --font-num:'Outfit',sans-serif;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--surface); color:var(--ink);
+  font-family:var(--font-num); -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.title{font-family:var(--font-head); font-weight:600; margin:0;}
+p{margin:0;}
+button{font-family:inherit; cursor:pointer;}
+
+/* ---------- app shell ---------- */
+.app{
+  max-width:560px; margin:0 auto; min-height:100vh;
+  display:flex; flex-direction:column; background:var(--surface);
+  border-left:1px solid var(--cream-border); border-right:1px solid var(--cream-border);
+}
+
+/* ---------- header ---------- */
+.header{
+  display:flex; align-items:flex-start; gap:12px;
+  padding:14px 14px 12px 18px;
+}
+.avatar-ring{
+  width:34px; height:34px; border-radius:50%; border:1.5px solid var(--teal);
+  display:flex; align-items:center; justify-content:center; flex:none;
+  overflow:hidden; cursor:pointer;
+}
+.avatar-emoji{font-size:19px;}
+.header-text{flex:1; min-width:0;}
+.eyebrow{
+  font-size:10px; font-weight:700; letter-spacing:.4px; color:var(--text-muted);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.title-row{
+  font-size:15px; font-weight:800; letter-spacing:-.2px; color:var(--ink);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.status-row{display:flex; align-items:center; gap:5px; margin-top:2px;}
+.pulse-dot{width:5px; height:5px; border-radius:50%; background:var(--teal); animation:pulse 1s ease-in-out infinite alternate;}
+@keyframes pulse{from{opacity:1;} to{opacity:.35;}}
+.status-label{font-size:9.5px; font-weight:700; color:var(--teal);}
+.icon-btn{
+  width:34px; height:34px; border-radius:11px; background:var(--neutral-tint); border:none;
+  display:flex; align-items:center; justify-content:center; flex:none;
+}
+.icon-btn svg{width:17px; height:17px; stroke:var(--ink);}
+
+/* ---------- top tab bar ---------- */
+.tab-bar{
+  display:flex; border-bottom:1px solid var(--cream-border); background:var(--surface); position:relative;
+}
+.tab-btn{
+  flex:1; background:none; border:none; padding:12px 4px 11px; display:flex; flex-direction:column;
+  align-items:center; gap:5px; color:var(--text-muted); position:relative;
+}
+.tab-btn svg{width:19px; height:19px; stroke:var(--text-muted);}
+.tab-btn span{font-size:10.5px; font-weight:700;}
+.tab-btn.active{color:var(--teal);}
+.tab-btn.active svg{stroke:var(--teal);}
+.tab-underline{
+  position:absolute; bottom:0; left:0; width:1px; height:3px; border-radius:2px; background:var(--teal);
+  transform-origin:left center;
+  transition:transform .17s cubic-bezier(.33,1,.68,1);
+}
+
+/* ---------- panels ---------- */
+.panel{display:none; padding:16px 18px 24px; animation:rise .32s cubic-bezier(.2,.7,.3,1);}
+.panel.active{display:block;}
+@keyframes rise{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);}}
+
+.card{
+  background:var(--surface); border:1px solid var(--cream-border); border-radius:16px; padding:18px;
+}
+.card + .card{margin-top:14px;}
+.card-title{font-size:16px; font-weight:600; font-family:var(--font-head);}
+.card-sub{font-size:11.5px; color:var(--text-muted); margin-top:2px;}
+
+/* ---------- KPI focus row ---------- */
+.kpi-card{padding:16px;}
+.kpi-top{display:flex; align-items:center; gap:16px;}
+.dial-wrap{width:128px; height:128px; position:relative; flex:none; cursor:pointer;}
+.dial-wrap svg{transform:rotate(-90deg);}
+.dial-center{
+  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+}
+.dial-pct{font-size:28px; font-weight:800; letter-spacing:-.5px; font-family:var(--font-num);}
+.dial-label{font-size:11.5px; color:var(--text-muted); font-weight:700;}
+.streak-badge{
+  position:absolute; top:-4px; right:-6px; background:var(--gold); border:2px solid #fff; border-radius:999px;
+  padding:5px 8px; display:flex; align-items:center; gap:2px; color:#fff; font-weight:800; font-size:11px;
+}
+.streak-badge svg{width:12px; height:12px; fill:#fff;}
+.stat-col{flex:1; display:flex; flex-direction:column; gap:10px; cursor:pointer;}
+.stat-pill{display:flex; align-items:center; gap:10px; background:var(--neutral-tint); border-radius:14px; padding:12px;}
+.stat-icon{width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex:none;}
+.stat-icon svg{width:15px; height:15px;}
+.stat-body{flex:1; min-width:0;}
+.stat-value{font-size:16px; font-weight:700; letter-spacing:-.2px;}
+.stat-label{font-size:10.5px; color:var(--text-muted); font-weight:600;}
+.stat-trend{display:flex; align-items:center; gap:2px; font-size:10.5px; font-weight:700; flex:none;}
+.stat-trend svg{width:10px; height:10px;}
+.trend-up{color:var(--teal);}
+.trend-down{color:var(--coral);}
+
+.detail-btn{
+  display:flex; align-items:center; justify-content:center; gap:6px; margin:12px auto 0; background:none; border:none;
+  color:var(--teal); font-size:12.5px; font-weight:700; padding:8px 16px; border-radius:8px;
+}
+.detail-btn svg{width:16px; height:16px; stroke:var(--teal);}
+.detail-btn:hover{background:var(--neutral-tint);}
+
+.milestone-banner{
+  display:none; margin-top:12px; background:var(--mint); border-radius:12px; padding:9px 12px;
+  font-size:11.5px; font-weight:700; color:var(--teal-dark);
+}
+.milestone-banner.show{display:block;}
+
+/* ---------- trend chart ---------- */
+.chart-head{display:flex; align-items:center; gap:7px;}
+.chart-head svg{width:16px; height:16px; stroke:var(--teal);}
+.range-pills{display:flex; gap:6px; margin-top:12px;}
+.range-pill{
+  border:none; border-radius:999px; padding:6px 12px; font-size:10.5px; font-weight:700;
+  background:var(--neutral-tint); color:var(--text-muted);
+}
+.range-pill.active{background:var(--teal); color:#fff;}
+.chart-svg-wrap{margin-top:16px;}
+.chart-label{font-size:9px; fill:var(--text-muted); font-family:var(--font-num);}
+
+/* ---------- adventures ---------- */
+.adventure-row{
+  display:flex; align-items:center; gap:12px; background:#fff; border:1px solid var(--cream-border);
+  border-radius:14px; padding:11px; margin-top:8px;
+}
+.adventure-row:first-child{margin-top:0;}
+.ring-wrap{width:40px; height:40px; position:relative; flex:none;}
+.ring-wrap svg{transform:rotate(-90deg);}
+.ring-pct{
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-size:9.5px; font-weight:800;
+}
+.adventure-body{flex:1; min-width:0;}
+.adventure-name{font-size:12.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.adventure-errors{font-size:10.5px; color:var(--text-muted); margin-top:1px;}
+.adventure-bar{height:4px; border-radius:2px; background:var(--mint); margin-top:5px; overflow:hidden;}
+.adventure-bar-fill{height:100%; border-radius:2px;}
+.needs-review{
+  background:var(--coral-tint); color:var(--coral); font-size:8.5px; font-weight:800; border-radius:6px;
+  padding:3px 6px; flex:none; white-space:nowrap;
+}
+.see-detail{display:flex; align-items:center; gap:2px; font-size:11.5px; font-weight:800; flex:none; background:none; border:none;}
+.see-detail svg{width:14px; height:14px;}
+
+.mediation-card{
+  margin-top:14px; background:var(--mint); border:1px solid var(--mint-border); border-radius:14px; padding:14px;
+}
+.mediation-head{display:flex; align-items:center; gap:6px; font-size:12px; font-weight:800; color:var(--teal-dark);}
+.mediation-body{font-size:12px; color:var(--teal-dark); line-height:1.35; margin-top:6px;}
+
+/* ---------- profile tab ---------- */
+.child-switcher{display:flex; gap:10px; overflow-x:auto; padding-bottom:2px;}
+.child-chip{
+  width:72px; flex:none; padding:8px 6px; border-radius:16px; border:1px solid var(--cream-border);
+  background:#fff; display:flex; flex-direction:column; align-items:center; gap:4px; text-align:center;
+}
+.child-chip.active{background:var(--gold-tint); border:2px solid var(--gold); padding:7px 5px;}
+.child-chip-avatar{width:36px; height:36px; border-radius:50%; background:var(--gold-tint); display:flex; align-items:center; justify-content:center; font-size:18px;}
+.child-chip-name{font-size:10.5px; font-weight:600; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;}
+.child-chip.active .child-chip-name{font-weight:800; color:#8A5A12;}
+
+.row-card{display:flex; align-items:center; gap:14px;}
+.profile-avatar{width:48px; height:48px; border-radius:50%; background:var(--gold-tint); display:flex; align-items:center; justify-content:center; font-size:24px; flex:none;}
+.row-body{flex:1; min-width:0;}
+.row-meta{font-size:12px; color:var(--text-muted); margin-top:2px;}
+.btn-outline{
+  background:none; border:1px solid var(--cream-border); color:var(--teal); border-radius:10px; padding:9px 16px;
+  font-weight:700; font-size:12.5px; flex:none;
+}
+.btn-outline.coral{color:var(--coral); border-color:var(--coral);}
+
+.class-chip{
+  display:flex; align-items:center; gap:10px; background:var(--mint); border:1px solid var(--mint-border);
+  border-radius:12px; padding:12px;
+}
+.class-chip svg{width:18px; height:18px; stroke:var(--teal); flex:none;}
+.class-chip-text{font-size:13px; font-weight:700;}
+.class-hint{font-size:11.5px; color:var(--text-muted); margin-top:10px;}
+.join-row{display:flex; gap:10px; margin-top:10px; align-items:flex-start;}
+.input-wrap{flex:1;}
+.input-field{
+  width:100%; background:var(--neutral-tint); border:1px solid var(--cream-border); border-radius:10px;
+  padding:12px; font-size:13px; font-family:inherit; color:var(--ink);
+}
+.input-field:focus{outline:none; border-color:var(--teal); box-shadow:0 3px 12px rgba(15,110,86,.18);}
+.input-label{font-size:10.5px; color:var(--text-muted); font-weight:700; margin-bottom:5px; display:block;}
+.btn-teal{background:var(--teal); color:#fff; border:none; border-radius:10px; padding:0 18px; height:42px; font-weight:700; font-size:13px; display:flex; align-items:center; gap:6px;}
+.btn-gold{
+  background:var(--gold); color:var(--ink); border:none; border-radius:12px; padding:12px 18px; font-weight:700;
+  font-size:13.5px; display:flex; align-items:center; justify-content:center; gap:6px; width:100%;
+}
+.btn-gold svg{width:18px; height:18px;}
+
+.sync-card{background:var(--mint); border-color:var(--mint-border);}
+.sync-card .card-sub{color:var(--teal-dark);}
+
+/* ---------- settings ---------- */
+.settings-icon{width:34px; height:34px; border-radius:11px; background:var(--mint); display:flex; align-items:center; justify-content:center; flex:none;}
+.settings-icon svg{width:17px; height:17px; stroke:var(--teal);}
+.settings-head{display:flex; align-items:center; gap:10px;}
+.slider-row{margin-top:14px;}
+.slider-row:first-of-type{margin-top:16px;}
+.slider-label-row{display:flex; justify-content:space-between; align-items:center;}
+.slider-label{display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700;}
+.slider-label svg{width:16px; height:16px; stroke:var(--text-muted);}
+.slider-value{font-size:12px; font-weight:800; color:var(--teal);}
+input[type=range]{width:100%; margin-top:4px; accent-color:var(--teal);}
+
+.gold-tint-card{background:var(--gold-tint); border-color:var(--gold-soft);}
+.coral-icon-box{width:38px; height:38px; border-radius:12px; background:var(--coral-tint); display:flex; align-items:center; justify-content:center; flex:none;}
+.coral-icon-box svg{width:18px; height:18px; stroke:var(--coral);}
+.mint-icon-box{width:38px; height:38px; border-radius:12px; background:var(--mint); display:flex; align-items:center; justify-content:center; flex:none;}
+.mint-icon-box svg{width:18px; height:18px; stroke:var(--teal);}
+.circle-icon-box{width:34px; height:34px; border-radius:50%; background:var(--coral-tint); display:flex; align-items:center; justify-content:center; flex:none;}
+.circle-icon-box svg{width:18px; height:18px; stroke:var(--coral);}
+
+/* ---------- wide / tablet layout (disabled — phone-only view) ---------- */
+.rail{display:none;}
+@media (min-width:99999px){
+  body{background:var(--cream);}
+  .app{
+    max-width:none; border:none; flex-direction:row; min-height:100vh;
+  }
+  .rail{
+    display:flex; flex-direction:column; align-items:center; gap:6px; width:84px; flex:none;
+    background:var(--teal-dark); padding:22px 0;
+  }
+  .rail-avatar{width:40px; height:40px; border-radius:50%; border:2px solid var(--gold); overflow:hidden; margin-bottom:22px;}
+  .rail-btn{
+    width:56px; padding:10px 0 8px; border:none; background:none; border-radius:12px;
+    display:flex; flex-direction:column; align-items:center; gap:5px; color:rgba(255,255,255,.6);
+  }
+  .rail-btn svg{width:19px; height:19px; stroke:rgba(255,255,255,.6);}
+  .rail-btn span{font-size:9.5px; font-weight:700;}
+  .rail-btn.active{background:rgba(255,255,255,.12); color:#fff;}
+  .rail-btn.active svg{stroke:#fff;}
+
+  .main{flex:1; display:flex; flex-direction:column; min-width:0; max-height:100vh; overflow-y:auto;}
+  .header{padding:22px 32px 16px; background:var(--surface); border-bottom:1px solid var(--cream-border);}
+  .tab-bar{display:none;}
+  .panel{padding:24px 32px 40px; max-width:1180px;}
+
+  /* progress: 4-up metric row + chart/adventures side by side */
+  .kpi-top{display:none;}
+  .kpi-wide-row{display:none; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:14px;}
+  .kpi-card.wide-mode .kpi-wide-row{display:grid;}
+  .kpi-card.wide-mode .stat-col,
+  .kpi-card.wide-mode .kpi-top{display:none;}
+  .metric-tile{background:var(--neutral-tint); border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:6px;}
+  .metric-tile-head{display:flex; align-items:center; gap:8px;}
+  .metric-tile-icon{width:30px; height:30px; border-radius:9px; display:flex; align-items:center; justify-content:center;}
+  .metric-tile-icon svg{width:14px; height:14px;}
+  .metric-tile-value{font-size:22px; font-weight:800; font-family:var(--font-num);}
+  .metric-tile-label{font-size:11px; color:var(--text-muted); font-weight:600;}
+
+  .progress-grid{display:grid; grid-template-columns:1.4fr 1fr; gap:16px; align-items:start; margin-top:14px;}
+  .progress-grid .card{margin-top:0;}
+
+  .profile-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start;}
+  .profile-grid .card{margin-top:0;}
+  .profile-grid .child-switcher-card{grid-column:1 / -1;}
+
+  .settings-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start;}
+  .settings-grid .card{margin-top:0;}
+  .settings-grid .sound-card{grid-column:1 / -1;}
+}
+@media (min-width:640px) and (max-width:899px){
+  .progress-grid, .profile-grid, .settings-grid{grid-template-columns:1fr;}
+  .profile-grid .child-switcher-card{grid-column:auto;}
+  .settings-grid .sound-card{grid-column:auto;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- wide-layout side rail (hidden on phone width) -->
+  <nav class="rail">
+    <div class="rail-avatar"><div style="width:100%;height:100%;background:var(--gold-tint);display:flex;align-items:center;justify-content:center;font-size:19px;">🧒</div></div>
+    <button class="rail-btn active" data-tab="0">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 9 4-18 3 9h4"/></svg>
+      <span>Progress</span>
+    </button>
+    <button class="rail-btn" data-tab="1">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7"/></svg>
+      <span>Profile</span>
+    </button>
+    <button class="rail-btn" data-tab="2">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <div class="main">
+    <!-- ============ header ============ -->
+    <header class="header">
+      <div class="avatar-ring" onclick="switchTab(0)">
+        <div style="width:100%;height:100%;background:var(--gold-tint);display:flex;align-items:center;justify-content:center;" class="avatar-emoji">🧒</div>
+      </div>
+      <div class="header-text">
+        <div class="eyebrow">ASSALAMU'ALAIKUM, FATIMA</div>
+        <div class="title-row">Amir's progress</div>
+        <div class="status-row">
+          <span class="pulse-dot"></span>
+          <span class="status-label">Synced 12 min ago</span>
+        </div>
+      </div>
+      <button class="icon-btn" title="Switch user" onclick="confirmSwitchUser()">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+      </button>
+    </header>
+
+    <!-- ============ top tab bar (phone) ============ -->
+    <nav class="tab-bar" id="tabBar">
+      <button class="tab-btn active" data-tab="0" onclick="switchTab(0)">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 9 4-18 3 9h4"/></svg>
+        <span>Progress</span>
+      </button>
+      <button class="tab-btn" data-tab="1" onclick="switchTab(1)">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7"/></svg>
+        <span>Profile</span>
+      </button>
+      <button class="tab-btn" data-tab="2" onclick="switchTab(2)">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
+      </button>
+      <span class="tab-underline" id="underline"></span>
+    </nav>
+
+    <!-- ============ PROGRESS TAB ============ -->
+    <section class="panel active" id="panel-0">
+
+      <div class="card kpi-card wide-mode" id="kpiCard">
+        <div class="kpi-top">
+          <div class="dial-wrap" onclick="toggleMilestone()">
+            <svg width="128" height="128" viewBox="0 0 128 128">
+              <circle cx="64" cy="64" r="58" fill="none" stroke="var(--mint)" stroke-width="10" stroke-linecap="round"/>
+              <circle cx="64" cy="64" r="58" fill="none" stroke="var(--teal)" stroke-width="10" stroke-linecap="round"
+                stroke-dasharray="364.4" stroke-dashoffset="65.6"/>
+            </svg>
+            <div class="dial-center">
+              <div class="dial-pct">82%</div>
+              <div class="dial-label">Accuracy</div>
+            </div>
+            <div class="streak-badge">
+              <svg viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+              7
+            </div>
+          </div>
+          <div class="stat-col" onclick="alert('Progress Details dialog — mock only')">
+            <div class="stat-pill">
+              <div class="stat-icon" style="background:var(--gold-tint);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              </div>
+              <div class="stat-body">
+                <div class="stat-value">45m</div>
+                <div class="stat-label">Time on task</div>
+              </div>
+              <div class="stat-trend trend-up">
+                <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6 4 4 6-8"/></svg>
+                +12%
+              </div>
+            </div>
+            <div class="stat-pill">
+              <div class="stat-icon" style="background:var(--coral-tint);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="var(--coral)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M10.3 3.9 2.6 18a1.8 1.8 0 0 0 1.6 2.7h15.6a1.8 1.8 0 0 0 1.6-2.7L13.7 3.9a1.8 1.8 0 0 0-3.4 0z"/><path d="M12 17h.01"/></svg>
+              </div>
+              <div class="stat-body">
+                <div class="stat-value">6</div>
+                <div class="stat-label">Errors</div>
+              </div>
+              <div class="stat-trend trend-down">
+                <svg viewBox="0 0 24 24" fill="none" stroke="var(--coral)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l6 6 4-4 6 8"/></svg>
+                -18%
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="kpi-wide-row">
+          <div class="metric-tile">
+            <div class="metric-tile-head">
+              <div class="metric-tile-icon" style="background:var(--mint);"><svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg></div>
+              <div class="metric-tile-label">Accuracy</div>
+            </div>
+            <div class="metric-tile-value">82%</div>
+          </div>
+          <div class="metric-tile">
+            <div class="metric-tile-head">
+              <div class="metric-tile-icon" style="background:var(--gold-tint);"><svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></div>
+              <div class="metric-tile-label">Streak</div>
+            </div>
+            <div class="metric-tile-value">7 days</div>
+          </div>
+          <div class="metric-tile">
+            <div class="metric-tile-head">
+              <div class="metric-tile-icon" style="background:var(--gold-tint);"><svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+              <div class="metric-tile-label">Time on task</div>
+            </div>
+            <div class="metric-tile-value">45m</div>
+          </div>
+          <div class="metric-tile">
+            <div class="metric-tile-head">
+              <div class="metric-tile-icon" style="background:var(--coral-tint);"><svg viewBox="0 0 24 24" fill="none" stroke="var(--coral)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M10.3 3.9 2.6 18a1.8 1.8 0 0 0 1.6 2.7h15.6a1.8 1.8 0 0 0 1.6-2.7L13.7 3.9a1.8 1.8 0 0 0-3.4 0z"/></svg></div>
+              <div class="metric-tile-label">Errors</div>
+            </div>
+            <div class="metric-tile-value">6</div>
+          </div>
+        </div>
+
+        <button class="detail-btn" onclick="alert('Progress Details dialog — mock only')">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
+          View Detailed Progress Report
+        </button>
+        <div class="milestone-banner" id="milestoneBanner">3 more days to unlock the 10-day streak badge.</div>
+      </div>
+
+      <div class="progress-grid">
+        <div>
+          <!-- trend chart -->
+          <div class="card">
+            <div class="chart-head">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h6v6"/></svg>
+              <span class="card-title">Weekly trend</span>
+            </div>
+            <div class="card-sub">Time spent playing, day by day</div>
+            <div class="range-pills">
+              <button class="range-pill active" onclick="selectRange(this)">7 days</button>
+              <button class="range-pill" onclick="selectRange(this)">30 days</button>
+              <button class="range-pill" onclick="selectRange(this)">Term</button>
+            </div>
+            <div class="chart-svg-wrap">
+              <svg viewBox="0 0 300 130" width="100%" height="130" preserveAspectRatio="none">
+                <line x1="0" y1="27" x2="300" y2="27" stroke="var(--cream-border)" stroke-width="1"/>
+                <line x1="0" y1="54" x2="300" y2="54" stroke="var(--cream-border)" stroke-width="1"/>
+                <line x1="0" y1="81" x2="300" y2="81" stroke="var(--cream-border)" stroke-width="1"/>
+                <defs>
+                  <linearGradient id="fillGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--teal)" stop-opacity="0.16"/>
+                    <stop offset="100%" stop-color="var(--teal)" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <polygon points="0,90 43,70 86,75 129,45 172,55 215,30 258,40 300,20 300,108 0,108"
+                  fill="url(#fillGrad)"/>
+                <polyline points="0,90 43,70 86,75 129,45 172,55 215,30 258,40 300,20"
+                  fill="none" stroke="var(--teal)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <div style="display:flex; justify-content:space-between; margin-top:4px;">
+                <span class="chart-label" style="font-size:9px;">M</span>
+                <span class="chart-label" style="font-size:9px;">T</span>
+                <span class="chart-label" style="font-size:9px;">W</span>
+                <span class="chart-label" style="font-size:9px;">T</span>
+                <span class="chart-label" style="font-size:9px;">F</span>
+                <span class="chart-label" style="font-size:9px;">S</span>
+                <span class="chart-label" style="font-size:9px;">S</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <!-- adventures -->
+          <div class="card">
+            <div class="card-title">Adventures this week</div>
+            <div class="card-sub">Progress by adventure, weakest first.</div>
+            <div style="margin-top:14px;">
+
+              <div class="adventure-row">
+                <div class="ring-wrap">
+                  <svg width="40" height="40" viewBox="0 0 40 40">
+                    <circle cx="20" cy="20" r="15.5" fill="none" stroke="var(--mint)" stroke-width="5"/>
+                    <circle cx="20" cy="20" r="15.5" fill="none" stroke="var(--coral)" stroke-width="5"
+                      stroke-dasharray="97.4" stroke-dashoffset="56.5" stroke-linecap="round"/>
+                  </svg>
+                  <div class="ring-pct" style="color:var(--coral);">42%</div>
+                </div>
+                <div class="adventure-body">
+                  <div class="adventure-name">Hijra Trail</div>
+                  <div class="adventure-errors">9 errors</div>
+                  <div class="adventure-bar"><div class="adventure-bar-fill" style="width:42%; background:var(--coral);"></div></div>
+                </div>
+                <span class="needs-review">NEEDS REVIEW</span>
+                <button class="see-detail" style="color:var(--coral);" onclick="alert('Adventure detail screen — mock only')">
+                  See detail
+                  <svg viewBox="0 0 24 24" fill="none" stroke="var(--coral)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
+              </div>
+
+              <div class="adventure-row">
+                <div class="ring-wrap">
+                  <svg width="40" height="40" viewBox="0 0 40 40">
+                    <circle cx="20" cy="20" r="15.5" fill="none" stroke="var(--mint)" stroke-width="5"/>
+                    <circle cx="20" cy="20" r="15.5" fill="none" stroke="var(--coral)" stroke-width="5"
+                      stroke-dasharray="97.4" stroke-dashoffset="41" stroke-linecap="round"/>
+                  </svg>
+                  <div class="ring-pct" style="color:var(--coral);">58%</div>
+                </div>
+                <div class="adventure-body">
+                  <div class="adventure-name">Fiqh Bridges</div>
+                  <div class="adventure-errors">7 errors</div>
+                  <div class="adventure-bar"><div class="adventure-bar-fill" style="width:58%; background:var(--coral);"></div></div>
+                </div>
+                <span class="needs-review">NEEDS REVIEW</span>
+                <button class="see-detail" style="color:var(--coral);" onclick="alert('Adventure detail screen — mock only')">
+                  See detail
+                  <svg viewBox="0 0 24 24" fill="none" stroke="var(--coral)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
+              </div>
+
+              <div class="adventure-row">
+                <div class="ring-wrap">
+                  <svg width="40" height="40" viewBox="0 0 40 40">
+                    <circle cx="20" cy="20" r="15.5" fill="none" stroke="var(--mint)" stroke-width="5"/>
+                    <circle cx="20" cy="20" r="15.5" fill="none" stroke="var(--teal)" stroke-width="5"
+                      stroke-dasharray="97.4" stroke-dashoffset="23.4" stroke-linecap="round"/>
+                  </svg>
+                  <div class="ring-pct" style="color:var(--teal);">76%</div>
+                </div>
+                <div class="adventure-body">
+                  <div class="adventure-name">Alif Alley</div>
+                  <div class="adventure-errors">4 errors</div>
+                  <div class="adventure-bar"><div class="adventure-bar-fill" style="width:76%; background:var(--teal);"></div></div>
+                </div>
+                <button class="see-detail" style="color:var(--teal);" onclick="alert('Adventure detail screen — mock only')">
+                  See detail
+                  <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
+              </div>
+
+              <div class="adventure-row">
+                <div class="ring-wrap">
+                  <svg width="40" height="40" viewBox="0 0 40 40">
+                    <circle cx="20" cy="20" r="15.5" fill="none" stroke="var(--mint)" stroke-width="5"/>
+                    <circle cx="20" cy="20" r="15.5" fill="none" stroke="var(--teal)" stroke-width="5"
+                      stroke-dasharray="97.4" stroke-dashoffset="8.8" stroke-linecap="round"/>
+                  </svg>
+                  <div class="ring-pct" style="color:var(--teal);">91%</div>
+                </div>
+                <div class="adventure-body">
+                  <div class="adventure-name">Qur'an Cove</div>
+                  <div class="adventure-errors">1 error</div>
+                  <div class="adventure-bar"><div class="adventure-bar-fill" style="width:91%; background:var(--teal);"></div></div>
+                </div>
+                <button class="see-detail" style="color:var(--teal);" onclick="alert('Adventure detail screen — mock only')">
+                  See detail
+                  <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
+              </div>
+
+            </div>
+
+            <div class="mediation-card">
+              <div class="mediation-head">
+                <span>🖊️</span>
+                <span>This week's practice routine — Hijra Trail</span>
+              </div>
+              <div class="mediation-body">Sit together for 10 minutes and retrace the Hijra Trail map — ask Amir to name each waystation out loud before tapping it. Repeating the harder crossings twice tends to fix the wrong-turn errors fastest.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PROFILE TAB ============ -->
+    <section class="panel" id="panel-1">
+      <div class="profile-grid">
+
+        <div class="card child-switcher-card">
+          <div class="child-switcher">
+            <div class="child-chip active">
+              <div class="child-chip-avatar">🧒</div>
+              <div class="child-chip-name">Amir</div>
+            </div>
+            <div class="child-chip" onclick="alert('Switch active learner — mock only')">
+              <div class="child-chip-avatar">👧</div>
+              <div class="child-chip-name">Layla</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row-card">
+            <div class="profile-avatar">🧒</div>
+            <div class="row-body">
+              <div class="card-title" style="font-size:15px;">Edit Child Profile</div>
+              <div class="row-meta">Amir · Age 6 · Grade 1</div>
+            </div>
+            <button class="btn-outline">Edit</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Class</div>
+          <div style="margin-top:10px;">
+            <div class="class-chip">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10L12 4 2 10l10 6 10-6z"/><path d="M6 12v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"/></svg>
+              <span class="class-chip-text">Amir is enrolled in Ustadzah Noor's Class</span>
+            </div>
+            <div class="class-hint">Enter a new invitation code below to join a different class.</div>
+          </div>
+          <div class="join-row">
+            <div class="input-wrap">
+              <label class="input-label">Invitation code</label>
+              <input class="input-field" type="text" placeholder="e.g. AB12CD" />
+            </div>
+            <button class="btn-teal" onclick="alert('Join class — mock only')">Join</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Create New Profile</div>
+          <div class="card-sub">Set up a new learning journey for another child on this device.</div>
+          <div style="margin-top:16px;">
+            <button class="btn-gold" onclick="alert('Add Child Profile — mock only')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+              Add Child Profile
+            </button>
+          </div>
+        </div>
+
+        <div class="card sync-card">
+          <div class="card-title">Synchronize Data</div>
+          <div class="card-sub">Backup and sync progress data with the cloud server.</div>
+          <div style="margin-top:16px;">
+            <button class="btn-gold" style="background:var(--teal); color:#fff;" id="syncProfileBtn" onclick="fakeSync(this)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg>
+              <span class="btn-text">Sync Profile Data</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============ SETTINGS TAB ============ -->
+    <section class="panel" id="panel-2">
+      <div class="settings-grid">
+
+        <div class="card sound-card">
+          <div class="settings-head">
+            <div class="settings-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></div>
+            <span class="card-title">Sound & Voice</span>
+          </div>
+
+          <div class="slider-row">
+            <div class="slider-label-row">
+              <span class="slider-label"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Background Music</span>
+              <span class="slider-value">Medium</span>
+            </div>
+            <input type="range" min="0" max="100" value="55" />
+          </div>
+          <div class="slider-row">
+            <div class="slider-label-row">
+              <span class="slider-label"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>UI Sound Effects</span>
+              <span class="slider-value">Loud</span>
+            </div>
+            <input type="range" min="0" max="100" value="80" />
+          </div>
+          <div class="slider-row">
+            <div class="slider-label-row">
+              <span class="slider-label"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4"/></svg>Pronunciation Voice</span>
+              <span class="slider-value">Max</span>
+            </div>
+            <input type="range" min="0" max="100" value="100" />
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row-card">
+            <div class="mint-icon-box"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg></div>
+            <div class="row-body">
+              <div class="card-title" style="font-size:15px;">Sync Now</div>
+              <div class="row-meta">Sync local device progress with cloud servers.</div>
+            </div>
+            <button class="btn-outline" id="syncNowBtn" onclick="fakeSyncNow(this)">Sync</button>
+          </div>
+        </div>
+
+        <div class="card gold-tint-card">
+          <div style="display:flex; align-items:flex-start; gap:14px;">
+            <div style="width:34px;height:34px;border-radius:11px;background:#fff;display:flex;align-items:center;justify-content:center;flex:none;">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 8l-2 1.5"/><path d="M2 8l8 5 4-2.5"/></svg>
+            </div>
+            <div style="flex:1;">
+              <div class="card-title">Verify your email</div>
+              <div style="font-size:12px; color:var(--ink); margin-top:4px;">We sent a link to fatima@example.com when this account was created.</div>
+              <div style="display:flex; gap:10px; margin-top:12px;">
+                <button class="btn-outline" style="color:var(--ink); border-color:var(--ink);">Resend</button>
+                <button class="btn-teal" style="height:auto; padding:9px 16px;">I've verified</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card gold-tint-card">
+          <div class="card-title">Link to Cloud</div>
+          <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">This account isn't linked to the cloud yet, so "Sync now" won't work until you link it. Re-enter your password to link it.</div>
+          <input class="input-field" type="password" placeholder="Account password" style="margin-top:12px;" />
+          <button class="btn-teal" style="width:100%; margin-top:12px; justify-content:center;" onclick="alert('Link to Cloud — mock only')">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.5.4l3-3a5 5 0 00-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 00-7.5-.4l-3 3a5 5 0 007 7l1.5-1.5"/></svg>
+            Link to Cloud
+          </button>
+        </div>
+
+        <div class="card">
+          <div class="row-card">
+            <div class="coral-icon-box"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg></div>
+            <div class="row-body">
+              <div class="card-title" style="font-size:15px;">Erase Local Data</div>
+              <div class="row-meta">Permanently delete all stored profiles and progress data.</div>
+            </div>
+            <button class="btn-outline coral" onclick="confirmErase()">Delete</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row-card">
+            <div class="circle-icon-box"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></div>
+            <div class="row-body">
+              <div style="font-size:16px; font-weight:700;">Exit Settings</div>
+              <div class="row-meta">Exit settings and lock admin areas</div>
+            </div>
+            <button class="btn-outline coral" onclick="confirmLogout()">Logout</button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+function switchTab(i){
+  document.querySelectorAll('.panel').forEach((p,idx)=>p.classList.toggle('active', idx===i));
+  document.querySelectorAll('.tab-btn').forEach((b)=>b.classList.toggle('active', +b.dataset.tab===i));
+  document.querySelectorAll('.rail-btn').forEach((b)=>b.classList.toggle('active', +b.dataset.tab===i));
+  positionUnderline();
+}
+function positionUnderline(){
+  const active = document.querySelector('.tab-btn.active');
+  const bar = document.getElementById('tabBar');
+  const underline = document.getElementById('underline');
+  if(!active) return;
+  const barRect = bar.getBoundingClientRect();
+  const btnRect = active.getBoundingClientRect();
+  const offset = btnRect.left - barRect.left + 22;
+  const width = btnRect.width - 44;
+  underline.style.transform = `translateX(${offset}px) scaleX(${width})`;
+}
+window.addEventListener('resize', positionUnderline);
+window.addEventListener('load', positionUnderline);
+document.querySelectorAll('.rail-btn').forEach(b=>b.addEventListener('click', ()=>switchTab(+b.dataset.tab)));
+
+function toggleMilestone(){
+  document.getElementById('milestoneBanner').classList.toggle('show');
+}
+function selectRange(el){
+  el.parentElement.querySelectorAll('.range-pill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+}
+function fakeSync(btn){
+  const label = btn.querySelector('.btn-text');
+  if(btn.disabled) return;
+  btn.disabled = true;
+  label.textContent = 'Syncing...';
+  setTimeout(()=>{ label.textContent = 'Sync Profile Data'; btn.disabled = false; }, 1200);
+}
+function fakeSyncNow(btn){
+  if(btn.disabled) return;
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Syncing...';
+  setTimeout(()=>{ btn.textContent = original; btn.disabled = false; }, 1200);
+}
+function confirmSwitchUser(){
+  alert('Switch User?\n\nAre you sure you want to switch user? This will lock the current session and return to the role select screen.');
+}
+function confirmErase(){
+  alert('Erase everything?\n\nThis removes the learner profile, consent record, PIN, and all progress from this device. This cannot be undone.');
+}
+function confirmLogout(){
+  alert('Log out?\n\nAre you sure you want to log out? You will need to sign in with your email and password again to access the Parent Dashboard next time.');
+}
+</script>
+</body>
+</html>
