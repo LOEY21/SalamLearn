@@ -272,16 +272,17 @@ class _PhoneLayoutState extends ConsumerState<_PhoneLayout>
       ),
       panelKey: ValueKey(_currentTab),
       panel: switch (_currentTab) {
-        0 => const HubTabBody(
+        0 => HubTabBody(
           left: [
-            HubStaggerFadeIn(delay: Duration.zero, child: _KpiFocusRow()),
-            SizedBox(height: 16),
-            HubStaggerFadeIn(
+            _JoinClassReminder(onJoin: () => _switchTab(1)),
+            const HubStaggerFadeIn(delay: Duration.zero, child: _KpiFocusRow()),
+            const SizedBox(height: 16),
+            const HubStaggerFadeIn(
               delay: Duration(milliseconds: 35),
               child: _PracticeNote(),
             ),
           ],
-          right: [
+          right: const [
             HubStaggerFadeIn(
               delay: Duration(milliseconds: 70),
               child: _AdventureBreakdownCard(),
@@ -728,6 +729,70 @@ class _UnlinkedLearnersCard extends ConsumerWidget {
                     ],
                   ),
                 ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Progress-tab nudge while the selected child has no class: their games
+/// are still saved (progress belongs to the child, not a class), but no
+/// teacher can follow along until a class code is entered on the Profile
+/// tab's [_ClassSection].
+class _JoinClassReminder extends ConsumerWidget {
+  const _JoinClassReminder({required this.onJoin});
+
+  final VoidCallback onJoin;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final learnerId = ref.watch(sessionProvider.select((s) => s.learner?.id));
+    if (learnerId == null) return const SizedBox.shrink();
+    final section = ref.watch(learnerClassProvider(learnerId));
+    if (section != null && !section.isArchived) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: SoftCard(
+        key: const ValueKey('join-class-reminder'),
+        radius: 20,
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            const MockIcon(
+              MockIcons.classBadge,
+              color: AppColors.teal,
+              size: 26,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Not in a class yet', style: _display(16)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    "Games played are still saved. Join your child's class "
+                    'so their teacher can follow their progress too.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.4,
+                      color: AppColors.inkSoft,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.teal,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(72, 44),
+              ),
+              onPressed: onJoin,
+              child: const Text('Join'),
+            ),
           ],
         ),
       ),

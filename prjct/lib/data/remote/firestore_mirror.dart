@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../local/hive_boxes.dart';
 import 'firebase_role_app.dart';
@@ -129,7 +130,9 @@ class FirestoreMirror {
   /// resolve the real instance when a push is actually attempted.
   FirebaseFirestore get _db =>
       _firestoreOverride ??
-      FirebaseFirestore.instanceFor(app: FirebaseRoleApp.app(teacher: _teacher));
+      FirebaseFirestore.instanceFor(
+        app: FirebaseRoleApp.app(teacher: _teacher),
+      );
 
   Future<void> pushParent(ParentAccount account) {
     return _db.collection(HiveBoxes.parents).doc(account.id).set({
@@ -302,16 +305,14 @@ class FirestoreMirror {
     final subs = <StreamSubscription>[];
     controller.onListen = () {
       try {
-        // Firestore `in` limit is 10; chunk for safety
-        for (var i = 0; i < learnerIds.length; i += 10) {
-          final chunk = learnerIds.sublist(
-            i,
-            (i + 10).clamp(0, learnerIds.length),
-          );
+        // One equality listener per learner, not `whereIn`: the progress
+        // read rule checks access per learnerId, which Firestore can only
+        // prove up front for an exact `learnerId ==` filter.
+        for (final learnerId in learnerIds) {
           subs.add(
             _db
                 .collection(HiveBoxes.progress)
-                .where('learnerId', whereIn: chunk)
+                .where('learnerId', isEqualTo: learnerId)
                 .snapshots()
                 .listen(
                   (snap) =>
@@ -333,6 +334,48 @@ class FirestoreMirror {
     };
     return controller.stream;
   }
+
+  /// Teacher -> learner read grant (see `teacher_learners` in
+  /// firestore.rules): lets the signed-in teacher read [learnerId]'s
+  /// progress, badges and flags. The rule only accepts it while
+  /// [classId] is one of this teacher's classes and the learner is really
+  /// enrolled in it. Written once per learner per app run.
+  Future<void> ensureTeacherAccess({
+    required String classId,
+    required String learnerId,
+  }) async {
+    final uid = _teacherUid;
+    if (uid == null || !_grantedTeacherAccess.add('$uid:$learnerId')) return;
+    try {
+      await FirebaseFirestore.instanceFor(app: FirebaseRoleApp.app(teacher: true))
+          .collection(teacherLearners)
+          .doc('${uid}_$learnerId')
+          .set({'teacherUid': uid, 'learnerId': learnerId, 'classId': classId});
+    } catch (_) {
+      // Retried next time (e.g. the enrollment hasn't reached Firestore).
+      _grantedTeacherAccess.remove('$uid:$learnerId');
+      rethrow;
+    }
+  }
+
+  /// Undoes [ensureTeacherAccess] once a learner leaves the teacher's last
+  /// class with them.
+  Future<void> revokeTeacherAccess(String learnerId) async {
+    final uid = _teacherUid;
+    if (uid == null) return;
+    _grantedTeacherAccess.remove('$uid:$learnerId');
+    await FirebaseFirestore.instanceFor(app: FirebaseRoleApp.app(teacher: true))
+        .collection(teacherLearners)
+        .doc('${uid}_$learnerId')
+        .delete();
+  }
+
+  static const teacherLearners = 'teacher_learners';
+  static final _grantedTeacherAccess = <String>{};
+
+  static String? get _teacherUid => FirebaseAuth.instanceFor(
+    app: FirebaseRoleApp.app(teacher: true),
+  ).currentUser?.uid;
 
   Future<void> pushBadge(BadgeAward award) {
     return _db
@@ -362,6 +405,19 @@ class FirestoreMirror {
               DateTime.now(),
         ),
     ];
+  }
+
+  /// The mascot's first-run tutorial is once per learner, not once per
+  /// device — see `TutorialSeenNotifier`.
+  Future<void> pushTutorialSeen(String learnerId) {
+    return _db.collection('learner_flags').doc(learnerId).set({
+      'tutorialSeen': true,
+    }, SetOptions(merge: true));
+  }
+
+  Future<bool> fetchTutorialSeen(String learnerId) async {
+    final doc = await _db.collection('learner_flags').doc(learnerId).get();
+    return doc.data()?['tutorialSeen'] == true;
   }
 
   ProgressRecord _progressFromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {

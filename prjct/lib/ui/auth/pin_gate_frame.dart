@@ -13,8 +13,8 @@ import '../widgets/role_icons.dart';
 /// visual language: a teal Khatam-pattern panel with the role badge, title
 /// and supporting line, then the keypad on the cream canvas. Phones stack
 /// the panel above the keypad; tablets, desktops and landscape phones put
-/// them side by side. Everything scrolls when the window is short or the
-/// text is large.
+/// them side by side. On phones the keypad shrinks to fill the screen;
+/// only very short windows fall back to scrolling.
 class PinGateFrame extends StatelessWidget {
   const PinGateFrame({
     super.key,
@@ -108,7 +108,7 @@ class PinGateFrame extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         _fade(padIn, pad),
-        if (footer.isNotEmpty) ...[const SizedBox(height: 8), ...footer],
+        ...footer,
       ],
     );
 
@@ -209,47 +209,84 @@ class PinGateFrame extends StatelessWidget {
               );
             }
 
-            return SingleChildScrollView(
-              child: Column(
-                children: [
-                  _TealPanel(
-                    rounded: true,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(10, 8, 10, 24),
-                      child: Column(
-                        children: [
-                          backButton(),
-                          Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 480),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                ),
-                                child: LayoutBuilder(
-                                  builder: (context, c) => identity(c.maxWidth),
-                                ),
-                              ),
-                            ),
+            final panel = _TealPanel(
+              rounded: true,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 24),
+                // Back button sits beside the badge, not on its own row, so
+                // the keypad below gets that height.
+                child: Stack(
+                  children: [
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 480),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          child: LayoutBuilder(
+                            builder: (context, c) => identity(c.maxWidth),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  SafeArea(
-                    top: false,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 420),
-                          child: keypad,
                         ),
                       ),
                     ),
-                  ),
-                ],
+                    Positioned(top: 0, left: 0, child: backButton()),
+                  ],
+                ),
               ),
+            );
+
+            // The keypad shrinks into whatever room the panel leaves, so the
+            // page fits the screen without scrolling. Under ~300px the keys
+            // would get too small to tap, so the page scrolls instead.
+            return CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(child: panel),
+                SliverLayoutBuilder(
+                  builder: (context, c) {
+                    final room =
+                        c.viewportMainAxisExtent - c.precedingScrollExtent;
+                    return SliverToBoxAdapter(
+                      child: SafeArea(
+                        top: false,
+                        child: room >= 300
+                            ? SizedBox(
+                                height:
+                                    room - MediaQuery.paddingOf(context).bottom,
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    12,
+                                    16,
+                                    4,
+                                  ),
+                                  child: Center(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: keypad,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  24,
+                                  16,
+                                  24,
+                                ),
+                                child: Center(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 420,
+                                    ),
+                                    child: keypad,
+                                  ),
+                                ),
+                              ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             );
           },
         ),

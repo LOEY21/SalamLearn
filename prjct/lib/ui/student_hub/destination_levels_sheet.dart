@@ -73,6 +73,7 @@ class DestinationLevelsSheet extends StatelessWidget {
     required this.onStartLesson,
     this.maxLevel = 3,
     this.maxLessons,
+    this.unlockAll = false,
   });
 
   final Destination destination;
@@ -93,6 +94,10 @@ class DestinationLevelsSheet extends StatelessWidget {
   /// cap on the top level either.
   final int? maxLessons;
 
+  /// Opens every level and game regardless of progress — the in-memory
+  /// progression override (nothing saved, see `progressionOverrideProvider`).
+  final bool unlockAll;
+
   /// Presents this sheet over [context], matching the source's overlay
   /// (semi-transparent backdrop, tap-outside-to-close, sheet sliding up with
   /// an overshoot ease) without inheriting Flutter's built-in
@@ -107,6 +112,7 @@ class DestinationLevelsSheet extends StatelessWidget {
     required void Function(Lesson lesson, bool isNewLevel) onStartLesson,
     int maxLevel = 3,
     int? maxLessons,
+    bool unlockAll = false,
   }) {
     return showGeneralDialog<void>(
       context: context,
@@ -124,6 +130,7 @@ class DestinationLevelsSheet extends StatelessWidget {
             onStartLesson: onStartLesson,
             maxLevel: maxLevel,
             maxLessons: maxLessons,
+            unlockAll: unlockAll,
           ),
         );
       },
@@ -157,8 +164,10 @@ class DestinationLevelsSheet extends StatelessWidget {
     return group.every((l) => !completedLessons.contains(l.id));
   }
 
+  /// A level opens once the one before it is complete.
   bool _isLevelUnlocked(int levelIdx) {
-    return true;
+    if (unlockAll || levelIdx == 0) return true;
+    return _isLevelComplete(_levels, levelIdx - 1);
   }
 
   /// How many lessons within level [levelIdx] are unlocked, in order —
@@ -239,6 +248,7 @@ class DestinationLevelsSheet extends StatelessWidget {
                                   levelIndex: li,
                                   group: levels[li],
                                   unlocked: _isLevelUnlocked(li),
+                                  unlockAll: unlockAll,
                                   lessonCap: _lessonCapFor(li),
                                   complete: _isLevelComplete(levels, li),
                                   isNew: _isLevelNew(levels, li),
@@ -498,6 +508,7 @@ class _LevelSection extends StatelessWidget {
     required this.levelIndex,
     required this.group,
     required this.unlocked,
+    this.unlockAll = false,
     this.lessonCap,
     required this.complete,
     required this.isNew,
@@ -510,6 +521,7 @@ class _LevelSection extends StatelessWidget {
   final int levelIndex;
   final List<Lesson> group;
   final bool unlocked;
+  final bool unlockAll;
 
   /// How many lessons in [group], in order, are teacher-unlocked — `null`
   /// means all of them.
@@ -544,7 +556,11 @@ class _LevelSection extends StatelessWidget {
             builder: (context) {
               final lesson = group[idx];
               final done = completedLessons.contains(lesson.id);
-              const lessonUnlocked = true;
+              // Each game opens once the one before it in its level is done.
+              final lessonUnlocked =
+                  unlockAll ||
+                  (unlocked &&
+                      (idx == 0 || completedLessons.contains(group[idx - 1].id)));
               const energyBlocked = false;
 
               return _LessonCard(

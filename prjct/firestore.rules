@@ -41,15 +41,20 @@ rules_version = '2';
 // data does. This only matters for shared multi-role devices; the common
 // single-parent-per-device case is unaffected.
 //
-// KNOWN SIMPLIFICATION: `progress` and `assigned_modules` records only
-// carry a `learnerId`/`classId`, not a reverse index of which teacher
-// owns that class. Security rules can only `get()` a specific known
-// document path, not run a query — so "is this teacher's class enrolling
-// this learner?" isn't cleanly expressible without denormalizing a
-// classId onto every progress record. Until that's done, these two
-// collections only require *some* authenticated SalamLearn account
-// (parent or teacher), not a proven ownership chain. Recommended real
-// fix: add `classId` to `ProgressRecord`/mirror it, then tighten this.
+// LEARNER DATA ACCESS: `progress`, `badges` and `learner_flags` belong to
+// the learner, not to a class — a child can play before joining any
+// class, and a teacher who enrolls them later sees that history too. So
+// only two accounts may read or write them: the learner's own parent
+// (`learners/{id}.parentId` -> that parent's `firebaseUid`), or a teacher
+// holding a `teacher_learners/{teacherUid}_{learnerId}` grant. Rules can't
+// run "is this learner in one of my classes?" as a query, so the teacher's
+// app writes that grant itself (`FirestoreMirror.ensureTeacherAccess`),
+// and the grant's own create rule proves the link: the named class is
+// this teacher's and the learner is really enrolled in it.
+//
+// KNOWN SIMPLIFICATION: `assigned_modules` records only carry a
+// `classId`, not a reverse index of which teacher owns that class, so it
+// still only requires *some* authenticated SalamLearn account.
 //
 // ADMIN OVERSIGHT PANEL: `/admins/{uid}` is a bootstrap-only allowlist — no
 // client (not even a signed-in admin) can ever create/update/delete a
@@ -164,6 +169,19 @@ service cloud.firestore {
     // A principal is read-only across teachers/classes/enrollments/
     // assignments/custom-lessons (see PRINCIPAL MONITORING note below) —
     // never parents, learners, or progress; those stay out of scope.
+    function isParentOfLearner(learnerId) {
+      return ownsParentDoc(get(/databases/$(database)/documents/learners/$(learnerId)).data.parentId);
+    }
+
+    function isTeacherOfLearner(learnerId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/teacher_learners/$(request.auth.uid + '_' + learnerId));
+    }
+
+    function canAccessLearner(learnerId) {
+      return isTeacherOfLearner(learnerId) || isParentOfLearner(learnerId);
+    }
+
     function isPrincipal() {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/principals/$(request.auth.uid));
@@ -293,25 +311,50 @@ service cloud.firestore {
         ownsParentDoc(get(/databases/$(database)/documents/learners/$(resource.data.learnerId)).data.parentId);
     }
 
-    // See "KNOWN SIMPLIFICATION" above — any signed-in SalamLearn account
-    // can read/write, not just a verified owner of this specific
-    // learner/class. Read must stay open (not admin-only) so
-    // FirestoreMirror.fetchProgressForLearner's cross-device pull can
-    // actually succeed — otherwise a learner's progress never follows them
-    // to a new device even though pushes still silently succeed.
-    match /progress/{progressId} {
-      allow read: if isAdmin() || isSignedIn();
-      allow delete: if isAdmin();
-      allow create, update: if isSignedIn();
+    // Teacher -> learner grant — see "LEARNER DATA ACCESS" above. Doc id is
+    // `{teacherUid}_{learnerId}` so `isTeacherOfLearner` can check it by
+    // path. Only the teacher themself may write it, and only for a class
+    // they own that really enrolls the learner.
+    match /teacher_learners/{grantId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.teacherUid == request.auth.uid);
+      allow create, update: if isSignedIn() &&
+        request.resource.data.keys().hasOnly(['teacherUid', 'learnerId', 'classId']) &&
+        request.resource.data.teacherUid == request.auth.uid &&
+        request.resource.data.learnerId is string &&
+        request.resource.data.classId is string &&
+        grantId == request.auth.uid + '_' + request.resource.data.learnerId &&
+        exists(/databases/$(database)/documents/enrollments/$(request.resource.data.classId + '_' + request.resource.data.learnerId)) &&
+        ownsTeacherDoc(get(/databases/$(database)/documents/classes/$(request.resource.data.classId)).data.teacherId);
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.teacherUid == request.auth.uid);
     }
 
-    // Backpack badges — same "KNOWN SIMPLIFICATION" as /progress above, and
-    // read must stay open for the same cross-device pull reason
-    // (FirestoreMirror.fetchBadgesForLearner).
-    match /badges/{badgeId} {
-      allow read: if isAdmin() || isSignedIn();
+    // See "LEARNER DATA ACCESS" above. Queries must filter by an exact
+    // `learnerId ==` (FirestoreMirror.fetchProgressForLearner /
+    // watchProgressForLearners) so Firestore can check the rule up front.
+    // Admin create is the admin panel's trashbin restore.
+    match /progress/{progressId} {
+      allow read: if isAdmin() || canAccessLearner(resource.data.learnerId);
       allow delete: if isAdmin();
-      allow create, update: if isSignedIn();
+      allow create: if isAdmin() || canAccessLearner(request.resource.data.learnerId);
+      allow update: if canAccessLearner(request.resource.data.learnerId) &&
+        request.resource.data.learnerId == resource.data.learnerId;
+    }
+
+    // Backpack badges — same access as /progress.
+    match /badges/{badgeId} {
+      allow read: if isAdmin() || canAccessLearner(resource.data.learnerId);
+      allow delete: if isAdmin();
+      allow create: if isAdmin() || canAccessLearner(request.resource.data.learnerId);
+      allow update: if canAccessLearner(request.resource.data.learnerId) &&
+        request.resource.data.learnerId == resource.data.learnerId;
+    }
+
+    // Per-learner one-time flags (mascot tutorial seen), keyed by the
+    // learner id itself — same access as /progress.
+    match /learner_flags/{learnerId} {
+      allow read: if isAdmin() || canAccessLearner(learnerId);
+      allow delete: if isAdmin();
+      allow create, update: if canAccessLearner(learnerId);
     }
 
     // Read must stay open to any signed-in account (not just admin/

@@ -879,6 +879,37 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('phone: a child with no class gets a join-class nudge', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(400, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sessionProvider.overrideWith(_ClasslessLearnerSession.new),
+          ],
+          child: const MaterialApp(home: ParentDashboardScreen()),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      final nudge = find.byKey(const ValueKey('join-class-reminder'));
+      expect(nudge, findsOneWidget);
+      expect(find.text('Not in a class yet'), findsOneWidget);
+
+      // Join leads to the Profile tab's class-code field.
+      await tester.tap(
+        find.descendant(of: nudge, matching: find.text('Join')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(nudge, findsNothing);
+      expect(find.text('Invitation code', skipOffstage: false), findsOneWidget);
+    });
+
     testWidgets('phone: Profile tab swaps the header title and panel', (
       tester,
     ) async {
@@ -1116,4 +1147,12 @@ class _FakeFirestoreMirror extends FirestoreMirror {
   Future<void> pushCustomLesson(dynamic lesson) async {}
   @override
   Future<void> pushConsent(dynamic key, dynamic record) async {}
+}
+
+class _ClasslessLearnerSession extends SessionNotifier {
+  @override
+  SessionState build() => SessionState(
+    activeParentId: 'parent-1',
+    learner: LearnerProfile(name: 'Amir', age: 7, id: 'learner-1'),
+  );
 }

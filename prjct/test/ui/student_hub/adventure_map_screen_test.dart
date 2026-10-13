@@ -11,6 +11,7 @@ import 'package:salamlearn/logic/auth/session.dart';
 import 'package:salamlearn/logic/learner/learner_xp_provider.dart';
 import 'package:salamlearn/logic/learner/noor_energy_provider.dart';
 import 'package:salamlearn/logic/learner/tutorial_progress_provider.dart';
+import 'package:salamlearn/logic/recent_module_provider.dart';
 import 'package:salamlearn/ui/core_modules/module_registry.dart';
 import 'package:salamlearn/ui/student_hub/adventure_map_screen.dart';
 import 'package:salamlearn/ui/student_hub/destination_levels_sheet.dart';
@@ -264,6 +265,39 @@ void main() {
 
       expect(crown(firstModule), findsOneWidget);
       expect(crown(coreModules[1]), findsNothing);
+    });
+
+    testWidgets('finishing a stage walks the avatar on to the next stage', (
+      tester,
+    ) async {
+      await _finishLessons(tester, lessons.skip(1).map((l) => l.id));
+      await _pumpLearnerMap(tester);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AdventureMapScreen)),
+      );
+      expect(container.read(recentModuleProvider), isNull);
+
+      await _finishLessons(tester, [lessons.first.id]);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1000));
+      Finder nextLocked() => find.descendant(
+        of: find.byKey(ValueKey('node-badge-${coreModules[1].id}')),
+        matching: find.byIcon(Icons.lock_rounded),
+      );
+      // Mid-walk: still on the finished stage, the next one held locked.
+      await tester.pump(const Duration(milliseconds: 1000));
+      expect(container.read(recentModuleProvider), isNull);
+      expect(nextLocked(), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 8));
+      expect(container.read(recentModuleProvider), coreModules[1].id);
+      expect(nextLocked(), findsNothing);
+      expect(find.byType(DestinationLevelsSheet), findsNothing);
+
+      // Unlock animation done -> its game selection opens.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(DestinationLevelsSheet), findsOneWidget);
     });
 
     testWidgets('a stage finished before the map opened shows settled', (

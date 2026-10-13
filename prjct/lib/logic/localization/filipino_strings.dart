@@ -2336,4 +2336,7 @@ const Map<String, String> filipinoTemplates = {
   'Stuck? Tap the lamp for a hint. Find all {0} to finish.': 'Nahihirapan ka? I-tap ang ilaw para sa pahiwatig. Hanapin ang lahat ng {0} upang matapos.',
   '{0} of {1} lanterns lit': '{0} sa {1} parol ang nakasindi',
   '{0} stars earned': '{0} bituing nakuha',
+  'Not in a class yet': 'Wala pa sa klase',
+  "Games played are still saved. Join your child's class so their teacher can follow their progress too.":
+      'Naka-save pa rin ang mga nalarong laro. Isali ang iyong anak sa klase upang masubaybayan din ng guro ang kanyang pag-unlad.',
 };

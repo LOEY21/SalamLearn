@@ -180,6 +180,14 @@ class SyncManager {
               );
             }
           }
+          try {
+            await _mirror.ensureTeacherAccess(
+              classId: section.id,
+              learnerId: remoteEnrollment.learnerId,
+            );
+          } catch (e) {
+            debugPrint('SyncManager: teacher access grant failed: $e');
+          }
           await _pullProgressForLearner(remoteEnrollment.learnerId);
         }
       } catch (e) {

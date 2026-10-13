@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -73,7 +74,175 @@ Color _hexColor(String hex) {
 /// pills, mascot, speech bubble): `cubic-bezier(0.34, 1.56, 0.64, 1)`.
 const _overshoot = Cubic(0.34, 1.56, 0.64, 1.0);
 
-const _debugUnlockAllModules = true;
+const _debugUnlockAllModules = false;
+
+/// The painted road from each stage to the next, keyed by the stage it
+/// leaves from, in the same 1080x3060 art pixels as `mapX`/`mapY` — traced
+/// off the map art so the avatar walks on the road, not across scenery.
+const _roadToNextStage = <int, List<Offset>>{
+  1: [
+    Offset(719, 2532),
+    Offset(670, 2430),
+    Offset(660, 2350),
+    Offset(700, 2250),
+    Offset(690, 2170),
+    Offset(630, 2100),
+    Offset(536, 2043),
+  ],
+  2: [
+    Offset(536, 2043),
+    Offset(470, 1950),
+    Offset(470, 1890),
+    Offset(510, 1830),
+    Offset(589, 1737),
+  ],
+  3: [
+    Offset(589, 1737),
+    Offset(680, 1640),
+    Offset(740, 1560),
+    Offset(690, 1480),
+    Offset(600, 1430),
+    Offset(543, 1377),
+  ],
+  4: [
+    Offset(543, 1377),
+    Offset(450, 1320),
+    Offset(425, 1250),
+    Offset(530, 1185),
+    Offset(640, 1150),
+    Offset(630, 1070),
+    Offset(560, 1010),
+    Offset(490, 949),
+  ],
+  5: [
+    Offset(490, 949),
+    Offset(580, 880),
+    Offset(680, 800),
+    Offset(700, 750),
+    Offset(640, 710),
+    Offset(566, 620),
+  ],
+  6: [
+    Offset(566, 620),
+    Offset(550, 550),
+    Offset(580, 450),
+    Offset(650, 370),
+    Offset(740, 310),
+    Offset(727, 245),
+  ],
+};
+
+/// A road sampled by distance, so the avatar walks at an even pace and the
+/// footprints land evenly spaced.
+class _RoadPath {
+  _RoadPath(List<Offset> points) {
+    final spline = CatmullRomSpline(points);
+    for (var i = 0; i <= 160; i++) {
+      final p = spline.transform(i / 160);
+      if (_points.isNotEmpty) {
+        _lengths.add(_lengths.last + (p - _points.last).distance);
+      }
+      _points.add(p);
+    }
+  }
+
+  final _points = <Offset>[];
+  final _lengths = <double>[0];
+
+  double get length => _lengths.last;
+
+  int _indexAt(double distance) {
+    var i = 1;
+    while (i < _lengths.length - 1 && _lengths[i] < distance) {
+      i++;
+    }
+    return i;
+  }
+
+  Offset at(double distance) {
+    final i = _indexAt(distance);
+    final span = _lengths[i] - _lengths[i - 1];
+    final t = span == 0
+        ? 0.0
+        : ((distance - _lengths[i - 1]) / span).clamp(0.0, 1.0);
+    return Offset.lerp(_points[i - 1], _points[i], t)!;
+  }
+
+  double angleAt(double distance) {
+    final i = _indexAt(distance);
+    return (_points[i] - _points[i - 1]).direction;
+  }
+}
+
+/// One walk from a just-finished stage's checkpoint to the next one.
+class _StageWalk {
+  _StageWalk({
+    required this.road,
+    required this.restFrom,
+    required this.restTo,
+    required this.startCamera,
+    required this.endCamera,
+  });
+
+  final _RoadPath road;
+
+  /// Resting avatar centers beside the two checkpoints.
+  final Offset restFrom;
+  final Offset restTo;
+  final Matrix4 startCamera;
+  final Matrix4 endCamera;
+
+  static const stepLength = 15.0;
+
+  /// Hop to the road, walk, hop off beside the next checkpoint.
+  static const introMs = 650;
+  static const outroMs = 550;
+  late final walkMs = (road.length * 15).clamp(2500, 6000).round();
+  late final totalMs = introMs + walkMs + outroMs;
+  late final _a = introMs / totalMs;
+  late final _b = (introMs + walkMs) / totalMs;
+
+  /// Avatar circle center sits this far above its feet on the road.
+  static const _feet = Offset(0, -36);
+
+  ({Offset center, double distance, double hop, double tilt, double trail})
+  pose(double t) {
+    if (t < _a) {
+      final u = Curves.easeInOut.transform(t / _a);
+      return (
+        center: Offset.lerp(restFrom, road.at(0) + _feet, u)!,
+        distance: 0,
+        hop: 26 * math.sin(u * math.pi),
+        tilt: 0,
+        trail: 1,
+      );
+    }
+    if (t < _b) {
+      final distance = road.length * ((t - _a) / (_b - _a));
+      final phase = distance / stepLength * math.pi;
+      return (
+        center: road.at(distance) + _feet,
+        distance: distance,
+        hop: 6 * math.sin(phase).abs(),
+        tilt: 0.09 * math.sin(phase),
+        trail: 1,
+      );
+    }
+    final u = Curves.easeInOut.transform((t - _b) / (1 - _b));
+    return (
+      center: Offset.lerp(road.at(road.length) + _feet, restTo, u)!,
+      distance: road.length,
+      hop: 22 * math.sin(u * math.pi),
+      tilt: 0,
+      trail: 1 - u,
+    );
+  }
+
+  /// Phase (0-1) of the hop off the road at the end, for the camera.
+  double outro(double t) =>
+      t < _b ? 0 : Curves.easeInOut.transform((t - _b) / (1 - _b));
+  double intro(double t) => t >= _a ? 1 : Curves.easeInOut.transform(t / _a);
+}
 
 enum _NodeState { locked, available, current }
 
@@ -135,11 +304,11 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
   void initState() {
     super.initState();
     if (Hive.isBoxOpen(HiveBoxes.progress)) {
-      _progressWrites = Hive.box<ProgressRecord>(
-        HiveBoxes.progress,
-      ).watch().listen((_) {
-        if (mounted) setState(() {});
-      });
+      _progressWrites = Hive.box<ProgressRecord>(HiveBoxes.progress)
+          .watch()
+          .listen((_) {
+            if (mounted) setState(() {});
+          });
     }
     _snapBack =
         AnimationController(
@@ -149,6 +318,7 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
           final a = _snapAnim;
           if (a != null) _viewer.value = a.value;
         });
+    _walkCtrl = AnimationController(vsync: this)..addListener(_followWalk);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _playTutorial();
     });
@@ -163,6 +333,118 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
   // spot the learner zoomed into centered on screen.
   late final AnimationController _snapBack;
   Animation<Matrix4>? _snapAnim;
+
+  /// Drives the avatar's walk to the next stage once one is finished; the
+  /// camera follows it zoomed in (see [_followWalk]).
+  late final AnimationController _walkCtrl;
+  _StageWalk? _stageWalk;
+  static const _walkZoom = 1.6;
+
+  /// Camera matrix that puts [p] (map coordinates) a little below the
+  /// middle of the screen at [zoom], kept inside the map's edges.
+  Matrix4 _focusOn(Offset p, double zoom) {
+    final w = _viewport.width;
+    final h = _viewport.height;
+    final tx = (w / 2 - zoom * p.dx).clamp(w - zoom * w, 0.0).toDouble();
+    final ty = (h * 0.55 - zoom * p.dy)
+        .clamp(math.min(0.0, h - zoom * _mapHeight), 0.0)
+        .toDouble();
+    return Matrix4.diagonal3Values(zoom, zoom, 1)..setTranslationRaw(tx, ty, 0);
+  }
+
+  void _followWalk() {
+    final walk = _stageWalk;
+    if (walk == null) return;
+    final t = _walkCtrl.value;
+    final focus = _focusOn(walk.pose(t).center, _walkZoom);
+    final intro = walk.intro(t);
+    final outro = walk.outro(t);
+    _viewer.value = intro < 1
+        ? Matrix4Tween(begin: walk.startCamera, end: focus).transform(intro)
+        : Matrix4Tween(begin: focus, end: walk.endCamera).transform(outro);
+  }
+
+  Offset _mapPoint(num artX, num artY) => Offset(
+    _viewport.width * artX / _wireframeCanvasWidth,
+    _mapHeight * artY / _wireframeCanvasHeight,
+  );
+
+  /// After [from]'s finish burst, walks the avatar along the road to the
+  /// next stage and makes that the current one. The last stage has nowhere
+  /// to walk to.
+  void _walkToNextStage(ModuleInfo from) {
+    final road = _roadToNextStage[from.destinationId];
+    final to = coreModules
+        .where((m) => m.destinationId == from.destinationId + 1)
+        .firstOrNull;
+    if (road == null || to == null) return;
+    if (MediaQuery.of(context).disableAnimations) {
+      ref.read(recentModuleProvider.notifier).interactWith(to.id);
+      _openLevelSheet(to, _destinationFor(to));
+      return;
+    }
+    // The next stage stays locked until the avatar arrives, then unlocks.
+    setState(() => _unlockPending = to.destinationId);
+    Future.delayed(const Duration(milliseconds: 900), () {
+      if (!mounted) return;
+      if (_covers > 0 || _stageWalk != null || _viewport == Size.zero) {
+        if (_unlockPending == to.destinationId) {
+          setState(() => _unlockPending = null);
+        }
+        return;
+      }
+      final fromStage = _destinationFor(from);
+      final toStage = _destinationFor(to);
+      // The resting avatar's circle sits beside its checkpoint (see
+      // `_MascotAvatar`): 76px right of and 10px above the map point.
+      const rest = Offset(76, -10);
+      final restTo = _mapPoint(toStage.mapX, toStage.mapY) + rest;
+      _snapBack.stop();
+      _userMoved = true;
+      setState(() {
+        _stageWalk = _StageWalk(
+          road: _RoadPath([for (final p in road) _mapPoint(p.dx, p.dy)]),
+          restFrom: _mapPoint(fromStage.mapX, fromStage.mapY) + rest,
+          restTo: restTo,
+          startCamera: _viewer.value.clone(),
+          endCamera: _focusOn(restTo, 1),
+        );
+      });
+      _walkCtrl
+        ..duration = Duration(milliseconds: _stageWalk!.totalMs)
+        ..forward(from: 0).whenCompleteOrCancel(() {
+          if (!mounted) return;
+          ref.read(recentModuleProvider.notifier).interactWith(to.id);
+          setState(() {
+            _stageWalk = null;
+            _unlockPending = null;
+          });
+          // Once the stage's unlock animation (`_MapNode._unlock`) is done,
+          // straight into its game selection.
+          Future.delayed(const Duration(milliseconds: 1600), () {
+            if (mounted && _covers == 0 && _stageWalk == null) {
+              _openLevelSheet(to, _destinationFor(to));
+            }
+          });
+        });
+    });
+  }
+
+  /// Stage held locked while the avatar walks to it (see [_walkToNextStage]).
+  int? _unlockPending;
+
+  /// The stage the avatar stands on: the one last played this session,
+  /// otherwise the first stage not finished yet (the last one once all are).
+  String _currentModuleId() {
+    final recent = ref.read(recentModuleProvider);
+    if (recent != null) return recent;
+    final completed = _completedLessons;
+    return (coreModules
+                .where((m) => !_isStageFinished(m.destinationId, completed))
+                .firstOrNull ??
+            coreModules.last)
+        .id;
+  }
 
   void _startSnapBack() {
     final m = _viewer.value;
@@ -189,7 +471,7 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
   }
 
   void _centerOnCurrent(double mapHeight, double viewportHeight) {
-    final currentId = ref.read(recentModuleProvider) ?? coreModules.first.id;
+    final currentId = _currentModuleId();
     final fraction = _nodePositions[currentId] ?? 0.5;
     final target = ((mapHeight * fraction) - 300)
         .clamp(0.0, math.max(0.0, mapHeight - viewportHeight))
@@ -233,8 +515,12 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
     if (ref.read(tutorialSeenProvider)) return;
     _tutorialActive = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (!mounted) {
+      Future.delayed(const Duration(milliseconds: 500), () async {
+        // Seen on another device already? Then skip it here too.
+        final seen =
+            mounted &&
+            await ref.read(tutorialSeenProvider.notifier).refreshFromRemote();
+        if (!mounted || seen) {
           _tutorialActive = false;
           return;
         }
@@ -255,6 +541,7 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
   void dispose() {
     _progressWrites?.cancel();
     _snapBack.dispose();
+    _walkCtrl.dispose();
     _viewer.dispose();
     super.dispose();
   }
@@ -306,14 +593,18 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
         learnerId: null,
       );
       for (final a in classAssignments) {
-        if (moduleForAssignment(a.moduleId)?.id == moduleId && a.dueDate.isBefore(now)) return true;
+        if (moduleForAssignment(a.moduleId)?.id == moduleId &&
+            a.dueDate.isBefore(now))
+          return true;
       }
       final personalAssignments = ClassRepository().assignmentsFor(
         classId: classId,
         learnerId: learnerId,
       );
       for (final a in personalAssignments) {
-        if (moduleForAssignment(a.moduleId)?.id == moduleId && a.dueDate.isBefore(now)) return true;
+        if (moduleForAssignment(a.moduleId)?.id == moduleId &&
+            a.dueDate.isBefore(now))
+          return true;
       }
     }
     return false;
@@ -321,6 +612,7 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
 
   _NodeState _stateFor(ModuleInfo module, String currentId, bool assigned) {
     if (!assigned) return _NodeState.locked;
+    if (module.destinationId == _unlockPending) return _NodeState.locked;
     if (module.id == currentId) return _NodeState.current;
     return _NodeState.available;
   }
@@ -328,9 +620,7 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
   /// Every lesson in the stage is done — drives the finished-stage medal,
   /// star crown and gold label (real progress, not map order).
   static bool _isStageFinished(int destinationId, Set<String> completed) {
-    final lessons = curriculum
-        .firstWhere((d) => d.id == destinationId)
-        .lessons;
+    final lessons = curriculum.firstWhere((d) => d.id == destinationId).lessons;
     return lessons.isNotEmpty && lessons.every((l) => completed.contains(l.id));
   }
 
@@ -375,17 +665,18 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
     // lesson that just closed landing a moment later) re-marks it at once.
     final completed = ValueNotifier(_completedLessons);
     _covers++;
-    final progressWrites = Hive.box<ProgressRecord>(
-      HiveBoxes.progress,
-    ).watch().listen((_) {
-      if (mounted) completed.value = _completedLessons;
-    });
+    final progressWrites = Hive.box<ProgressRecord>(HiveBoxes.progress)
+        .watch()
+        .listen((_) {
+          if (mounted) completed.value = _completedLessons;
+        });
     DestinationLevelsSheet.show(
       context,
       destination: destination,
       completedLessons: completed,
       maxLevel: _maxLevelFor(module.id),
       maxLessons: _maxLessonsFor(module.id),
+      unlockAll: ref.read(progressionOverrideProvider),
       noorEnergy: ref.read(noorEnergyProvider).current,
       onStartLesson: (lesson, isNewLevel) {
         // Out of Noor Energy blocks every lesson, finished ones included.
@@ -402,19 +693,19 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
         _covers++;
         Navigator.of(context, rootNavigator: true)
             .push(
-          MaterialPageRoute<void>(
-            builder: (_) => LessonPlayerScreen(
-              lesson: lesson,
-              destinationId: destination.id,
-              onClose: () {
-                // Close the lesson player
-                Navigator.of(context, rootNavigator: true).pop();
-                // Always go back to the level selection sheet
-                _openLevelSheet(module, destination);
-              },
-            ),
-          ),
-        )
+              MaterialPageRoute<void>(
+                builder: (_) => LessonPlayerScreen(
+                  lesson: lesson,
+                  destinationId: destination.id,
+                  onClose: () {
+                    // Close the lesson player
+                    Navigator.of(context, rootNavigator: true).pop();
+                    // Always go back to the level selection sheet
+                    _openLevelSheet(module, destination);
+                  },
+                ),
+              ),
+            )
             .whenComplete(_uncover);
       },
     ).whenComplete(() {
@@ -437,7 +728,8 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
 
   @override
   Widget build(BuildContext context) {
-    final currentId = ref.watch(recentModuleProvider) ?? coreModules.first.id;
+    ref.watch(recentModuleProvider);
+    final currentId = _currentModuleId();
     final learnerAvatar = ref.watch(sessionProvider).learner?.avatar;
     final completedLessons = _completedLessons;
     final finished = {
@@ -529,9 +821,10 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
                               _pendingCelebrations.contains(
                                 module.destinationId,
                               ),
-                          onCelebrated: () => _pendingCelebrations.remove(
-                            module.destinationId,
-                          ),
+                          onCelebrated: () {
+                            _pendingCelebrations.remove(module.destinationId);
+                            _walkToNextStage(module);
+                          },
                           entranceDelay: Duration(milliseconds: 40 + i * 50),
                           onTap: () =>
                               _onNodeTap(module, _isModuleAssigned(module.id)),
@@ -539,6 +832,25 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
                               ? anchors.currentNodeKey
                               : null,
                         ),
+                      if (_stageWalk case final walk?) ...[
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: RepaintBoundary(
+                              child: CustomPaint(
+                                painter: _FootprintsPainter(
+                                  walk: walk,
+                                  animation: _walkCtrl,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        _WalkingAvatar(
+                          walk: walk,
+                          animation: _walkCtrl,
+                          avatar: learnerAvatar,
+                        ),
+                      ],
                       KeyedSubtree(
                         key: anchors.mapAvatarKey,
                         child: _MascotAvatar(
@@ -548,12 +860,27 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
                               (_nodePositionsX[currentId] ?? 0.33),
                           mapHeight: effectiveMapHeight,
                           avatar: learnerAvatar,
+                          hidden: _stageWalk != null,
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
+              // The map holds still while the avatar walks.
+              if (_stageWalk != null)
+                const Positioned.fill(child: AbsorbPointer()),
+              if (kDebugMode)
+                Positioned(
+                  left: 12,
+                  bottom: 120,
+                  child: _UnlockAllTestButton(
+                    on: ref.watch(progressionOverrideProvider),
+                    onChanged: ref
+                        .read(progressionOverrideProvider.notifier)
+                        .toggle,
+                  ),
+                ),
               IgnorePointer(
                 ignoring: chromeFade < 0.5,
                 child: Opacity(
@@ -879,11 +1206,22 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
   // Created in initState, not lazily: unfinished nodes never touch it, and
   // first creating a controller inside dispose() throws mid-unmount.
   late final AnimationController _burst;
+  // One-shot unlock when this stage opens: the grey padlocked look shakes,
+  // the padlock pops off and the colour comes through. Rests at 1.
+  late final _unlock = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1500),
+    value: 1,
+  );
   Timer? _entranceTimer;
   // Only the one-shot entrance/wobble rebuild the node's widget tree; the
   // looping glow and twinkles animate inside their own cached subtrees so
   // an idle node costs nothing to rebuild.
-  late final _transformAnimations = Listenable.merge([_entrance, _wobble]);
+  late final _transformAnimations = Listenable.merge([
+    _entrance,
+    _wobble,
+    _unlock,
+  ]);
 
   /// Checkpoint art per destination (1-7); the last one is the trophy.
   String? get _iconAsset {
@@ -933,6 +1271,11 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
       _syncContinuousAnimations(previousState: oldWidget.state);
     }
     if (widget.celebrate && !oldWidget.celebrate) _celebrate();
+    if (oldWidget.state == _NodeState.locked &&
+        widget.state != _NodeState.locked &&
+        !MediaQuery.of(context).disableAnimations) {
+      _unlock.forward(from: 0);
+    }
   }
 
   void _syncContinuousAnimations({required _NodeState? previousState}) {
@@ -956,6 +1299,7 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
     _shine.dispose();
     _wobble.dispose();
     _burst.dispose();
+    _unlock.dispose();
     super.dispose();
   }
 
@@ -1091,6 +1435,23 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
                     top: dy * iconBox + 8,
                     child: _Twinkle(shine: _shine, phase: i / 3),
                   ),
+              if (!locked && iconAsset != null)
+                Positioned.fill(
+                  child: _UnlockOverlay(
+                    unlock: _unlock,
+                    grayscale: _grayscale,
+                    tileTop: tileTop,
+                    tileW: tileW,
+                    tileH: tileH,
+                    iconBottom: iconBottom,
+                    iconBox: iconBox,
+                    iconAsset: iconAsset,
+                    center: Offset(
+                      width / 2,
+                      height - iconBottom - iconBox / 2,
+                    ),
+                  ),
+                ),
               if (locked)
                 Positioned(
                   bottom: iconBottom + iconBox * 0.12,
@@ -1104,7 +1465,10 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
                 Positioned.fill(
                   child: _FinishBurst(
                     burst: _burst,
-                    center: Offset(width / 2, height - iconBottom - iconBox / 2),
+                    center: Offset(
+                      width / 2,
+                      height - iconBottom - iconBox / 2,
+                    ),
                   ),
                 ),
                 Positioned(
@@ -1163,7 +1527,11 @@ class _MapNodeState extends State<_MapNode> with TickerProviderStateMixin {
             final entranceT = _overshoot.transform(_entrance.value);
             final wobbleT = Curves.easeInOut.transform(_wobble.value);
 
-            final scale = 0.5 + 0.5 * entranceT;
+            // Pop as the padlock comes off.
+            final unlockPop = math.sin(
+              math.pi * const Interval(0.3, 0.7).transform(_unlock.value),
+            );
+            final scale = (0.5 + 0.5 * entranceT) * (1 + 0.14 * unlockPop);
             final opacity = entranceT.clamp(0.0, 1.0);
             final wobbleDx = locked
                 ? (wobbleT < 0.5 ? -4.0 : 4.0) * (1 - (wobbleT - 0.5).abs() * 2)
@@ -1371,10 +1739,7 @@ class _PadlockPainter extends CustomPainter {
     final shackle = Path()
       ..moveTo(w * 0.27, bodyTop + 2)
       ..lineTo(w * 0.27, h * 0.3)
-      ..arcToPoint(
-        Offset(w * 0.73, h * 0.3),
-        radius: Radius.circular(w * 0.23),
-      )
+      ..arcToPoint(Offset(w * 0.73, h * 0.3), radius: Radius.circular(w * 0.23))
       ..lineTo(w * 0.73, bodyTop + 2);
     canvas.drawPath(
       shackle,
@@ -1603,8 +1968,7 @@ class _FinishBurstPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _FinishBurstPainter old) =>
-      old.center != center;
+  bool shouldRepaint(covariant _FinishBurstPainter old) => old.center != center;
 }
 
 /// Destination name pill under a map node's badge — small enough to stay
@@ -1726,12 +2090,16 @@ class _MascotAvatar extends StatefulWidget {
     required this.left,
     required this.mapHeight,
     required this.avatar,
+    this.hidden = false,
   });
 
   final double topFraction;
   final double left;
   final double mapHeight;
   final String? avatar;
+
+  /// While [_WalkingAvatar] stands in for it.
+  final bool hidden;
 
   @override
   State<_MascotAvatar> createState() => _MascotAvatarState();
@@ -1782,26 +2150,215 @@ class _MascotAvatarState extends State<_MascotAvatar>
     return Positioned(
       top: widget.mapHeight * widget.topFraction - 64,
       left: widget.left + 34,
-      child: SizedBox(
-        width: 84,
-        height: 100,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            // Ground shadow, pulsing on the shared 2600ms rhythm.
-            AnimatedBuilder(
-              animation: _bob,
-              builder: (context, _) {
-                final t = Curves.easeInOut.transform(_bob.value);
-                return Positioned(
-                  bottom: 0,
-                  left: 19,
-                  child: Opacity(
-                    opacity: 0.28 - 0.10 * t,
-                    child: Transform.scale(
-                      scale: 1 - 0.18 * t,
+      child: widget.hidden
+          ? const SizedBox(width: 84, height: 100)
+          : SizedBox(
+              width: 84,
+              height: 100,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // Ground shadow, pulsing on the shared 2600ms rhythm.
+                  AnimatedBuilder(
+                    animation: _bob,
+                    builder: (context, _) {
+                      final t = Curves.easeInOut.transform(_bob.value);
+                      return Positioned(
+                        bottom: 0,
+                        left: 19,
+                        child: Opacity(
+                          opacity: 0.28 - 0.10 * t,
+                          child: Transform.scale(
+                            scale: 1 - 0.18 * t,
+                            child: Container(
+                              width: 46,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: Colors.black,
+                                borderRadius: BorderRadius.circular(50),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  AnimatedBuilder(
+                    animation: _mascotAnimations,
+                    builder: (context, child) {
+                      double dy;
+                      double scale;
+                      double opacity;
+                      if (_enter.value < 1.0) {
+                        // Keyframes: 0%->opacity0/y-24/s0.7, 60%->opacity1/y4/s1.08,
+                        // 80%->y-2/s0.97, 100%->y0/s1.
+                        final v = _enter.value;
+                        if (v < 0.6) {
+                          final t = _overshoot.transform(v / 0.6);
+                          dy = -24 + 28 * t;
+                          scale = 0.7 + 0.38 * t;
+                          // The overshoot curve passes 1 (that's the bounce), but
+                          // an opacity above 1 asserts and breaks the whole hub.
+                          opacity = t.clamp(0.0, 1.0);
+                        } else if (v < 0.8) {
+                          final t = (v - 0.6) / 0.2;
+                          dy = 4 - 6 * t;
+                          scale = 1.08 - 0.11 * t;
+                          opacity = 1;
+                        } else {
+                          final t = (v - 0.8) / 0.2;
+                          dy = -2 + 2 * t;
+                          scale = 0.97 + 0.03 * t;
+                          opacity = 1;
+                        }
+                      } else {
+                        final t = Curves.easeInOut.transform(_bob.value);
+                        dy = -10 * t;
+                        scale = 1;
+                        opacity = 1;
+                      }
+                      return Positioned(
+                        bottom: 10,
+                        left: 6,
+                        child: Opacity(
+                          opacity: opacity,
+                          child: Transform.translate(
+                            offset: Offset(0, dy),
+                            child: Transform.scale(scale: scale, child: child),
+                          ),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 3),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x4D000000),
+                            blurRadius: 14,
+                            offset: Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: LearnerAvatar(
+                          avatar: widget.avatar ?? '🧒',
+                          size: 72,
+                        ),
+                      ),
+                    ),
+                  ),
+                  AnimatedBuilder(
+                    animation: _bubble,
+                    builder: (context, child) {
+                      final t = _overshoot.transform(_bubble.value);
+                      return Positioned(
+                        left: -30,
+                        right: -30,
+                        top: -20,
+                        child: Opacity(
+                          opacity: t.clamp(0.0, 1.0),
+                          child: Transform.scale(
+                            scale: 0.7 + 0.3 * t,
+                            alignment: Alignment.bottomCenter,
+                            child: Center(child: child),
+                          ),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: AppColors.gold, width: 2),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x26000000),
+                            blurRadius: 10,
+                            offset: Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Text(
+                        'You are here!',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.tealDark,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
+/// The learner's avatar hopping from its checkpoint onto the road, walking
+/// it step by step (a small bounce and side-to-side sway per step) and
+/// hopping off beside the next checkpoint. Looks exactly like the resting
+/// [_MascotAvatar] so the hand-over at either end is seamless.
+class _WalkingAvatar extends StatelessWidget {
+  const _WalkingAvatar({
+    required this.walk,
+    required this.animation,
+    required this.avatar,
+  });
+
+  final _StageWalk walk;
+  final Animation<double> animation;
+  final String? avatar;
+
+  @override
+  Widget build(BuildContext context) {
+    final face = Container(
+      width: 72,
+      height: 72,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 3),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x4D000000),
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipOval(child: LearnerAvatar(avatar: avatar ?? '🧒', size: 72)),
+    );
+    return AnimatedBuilder(
+      animation: animation,
+      child: face,
+      builder: (context, child) {
+        final pose = walk.pose(animation.value);
+        return Positioned(
+          left: pose.center.dx - 36,
+          top: pose.center.dy - 36,
+          child: IgnorePointer(
+            child: SizedBox(
+              width: 72,
+              height: 90,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.topCenter,
+                children: [
+                  // Ground shadow at the feet, shrinking as the avatar lifts.
+                  Positioned(
+                    top: 66,
+                    child: Opacity(
+                      opacity: (0.3 - pose.hop * 0.006).clamp(0.08, 0.3),
                       child: Container(
-                        width: 46,
+                        width: 46 - pose.hop * 0.6,
                         height: 12,
                         decoration: BoxDecoration(
                           color: Colors.black,
@@ -1810,122 +2367,231 @@ class _MascotAvatarState extends State<_MascotAvatar>
                       ),
                     ),
                   ),
-                );
-              },
-            ),
-            AnimatedBuilder(
-              animation: _mascotAnimations,
-              builder: (context, child) {
-                double dy;
-                double scale;
-                double opacity;
-                if (_enter.value < 1.0) {
-                  // Keyframes: 0%->opacity0/y-24/s0.7, 60%->opacity1/y4/s1.08,
-                  // 80%->y-2/s0.97, 100%->y0/s1.
-                  final v = _enter.value;
-                  if (v < 0.6) {
-                    final t = _overshoot.transform(v / 0.6);
-                    dy = -24 + 28 * t;
-                    scale = 0.7 + 0.38 * t;
-                    // The overshoot curve passes 1 (that's the bounce), but
-                    // an opacity above 1 asserts and breaks the whole hub.
-                    opacity = t.clamp(0.0, 1.0);
-                  } else if (v < 0.8) {
-                    final t = (v - 0.6) / 0.2;
-                    dy = 4 - 6 * t;
-                    scale = 1.08 - 0.11 * t;
-                    opacity = 1;
-                  } else {
-                    final t = (v - 0.8) / 0.2;
-                    dy = -2 + 2 * t;
-                    scale = 0.97 + 0.03 * t;
-                    opacity = 1;
-                  }
-                } else {
-                  final t = Curves.easeInOut.transform(_bob.value);
-                  dy = -10 * t;
-                  scale = 1;
-                  opacity = 1;
-                }
-                return Positioned(
-                  bottom: 10,
-                  left: 6,
-                  child: Opacity(
-                    opacity: opacity,
-                    child: Transform.translate(
-                      offset: Offset(0, dy),
-                      child: Transform.scale(scale: scale, child: child),
-                    ),
-                  ),
-                );
-              },
-              child: Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 3),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x4D000000),
-                      blurRadius: 14,
-                      offset: Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: ClipOval(
-                  child: LearnerAvatar(avatar: widget.avatar ?? '🧒', size: 72),
-                ),
-              ),
-            ),
-            AnimatedBuilder(
-              animation: _bubble,
-              builder: (context, child) {
-                final t = _overshoot.transform(_bubble.value);
-                return Positioned(
-                  left: -30,
-                  right: -30,
-                  top: -20,
-                  child: Opacity(
-                    opacity: t.clamp(0.0, 1.0),
-                    child: Transform.scale(
-                      scale: 0.7 + 0.3 * t,
+                  Transform.translate(
+                    offset: Offset(0, -pose.hop),
+                    child: Transform.rotate(
+                      angle: pose.tilt,
                       alignment: Alignment.bottomCenter,
-                      child: Center(child: child),
+                      child: child,
                     ),
                   ),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: AppColors.gold, width: 2),
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x26000000),
-                      blurRadius: 10,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: const Text(
-                  'You are here!',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.tealDark,
-                  ),
-                ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Alternating left/right footprints stamped on the road behind the
+/// walking avatar. Each one pops in as its foot lands, the whole trail
+/// fades as the avatar hops off at the next checkpoint.
+class _FootprintsPainter extends CustomPainter {
+  _FootprintsPainter({required this.walk, required this.animation})
+    : super(repaint: animation);
+
+  final _StageWalk walk;
+  final Animation<double> animation;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final pose = walk.pose(animation.value);
+    if (pose.trail <= 0) return;
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.9 * pose.trail);
+    // Faint dark rim so the white prints still read on the pale road.
+    final outline = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8
+      ..color = const Color(0xFF4B3A26).withValues(alpha: 0.35 * pose.trail);
+    final road = walk.road;
+    for (var i = 1; i * _StageWalk.stepLength <= pose.distance; i++) {
+      final d = i * _StageWalk.stepLength;
+      if (d > road.length - 4) break;
+      final angle = road.angleAt(d);
+      final side = i.isEven ? 4.0 : -4.0;
+      final at = road.at(d) + Offset(-math.sin(angle), math.cos(angle)) * side;
+      final pop = 1 + 0.6 * (1 - ((pose.distance - d) / 8).clamp(0.0, 1.0));
+      canvas
+        ..save()
+        ..translate(at.dx, at.dy)
+        ..rotate(angle)
+        ..scale(pop);
+      // Sole in front, heel behind, pointing the way the road goes.
+      const sole = Rect.fromLTWH(-1.25, -2.3, 6.5, 4.6);
+      const heel = Rect.fromLTWH(-5.3, -1.8, 3.8, 3.6);
+      canvas
+        ..drawOval(sole, paint)
+        ..drawOval(sole, outline)
+        ..drawOval(heel, paint)
+        ..drawOval(heel, outline)
+        ..restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FootprintsPainter old) => old.walk != walk;
+}
+
+/// Plays over a checkpoint that just unlocked: its old grey, padlocked look
+/// shakes, the padlock pops up and away, the grey fades so the colour comes
+/// through, and gold sparks burst out. Paints nothing at rest.
+class _UnlockOverlay extends StatelessWidget {
+  const _UnlockOverlay({
+    required this.unlock,
+    required this.grayscale,
+    required this.tileTop,
+    required this.tileW,
+    required this.tileH,
+    required this.iconBottom,
+    required this.iconBox,
+    required this.iconAsset,
+    required this.center,
+  });
+
+  final AnimationController unlock;
+  final ColorFilter grayscale;
+  final double tileTop;
+  final double tileW;
+  final double tileH;
+  final double iconBottom;
+  final double iconBox;
+  final String iconAsset;
+  final Offset center;
+
+  static const _shake = Interval(0, 0.3);
+  static const _popOff = Interval(0.3, 0.7, curve: Curves.easeOutCubic);
+  static const _colorIn = Interval(0.3, 0.75, curve: Curves.easeInOut);
+
+  @override
+  Widget build(BuildContext context) {
+    final grey = ColorFiltered(
+      colorFilter: grayscale,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
+        children: [
+          Positioned(
+            top: tileTop,
+            width: tileW,
+            height: tileH,
+            child: Image.asset(
+              'assets/images/adventure_map/checkpoint_tile.png',
+            ),
+          ),
+          Positioned(
+            bottom: iconBottom,
+            width: iconBox,
+            height: iconBox,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Opacity(
+                opacity: 0.7,
+                child: Image.asset(iconAsset, fit: BoxFit.contain),
+              ),
+            ),
+          ),
+        ],
       ),
+    );
+    final padlockSize = iconBox * 0.56;
+    final padlock = CustomPaint(
+      size: Size(padlockSize, padlockSize * 1.18),
+      painter: const _PadlockPainter(),
+    );
+    return IgnorePointer(
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
+        children: [
+          AnimatedBuilder(
+            animation: unlock,
+            builder: (context, _) {
+              final v = unlock.value;
+              if (v >= 1) return const SizedBox.shrink();
+              final shake = _shake.transform(v);
+              final off = _popOff.transform(v);
+              return Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.topCenter,
+                children: [
+                  Positioned.fill(
+                    child: Opacity(
+                      opacity: 1 - _colorIn.transform(v),
+                      child: grey,
+                    ),
+                  ),
+                  Positioned(
+                    bottom: iconBottom + iconBox * 0.12,
+                    child: Opacity(
+                      opacity: 1 - off,
+                      child: Transform.translate(
+                        offset: Offset(18 * off, -46 * off),
+                        child: Transform.rotate(
+                          angle:
+                              0.35 *
+                                  math.sin(shake * math.pi * 6) *
+                                  (1 - shake) +
+                              0.9 * off,
+                          alignment: Alignment.topCenter,
+                          child: Transform.scale(
+                            scale: 1 + 0.35 * off,
+                            child: padlock,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          Positioned.fill(
+            child: _FinishBurst(
+              burst: unlock.drive(CurveTween(curve: const Interval(0.25, 1))),
+              center: center,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Debug-only testing switch: opens every stage, level and game on this
+/// device by flipping the same in-memory progression override teachers use.
+/// Saves nothing (no Hive, no Firestore) and resets when the app closes.
+class _UnlockAllTestButton extends StatelessWidget {
+  const _UnlockAllTestButton({required this.on, required this.onChanged});
+
+  final bool on;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return FloatingActionButton.small(
+      heroTag: 'unlock-all-test',
+      tooltip: on ? 'Testing: lock again' : 'Testing: unlock everything',
+      backgroundColor: on ? AppColors.gold : Colors.white,
+      foregroundColor: on ? Colors.white : AppColors.tealDark,
+      onPressed: () {
+        onChanged(!on);
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                on
+                    ? 'Testing: normal locks back on'
+                    : 'Testing: every stage, level and game unlocked',
+              ),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+      },
+      child: Icon(on ? Icons.lock_open_rounded : Icons.lock_rounded),
     );
   }
 }

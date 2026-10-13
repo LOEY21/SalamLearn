@@ -38,12 +38,25 @@ final parentProgressSyncProvider = StreamProvider.autoDispose<void>((ref) {
 
 /// Same as [parentProgressSyncProvider], for every learner enrolled in any
 /// of the teacher's active classes.
-final teacherProgressSyncProvider = StreamProvider.autoDispose<void>((ref) {
+final teacherProgressSyncProvider = StreamProvider.autoDispose<void>((ref) async* {
   ref.watch(rosterRefreshProvider);
   final classes = ClassRepository();
-  final learnerIds = {
+  final enrollments = [
     for (final section in ref.watch(teacherClassesProvider))
-      ...classes.byClassId(section.id).map((e) => e.learnerId),
-  }.toList();
-  return _pullProgressLive(learnerIds);
+      ...classes.byClassId(section.id),
+  ];
+  // The progress rule only lets a teacher read learners they hold a grant
+  // for — see `FirestoreMirror.ensureTeacherAccess`.
+  final mirror = FirestoreMirror(teacher: true);
+  final learnerIds = <String>[];
+  for (final e in enrollments) {
+    try {
+      await mirror.ensureTeacherAccess(classId: e.classId, learnerId: e.learnerId);
+      learnerIds.add(e.learnerId);
+    } catch (_) {
+      // Not provable yet (offline, or enrollment not uploaded) — skipped
+      // until the roster next refreshes.
+    }
+  }
+  yield* _pullProgressLive(learnerIds.toSet().toList());
 });

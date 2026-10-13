@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
 
+import '../../data/remote/firestore_mirror.dart';
 import '../../data/repositories/class_repository.dart';
 import '../../data/repositories/progress_repository.dart';
 import '../../logic/auth/session.dart';
@@ -2195,6 +2196,11 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
       Navigator.of(context).pop();
 
       await ClassRepository().unenroll(classId: classId, learnerId: studentId);
+      if (ClassRepository().byLearnerId(studentId).isEmpty) {
+        FirestoreMirror(
+          teacher: true,
+        ).revokeTeacherAccess(studentId).catchError((Object _) {});
+      }
 
       // Invalidate providers so the roster updates instantly
       ref.invalidate(teacherRosterProvider);
