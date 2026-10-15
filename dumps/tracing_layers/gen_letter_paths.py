@@ -1,4 +1,5 @@
-# Builds lib/data/letter_trace_data.dart: for each isolated Arabic letter,
+# Builds lib/data/letter_trace_data.dart: for each isolated Arabic letter and
+# numeral 1-10,
 # ScheherazadeNew Bold's own outline (the tracing mask) and the stroke centre-lines the
 # learner follows, taken from the glyph's skeleton so path and shape agree.
 # Each stroke is routed along the skeleton through the waypoints below, which
@@ -11,7 +12,7 @@ import networkx as nx
 from PIL import Image, ImageDraw
 from scipy import ndimage
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from letter_glyphs import LETTERS, Glyph, contours
+from letter_glyphs import LETTERS, Glyph, contours, advance
 
 S = sys.argv[1] if len(sys.argv) > 1 else '.'
 
@@ -20,11 +21,11 @@ S = sys.argv[1] if len(sys.argv) > 1 else '.'
 # Bold's naskh shapes; see the review sheet this script writes.
 BA = [[(0.92, 0.03), (0.93, 0.45), (0.75, 0.75), (0.5, 0.85), (0.15, 0.75),
        (0.06, 0.5), (0.12, 0.25)]]
-# One stroke: head right to left, then on down round the bowl.
-HA = [[(0.92, 0.05), (0.5, 0.1), (0.05, 0.18), (0.08, 0.45), (0.05, 0.62),
-       (0.2, 0.85), (0.5, 0.92), (0.97, 0.85)]]
-KHA = [[(0.95, 0.03), (0.5, 0.08), (0.05, 0.15), (0.08, 0.45), (0.05, 0.62),
-        (0.2, 0.85), (0.5, 0.92), (0.97, 0.85)]]
+# One stroke: head left to right, back along it, then down round the bowl.
+HA = [[(0.05, 0.18), (0.5, 0.1), (0.92, 0.05), (0.5, 0.1), (0.05, 0.18),
+       (0.08, 0.45), (0.05, 0.62), (0.2, 0.85), (0.5, 0.92), (0.97, 0.85)]]
+KHA = [[(0.05, 0.15), (0.5, 0.08), (0.95, 0.03), (0.5, 0.08), (0.05, 0.15),
+        (0.08, 0.45), (0.05, 0.62), (0.2, 0.85), (0.5, 0.92), (0.97, 0.85)]]
 DAL = [[(0.42, 0.02), (0.5, 0.2), (0.8, 0.4), (0.93, 0.62), (0.7, 0.82),
         (0.25, 0.86), (0.05, 0.96)]]
 RA = [[(0.83, 0.02), (0.83, 0.22), (0.97, 0.5), (0.75, 0.8), (0.45, 0.92),
@@ -41,9 +42,10 @@ SAD = [[(0.62, 0.45), (0.72, 0.2), (0.9, 0.1), (0.97, 0.22), (0.9, 0.4),
 TAH = [[(0.47, 0.7), (0.6, 0.6), (0.85, 0.55), (0.97, 0.65), (0.8, 0.85),
         (0.45, 0.88), (0.25, 0.9), (0.03, 0.82)],
        [(0.43, 0.02), (0.45, 0.4), (0.46, 0.7)]]
-AIN = [[(0.52, 0.08), (0.2, 0.08), (0.12, 0.2), (0.25, 0.3), (0.45, 0.28),
-        (0.72, 0.16)],
-       [(0.3, 0.32), (0.12, 0.55), (0.08, 0.7), (0.3, 0.9), (0.6, 0.93),
+# Head's upper curve down to the joint, then the lower horn right to left
+# and on down round the bowl.
+AIN = [[(0.52, 0.08), (0.2, 0.08), (0.12, 0.2), (0.25, 0.3), (0.3, 0.32)],
+       [(0.72, 0.16), (0.45, 0.28), (0.3, 0.32), (0.12, 0.55), (0.08, 0.7), (0.3, 0.9), (0.6, 0.93),
         (0.98, 0.87)]]
 HINTS = {
     'ا': [[(0.5, 0.0), (0.4, 0.5), (0.6, 0.97)]],
@@ -57,11 +59,12 @@ HINTS = {
     'ص': SAD, 'ض': SAD,
     'ط': TAH, 'ظ': TAH,
     'ع': AIN, 'غ': AIN,
-    'ف': [[(0.82, 0.1), (0.72, 0.2), (0.72, 0.38), (0.85, 0.42), (0.9, 0.25),
-           (0.84, 0.18), (0.9, 0.38), (0.97, 0.5), (0.85, 0.72), (0.5, 0.88),
+    # Loops of ف ق و ه run clockwise.
+    'ف': [[(0.85, 0.42), (0.72, 0.38), (0.72, 0.2), (0.82, 0.1), (0.9, 0.25),
+           (0.9, 0.38), (0.97, 0.5), (0.85, 0.72), (0.5, 0.88),
            (0.1, 0.8), (0.03, 0.6), (0.1, 0.45)]],
-    'ق': [[(0.78, 0.1), (0.62, 0.2), (0.62, 0.4), (0.8, 0.45), (0.87, 0.3),
-           (0.8, 0.15), (0.88, 0.42), (0.95, 0.5), (0.9, 0.75), (0.45, 0.9),
+    'ق': [[(0.8, 0.45), (0.62, 0.4), (0.62, 0.2), (0.78, 0.1), (0.87, 0.3),
+           (0.88, 0.42), (0.95, 0.5), (0.9, 0.75), (0.45, 0.9),
            (0.05, 0.72), (0.15, 0.28)]],
     'ك': [[(0.82, 0.02), (0.87, 0.3), (0.97, 0.68), (0.88, 0.88), (0.5, 0.9),
            (0.12, 0.9), (0.1, 0.72)],
@@ -73,14 +76,31 @@ HINTS = {
            (0.2, 0.55), (0.25, 0.8), (0.3, 0.98)]],
     'ن': [[(0.8, 0.02), (0.8, 0.2), (0.95, 0.5), (0.85, 0.75), (0.45, 0.88),
            (0.07, 0.7), (0.15, 0.33)]],
-    'ه': [[(0.5, 0.1), (0.52, 0.25), (0.25, 0.35), (0.12, 0.62), (0.45, 0.8),
-           (0.85, 0.65), (0.92, 0.5), (0.75, 0.33), (0.58, 0.26)]],
-    'و': [[(0.75, 0.05), (0.75, 0.15), (0.6, 0.2), (0.58, 0.33), (0.72, 0.38),
-           (0.85, 0.32), (0.82, 0.17), (0.88, 0.3), (0.96, 0.4), (0.93, 0.6),
+    'ه': [[(0.5, 0.1), (0.52, 0.25), (0.75, 0.33), (0.92, 0.5), (0.85, 0.65),
+           (0.45, 0.8), (0.12, 0.62), (0.25, 0.35), (0.46, 0.26)]],
+    'و': [[(0.72, 0.38), (0.58, 0.33), (0.6, 0.2), (0.75, 0.12), (0.82, 0.17),
+           (0.88, 0.3), (0.96, 0.4), (0.93, 0.6),
            (0.6, 0.87), (0.35, 0.93), (0.02, 0.83)]],
     'ي': [[(0.95, 0.04), (0.85, 0.1), (0.62, 0.25), (0.57, 0.45), (0.85, 0.55),
            (0.88, 0.65), (0.6, 0.8), (0.3, 0.85), (0.05, 0.72), (0.15, 0.3)]],
+    # Numerals: top strokes run left to right, then the stem down.
+    '١': [[(0.3, 0.03), (0.6, 0.5), (0.85, 0.97)]],
+    '٢': [[(0.12, 0.03), (0.35, 0.3), (0.7, 0.25), (0.93, 0.03)],
+          [(0.35, 0.3), (0.55, 0.6), (0.6, 0.97)]],
+    '٣': [[(0.1, 0.03), (0.3, 0.27), (0.55, 0.24), (0.6, 0.03), (0.6, 0.24),
+           (0.75, 0.25), (0.97, 0.03)],
+          [(0.3, 0.27), (0.4, 0.6), (0.4, 0.97)]],
+    '٤': [[(0.97, 0.0), (0.6, 0.15), (0.3, 0.25), (0.25, 0.4), (0.5, 0.5),
+           (0.7, 0.48), (0.5, 0.5), (0.25, 0.75), (0.12, 0.86), (0.7, 0.88),
+           (0.97, 0.8)]],
+    '٥': [[(0.5, 0.18), (0.15, 0.55), (0.45, 0.83), (0.88, 0.55), (0.6, 0.2)]],
+    '٦': [[(0.03, 0.03), (0.35, 0.2), (0.6, 0.2), (0.7, 0.45), (0.92, 0.97)]],
+    '٧': [[(0.02, 0.02), (0.3, 0.5), (0.5, 0.8), (0.7, 0.5), (0.98, 0.02)]],
+    '٨': [[(0.02, 0.98), (0.3, 0.5), (0.47, 0.04), (0.75, 0.7), (0.98, 0.95)]],
+    '٩': [[(0.6, 0.44), (0.62, 0.3), (0.35, 0.1), (0.07, 0.3), (0.3, 0.45),
+           (0.55, 0.45), (0.75, 0.7), (0.88, 0.97)]],
 }
+NUMERALS = '١٢٣٤٥٦٧٨٩'
 
 STEP = 0.02  # resample spacing, in letter units
 
@@ -155,11 +175,32 @@ def build(ch):
     return g, strokes, outline
 
 
+def ten():
+    """١٠ as one item: ١ then ٠ beside it (numbers run left to right), the
+    ٠ a dot to tap. Both are put back in font units, laid out by advance
+    width, and normalised together."""
+    g1, s1, o1 = results['١']
+    to_font = lambda p: (p[0] * g1.E + g1.x0, g1.y1 - p[1] * g1.E)
+    o1 = [np.array([to_font(p) for p in c]) for c in o1]
+    s1 = [np.array([to_font(p) for p in st]) for st in s1]
+    dx = advance('١')
+    o0 = [np.array(c) + (dx, 0) for c in contours('٠', steps=6)]
+    pts = np.vstack(o1 + o0)
+    x0, y1 = pts[:, 0].min(), pts[:, 1].max()
+    E = max(np.ptp(pts[:, 0]), np.ptp(pts[:, 1]))
+    norm = lambda a: np.stack([(a[:, 0] - x0) / E, (y1 - a[:, 1]) / E], 1)
+    dot = np.vstack(o0)
+    centre = np.array([[(dot[:, 0].min() + dot[:, 0].max()) / 2,
+                        (dot[:, 1].min() + dot[:, 1].max()) / 2]])
+    return g1, [norm(st) for st in s1] + [norm(centre)], [norm(c) for c in o1 + o0]
+
+
 def fmt(a):
     return ', '.join('%.3f' % v for v in np.asarray(a).ravel())
 
 
-results = {ch: build(ch) for ch in LETTERS}
+results = {ch: build(ch) for ch in LETTERS + NUMERALS}
+results['١٠'] = ten()
 
 lines = [
     '// GENERATED by dumps/tracing_layers/gen_letter_paths.py from',
@@ -181,7 +222,7 @@ lines = [
     '',
     'const letterTraces = <String, LetterTrace>{',
 ]
-for ch in LETTERS:
+for ch in results:
     g, strokes, outline = results[ch]
     lines.append(f"  '{ch}': LetterTrace(")
     lines.append('    [')
@@ -198,17 +239,14 @@ open('lib/data/letter_trace_data.dart', 'w', encoding='utf-8', newline='\n').wri
 
 # Review sheet: glyph, strokes numbered with start dot + arrow.
 C = 300
-sheet = Image.new('RGB', (C * 7, C * 4), 'white')
-for k, ch in enumerate(LETTERS):
+sheet = Image.new('RGB', (C * 7, C * ((len(results) + 6) // 7)), 'white')
+for k, ch in enumerate(results):
     g, strokes, outline = results[ch]
-    f = (C - 40) / (g.E * g.sc)
     sc = C - 40
-    cell = np.full((g.H, g.W, 3), 255, np.uint8)
-    cell[g.mask] = (225, 215, 190)
     img = Image.new('RGB', (C, C), 'white')
-    img.paste(Image.fromarray(cell).resize((round(g.W * f), round(g.H * f))),
-              (round(20 - g.pad * f), round(20 - g.pad * f)))
     d = ImageDraw.Draw(img)
+    for c in outline:
+        d.polygon([(20 + x * sc, 20 + y * sc) for x, y in c], fill=(225, 215, 190))
     cols = [(220, 30, 30), (30, 90, 220), (0, 150, 0), (200, 0, 200), (230, 130, 0)]
     for si, st in enumerate(strokes):
         q = [(20 + x * sc, 20 + y * sc) for x, y in st.reshape(-1, 2)]

@@ -12,6 +12,7 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../widgets/arc_text_painter.dart';
+import '../game_ui_audio.dart';
 
 const _kA = 'assets/images/sound_detective';
 
@@ -45,6 +46,16 @@ const soundDetectiveLetterAudio = <String, String>{
   'Haa': 'assets/audio/sand_tracer/stage4/ha_soft.mp3',
   'Waw': 'assets/audio/sand_tracer/stage4/waw.mp3',
   'Ya': 'assets/audio/sand_tracer/stage4/ya.mp3',
+  'Wahid': 'assets/audio/numbers/wahid.mp3',
+  'Ithnan': 'assets/audio/numbers/ithnan.mp3',
+  'Thalathah': 'assets/audio/numbers/thalathah.mp3',
+  "Arba'ah": 'assets/audio/numbers/arbaah.mp3',
+  'Khamsah': 'assets/audio/numbers/khamsah.mp3',
+  'Sittah': 'assets/audio/numbers/sittah.mp3',
+  "Sab'ah": 'assets/audio/numbers/sabah.mp3',
+  'Thamaniyah': 'assets/audio/numbers/thamaniyah.mp3',
+  "Tis'ah": 'assets/audio/numbers/tisah.mp3',
+  "'Asharah": 'assets/audio/numbers/asharah.mp3',
 };
 
 /// Phone-sized stage every screen is laid out in, scaled to fit.
@@ -84,9 +95,18 @@ class _Q {
 }
 
 class _Session {
-  const _Session(this.number, this.range, this.countAr, this.questions);
+  const _Session(
+    this.number,
+    this.range,
+    this.countAr,
+    this.questions, {
+    this.numbers = false,
+  });
   final int number;
   final String range;
+
+  /// Hear a number, find its digit — the copy says "number", not "letter".
+  final bool numbers;
 
   /// "All N sounds" in Arabic, for the done card.
   final String countAr;
@@ -132,6 +152,20 @@ const _kSessions = {
     _Q('Waw', 'و', ['ر', 'ز']),
     _Q('Ya', 'ي', ['ب', 'ن']),
   ]),
+  SoundDetectiveSession.oneToFive: _Session(5, 'Numbers 1 to 5', 'الخمسة', [
+    _Q('Wahid', '1', ['2', '3']),
+    _Q('Ithnan', '2', ['1', '4']),
+    _Q('Thalathah', '3', ['2', '5']),
+    _Q("Arba'ah", '4', ['3', '5']),
+    _Q('Khamsah', '5', ['4', '1']),
+  ], numbers: true),
+  SoundDetectiveSession.sixToTen: _Session(6, 'Numbers 6 to 10', 'الخمسة', [
+    _Q('Sittah', '6', ['7', '8']),
+    _Q("Sab'ah", '7', ['6', '8']),
+    _Q('Thamaniyah', '8', ['7', '9']),
+    _Q("Tis'ah", '9', ['8', '10']),
+    _Q("'Asharah", '10', ['9', '1']),
+  ], numbers: true),
 };
 
 /// Where each animal holds its sign, per pose: centre x/y and width as % of
@@ -213,6 +247,16 @@ const Map<String, (double, double, double, double)> _kLetterInk = {
   'ه': (0.190, -0.191, 0.379, 0.395),
   'و': (0.189, -0.016, 0.480, 0.682),
   'ي': (0.401, -0.037, 0.801, 0.865),
+  '1': (0.224, -0.306, 0.328, 0.612),
+  '2': (0.233, -0.306, 0.406, 0.612),
+  '3': (0.221, -0.300, 0.385, 0.625),
+  '4': (0.229, -0.306, 0.428, 0.612),
+  '5': (0.230, -0.293, 0.411, 0.611),
+  '6': (0.231, -0.300, 0.394, 0.625),
+  '7': (0.222, -0.293, 0.392, 0.611),
+  '8': (0.230, -0.298, 0.390, 0.622),
+  '9': (0.236, -0.300, 0.394, 0.625),
+  '10': (0.472, -0.300, 0.825, 0.625),
 };
 
 const _kPraise = [
@@ -403,6 +447,11 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
       _music = AudioPlayer();
       _voice = AudioPlayer();
       unawaited(_startMusic());
+      _after(1200, () {
+        if (_screen == _Screen.title) {
+          unawaited(_say(['arabic_sound_detective.mp3']));
+        }
+      });
     }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _ticker.start();
@@ -511,11 +560,11 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
       final player = _music;
       if (player == null) return;
       await player.setReleaseMode(ReleaseMode.loop);
-      await player.setVolume(_sound ? 0.18 : 0);
+      await player.setVolume(_sound ? 0.06 : 0);
       await player.play(
         AssetSource('audio/sound_detective/forest_ambient.mp3'),
       );
-      await player.setVolume(_sound ? 0.18 : 0);
+      await player.setVolume(_sound ? 0.06 : 0);
     } catch (_) {
       // The detective game remains playable without an audio device.
     }
@@ -542,6 +591,36 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
     }
   }
 
+  /// Narrates [clips] back to back; a newer line or letter cuts it off.
+  /// Tagalog lines without a recording fall back to English, and lines with
+  /// neither stay silent.
+  Future<void> _say(List<String> clips) async {
+    final generation = ++_voiceGeneration;
+    final player = _voice;
+    if (player == null) return;
+    for (final clip in clips) {
+      if (generation != _voiceGeneration || !_sound) return;
+      try {
+        await player.stop();
+        // Stopped counts as done too, so muting or leaving never strands a
+        // caller waiting on the line.
+        final done = player.onPlayerStateChanged.firstWhere(
+          (s) => s == PlayerState.completed || s == PlayerState.stopped,
+        );
+        final local = localizedVoice(clip);
+        try {
+          await player.play(AssetSource('audio/sound_detective/$local'));
+        } catch (_) {
+          if (local == clip) rethrow;
+          await player.play(AssetSource('audio/sound_detective/$clip'));
+        }
+        await done;
+      } catch (_) {
+        // A missing recording just stays silent.
+      }
+    }
+  }
+
   Future<void> _stopLetterAudio() async {
     ++_voiceGeneration;
     try {
@@ -553,7 +632,7 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
 
   Future<void> _setMusicVolume() async {
     try {
-      await _music?.setVolume(_sound ? 0.18 : 0);
+      await _music?.setVolume(_sound ? 0.06 : 0);
     } catch (_) {
       // The mute control still silences the game's click cue.
     }
@@ -617,6 +696,7 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
       _count = 3;
       _countAt = _now;
     });
+    unawaited(_say(['lets_go.mp3']));
     for (final (i, n) in [(1, 2), (2, 1), (3, 0)]) {
       _after(1000 * i, () {
         _count = n;
@@ -674,9 +754,15 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
         _flyAt = _now;
       } else {
         _errors++;
+        GameUiAudio.instance.wrong();
         _missed.add(_qi);
       }
     });
+    if (!right) {
+      unawaited(_say(['retry_oops_listen_again.mp3']));
+    } else {
+      unawaited(_say(['praise_great_listening.mp3']));
+    }
     if (right) {
       _sfx();
       HapticFeedback.mediumImpact();
@@ -1125,9 +1211,23 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
       _screenAt = _now;
       _goReady = false;
     });
-    _after(5000, () {
+    // Let's Go waits for both the narrated steps and a 5s minimum.
+    final at = _screenAt;
+    var pending = 2;
+    void ready() {
+      if (--pending > 0 || _screen != _Screen.howTo || _screenAt != at) return;
       _goReady = true;
       _goAt = _now;
+    }
+
+    _after(5000, ready);
+    _say([
+      'instruction_listen_sound.mp3',
+      'instruction_tap_animal.mp3',
+      'instruction_win_star.mp3',
+      'tip_look_dots.mp3',
+    ]).then((_) {
+      if (mounted) setState(ready);
     });
   }
 
@@ -1337,10 +1437,7 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
               'board_howto',
               350,
               const EdgeInsets.fromLTRB(.1, .17, .1, .23),
-              Text(
-                'How to Play',
-                style: _baloo(30, 800, _kInk, height: 1.1),
-              ),
+              Text('How to Play', style: _baloo(30, 800, _kInk, height: 1.1)),
             ),
           ),
         ),
@@ -1350,17 +1447,16 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
           top: 214,
           child: Column(
             children: [
-              rise(
-                .2,
-                step(1, listen, 'Listen to the sound.'),
-              ),
+              rise(.2, step(1, listen, 'Listen to the sound.')),
               const SizedBox(height: 8),
               rise(
                 .35,
                 step(
                   2,
                   tap,
-                  'Tap the animal holding the right letter.',
+                  _s.numbers
+                      ? 'Tap the animal holding the right number.'
+                      : 'Tap the animal holding the right letter.',
                 ),
               ),
               const SizedBox(height: 8),
@@ -1578,11 +1674,15 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Which letter makes this sound?',
+                      _s.numbers
+                          ? 'Which number makes this sound?'
+                          : 'Which letter makes this sound?',
                       style: _baloo(17, 800, _kInk, height: 1.2),
                     ),
                     _ar(
-                      'أيُّ حرفٍ يُصدِر هذا الصوت؟',
+                      _s.numbers
+                          ? 'أيُّ رقمٍ يُصدِر هذا الصوت؟'
+                          : 'أيُّ حرفٍ يُصدِر هذا الصوت؟',
                       _naskh(15, const Color(0xFF5B3B1E)),
                     ),
                   ],

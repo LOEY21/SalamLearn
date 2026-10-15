@@ -135,7 +135,11 @@ String assignmentTitle(String moduleId) =>
 /// The lessons an assignment gives the learner: just the game itself, or
 /// for a whole-destination assignment every lesson up to
 /// [maxLevel]/[maxLessons] (levels are the destination's lessons in thirds).
-List<Lesson> assignedLessonsFor(String moduleId, int maxLevel, int? maxLessons) {
+List<Lesson> assignedLessonsFor(
+  String moduleId,
+  int maxLevel,
+  int? maxLessons,
+) {
   final game = gameForId(moduleId);
   if (game != null) return [game.lesson];
   final destinationId = moduleForAssignment(moduleId)?.destinationId;

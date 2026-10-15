@@ -10,6 +10,7 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 import 'ayah_builder_audio.dart';
+import '../game_ui_audio.dart';
 
 /// Ayah Builder — listen to an ayah, then drag its word cards into the
 /// numbered slots in order. Ported 1:1 from the supplied "Ayah Builder"
@@ -229,6 +230,10 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
   double? _exitT0;
   // When the how-to board's 3-2-1 countdown started.
   double? _countT0;
+
+  /// Seconds into the how-to screen when I'm ready may appear: once the
+  /// spoken steps finish (null while they play), or a 5s read when muted.
+  double? _readyAt;
   int _stars = 0;
   bool _soundOn = true;
   bool _completed = false;
@@ -276,6 +281,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     super.initState();
     _resetRound();
     _audio.startMusic();
+    _audio.say([AyahBuilderAudio.title, _audio.intro]);
     for (final asset in [..._startScene.images, ..._gameScene.images]) {
       final stream = AssetImage(asset).resolve(ImageConfiguration.empty);
       late final ImageStreamListener listener;
@@ -429,11 +435,22 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     return a;
   }
 
-  void _onStart() => _transitionTo(_Screen.instructions);
+  void _onStart() => _transitionTo(_Screen.instructions, () {
+    _readyAt = _soundOn ? null : 5;
+    if (!_soundOn) return;
+    _audio.say(AyahBuilderAudio.howTo).then((done) {
+      if (done && mounted && _screen == _Screen.instructions) {
+        setState(() => _readyAt = _now - _screenT0);
+      }
+    });
+  });
 
   /// The back button on every screen past the start — returns to the start
   /// screen, abandoning the round in progress.
-  void _onBack() => _transitionTo(_Screen.start, _resetRound);
+  void _onBack() => _transitionTo(_Screen.start, () {
+    _resetRound();
+    _audio.say([AyahBuilderAudio.title, _audio.intro]);
+  });
 
   /// I'm ready: a 3-2-1 countdown over the how-to board, then the listen
   /// screen.
@@ -552,6 +569,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
         final m = _roundMistakes;
         _roundStars = m == 0 ? 3 : (m <= 2 ? 2 : 1);
         _stars += _roundStars;
+        _audio.say([AyahBuilderAudio.mashaAllah]);
         widget.onEnding?.call();
       });
     });
@@ -659,6 +677,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     });
     if (hit >= 0) {
       _sfx('wrong');
+      GameUiAudio.instance.wrong();
       _errors += 1;
       setState(() {
         _roundLog.add(false);
@@ -1363,14 +1382,14 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
           top: panelTop + panelH + 22,
           width: 300,
           height: 66.8,
-          // A 5s read of the board before I'm ready appears; it steps
-          // aside once the countdown starts.
+          // I'm ready waits for the spoken steps (or a 5s read when muted);
+          // it steps aside once the countdown starts.
           child: IgnorePointer(
-            ignoring: st < 5 || _countT0 != null,
+            ignoring: _readyAt == null || st < _readyAt! || _countT0 != null,
             child: Opacity(
               opacity: _countT0 == null ? 1 : 1 - _once(t - _countT0!, .25),
               child: _enter(
-                _once(st, .5, 5),
+                _readyAt == null ? 0 : _once(st, .5, _readyAt!),
                 fromScale: .6,
                 _Press(
                   onTap: _onReady,

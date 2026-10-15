@@ -5,6 +5,7 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../theme/app_colors.dart';
+import '../game_ui_audio.dart';
 
 enum _QuizState { answering, correct, wrong }
 
@@ -67,6 +68,7 @@ class _QuizActivityState extends State<QuizActivity> {
         _state = _QuizState.wrong;
         _hearts = math.max(0, _hearts - 1);
         _errors += 1;
+        GameUiAudio.instance.wrong();
       }
     });
   }
@@ -75,8 +77,8 @@ class _QuizActivityState extends State<QuizActivity> {
     if (_qi + 1 >= widget.questions.length) {
       // _handleAnswer already counted the last answer.
       final correctCount = _score;
-      final finalXp =
-          (widget.xp * correctCount / widget.questions.length).round();
+      final finalXp = (widget.xp * correctCount / widget.questions.length)
+          .round();
       final accuracyPct = correctCount / widget.questions.length * 100;
       widget.onComplete(
         math.max((widget.xp * 0.4).round(), finalXp),

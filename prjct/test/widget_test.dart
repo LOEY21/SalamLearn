@@ -831,7 +831,7 @@ void main() {
       );
       await tester.pump(const Duration(seconds: 1));
 
-      expect(find.text('Notifications'), findsOneWidget);
+      expect(find.byIcon(Icons.notifications_rounded), findsOneWidget);
       expect(find.text('Switch Account'), findsOneWidget);
       expect(find.text('Requires parent PIN'), findsOneWidget);
     });

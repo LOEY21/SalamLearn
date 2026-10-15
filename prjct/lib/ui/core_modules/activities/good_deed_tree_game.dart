@@ -11,6 +11,7 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../widgets/arc_text_painter.dart';
 import 'good_deed_tree_audio.dart';
+import '../game_ui_audio.dart';
 
 /// The Good Deed Tree — sort daily actions: good deeds to the tree, wrong
 /// actions to the bin. Ported 1:1 from the supplied "Good Deed Tree"
@@ -31,6 +32,7 @@ class GoodDeedTreeGame extends StatefulWidget {
     required this.onComplete,
     this.onEnding,
     this.onExit,
+    this.audio,
   });
 
   final GoodDeedTreeSession session;
@@ -43,6 +45,9 @@ class GoodDeedTreeGame extends StatefulWidget {
 
   /// Leaves the lesson from the start screen's home button.
   final VoidCallback? onExit;
+
+  /// Swapped for a silent stand-in by tests.
+  final GoodDeedTreeAudio? audio;
 
   @override
   State<GoodDeedTreeGame> createState() => _GoodDeedTreeGameState();
@@ -168,6 +173,20 @@ class _Card {
   final bool good;
   final String ok;
 }
+
+/// Each card's spoken name, then what is said once it is sorted right.
+const Map<String, (String, String)> _kCardVoice = {
+  'praying': ('card_praying_to_allah', 'praise_praying_to_allah'),
+  'helping': ('card_helping_parents', 'praise_helping_parents'),
+  'fighting': ('card_fighting_friends', 'retry_fighting_friends'),
+  'sharing': ('card_sharing_food', 'praise_sharing_food'),
+  'laughing': ('card_laughing_at_others', 'retry_laughing_at_others'),
+  'trash': ('card_throwing_trash_properly', 'praise_throwing_trash_properly'),
+  'anthem': ('card_standing_anthem', 'praise_respecting_anthem'),
+  'branches': ('card_breaking_plants', 'retry_breaking_plants'),
+  'planting': ('card_planting_tree', 'praise_planting_tree'),
+  'river': ('card_garbage_river', 'retry_garbage_river'),
+};
 
 class _Session {
   const _Session({
@@ -543,8 +562,21 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
   _Fb? _fb;
   int _fbId = 0;
   bool _busy = false;
+
+  /// True while the cards' names are read out at the start of play; the
+  /// cards and targets don't take input until it's over.
+  bool _readingCards = false;
+  int _readRun = 0;
+
+  /// True while a right answer's "Mumtaz! …" line plays: it is never cut
+  /// off, so the cards wait for it.
+  bool _praising = false;
   bool _sound = true;
-  final GoodDeedTreeAudio _audio = GoodDeedTreeAudio();
+  late final GoodDeedTreeAudio _audio = widget.audio ?? GoodDeedTreeAudio();
+
+  /// How to play's Start waits until its narration ends.
+  bool _howReady = false;
+  Future<void>? _tutorial;
   int? _top;
   bool _trayGone = false;
   int _errors = 0;
@@ -570,6 +602,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
   void initState() {
     super.initState();
     _audio.startMusic();
+    _audio.say(const ['the_good_deed_tree.mp3']);
     _ticker = createTicker((e) => _time.value = e.inMicroseconds / 1e6)
       ..start();
     for (final a in {..._d.trees, _d.doneTree}) {
@@ -747,7 +780,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
   }
 
   void _down(int i, PointerDownEvent e) {
-    if (_dragIdx != null) return;
+    if (_dragIdx != null || _readingCards || _praising) return;
     setState(() => _sel = i);
     if (_busy) return;
     _dragIdx = i;
@@ -796,7 +829,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
   }
 
   void _tapTarget(_Target target) {
-    if (_busy) return;
+    if (_busy || _readingCards || _praising) return;
     final i = _sel;
     if (i == null) {
       _showFb(false, 'Pick a card first, then tap where it goes.', 1700);
@@ -811,6 +844,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
     final right = (target == _Target.tree) == card.good;
     if (!right) {
       _errors++;
+      GameUiAudio.instance.wrong();
       _boing();
       _snapBack(i);
       _restoreTray();
@@ -866,6 +900,20 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
       });
       if (grows || changed) _fx.forward(from: 0);
       if (grows) _audio.playBloom();
+      final spoken = _audio.say(['${_kCardVoice[card.id]!.$2}.mp3']);
+      final fbId = _fbId;
+      setState(() => _praising = true);
+      spoken.then((_) {
+        if (mounted && _fbId == fbId) setState(() => _praising = false);
+      });
+      // The banner (and the move to the end screen) waits for its line to
+      // finish, however long it runs past [ms].
+      Timer afterLine(int ms, VoidCallback fn) => _later(
+        ms,
+        () => spoken.then((_) {
+          if (mounted && _fbId == fbId && _screen == _Screen.play) fn();
+        }),
+      );
       if (!grows) _binCtl.forward(from: 0);
       _swapT?.cancel();
       if (changed) {
@@ -884,7 +932,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
           _flash = false;
         }),
       );
-      _fbT = _later(
+      _fbT = afterLine(
         3200,
         () => setState(() {
           _fb = null;
@@ -897,7 +945,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
           _animTray(200, 450, const Cubic(0.4, 0, 0.7, 0.4));
           _trayT = _later(470, () => setState(() => _trayGone = true));
         });
-        _later(3400, () {
+        afterLine(3400, () {
           setState(() {
             _screen = _Screen.done;
             _clock.stop();
@@ -915,6 +963,9 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
   // -------------------------------------------------------------------------
 
   void _reset(_Screen to) {
+    _readRun++;
+    _praising = false;
+    _audio.stopVoice();
     _setOver(null);
     if (to == _Screen.start) {
       _howCtl.value = 0;
@@ -945,6 +996,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
       _fb = null;
       _burst = false;
       _busy = false;
+      _readingCards = false;
       _top = null;
       _prevTree = null;
       _errors = 0;
@@ -953,8 +1005,25 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
 
   void _goStart() => _reset(_Screen.start);
   void _goHow() {
-    setState(() => _screen = _Screen.how);
+    setState(() {
+      _screen = _Screen.how;
+      _howReady = false;
+    });
     _howCtl.forward(from: 0);
+    final fil = AppTranslations.currentLanguageCode == 'fil';
+    final tutorial = _tutorial = _audio.say([
+      'tutorial_drag_picture_card.mp3',
+      'tutorial_good_deed_tree.mp3',
+      'tutorial_bad_deed_bin.mp3',
+      // Only the Tagalog set has a "bloom" take for Session 2.
+      fil && _d == _kFlowers
+          ? 'tutorial_sort_help_bloom.mp3'
+          : 'tutorial_sort_help_grown.mp3',
+    ]);
+    tutorial.then((_) {
+      if (!mounted || _tutorial != tutorial || _screen != _Screen.how) return;
+      setState(() => _howReady = true);
+    });
   }
 
   void _goPlay({bool fromHow = false}) {
@@ -966,6 +1035,24 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
     _clock
       ..reset()
       ..start();
+    _later(fromHow ? 4200 : 1000, _readCards);
+  }
+
+  /// Reads every card's name in turn, lighting each one up as it is said.
+  Future<void> _readCards() async {
+    final run = ++_readRun;
+    bool live() => mounted && run == _readRun && _screen == _Screen.play;
+    setState(() => _readingCards = true);
+    for (var i = 0; i < _d.cards.length; i++) {
+      if (!live()) return;
+      setState(() => _sel = i);
+      await _audio.say(['${_kCardVoice[_d.cards[i].id]!.$1}.mp3']);
+    }
+    if (!live()) return;
+    setState(() {
+      _sel = null;
+      _readingCards = false;
+    });
   }
 
   /// Start art dissolving into the game garden.
@@ -1403,16 +1490,20 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
               Positioned.fromRect(
                 rect: at(_kHowStartAt),
                 child: IgnorePointer(
-                  ignoring: h < 1 || _screen != _Screen.how,
-                  child: Opacity(
-                    opacity: span(0.7, 0.85) * (1 - exit),
-                    child: Transform.scale(
-                      scale: (0.7 + 0.3 * startIn) * (1 - 0.4 * exit),
-                      child: _ImageButton(
-                        key: const ValueKey('gdt-start'),
-                        up: _kBtnStart,
-                        down: _kBtnStartDown,
-                        onTap: () => _goPlay(fromHow: true),
+                  ignoring: h < 1 || _screen != _Screen.how || !_howReady,
+                  child: AnimatedOpacity(
+                    opacity: _howReady ? 1 : 0,
+                    duration: const Duration(milliseconds: 300),
+                    child: Opacity(
+                      opacity: span(0.7, 0.85) * (1 - exit),
+                      child: Transform.scale(
+                        scale: (0.7 + 0.3 * startIn) * (1 - 0.4 * exit),
+                        child: _ImageButton(
+                          key: const ValueKey('gdt-start'),
+                          up: _kBtnStart,
+                          down: _kBtnStartDown,
+                          onTap: () => _goPlay(fromHow: true),
+                        ),
                       ),
                     ),
                   ),
@@ -1510,15 +1601,25 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
                       ),
                     ),
                     SizedBox(width: rw * 0.035),
+                    // Wraps at its column's width, then shrinks only if
+                    // the (e.g. Tagalog) lines would still spill past the
+                    // row, instead of being cut off.
                     SizedBox(
-                      width: rw * 0.38,
-                      child: Text(
-                        rows[i].$2,
-                        style: _f(
-                          (i == 3 ? 15 : 16.5) * fs,
-                          w: FontWeight.w700,
-                          color: ink,
-                          h: 1.15,
+                      width: rw * 0.4,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: SizedBox(
+                          width: rw * 0.4,
+                          child: Text(
+                            rows[i].$2,
+                            style: _f(
+                              (i == 3 ? 15 : 16.5) * fs,
+                              w: FontWeight.w700,
+                              color: ink,
+                              h: 1.15,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -1536,13 +1637,26 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
           ),
         Positioned.fromRect(
           rect: frac(230, 1236, 790, 1380),
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 10 * fs),
-              child: Text(
-                _d.howChip,
-                textAlign: TextAlign.center,
-                style: _f(14.5 * fs, w: FontWeight.w700, color: ink, h: 1.2),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 10 * fs),
+            child: LayoutBuilder(
+              builder: (context, c) => Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: SizedBox(
+                    width: c.maxWidth,
+                    child: Text(
+                      _d.howChip,
+                      textAlign: TextAlign.center,
+                      style: _f(
+                        14.5 * fs,
+                        w: FontWeight.w700,
+                        color: ink,
+                        h: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -2520,6 +2634,25 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
             left: 10,
             right: 10,
             child: _feedback(_fb!),
+          ),
+        // While the cards are read out, the garden dims so only the tray
+        // and its cards stand out. Bleeds past the stage to cover the
+        // whole screen on any shape of display.
+        if (!done)
+          Positioned(
+            left: -2000,
+            top: -2000,
+            right: -2000,
+            bottom: -2000,
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                key: const ValueKey('gdt-focus'),
+                opacity: _readingCards ? 1 : 0,
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeOut,
+                child: const ColoredBox(color: Color(0xA6000000)),
+              ),
+            ),
           ),
         if (!_trayGone && !done)
           Positioned(

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:salamlearn/data/curriculum_data.dart';
 import 'package:salamlearn/data/repositories/progress_repository.dart';
 import 'package:salamlearn/logic/auth/session.dart';
 import 'package:salamlearn/logic/connectivity/internet_access.dart';
@@ -7,6 +8,10 @@ import 'package:salamlearn/logic/parent/analytics_providers.dart';
 import 'package:salamlearn/logic/parent/game_grades.dart';
 
 import '../../test_helpers/hive_test_setup.dart';
+
+/// All 47 sessions, less Classroom Heroes' four Colors and Shapes ones
+/// while they are hidden.
+const _sessions = kHeroesVocabEnabled ? 47 : 43;
 
 void main() {
   test('score bands follow the DepEd descriptor cut-offs', () {
@@ -35,24 +40,26 @@ void main() {
     );
   });
 
-  test('curriculum groups into 12 games holding all 38 sessions', () {
+  test('curriculum groups into 12 games holding every session', () {
     final games = curriculumGames();
     expect(games, hasLength(12));
-    expect(games.expand((g) => g.sessions), hasLength(38));
+    expect(games.expand((g) => g.sessions), hasLength(_sessions));
     final tracer = games.firstWhere((g) => g.name == 'Magic Sand Tracer');
     expect(tracer.sessions.map((s) => sessionLabel(s.lesson)), [
       'Session 1 (Alif to Kha)',
       'Session 2 (Dal to Sad)',
       'Session 3 (Dad to Qaf)',
       'Session 4 (Kaf to Ya)',
+      'Session 5 (Numbers 1 to 5)',
+      'Session 6 (Numbers 6 to 10)',
     ]);
   });
 
-  test('curriculum groups into 7 stages holding all 38 sessions', () {
+  test('curriculum groups into 7 stages holding every session', () {
     final stages = curriculumStages();
     expect(stages, hasLength(7));
     expect(stages.every((s) => s.isStage), isTrue);
-    expect(stages.expand((s) => s.sessions), hasLength(38));
+    expect(stages.expand((s) => s.sessions), hasLength(_sessions));
     expect(stages.first.name, 'Stage 1: Welcome to Madrasah');
   });
 

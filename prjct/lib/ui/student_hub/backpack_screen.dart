@@ -313,9 +313,12 @@ class _BadgeCabinet extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(10, 16, 10, 8),
       child: LayoutBuilder(
         builder: (context, c) {
-          final perShelf = c.maxWidth >= 720
+          // Bigger system text needs wider slots, so fewer per shelf.
+          final width =
+              c.maxWidth / MediaQuery.textScalerOf(context).scale(1);
+          final perShelf = width >= 720
               ? 5
-              : c.maxWidth >= 520
+              : width >= 520
               ? 4
               : 3;
           final shelves = <List<BadgeItem>>[

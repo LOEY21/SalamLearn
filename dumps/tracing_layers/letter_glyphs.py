@@ -49,6 +49,11 @@ def contours(ch, steps=12):
     return polys
 
 
+def advance(ch):
+    """Advance width in font units."""
+    return _font['hmtx'][_cmap[ord(ch)]][0]
+
+
 def _signed_area(poly):
     a = np.array(poly)
     return 0.5 * np.sum(a[:, 0] * np.roll(a[:, 1], -1) - np.roll(a[:, 0], -1) * a[:, 1])

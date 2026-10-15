@@ -100,6 +100,26 @@ void main() {
       expect(c.read(sessionProvider).pinVerified, isTrue);
     });
 
+    test('Change PIN has a one-day cooldown', () async {
+      final c = newContainer();
+      final n = await registeredParent(c);
+      expect(n.pinChangeCooldown(), isNull);
+
+      await n.changePin('5678');
+      final left = n.pinChangeCooldown();
+      expect(left, isNotNull);
+      expect(left!.inHours, 23);
+
+      final id = c.read(sessionProvider).activeParentId;
+      await Hive.box<dynamic>(HiveBoxes.settings).put(
+        'pinChangedAt:parent:$id',
+        DateTime.now()
+            .subtract(const Duration(days: 1, minutes: 1))
+            .millisecondsSinceEpoch,
+      );
+      expect(n.pinChangeCooldown(), isNull);
+    });
+
     test('AUTH-09/SET-02: logout clears the session and a restart never restores PIN access', () async {
       final c = newContainer();
       final n = await registeredParent(c);

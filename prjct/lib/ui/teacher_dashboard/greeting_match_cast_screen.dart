@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../data/curriculum_data.dart';
 import '../../data/models/curriculum/curriculum_models.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_orientation.dart';
 
 /// Classroom cast view for Greeting Match: locked landscape, one big
 /// phrase + play button, and a teacher-controlled "Reveal" that flips in
@@ -43,10 +44,7 @@ class _GreetingMatchCastScreenState extends State<GreetingMatchCastScreen> {
 
   @override
   void dispose() {
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
+    restoreAppOrientations();
     super.dispose();
   }
 

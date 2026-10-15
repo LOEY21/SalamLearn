@@ -11,6 +11,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../data/curriculum_data.dart';
 import '../../data/local/hive_boxes.dart';
+import '../../data/models/assigned_module.dart';
 import '../../data/models/progress_record.dart';
 import '../../data/models/curriculum/curriculum_models.dart';
 import '../../data/repositories/class_repository.dart';
@@ -574,7 +575,8 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
   }
 
   /// True if [moduleId] is assigned (class-wide or per-student) with a due
-  /// date already in the past — drives the small overdue badge on the map node.
+  /// date already in the past and not finished yet — drives the small
+  /// overdue badge on the map node.
   bool _isModuleOverdue(String moduleId) {
     if (ref.watch(progressionOverrideProvider)) return false;
     final now = DateTime.now();
@@ -583,6 +585,18 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
     if (learner == null) return false;
     final learnerId = learner.id;
     if (learnerId == null) return false;
+
+    final progress = ProgressRepository();
+    bool isDone(AssignedModule a) =>
+        progress.homeworkDoneAt(
+          learnerId,
+          assignedLessonsFor(
+            a.moduleId,
+            a.maxLevel,
+            a.maxLessons,
+          ).map((l) => l.id),
+        ) !=
+        null;
 
     final enrollments = ClassRepository().byLearnerId(learnerId);
     final enrolledClassIds = enrollments.map((e) => e.classId).toSet();
@@ -594,7 +608,8 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
       );
       for (final a in classAssignments) {
         if (moduleForAssignment(a.moduleId)?.id == moduleId &&
-            a.dueDate.isBefore(now))
+            a.dueDate.isBefore(now) &&
+            !isDone(a))
           return true;
       }
       final personalAssignments = ClassRepository().assignmentsFor(
@@ -603,7 +618,8 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
       );
       for (final a in personalAssignments) {
         if (moduleForAssignment(a.moduleId)?.id == moduleId &&
-            a.dueDate.isBefore(now))
+            a.dueDate.isBefore(now) &&
+            !isDone(a))
           return true;
       }
     }
@@ -917,14 +933,46 @@ class _MapVideoBackground extends StatefulWidget {
 }
 
 class _MapVideoBackgroundState extends State<_MapVideoBackground> {
-  late final _controller = VideoPlayerController.asset(
-    'assets/videos/adventure_map_loop.mp4',
-  );
+  // Mixes with other audio: it's muted, but otherwise a game's sound takes
+  // audio focus from it and Android pauses the map mid-loop.
+  VideoPlayerController _controller = _newController();
   bool _ready = false;
+  bool _visible = true;
+
+  static VideoPlayerController _newController() => VideoPlayerController.asset(
+    'assets/videos/adventure_map_loop.mp4',
+    videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+  );
 
   @override
   void initState() {
     super.initState();
+    _initVideo();
+  }
+
+  // A game or sheet covering the map turns its tickers off; when the map
+  // shows again, make sure the loop is still running.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final visible = TickerMode.valuesOf(context).enabled;
+    if (visible && !_visible) _resume();
+    _visible = visible;
+  }
+
+  void _resume() {
+    final v = _controller.value;
+    if (v.isInitialized && !v.hasError) {
+      if (!v.isPlaying) _controller.play();
+      return;
+    }
+    // Broken while away (e.g. the decoder was reclaimed): start over, the
+    // still map showing until the new video is ready. (Runs from
+    // didChangeDependencies, which is followed by a build anyway.)
+    final old = _controller;
+    _controller = _newController();
+    _ready = false;
+    old.dispose();
     _initVideo();
   }
 
@@ -933,12 +981,13 @@ class _MapVideoBackgroundState extends State<_MapVideoBackground> {
   // `initialize()` throws there. Caught here so the still-image fallback
   // in `build()` renders instead of crashing the whole screen.
   Future<void> _initVideo() async {
+    final controller = _controller;
     try {
-      await _controller.initialize();
+      await controller.initialize();
     } catch (_) {
       return;
     }
-    if (!mounted) return;
+    if (!mounted || controller != _controller) return;
     await _controller.setLooping(true);
     await _controller.setVolume(0);
     await _controller.play();

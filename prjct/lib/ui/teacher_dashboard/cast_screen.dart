@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +16,7 @@ import '../core_modules/lesson_player_screen.dart';
 import '../theme/app_colors.dart';
 import 'cast_games.dart';
 import 'hot_seat_choral.dart';
+import '../widgets/app_orientation.dart';
 
 /// Classroom cast screen (mockup Figure 4.6, FR-6.4): forced 16:9
 /// landscape presentation view shown on the projector/TV under the
@@ -27,25 +30,88 @@ class CastScreen extends ConsumerStatefulWidget {
   ConsumerState<CastScreen> createState() => _CastScreenState();
 }
 
-class _CastScreenState extends ConsumerState<CastScreen> {
+class _CastScreenState extends ConsumerState<CastScreen>
+    with WidgetsBindingObserver {
   // Who's on the Hot Seat — games stay locked until someone is drawn.
   String? _hotSeatStudent;
   String? _hotSeatLearnerId;
 
+  static const _castChannel = MethodChannel('salamlearn/cast');
+
+  /// Android can tell whether the screen is mirrored; elsewhere (and in
+  /// tests) the presentation view just shows.
+  static final bool _canDetect = !kIsWeb && Platform.isAndroid;
+
+  /// Shown only while actually casting: null while that is being checked.
+  late bool? _casting = _canDetect ? null : true;
+
+  /// The Cast picker is open; check for a cast once the app is back.
+  bool _awaitingPicker = false;
+  int _checkN = 0;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // FR-6.4: presentation UI locks to landscape while casting.
     _lockLandscape();
+    // The hub's Cast button starts casting straight away (unless the screen
+    // is already mirrored); the in-screen button stays for reconnecting.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      if (_canDetect && await _isCasting() == true) {
+        if (mounted) setState(() => _casting = true);
+        return;
+      }
+      if (mounted) _openCastPicker();
+    });
   }
 
   @override
   void dispose() {
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
+    WidgetsBinding.instance.removeObserver(this);
+    restoreAppOrientations();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !_awaitingPicker) return;
+    _awaitingPicker = false;
+    _waitForCast();
+  }
+
+  /// null when the platform can't say.
+  Future<bool?> _isCasting() async {
+    try {
+      return await _castChannel.invokeMethod<bool>('isCasting');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Back from the picker: a chosen TV can take a few seconds to connect,
+  /// so keep checking briefly. No cast by then — leave; this screen is
+  /// only for when the class can see it.
+  Future<void> _waitForCast() async {
+    final n = ++_checkN;
+    for (var i = 0; i < 16; i++) {
+      final casting = await _isCasting();
+      if (!mounted || n != _checkN) return;
+      if (casting != false) {
+        setState(() => _casting = true);
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      if (!mounted || n != _checkN) return;
+    }
+    _leave();
+  }
+
+  void _leave() {
+    _checkN++;
+    restoreAppOrientations();
+    if (mounted) context.go('/teacher');
   }
 
   void _lockLandscape() => SystemChrome.setPreferredOrientations([
@@ -57,13 +123,17 @@ class _CastScreenState extends ConsumerState<CastScreen> {
   // select the classroom Chromecast/Android TV; the OS then mirrors the
   // device screen (this locked-landscape presentation view) to it.
   Future<void> _openCastPicker() async {
+    _awaitingPicker = _canDetect;
     try {
       await const AndroidIntent(
         action: 'android.settings.CAST_SETTINGS',
         flags: [Flag.FLAG_ACTIVITY_NEW_TASK],
       ).launch();
     } on PlatformException {
+      _awaitingPicker = false;
       if (!mounted) return;
+      // No picker to come back from: show the view rather than strand them.
+      setState(() => _casting = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cast isn\'t available on this device.')),
       );
@@ -77,10 +147,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
   // TV. Games reset orientation in their own dispose, so re-lock the cast's
   // landscape view once the class is back here.
   Future<void> _playGame(Lesson lesson, int destinationId) async {
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
+    await restoreAppOrientations();
     if (!mounted) return;
     final route = MaterialPageRoute<void>(
       builder: (playerContext) => LessonPlayerScreen(
@@ -110,10 +177,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
 
   // The Module Library/builder screens are portrait phone layouts.
   Future<void> _openModuleLibrary() async {
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
+    await restoreAppOrientations();
     if (!mounted) return;
     await context.push('/teacher/module-library');
     _lockLandscape();
@@ -139,10 +203,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.coral),
             onPressed: () {
-              SystemChrome.setPreferredOrientations([
-                DeviceOrientation.portraitUp,
-                DeviceOrientation.portraitDown,
-              ]);
+              restoreAppOrientations();
               Navigator.of(dialogContext).pop();
               context.go('/teacher');
             },
@@ -157,6 +218,18 @@ class _CastScreenState extends ConsumerState<CastScreen> {
   Widget build(BuildContext context) {
     final activeClass = ref.watch(activeClassNameProvider);
     final student = _hotSeatStudent;
+
+    // Not casting (yet): only a quiet "connecting" view, never the
+    // presentation itself.
+    if (_casting != true) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) _leave();
+        },
+        child: _Connecting(onCancel: _leave),
+      );
+    }
 
     return PopScope(
       canPop: false,
@@ -232,6 +305,44 @@ class _CastScreenState extends ConsumerState<CastScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Connecting extends StatelessWidget {
+  const _Connecting({required this.onCancel});
+
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0C1B23),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: AppColors.gold),
+            const SizedBox(height: 18),
+            const Text(
+              'Connecting to the classroom screen...',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: onCancel,
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
+          ],
         ),
       ),
     );

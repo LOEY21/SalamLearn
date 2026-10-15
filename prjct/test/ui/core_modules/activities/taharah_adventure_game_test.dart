@@ -42,19 +42,17 @@ void main() {
     ),
   );
 
-  test('the curriculum plays the whole wudhu once, in Cleanliness & Character',
-      () {
+  test('the curriculum teaches wudhu guided, then practises it unguided', () {
     final taharah = [
       for (final d in curriculum)
         for (final l in d.lessons)
           for (final a in l.activities)
-            if (a.type == ActivityType.taharahAdventure) (d, a),
+            if (a.type == ActivityType.taharahAdventure) a,
     ];
-    expect(taharah, hasLength(1));
-    final (dest, act) = taharah.single;
-    expect(dest.name, 'Cleanliness & Character');
-    expect(act.id, 'dest5-s4-act');
-    expect(act.taharahSession, TaharahSession.wudhu);
+    expect([for (final a in taharah) (a.id, a.taharahSession)], [
+      ('dest5-s4-act', TaharahSession.wudhu),
+      ('dest6-s3-act', TaharahSession.wudhuPractice),
+    ]);
   });
 
   testWidgets('Clean or Dirty: sort all six cards and finish', (tester) async {
@@ -123,8 +121,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 800));
       await tester.tap(find.byKey(const ValueKey('ta-w-play')));
       await tester.pump();
-      // Start button appears after the step tour, then a 4s countdown.
-      await tester.pump(const Duration(milliseconds: 5400));
+      // Every step is said in turn (each clip, or its 6s guard here with
+      // no audio plugin) before Start appears, then a 4s countdown.
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.byKey(const ValueKey('ta-w-start')), findsNothing);
+      for (var i = 0; i < 40; i++) {
+        if (find.byKey(const ValueKey('ta-w-start')).evaluate().isNotEmpty) {
+          break;
+        }
+        await tester.pump(const Duration(seconds: 1));
+      }
       await tester.pump(const Duration(milliseconds: 600));
       await tester.tap(find.textContaining('Wudhu').last);
       await tester.pump(const Duration(milliseconds: 3500));
@@ -150,4 +156,61 @@ void main() {
       expect(errors, 1);
     });
   }
+
+  testWidgets('wudhuPractice: no guide, all ten steps from memory', (
+    tester,
+  ) async {
+    int? errors;
+    await tester.pumpWidget(
+      host(TaharahSession.wudhuPractice, (_, _, e) => errors = e),
+    );
+    await tester.pump(const Duration(milliseconds: 1000));
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.tap(find.byKey(const ValueKey('ta-w-play')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump(const Duration(milliseconds: 600));
+    // No step tour on How to Play.
+    expect(find.text('Wash\nHands'), findsNothing);
+    await tester.tap(find.text('Start Wudhu').last);
+    await tester.pump(const Duration(milliseconds: 3500));
+    await tester.pump(const Duration(milliseconds: 700));
+
+    // The step card hides the step's name.
+    expect(find.text('Think & Tap!'), findsOneWidget);
+    expect(find.text('Wash Hands'), findsNothing);
+
+    Future<void> tapZone(String z) async {
+      final f = find.byKey(ValueKey('ta-zone-$z'));
+      final nudge = z.startsWith('face') ? const Offset(0, -30) : Offset.zero;
+      await tester.tapAt(tester.getCenter(f) + nudge);
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    await tapZone('head-1');
+    expect(find.textContaining("That's not the next step"), findsOneWidget);
+    expect(find.textContaining('Try tapping the'), findsNothing);
+    for (final z in [
+      'hands-8',
+      'mouth-11',
+      'nose-10',
+      'face-6',
+      'right_arm-7',
+      'left_arm-0',
+      'head-1',
+      'ears-2',
+      'right_foot-4',
+      'left_foot-5',
+    ]) {
+      await tapZone(z);
+      // Let the pose (and its close-up) finish before the next tap.
+      await tester.pump(const Duration(milliseconds: 5000));
+      await tester.pump(const Duration(milliseconds: 700));
+    }
+    await tester.pump(const Duration(milliseconds: 5300));
+    expect(find.text('Mumtaz!'), findsWidgets);
+    await tester.pump(const Duration(milliseconds: 2400));
+    await tester.tap(find.byKey(const ValueKey('ta-continue')));
+    expect(errors, 1);
+  });
 }

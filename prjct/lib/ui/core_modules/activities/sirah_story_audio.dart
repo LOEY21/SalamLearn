@@ -91,7 +91,7 @@ class SirahStoryAudio implements SirahAudioPlayback {
   Future<void> startMusic() async {
     try {
       await _music.setReleaseMode(ReleaseMode.loop);
-      await _music.setVolume(0.18);
+      await _music.setVolume(0.06);
       await _music.play(AssetSource('audio/sirah_story/ambient.mp3'));
     } catch (_) {
       // Sound must never prevent a child from playing the story.

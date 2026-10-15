@@ -37,17 +37,25 @@ enum FivePillarsMode { scenarios, ordering }
 enum GoodDeedTreeSession { rootsAndBranches, flowersAndFruits }
 
 /// Taharah Adventure's sessions: Clean or Dirty?, Wudhu Part 1 (steps 1-5),
-/// Wudhu Part 2 (steps 6-10) and the whole wudhu in one ([wudhu], steps
-/// 1-10) — the only one the curriculum plays now.
-enum TaharahSession { cleanOrDirty, wudhuPart1, wudhuPart2, wudhu }
+/// Wudhu Part 2 (steps 6-10), the whole guided wudhu ([wudhu], Session 1)
+/// and the same ten steps with no hints ([wudhuPractice], Session 2).
+enum TaharahSession { cleanOrDirty, wudhuPart1, wudhuPart2, wudhu, wudhuPractice }
 
 /// Label Maker's three sessions: My Home (Stage 2), My Body (Stage 3) and
 /// My Madrasah (Stage 5), ten Arabic words each.
 enum LabelMakerSession { home, body, classroom }
 
-/// Arabic Sound Detective's four sessions, following Magic Sand Tracer's
-/// letter groups: Alif-Kha, Dal-Dad, Ta-Qaf and Kaf-Ya.
-enum SoundDetectiveSession { alifToKha, dalToDad, taToQaf, kafToYa }
+/// Arabic Sound Detective's sessions, following Magic Sand Tracer's groups:
+/// the letters Alif-Kha, Dal-Dad, Ta-Qaf and Kaf-Ya, then the numbers 1-5
+/// and 6-10.
+enum SoundDetectiveSession {
+  alifToKha,
+  dalToDad,
+  taToQaf,
+  kafToYa,
+  oneToFive,
+  sixToTen,
+}
 
 enum DestinationState { completed, current, locked }
 
@@ -113,11 +121,15 @@ class GreetingQuestion {
     required this.scenarioImage,
     required this.choices,
     this.audioAsset,
+    this.prompt,
   });
 
   final String id;
   final String arabic;
   final String meaning;
+
+  /// Narration line shown over the scene (the story behind the greeting).
+  final String? prompt;
 
   /// Full asset path of the full-bleed scene behind the card.
   final String scenarioImage;
@@ -337,6 +349,7 @@ class CreationHuntSpot {
     this.label,
     this.group,
     this.alias = false,
+    this.segment = false,
   });
 
   final String id;
@@ -365,6 +378,11 @@ class CreationHuntSpot {
   /// fills the same single token.
   final String? group;
   final bool alias;
+
+  /// This alias is another piece of the same single object (one bend of
+  /// the winding river), not a second copy of it like the pine trees, so
+  /// the whole group is outlined together as one shape.
+  final bool segment;
 
   String get key => group ?? id;
   String get name => label ?? id;
@@ -443,6 +461,8 @@ class ClassroomHeroesQuestion {
     required this.correctText,
     required this.decoyText,
     required this.successFeedback,
+    this.objectImage,
+    this.objectEmoji,
   });
 
   final String scenarioImage;
@@ -450,6 +470,12 @@ class ClassroomHeroesQuestion {
   final String correctText;
   final String decoyText;
   final String successFeedback;
+
+  /// Vocabulary sessions (colors, shapes): the single object shown on the
+  /// classroom's chalkboard over the reused [scenarioImage]. [objectEmoji]
+  /// stands in until the object's art is bundled.
+  final String? objectImage;
+  final String? objectEmoji;
 }
 
 /// One session of Classroom Heroes — a single good-manners theme (respect,
@@ -470,7 +496,8 @@ class ClassroomHeroesSession {
     required this.questions,
   });
 
-  /// 1-4 — shown in the session card's badge.
+  /// 1-4 for the manners sessions, 5-8 for the colors and shapes ones —
+  /// picks the session's recordings in `classroomAudio`.
   final int number;
 
   /// e.g. "SESSION 1 · RESPECT" — the curtain's eyebrow line.

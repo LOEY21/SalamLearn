@@ -170,7 +170,7 @@ void main() {
       await tester.pump();
       expect(audio.taps, 0);
       await tester.tap(find.byKey(const Key('greeting-match-play-btn')));
-      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(seconds: 30));
       await tester.pump(const Duration(milliseconds: 700));
       await tester.tap(find.byKey(const Key('greeting-howto-play')));
       await tester.pump();
@@ -195,7 +195,7 @@ void main() {
       // Straight into the second activity's start screen.
       expect(find.byKey(const Key('greeting-match-play-btn')), findsOneWidget);
       await tester.tap(find.byKey(const Key('greeting-match-play-btn')));
-      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(seconds: 30));
       await tester.pump(const Duration(milliseconds: 700));
       await tester.tap(find.byKey(const Key('greeting-howto-play')));
       await tester.pump();

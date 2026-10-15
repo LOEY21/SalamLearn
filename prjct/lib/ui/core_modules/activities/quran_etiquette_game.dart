@@ -10,6 +10,8 @@ import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../widgets/arc_text_painter.dart';
 import 'bend_sprite.dart';
 import 'quran_etiquette_audio.dart';
+import '../../widgets/app_orientation.dart';
+import '../game_ui_audio.dart';
 
 /// The Qur'an Etiquette — pick the respectful choice in five scenes about
 /// listening to and handling the Qur'an. Built from the supplied
@@ -252,6 +254,7 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
     if (widget.audioEnabled) {
       _audio = QuranEtiquetteAudio();
       unawaited(_audio!.startMusic());
+      _sayTitle();
     }
     _clock = AnimationController(
       vsync: this,
@@ -283,10 +286,7 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
     _stopReveal();
     if (_audio != null) unawaited(_audio!.dispose());
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
+    restoreAppOrientations();
     _clock.dispose();
     super.dispose();
   }
@@ -297,6 +297,11 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
   // -------------------------------------------------------------------------
   // Flow
   // -------------------------------------------------------------------------
+
+  void _sayTitle() {
+    if (_audio == null) return;
+    unawaited(_audio!.play(QuranEtiquetteAudio.title, localized: false));
+  }
 
   void _wipe() {
     _curtainTimer?.cancel();
@@ -431,7 +436,11 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
   /// the Star Meter marks the socket accordingly.
   void _pick(bool good) {
     if (_answered || _missed || _narrating) return;
-    if (_audio != null) unawaited(_audio!.stopVoice());
+    if (_audio != null) {
+      unawaited(
+        good ? _audio!.play(QuranEtiquetteAudio.mumtaz) : _audio!.stopVoice(),
+      );
+    }
     if (good) {
       HapticFeedback.mediumImpact();
     } else {
@@ -447,6 +456,7 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
         _correct = math.min(_correct + 1, _items.length);
       } else {
         _errors += 1;
+        GameUiAudio.instance.wrong();
       }
     });
     _showcaseTimer?.cancel();
@@ -501,6 +511,7 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
       _narrating = false;
       _prevImage = null;
     });
+    _sayTitle();
   }
 
   void _replay() {

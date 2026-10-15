@@ -8,6 +8,8 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../widgets/arc_text_painter.dart';
 import 'classroom_heroes_audio.dart';
+import '../../widgets/app_orientation.dart';
+import '../game_ui_audio.dart';
 
 /// Classroom Heroes — pick the hero choice in three classroom scenarios.
 /// Ported 1:1 from the supplied "Classroom Heroes" design prototype: same
@@ -232,6 +234,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     if (widget.audioEnabled) {
       _audio = widget.audio ?? ClassroomHeroesAudio();
       unawaited(_audio!.startMusic());
+      _sayTitle();
     }
     // The prototype's stage is a 1600x900 landscape canvas — the app is
     // portrait-locked everywhere else, so this activity flips the device for
@@ -252,10 +255,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     _stopNarration();
     if (_audio != null) unawaited(_audio!.dispose());
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
+    restoreAppOrientations();
     _clock.dispose();
     super.dispose();
   }
@@ -395,6 +395,11 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     });
   }
 
+  void _sayTitle() {
+    if (_audio == null) return;
+    unawaited(_audio!.play(ClassroomHeroesAudio.title, localized: false));
+  }
+
   void _backToStart() {
     _curtainTimer?.cancel();
     _curtainMidTimer?.cancel();
@@ -413,11 +418,16 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       _finished = false;
       _results.clear();
     });
+    _sayTitle();
   }
 
   void _pick(bool good) {
     if (_answered || _swapping) return;
-    if (_audio != null) unawaited(_audio!.stopVoice());
+    if (_audio != null) {
+      unawaited(
+        good ? _audio!.play(ClassroomHeroesAudio.mumtaz) : _audio!.stopVoice(),
+      );
+    }
     if (good) {
       HapticFeedback.mediumImpact();
       setState(() {
@@ -446,6 +456,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
         _bandT0 = _now;
         _successT0 = _now;
         _errors += 1;
+        GameUiAudio.instance.wrong();
         _results.add(false);
       });
     }
@@ -709,11 +720,36 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     return Stack(
       children: [
         if (!_finished) _buildChrome(),
+        if (!_finished && (_q.objectImage ?? _q.objectEmoji) != null)
+          _buildObject(),
         if (_narrating && !_finished) _buildNarrationBar(),
         if (!_narrating && !_finished) _buildPanel(),
         if (_mumtaz) _buildMumtaz(),
         if (_finished) _buildFinish(),
       ],
+    );
+  }
+
+  /// A vocabulary question's object, on the title classroom's chalkboard.
+  Widget _buildObject() {
+    final emoji = Text(
+      _q.objectEmoji ?? '',
+      style: const TextStyle(fontSize: 210, height: 1),
+    );
+    return Positioned(
+      top: 130,
+      left: 0,
+      right: 0,
+      height: 320,
+      child: Center(
+        child: _q.objectImage == null
+            ? emoji
+            : Image.asset(
+                _q.objectImage!,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => emoji,
+              ),
+      ),
     );
   }
 

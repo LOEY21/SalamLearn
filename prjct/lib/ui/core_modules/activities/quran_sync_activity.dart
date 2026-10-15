@@ -48,20 +48,21 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
     super.initState();
     _correctOrder = _determineCorrectOrder();
     _placedStones = List<String?>.filled(_correctOrder.length, null);
-    
+
     _shuffledStones = List<String>.from(_correctOrder);
     // Shuffle the stepping stones so they are scattered
     _shuffledStones.shuffle();
 
-    _wobbleController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    )..addListener(() {
-        setState(() {
-          final t = _wobbleController.value;
-          _wobble = math.sin(t * math.pi * 5) * 8 * (1 - t);
+    _wobbleController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 500),
+        )..addListener(() {
+          setState(() {
+            final t = _wobbleController.value;
+            _wobble = math.sin(t * math.pi * 5) * 8 * (1 - t);
+          });
         });
-      });
 
     _pulseController = AnimationController(
       vsync: this,
@@ -86,7 +87,12 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
       return ["Bismillahir", "Rahmanir", "Raheem"];
     }
     if (id.contains('wake') || id.contains('ahyana')) {
-      return ["Alhamdu lillahil-ladhi", "ahyana ba'da", "ma amatana", "wa ilayhin-nushur"];
+      return [
+        "Alhamdu lillahil-ladhi",
+        "ahyana ba'da",
+        "ma amatana",
+        "wa ilayhin-nushur",
+      ];
     }
     if (id.contains('sleep') || id.contains('amutu')) {
       return ["Bismika", "Allahumma", "amutu", "wa ahya"];
@@ -98,7 +104,12 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
       return ["Alhamdu lillahil-ladhi", "at'amana", "wa saqana"];
     }
     if (id.contains('toilet-enter') || id.contains('khubuthi')) {
-      return ["Allahumma inni", "a'oodhu bika", "minal-khubuthi", "wal-khaba'ith"];
+      return [
+        "Allahumma inni",
+        "a'oodhu bika",
+        "minal-khubuthi",
+        "wal-khaba'ith",
+      ];
     }
     if (id.contains('toilet-leave') || id.contains('ghufranak')) {
       return ["Ghufranak"];
@@ -114,14 +125,14 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
 
   void _playFullAudio() {
     if (_playingAudio) return;
-    
+
     setState(() {
       _playingAudio = true;
       _highlightIndex = 0;
     });
 
     _playbackTimer?.cancel();
-    
+
     // SnackBar audio cue
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -136,7 +147,9 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
     );
 
     // Highlight each block step-by-step
-    _playbackTimer = Timer.periodic(const Duration(milliseconds: 1000), (timer) {
+    _playbackTimer = Timer.periodic(const Duration(milliseconds: 1000), (
+      timer,
+    ) {
       if (!mounted) return;
       if (_highlightIndex < _correctOrder.length - 1) {
         setState(() {
@@ -199,7 +212,10 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
         SnackBar(
           content: Text(
             '⚠️ "$stoneValue" does not belong in stepping stone #${slotIndex + 1}!',
-            style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
           ),
           duration: const Duration(milliseconds: 700),
           behavior: SnackBarBehavior.floating,
@@ -270,10 +286,16 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
             onTap: _playFullAudio,
             child: ScaleTransition(
               scale: Tween<double>(begin: 1.0, end: 1.04).animate(
-                CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+                CurvedAnimation(
+                  parent: _pulseController,
+                  curve: Curves.easeInOut,
+                ),
               ),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
@@ -283,7 +305,7 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
                       color: widget.color.withValues(alpha: 0.12),
                       blurRadius: 8,
                       offset: const Offset(0, 3),
-                    )
+                    ),
                   ],
                 ),
                 child: Row(
@@ -327,7 +349,8 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
                           final isHighlighted = _highlightIndex == index;
 
                           return DragTarget<String>(
-                            onAcceptWithDetails: (details) => _onStonePlaced(index, details.data),
+                            onAcceptWithDetails: (details) =>
+                                _onStonePlaced(index, details.data),
                             builder: (context, candidateData, rejectedData) {
                               final isHovering = candidateData.isNotEmpty;
                               return AnimatedContainer(
@@ -338,20 +361,25 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
                                   color: isHighlighted
                                       ? widget.color.withValues(alpha: 0.2)
                                       : isFilled
-                                          ? AppColors.adventureGreen.withValues(alpha: 0.12)
-                                          : isHovering
-                                              ? widget.color.withValues(alpha: 0.16)
-                                              : AppColors.goldTint,
+                                      ? AppColors.adventureGreen.withValues(
+                                          alpha: 0.12,
+                                        )
+                                      : isHovering
+                                      ? widget.color.withValues(alpha: 0.16)
+                                      : AppColors.goldTint,
                                   borderRadius: BorderRadius.circular(18),
                                   border: Border.all(
                                     color: isHighlighted
                                         ? widget.color
                                         : isFilled
-                                            ? AppColors.adventureGreen
-                                            : isHovering
-                                                ? widget.color
-                                                : AppColors.goldSoft,
-                                    width: isHighlighted || isHovering || isFilled ? 3 : 2,
+                                        ? AppColors.adventureGreen
+                                        : isHovering
+                                        ? widget.color
+                                        : AppColors.goldSoft,
+                                    width:
+                                        isHighlighted || isHovering || isFilled
+                                        ? 3
+                                        : 2,
                                   ),
                                 ),
                                 alignment: Alignment.center,
@@ -366,14 +394,17 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
                                         ),
                                       )
                                     : Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         children: [
                                           Text(
                                             'Stone #${index + 1}',
                                             style: TextStyle(
                                               fontSize: 12,
                                               fontWeight: FontWeight.w800,
-                                              color: widget.color.withValues(alpha: 0.65),
+                                              color: widget.color.withValues(
+                                                alpha: 0.65,
+                                              ),
                                             ),
                                           ),
                                           const SizedBox(height: 2),
@@ -389,7 +420,7 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
                           );
                         }),
                       ),
-                      
+
                       // Success Celebration Burst Lottie
                       if (_success)
                         Padding(
@@ -400,7 +431,8 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
                             child: Lottie.asset(
                               'assets/lottie/milestone_burst.json',
                               repeat: false,
-                              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                              errorBuilder: (_, _, _) =>
+                                  const SizedBox.shrink(),
                             ),
                           ),
                         ),
@@ -425,7 +457,7 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
                     color: Color(0x0C4A3A1E),
                     blurRadius: 6,
                     offset: Offset(0, 3),
-                  )
+                  ),
                 ],
               ),
               child: Column(
@@ -469,7 +501,10 @@ class _QuranSyncActivityState extends State<QuranSyncActivity>
                           color: Colors.transparent,
                           child: Transform.scale(
                             scale: 1.1,
-                            child: _StoneBlock(text: stone, color: widget.color),
+                            child: _StoneBlock(
+                              text: stone,
+                              color: widget.color,
+                            ),
                           ),
                         ),
                         childWhenDragging: Opacity(
@@ -516,7 +551,7 @@ class _StoneBlock extends StatelessWidget {
             color: Color(0x06000000),
             blurRadius: 4,
             offset: Offset(0, 2),
-          )
+          ),
         ],
       ),
       child: Text(

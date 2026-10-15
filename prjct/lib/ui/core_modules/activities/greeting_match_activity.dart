@@ -9,6 +9,8 @@ import 'package:flutter/services.dart';
 import '../../../data/models/curriculum/curriculum_models.dart';
 import 'greeting_match_audio.dart';
 import '../../widgets/arc_text_painter.dart';
+import '../../widgets/app_orientation.dart';
+import '../game_ui_audio.dart';
 
 enum _Screen { start, howTo, countdown, play, done }
 
@@ -34,6 +36,7 @@ class GreetingMatchActivity extends StatefulWidget {
     required this.onComplete,
     this.onEnding,
     this.onBack,
+    this.audio,
   });
 
   final GreetingMatchSession session;
@@ -44,6 +47,7 @@ class GreetingMatchActivity extends StatefulWidget {
   /// cue for its congratulations sound).
   final VoidCallback? onEnding;
   final VoidCallback? onBack;
+  final GreetingMatchAudio? audio;
 
   @override
   State<GreetingMatchActivity> createState() => _GreetingMatchActivityState();
@@ -69,10 +73,17 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
   Timer? _promptTimer;
   Timer? _revealTimer;
 
-  /// How to Play holds its Let's Play button back for 5 seconds so the
-  /// steps get read first.
+  /// How to Play holds its Let's Play button back until the instruction
+  /// audio has finished (and at least 5 seconds) so the steps get read first.
   static const _howToHold = Duration(seconds: 5);
+
+  /// If a voice line stalls (no audio output), the game moves on anyway.
+  static const _audioCap = Duration(seconds: 30);
+  Timer? _audioCapTimer;
   bool _howToReady = false;
+  bool _howToHeld = false;
+  bool _howToRead = false;
+  int _howToVisit = 0;
   Timer? _howToTimer;
 
   /// 3-2-1 before each round.
@@ -82,10 +93,17 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
   /// False while the scene is shown alone before the choices slide in.
   bool _revealed = false;
 
+  /// The choice being read out after the story, if any.
+  int? _speakingIdx;
+
+  /// Bumped by anything that should cut the choices' read-out short.
+  int _choiceRun = 0;
+
   late final AnimationController _wobbleController;
   late final AnimationController _idleController;
   late final AnimationController _cheerController;
-  final GreetingMatchAudio _audio = GreetingMatchAudio();
+  late final GreetingMatchAudio _audio;
+  bool _ownsAudio = false;
 
   List<GreetingQuestion> get _questions => widget.session.questions;
   GreetingQuestion get _question => _questions[_idx];
@@ -93,6 +111,12 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
   @override
   void initState() {
     super.initState();
+    if (widget.audio != null) {
+      _audio = widget.audio!;
+    } else {
+      _audio = GreetingMatchAudio();
+      _ownsAudio = true;
+    }
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -120,6 +144,7 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
       duration: const Duration(milliseconds: 900),
     );
     unawaited(_audio.startMusic());
+    unawaited(_audio.play([GreetingMatchAudio.title]));
   }
 
   @override
@@ -133,20 +158,20 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
   @override
   void dispose() {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
+    restoreAppOrientations();
     _wrongTimer?.cancel();
     _nextTimer?.cancel();
     _promptTimer?.cancel();
     _revealTimer?.cancel();
     _howToTimer?.cancel();
+    _audioCapTimer?.cancel();
     _countTimer?.cancel();
     _wobbleController.dispose();
     _idleController.dispose();
     _cheerController.dispose();
-    unawaited(_audio.dispose());
+    if (_ownsAudio) {
+      unawaited(_audio.dispose());
+    }
     super.dispose();
   }
 
@@ -161,14 +186,36 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
       _screen = _Screen.howTo;
       _howToReady = false;
     });
-    _howToTimer = Timer(_howToHold, () {
-      if (mounted) setState(() => _howToReady = true);
+    _howToHeld = false;
+    _howToRead = false;
+    final visit = ++_howToVisit;
+    _audio.play(GreetingMatchAudio.howTo).then((_) {
+      if (visit == _howToVisit) _howToAudioDone();
     });
+    _audioCapTimer?.cancel();
+    _audioCapTimer = Timer(_audioCap, _howToAudioDone);
+    _howToTimer = Timer(_howToHold, () {
+      _howToHeld = true;
+      _maybeHowToReady();
+    });
+  }
+
+  void _howToAudioDone() {
+    _howToRead = true;
+    _maybeHowToReady();
+  }
+
+  void _maybeHowToReady() {
+    if (mounted && _howToHeld && _howToRead && _screen == _Screen.howTo) {
+      setState(() => _howToReady = true);
+    }
   }
 
   void _backToStart() {
     _howToTimer?.cancel();
+    _audioCapTimer?.cancel();
     setState(() => _screen = _Screen.start);
+    unawaited(_audio.play([GreetingMatchAudio.title]));
   }
 
   void _startCountdown() {
@@ -178,6 +225,12 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
       _screen = _Screen.countdown;
       _count = 3;
     });
+    unawaited(
+      _audio.play([
+        GreetingMatchAudio.letsPlay,
+        GreetingMatchAudio.listenCarefully,
+      ]),
+    );
     _countTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return t.cancel();
       if (_count > 1) {
@@ -207,9 +260,8 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
   int get _correctCount => _results.where((r) => r).length;
   int get _errors => _results.where((r) => !r).length;
 
-  double get _accuracyPct => _results.isEmpty
-      ? 100.0
-      : _correctCount / _results.length * 100;
+  double get _accuracyPct =>
+      _results.isEmpty ? 100.0 : _correctCount / _results.length * 100;
 
   /// 3 stars for all correct, 2 from 60%, 1 for any correct, else 0.
   int get _starRating => _errors == 0
@@ -220,8 +272,7 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
       ? 1
       : 0;
 
-  void _finish() =>
-      widget.onComplete(widget.xp, _accuracyPct, _errors);
+  void _finish() => widget.onComplete(widget.xp, _accuracyPct, _errors);
 
   void _playAgain() {
     HapticFeedback.mediumImpact();
@@ -229,17 +280,70 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
     _openHowTo();
   }
 
-  /// Auto-plays the greeting once the new scene has faded in.
-  /// Shows the whole scene for 4 seconds (greeting auto-plays over it),
+  /// Auto-plays the scenario narration once the new scene has faded in.
+  /// Shows the whole scene (at least 4 seconds, until the narration ends),
   /// then slides in the title, stars, prompt card and choices.
   void _queuePrompt() {
     _promptTimer?.cancel();
     _revealTimer?.cancel();
-    setState(() => _revealed = false);
-    _promptTimer = Timer(const Duration(milliseconds: 450), _playPrompt);
-    _revealTimer = Timer(const Duration(seconds: 4), () {
-      if (mounted) setState(() => _revealed = true);
+    _audioCapTimer?.cancel();
+    _minShown = false;
+    _narrated = false;
+    _choiceRun++;
+    setState(() {
+      _revealed = false;
+      _speakingIdx = null;
     });
+    _promptTimer = Timer(
+      const Duration(milliseconds: 450),
+      () => unawaited(_narratePrompt()),
+    );
+    _revealTimer = Timer(const Duration(seconds: 4), () {
+      _minShown = true;
+      _maybeReveal();
+    });
+  }
+
+  bool _minShown = false;
+  bool _narrated = false;
+
+  Future<void> _narratePrompt() async {
+    final idx = _idx;
+    _audioCapTimer?.cancel();
+    _audioCapTimer = Timer(_audioCap, _narrationDone);
+    await _audio.play([_question.audioAsset]);
+    if (!mounted || idx != _idx) return;
+    _narrationDone();
+  }
+
+  void _narrationDone() {
+    _narrated = true;
+    _maybeReveal();
+  }
+
+  void _maybeReveal() {
+    if (mounted && _minShown && _narrated && !_revealed) {
+      setState(() => _revealed = true);
+      unawaited(_narrateChoices());
+    }
+  }
+
+  /// After the story, reads each choice once it has slid in, lifting the
+  /// one being read. A tap (or Play Audio) cuts it short.
+  Future<void> _narrateChoices() async {
+    final run = ++_choiceRun;
+    await Future<void>.delayed(const Duration(milliseconds: 550));
+    for (var i = 0; i < _question.choices.length; i++) {
+      if (!mounted || run != _choiceRun) return;
+      setState(() => _speakingIdx = i);
+      await _audio.play([_question.choices[i].audioAsset]);
+    }
+    if (mounted && run == _choiceRun) setState(() => _speakingIdx = null);
+  }
+
+  void _stopChoiceNarration() {
+    _choiceRun++;
+    if (_speakingIdx != null) setState(() => _speakingIdx = null);
   }
 
   Widget _reveal(Widget child, {required double dy}) {
@@ -262,15 +366,23 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
     );
   }
 
+  /// Play Audio: back to the whole scene alone while the story is read
+  /// again, then the choices slide back in and are read out.
   void _playPrompt() {
     if (!mounted) return;
-    unawaited(_audio.play([_question.audioAsset]));
+    _stopChoiceNarration();
+    if (_results.length > _idx) {
+      unawaited(_audio.play([_question.audioAsset]));
+      return;
+    }
+    _queuePrompt();
   }
 
   /// One tap per question: right = gold star, wrong = red star (the right
   /// answer is shown, then the game moves on — no retry).
   void _handleChoice(int i) {
     if (_results.length > _idx || !_revealed) return;
+    _stopChoiceNarration();
     final choice = _question.choices[i];
     if (choice.correct) {
       HapticFeedback.lightImpact();
@@ -285,10 +397,25 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
       } else {
         _cheerController.forward(from: 0);
       }
-      unawaited(_audio.play([choice.audioAsset, GreetingMatchAudio.mumtaz]));
-      _nextTimer = Timer(const Duration(milliseconds: 1600), _next);
+      final idx = _idx;
+      _nextTimer?.cancel();
+      if (choice.audioAsset != null) {
+        unawaited(() async {
+          await Future.wait([
+            _audio
+                .play([choice.audioAsset, GreetingMatchAudio.mumtaz])
+                .timeout(const Duration(seconds: 8), onTimeout: () {}),
+            Future<void>.delayed(const Duration(milliseconds: 1600)),
+          ]);
+          if (!mounted || idx != _idx) return;
+          _next();
+        }());
+      } else {
+        _nextTimer = Timer(const Duration(milliseconds: 1600), _next);
+      }
     } else {
       HapticFeedback.heavyImpact();
+      GameUiAudio.instance.wrong();
       final right = _question.choices.indexWhere((c) => c.correct);
       setState(() {
         _wrongIdx = i;
@@ -467,7 +594,8 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
           height: 400,
           child: Row(
             children: [
-              for (final (i, (icon, palette, title, text)) in steps.indexed) ...[
+              for (final (i, (icon, palette, title, text))
+                  in steps.indexed) ...[
                 if (i > 0) const SizedBox(width: 50),
                 Expanded(
                   child: _Enter(
@@ -738,6 +866,12 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
   void _toggleMuted() {
     setState(() => _muted = !_muted);
     unawaited(_audio.setMuted(_muted));
+    if (_muted) {
+      _narrated = true;
+      _maybeReveal();
+      _howToRead = true;
+      _maybeHowToReady();
+    }
   }
 
   /// Music note = sound on/off. Muted shows greyed out with a red slash.
@@ -768,9 +902,7 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
           child: _ImageButton(key: key, name: 'music', onTap: _toggleMuted),
         ),
         if (_muted)
-          IgnorePointer(
-            child: CustomPaint(painter: _MutedSlashPainter()),
-          ),
+          IgnorePointer(child: CustomPaint(painter: _MutedSlashPainter())),
       ],
     ),
   );
@@ -1065,7 +1197,8 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                             curve: Curves.easeOutBack,
                             child: GestureDetector(
                               key: const Key('greeting-match-play-btn'),
-                              onTapDown: (_) => setState(() => _playDown = true),
+                              onTapDown: (_) =>
+                                  setState(() => _playDown = true),
                               onTapUp: (_) {
                                 setState(() => _playDown = false);
                                 _startGame();
@@ -1148,24 +1281,29 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                           (canvasW - _StarsBar.widthFor(_questions.length)) /
                               2 -
                           46,
+                      // Held to the top band so the ribbon never dips into
+                      // the narration below it.
+                      height: 124,
                       child: Align(
                         alignment: Alignment.topLeft,
                         child: _reveal(
-                          _TitleBadge(title: widget.session.title),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.topLeft,
+                            child: _TitleBadge(title: widget.session.title),
+                          ),
                           dy: -0.4,
                         ),
                       ),
                     ),
                     Positioned(
-                      left: (canvasW - _StarsBar.widthFor(_questions.length)) / 2,
+                      left:
+                          (canvasW - _StarsBar.widthFor(_questions.length)) / 2,
                       top: 18,
                       width: _StarsBar.widthFor(_questions.length),
                       height: 92,
                       child: _reveal(
-                        _StarsBar(
-                          total: _questions.length,
-                          results: _results,
-                        ),
+                        _StarsBar(total: _questions.length, results: _results),
                         dy: -0.6,
                       ),
                     ),
@@ -1188,11 +1326,30 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                       child: _musicButton(const Key('greeting-music')),
                     ),
 
+                    // Narration line: the story behind this greeting.
+                    if (question.prompt != null)
+                      Positioned(
+                        left: 200,
+                        right: 200,
+                        top: 156,
+                        child: Center(
+                          child: AnimatedSwitcher(
+                            duration: MediaQuery.of(context).disableAnimations
+                                ? Duration.zero
+                                : const Duration(milliseconds: 400),
+                            child: _NarrationCaption(
+                              key: ValueKey(question.id),
+                              text: question.prompt!,
+                            ),
+                          ),
+                        ),
+                      ),
+
                     // "Mumtaz!" badge over the scene on a correct answer.
                     Positioned(
                       left: 0,
                       right: 0,
-                      top: 292,
+                      top: 350,
                       child: Center(
                         child: AnimatedBuilder(
                           animation: _cheerController,
@@ -1217,57 +1374,52 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                       ),
                     ),
 
-                    // Prompt card with the response buttons.
+                    // Prompt card: Play Audio beside the greeting, then the
+                    // response buttons. Kept low so the scene stays in view.
                     Positioned(
-                      left: 290,
-                      top: 484,
-                      width: 1290,
-                      height: 344,
+                      left: 250,
+                      top: 528,
+                      width: 1370,
+                      height: 300,
                       child: _reveal(
                         _PromptCard(
                           question: question,
+                          audioButton: _GlossyButton(
+                            key: const Key('greeting-play-audio'),
+                            palette: _Palette.blue,
+                            radius: 38,
+                            depth: 7,
+                            outline: Colors.white,
+                            onTap: _playPrompt,
+                            child: const _IconLabel(
+                              icon: Icons.volume_up_rounded,
+                              label: 'Play Audio',
+                              color: Colors.white,
+                            ),
+                          ),
                           buttons: [
                             for (var i = 0; i < question.choices.length; i++)
                               Transform.translate(
                                 offset: Offset(_wrongIdx == i ? _wobble : 0, 0),
-                                child: _ChoiceButton(
-                                  key: Key('greeting-choice-$i'),
-                                  choice: question.choices[i],
-                                  state: _correctIdx == i || _revealIdx == i
-                                      ? _ChoiceState.correct
-                                      : _wrongIdx == i
-                                      ? _ChoiceState.wrong
-                                      : _ChoiceState.idle,
-                                  onTap: () => _handleChoice(i),
+                                child: AnimatedScale(
+                                  scale: _speakingIdx == i ? 1.08 : 1,
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeOutBack,
+                                  child: _ChoiceButton(
+                                    key: Key('greeting-choice-$i'),
+                                    choice: question.choices[i],
+                                    state: _correctIdx == i || _revealIdx == i
+                                        ? _ChoiceState.correct
+                                        : _wrongIdx == i
+                                        ? _ChoiceState.wrong
+                                        : _ChoiceState.idle,
+                                    onTap: () => _handleChoice(i),
+                                  ),
                                 ),
                               ),
                           ],
                         ),
                         dy: 0.35,
-                      ),
-                    ),
-
-                    // Play Audio pill straddling the card's top edge.
-                    Positioned(
-                      left: (canvasW - 430) / 2,
-                      top: 424,
-                      width: 430,
-                      height: 96,
-                      child: _reveal(
-                        _GlossyButton(
-                          key: const Key('greeting-play-audio'),
-                          palette: _Palette.blue,
-                          radius: 48,
-                          depth: 8,
-                          outline: Colors.white,
-                          onTap: _playPrompt,
-                          child: const _IconLabel(
-                            icon: Icons.volume_up_rounded,
-                            label: 'Play Audio',
-                            color: Colors.white,
-                          ),
-                        ),
-                        dy: 1.2,
                       ),
                     ),
                   ],
@@ -1739,10 +1891,58 @@ class _StarImage extends StatelessWidget {
   }
 }
 
+class _NarrationCaption extends StatelessWidget {
+  const _NarrationCaption({super.key, required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('greeting-narration'),
+      // A subtitle strip, not a wall: narrow enough to leave the mascots'
+      // faces clear on either side.
+      constraints: const BoxConstraints(maxWidth: 1180),
+      padding: const EdgeInsets.fromLTRB(34, 12, 34, 14),
+      decoration: BoxDecoration(
+        color: const Color(0xF2FFFDF6),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: const Color(0xFFE9D3A0), width: 4),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x40000000),
+            blurRadius: 18,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontFamily: _kUiFont,
+          fontFamilyFallback: [_kArabicFont],
+          fontSize: 30,
+          height: 1.3,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF2E1D0B),
+        ),
+      ),
+    );
+  }
+}
+
 class _PromptCard extends StatelessWidget {
-  const _PromptCard({required this.question, required this.buttons});
+  const _PromptCard({
+    required this.question,
+    required this.audioButton,
+    required this.buttons,
+  });
 
   final GreetingQuestion question;
+  final Widget audioButton;
   final List<Widget> buttons;
 
   @override
@@ -1761,7 +1961,7 @@ class _PromptCard extends StatelessWidget {
       ),
       padding: const EdgeInsets.all(6),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(26, 46, 26, 24),
+        padding: const EdgeInsets.fromLTRB(28, 16, 28, 20),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             begin: Alignment.topCenter,
@@ -1773,35 +1973,54 @@ class _PromptCard extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Text(
-              question.arabic,
-              textDirection: TextDirection.rtl,
-              // ScheherazadeNew's harakat and descenders reach well past a
-              // ~1.0 line box; 1.65 keeps them off the meaning line below.
-              style: const TextStyle(
-                fontFamily: _kArabicFont,
-                fontSize: 54,
-                height: 1.65,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF2E1D0B),
+            // The greeting heard, on one line beside its replay button.
+            SizedBox(
+              height: 78,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(width: 280, child: audioButton),
+                  const SizedBox(width: 28),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            question.arabic,
+                            textDirection: TextDirection.rtl,
+                            style: const TextStyle(
+                              fontFamily: _kArabicFont,
+                              fontSize: 50,
+                              height: 1.5,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF2E1D0B),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Text(
+                            '(${question.meaning.tr})',
+                            style: const TextStyle(
+                              fontFamily: _kUiFont,
+                              fontSize: 30,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF6B4A22),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            Text(
-              '(${question.meaning.tr})',
-              style: const TextStyle(
-                fontFamily: _kUiFont,
-                fontSize: 30,
-                height: 1.1,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF6B4A22),
-              ),
-            ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             Expanded(
               child: Row(
                 children: [
                   for (var i = 0; i < buttons.length; i++) ...[
-                    if (i > 0) const SizedBox(width: 30),
+                    if (i > 0) const SizedBox(width: 36),
                     Expanded(child: buttons[i]),
                   ],
                 ],
@@ -1857,7 +2076,7 @@ class _ChoiceButton extends StatelessWidget {
             depth: 9,
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 2),
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Column(
@@ -2249,7 +2468,9 @@ class _ResultsCard extends StatelessWidget {
                   scale: 0.2,
                   curve: Curves.elasticOut,
                   child: Padding(
-                    key: Key('greeting-end-star-$i-${i < rating ? 'on' : 'off'}'),
+                    key: Key(
+                      'greeting-end-star-$i-${i < rating ? 'on' : 'off'}',
+                    ),
                     padding: EdgeInsets.fromLTRB(8, i == 1 ? 0 : 14, 8, 0),
                     child: _StarImage(
                       kind: i < rating ? _StarKind.gold : _StarKind.empty,
@@ -2310,10 +2531,7 @@ class _ResultsCard extends StatelessWidget {
                 return Row(
                   key: Key('greeting-end-row-$i'),
                   children: [
-                    _StarImage(
-                      kind: _StarKind.of(results, i),
-                      size: 38,
-                    ),
+                    _StarImage(kind: _StarKind.of(results, i), size: 38),
                     const SizedBox(width: 10),
                     Expanded(
                       child: FittedBox(

@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart' hide Text, TextSpan;
-import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter/scheduler.dart';
 
 /// Greeting Match's animated background — ports the project owner's
@@ -155,9 +154,30 @@ class _GreetingMatchLivingSceneState extends State<GreetingMatchLivingScene>
   // ---------------------------------------------------------------------
   List<Widget> _buildRays(Size size) {
     const rays = [
-      (left: 0.20, width: 0.11, height: 0.66, angle: 20.0, period: 7.0, delay: 0.0),
-      (left: 0.42, width: 0.09, height: 0.60, angle: 22.0, period: 9.0, delay: 2.0),
-      (left: 0.63, width: 0.12, height: 0.64, angle: 18.0, period: 8.0, delay: 4.0),
+      (
+        left: 0.20,
+        width: 0.11,
+        height: 0.66,
+        angle: 20.0,
+        period: 7.0,
+        delay: 0.0,
+      ),
+      (
+        left: 0.42,
+        width: 0.09,
+        height: 0.60,
+        angle: 22.0,
+        period: 9.0,
+        delay: 2.0,
+      ),
+      (
+        left: 0.63,
+        width: 0.12,
+        height: 0.64,
+        angle: 18.0,
+        period: 8.0,
+        delay: 4.0,
+      ),
     ];
     return rays.map((r) {
       final opacity = 0.12 + _peak(_phase(r.period, r.delay)) * 0.26;
@@ -230,15 +250,54 @@ class _GreetingMatchLivingSceneState extends State<GreetingMatchLivingScene>
     if (dt < 0 || dt > _startleFall) return 0;
     if (dt < _startleRise) return Curves.easeOut.transform(dt / _startleRise);
     if (dt < _startleHold) return 1;
-    return 1 - Curves.easeOut.transform((dt - _startleHold) / (_startleFall - _startleHold));
+    return 1 -
+        Curves.easeOut.transform(
+          (dt - _startleHold) / (_startleFall - _startleHold),
+        );
   }
 
   List<Widget> _buildBirds(Size size) {
     const birds = [
-      (top: 0.11, scale: 1.0, period: 28.0, delay: 0.0, reverse: false, bobPeriod: 2.4, flapPeriod: 0.5, dir: -1),
-      (top: 0.17, scale: 0.72, period: 34.0, delay: 6.0, reverse: false, bobPeriod: 2.8, flapPeriod: 0.6, dir: 1),
-      (top: 0.09, scale: 0.85, period: 31.0, delay: 14.0, reverse: true, bobPeriod: 2.6, flapPeriod: 0.55, dir: -1),
-      (top: 0.24, scale: 0.6, period: 40.0, delay: 24.0, reverse: false, bobPeriod: 3.0, flapPeriod: 0.65, dir: 1),
+      (
+        top: 0.11,
+        scale: 1.0,
+        period: 28.0,
+        delay: 0.0,
+        reverse: false,
+        bobPeriod: 2.4,
+        flapPeriod: 0.5,
+        dir: -1,
+      ),
+      (
+        top: 0.17,
+        scale: 0.72,
+        period: 34.0,
+        delay: 6.0,
+        reverse: false,
+        bobPeriod: 2.8,
+        flapPeriod: 0.6,
+        dir: 1,
+      ),
+      (
+        top: 0.09,
+        scale: 0.85,
+        period: 31.0,
+        delay: 14.0,
+        reverse: true,
+        bobPeriod: 2.6,
+        flapPeriod: 0.55,
+        dir: -1,
+      ),
+      (
+        top: 0.24,
+        scale: 0.6,
+        period: 40.0,
+        delay: 24.0,
+        reverse: false,
+        bobPeriod: 3.0,
+        flapPeriod: 0.65,
+        dir: 1,
+      ),
     ];
     final startle = _startleFactor();
     return birds.map((b) {
@@ -398,13 +457,69 @@ class _GreetingMatchLivingSceneState extends State<GreetingMatchLivingScene>
   // ---------------------------------------------------------------------
   List<Widget> _buildLeaves(Size size) {
     const leaves = [
-      (left: 0.12, period: 11.0, delay: 0.0, swayPeriod: 3.0, color1: 0xFFFFB300, color2: 0xFFF57C00, petal: false),
-      (left: 0.26, period: 9.0, delay: 3.0, swayPeriod: 2.4, color1: 0xFF9CCC65, color2: 0xFF558B2F, petal: false),
-      (left: 0.40, period: 13.0, delay: 6.0, swayPeriod: 3.4, color1: 0xFFF06292, color2: 0xFFF06292, petal: true),
-      (left: 0.56, period: 10.0, delay: 2.0, swayPeriod: 2.8, color1: 0xFFFFCA28, color2: 0xFFFB8C00, petal: false),
-      (left: 0.70, period: 12.0, delay: 8.0, swayPeriod: 3.1, color1: 0xFFAED581, color2: 0xFF689F38, petal: false),
-      (left: 0.83, period: 8.5, delay: 4.0, swayPeriod: 2.6, color1: 0xFFBA68C8, color2: 0xFFBA68C8, petal: true),
-      (left: 0.92, period: 14.0, delay: 10.0, swayPeriod: 3.3, color1: 0xFFFFB300, color2: 0xFFEF6C00, petal: false),
+      (
+        left: 0.12,
+        period: 11.0,
+        delay: 0.0,
+        swayPeriod: 3.0,
+        color1: 0xFFFFB300,
+        color2: 0xFFF57C00,
+        petal: false,
+      ),
+      (
+        left: 0.26,
+        period: 9.0,
+        delay: 3.0,
+        swayPeriod: 2.4,
+        color1: 0xFF9CCC65,
+        color2: 0xFF558B2F,
+        petal: false,
+      ),
+      (
+        left: 0.40,
+        period: 13.0,
+        delay: 6.0,
+        swayPeriod: 3.4,
+        color1: 0xFFF06292,
+        color2: 0xFFF06292,
+        petal: true,
+      ),
+      (
+        left: 0.56,
+        period: 10.0,
+        delay: 2.0,
+        swayPeriod: 2.8,
+        color1: 0xFFFFCA28,
+        color2: 0xFFFB8C00,
+        petal: false,
+      ),
+      (
+        left: 0.70,
+        period: 12.0,
+        delay: 8.0,
+        swayPeriod: 3.1,
+        color1: 0xFFAED581,
+        color2: 0xFF689F38,
+        petal: false,
+      ),
+      (
+        left: 0.83,
+        period: 8.5,
+        delay: 4.0,
+        swayPeriod: 2.6,
+        color1: 0xFFBA68C8,
+        color2: 0xFFBA68C8,
+        petal: true,
+      ),
+      (
+        left: 0.92,
+        period: 14.0,
+        delay: 10.0,
+        swayPeriod: 3.3,
+        color1: 0xFFFFB300,
+        color2: 0xFFEF6C00,
+        petal: false,
+      ),
     ];
     return leaves.map((l) {
       final fallPhase = _phase(l.period, l.delay);

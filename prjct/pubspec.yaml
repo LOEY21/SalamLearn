@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: ^3.12.2
@@ -106,12 +106,24 @@ flutter:
     - assets/audio/sand_tracer/stage2/
     - assets/audio/sand_tracer/stage3/
     - assets/audio/sand_tracer/stage4/
+    - assets/audio/sand_tracer/voice/
+    - assets/audio/sand_tracer/voice/fil/
     - assets/audio/sound_detective/
+    - assets/audio/sound_detective/fil/
+    - assets/audio/creation_hunt/
+    - assets/audio/creation_hunt/fil/
+    - assets/audio/five_pillars/
+    - assets/audio/five_pillars/fil/
+    - assets/audio/numbers/
     - assets/audio/greetings/
+    - assets/audio/greetings/fil/
     - assets/audio/good_deed_tree/
+    - assets/audio/good_deed_tree/fil/
     - assets/audio/label_maker/
     - assets/audio/label_maker/vocab/
+    - assets/audio/label_maker/fil/
     - assets/audio/ayah_builder/
+    - assets/audio/ayah_builder/fil/
     - assets/audio/ayah_builder/basmalah/
     - assets/audio/ayah_builder/fatihah1/
     - assets/audio/ayah_builder/fatihah2/
@@ -120,22 +132,28 @@ flutter:
     - assets/audio/ayah_builder/nas/
     - assets/audio/ayah_builder/kawthar/
     - assets/audio/taharah_wudhu/
+    - assets/audio/taharah_wudhu/fil/
     - assets/audio/game_ui/
     - assets/audio/classroom_heroes/
     - assets/audio/classroom_heroes/respect/
     - assets/audio/classroom_heroes/kindness/
     - assets/audio/classroom_heroes/responsibility/
     - assets/audio/classroom_heroes/teamwork/
+    - assets/audio/classroom_heroes/vocab/
+    - assets/audio/classroom_heroes/fil/
     - assets/audio/classroom_heroes/fil/respect/
     - assets/audio/classroom_heroes/fil/kindness/
     - assets/audio/classroom_heroes/fil/responsibility/
     - assets/audio/classroom_heroes/fil/teamwork/
+    - assets/audio/classroom_heroes/fil/vocab/
     - assets/audio/quran_etiquette/
     - assets/audio/quran_etiquette/masjid/
     - assets/audio/quran_etiquette/home/
+    - assets/audio/quran_etiquette/fil/
     - assets/audio/quran_etiquette/fil/masjid/
     - assets/audio/quran_etiquette/fil/home/
     - assets/audio/sirah_story/
+    - assets/audio/sirah_story/fil/
     - assets/audio/sirah_story/birth/
     - assets/audio/sirah_story/halimah/
     - assets/audio/sirah_story/family/
@@ -149,21 +167,33 @@ flutter:
     - assets/images/badges/
     - assets/images/game_icons/
     - assets/images/ayah_builder/
+    - assets/images/ayah_builder/fil/
     - assets/images/classroom_heroes/
+    - assets/images/classroom_heroes/fil/
     - assets/images/classroom_heroes/bg/
+    - assets/images/classroom_heroes/items/
     - assets/images/creation_hunt/
     - assets/images/five_pillars/
+    - assets/images/five_pillars/fil/
     - assets/images/good_deed_tree/
+    - assets/images/good_deed_tree/fil/
     - assets/images/greeting_match/
+    - assets/images/greeting_match/fil/
     - assets/images/greeting_match/scenes/
     - assets/images/label_maker/
+    - assets/images/label_maker/fil/
     - assets/images/quran_etiquette/
+    - assets/images/quran_etiquette/fil/
     - assets/images/sirah_story/
+    - assets/images/sirah_story/fil/
     - assets/images/sound_detective/
+    - assets/images/sound_detective/fil/
     - assets/images/taharah/
+    - assets/images/taharah/fil/
     - assets/images/mascot/boy/
     - assets/images/mascot/girl/
     - assets/images/tracing/
+    - assets/images/tracing/fil/
     - assets/images/wudhu/
     - assets/lottie/
     - assets/videos/

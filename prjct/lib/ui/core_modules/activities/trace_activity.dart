@@ -161,6 +161,7 @@ class _TraceActivityState extends State<TraceActivity>
     if (widget.audioEnabled) {
       _audio = TraceAudio();
       unawaited(_audio!.startMusic());
+      _voice([TraceAudio.title]);
     }
     _bgTicker.start();
     _loadLiveBg();
@@ -249,6 +250,10 @@ class _TraceActivityState extends State<TraceActivity>
     if (key == 'ى') key = 'ي';
     return letterTraces[key];
   }
+
+  /// A numbers session (١-١٠) rather than letters: same game, but the copy
+  /// says "number" and drops right to left, since numerals run left to right.
+  late final _numbers = RegExp('[٠-٩]').hasMatch(widget.cards.first.arabic);
 
   /// This session's letters, shown pressed into the start screen's sand.
   late final _sessionTraces = [for (final c in widget.cards) ?_traceOf(c)];
@@ -420,6 +425,7 @@ class _TraceActivityState extends State<TraceActivity>
 
   void _showVerdict(bool pass) {
     _verdictPass = pass;
+    if (pass) _voice([TraceAudio.praise]);
     _verdict.forward(from: 0);
   }
 
@@ -456,6 +462,7 @@ class _TraceActivityState extends State<TraceActivity>
       _click();
       setState(() => _screen = _Screen.done);
       _enter.forward(from: 0);
+      _voice([TraceAudio.complete]);
       widget.onEnding?.call();
     } else {
       setState(() {
@@ -498,6 +505,10 @@ class _TraceActivityState extends State<TraceActivity>
     } else {
       _click();
     }
+  }
+
+  void _voice(List<String> lines) {
+    if (_audio != null) unawaited(_audio!.say(lines));
   }
 
   void _toggleMusic() {
@@ -587,13 +598,28 @@ class _TraceActivityState extends State<TraceActivity>
       _playDown = false;
     });
     _enter.forward(from: 0);
-    _ready.forward(from: 0);
+    final audio = _audio;
+    if (audio == null) {
+      _ready.forward(from: 0);
+      return;
+    }
+    // Let's Go waits for the narration: the bar creeps most of the way while
+    // it plays, then fills once the last line ends.
+    _ready.value = 0;
+    _ready.animateTo(.9, duration: const Duration(seconds: 12));
+    unawaited(
+      audio.say(TraceAudio.howTo).then((done) {
+        if (done && mounted && _screen == _Screen.howTo) {
+          _ready.animateTo(1, duration: const Duration(milliseconds: 300));
+        }
+      }),
+    );
   }
 
   /// How to Play's Back: return to the start screen (not out of the lesson).
   void _toStart() {
     _click();
-    if (_audio != null) unawaited(_audio!.stopLetter());
+    _voice([TraceAudio.title]);
     _ready.stop();
     setState(() => _screen = _Screen.start);
     _idle.repeat();
@@ -604,6 +630,7 @@ class _TraceActivityState extends State<TraceActivity>
   /// letter's timer and the round clock start.
   void _go() {
     _click();
+    _voice([TraceAudio.letsGo]);
     _verdict.value = 0;
     _clock.value = 0;
     setState(() => _screen = _Screen.play);
@@ -1217,8 +1244,8 @@ class _TraceActivityState extends State<TraceActivity>
                                     // keep the natural descent for ج/ح/ع tails.
                                     textHeightBehavior:
                                         const TextHeightBehavior(
-                                      applyHeightToLastDescent: false,
-                                    ),
+                                          applyHeightToLastDescent: false,
+                                        ),
                                     style: const TextStyle(
                                       fontFamily: 'ScheherazadeNew',
                                       fontWeight: FontWeight.w700,
@@ -1235,7 +1262,7 @@ class _TraceActivityState extends State<TraceActivity>
                       ),
                       Semantics(
                         button: true,
-                        label: 'Hear the letter',
+                        label: _numbers ? 'Hear the number' : 'Hear the letter',
                         child: GestureDetector(
                           key: const ValueKey('trace-say'),
                           onTap: _say,
@@ -1410,7 +1437,15 @@ class _TraceActivityState extends State<TraceActivity>
                                     width: 6,
                                   ),
                                 ),
-                                child: Text('Go!', style: _f(96, Colors.white)),
+                                // One line: Tagalog "Tara!" is wider than
+                                // "Go!" and would wrap its "!" below.
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    'Go!',
+                                    style: _f(96, Colors.white),
+                                  ),
+                                ),
                               ),
                             )
                           : Stack(
@@ -1756,7 +1791,9 @@ class _TraceActivityState extends State<TraceActivity>
             step(
               1,
               'Listen',
-              'Tap the speaker to hear the letter.',
+              _numbers
+                  ? 'Tap the speaker to hear the number.'
+                  : 'Tap the speaker to hear the letter.',
               _speaker(120),
             ),
           ),
@@ -1772,7 +1809,9 @@ class _TraceActivityState extends State<TraceActivity>
             step(
               2,
               'Trace',
-              'Start at number 1 and follow the letter from right to left.',
+              _numbers
+                  ? 'Start at number 1 and follow the arrows.'
+                  : 'Start at number 1 and follow the letter from right to left.',
               ValueListenableBuilder<double>(
                 valueListenable: _bgT,
                 builder: (context, t, _) => CustomPaint(
@@ -1794,7 +1833,9 @@ class _TraceActivityState extends State<TraceActivity>
             step(
               3,
               'Check',
-              'Fill the whole letter, then tap Check my trace.',
+              _numbers
+                  ? 'Fill the whole number, then tap Check my trace.'
+                  : 'Fill the whole letter, then tap Check my trace.',
               _disc(Icons.check_rounded, 120),
             ),
           ),
@@ -1819,7 +1860,7 @@ class _TraceActivityState extends State<TraceActivity>
                   opacity: a,
                   child: ScaleTransition(scale: a, child: c),
                 ),
-                child: _ready.isCompleted
+                child: _ready.value == 1
                     ? _greenBtn(
                         'trace-go',
                         "Let's Go!",
@@ -1999,7 +2040,12 @@ class _TraceActivityState extends State<TraceActivity>
             0,
             .3,
             high
-                ? _plaque('Mumtaz!', 'You traced every letter!')
+                ? _plaque(
+                    'Mumtaz!',
+                    _numbers
+                        ? 'You traced every number!'
+                        : 'You traced every letter!',
+                  )
                 : _plaque('Good try!', 'Keep practising, you can do it!'),
           ),
         ),
@@ -2054,7 +2100,7 @@ class _TraceActivityState extends State<TraceActivity>
                       stat(
                         Icons.edit_rounded,
                         '${_scores.length}/${widget.cards.length}',
-                        'letters',
+                        _numbers ? 'numbers' : 'letters',
                       ),
                       stat(
                         Icons.track_changes_rounded,

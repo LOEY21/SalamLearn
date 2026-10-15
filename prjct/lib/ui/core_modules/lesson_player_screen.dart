@@ -143,11 +143,11 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         learnerId != null &&
             (widget.assignedByTeacher
                 ? ProgressRepository()
-                    .completedHomeworkLessonIds(learnerId)
-                    .contains(widget.lesson.id)
+                      .completedHomeworkLessonIds(learnerId)
+                      .contains(widget.lesson.id)
                 : ProgressRepository()
-                    .completedLessonIds(learnerId)
-                    .contains(widget.lesson.id));
+                      .completedLessonIds(learnerId)
+                      .contains(widget.lesson.id));
   }
 
   // Pause the stopwatch while backgrounded so time-on-task reflects actual

@@ -43,10 +43,18 @@ class _AuthChoiceScreenState extends ConsumerState<AuthChoiceScreen>
   // Drives the hub's own entrance stagger (badge/heading/cards) — plays
   // once on first mount only. Returning to the hub via the back button
   // relies purely on AnimatedSwitcher's fade/slide, not a replayed stagger.
-  late final AnimationController _hubC = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 900),
-  )..forward();
+  // Created eagerly: opened straight on sign-up, a lazy controller would
+  // first be built inside dispose(), which throws.
+  late final AnimationController _hubC;
+
+  @override
+  void initState() {
+    super.initState();
+    _hubC = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..forward();
+  }
 
   Animation<double> _in(
     AnimationController controller,

@@ -9,6 +9,8 @@ import '../../widgets/arc_text_painter.dart';
 import 'sirah_story_audio.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
+import '../../widgets/app_orientation.dart';
+import '../game_ui_audio.dart';
 
 /// Sirah Story — listen to the scene, tap the thing that lights up, answer
 /// the question it asks. Ported 1:1 from the supplied "Sirah Story" design
@@ -421,10 +423,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
     _openTimer?.cancel();
     _wipeMidTimer?.cancel();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
+    restoreAppOrientations();
     _card.dispose();
     _end.dispose();
     _clock.dispose();
@@ -595,7 +594,11 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   void _pickCorrect() {
     if (_answered) return;
     HapticFeedback.mediumImpact();
-    if (_audio != null) unawaited(_audio!.stopVoice());
+    // English has a second take to alternate with; Tagalog has one.
+    final second = _page.isOdd && AppTranslations.currentLanguageCode != 'fil';
+    if (_audio != null) {
+      unawaited(_audio!.play(second ? 'mumtaz2.mp3' : 'mumtaz.mp3'));
+    }
     setState(() {
       _answered = true;
       _results[_page] = true;
@@ -643,6 +646,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
       _results[_page] = false;
       _answered = true;
       _missed = true;
+      GameUiAudio.instance.wrong();
       _shake = true;
       _shakeT0 = _now;
     });
@@ -1067,6 +1071,9 @@ class _SirahStoryGameState extends State<SirahStoryGame>
               ),
             ),
           ),
+        // Above the narration card, which would otherwise cover it where the
+        // glowing layer sits near the card.
+        if (glowOn && !_opening) _buildTapHand(_rectOf(_p.glow).center),
         if (_showModal) _buildModal(),
         // Sits where the scene's own Back sits, so it reads as the same
         // button rather than a new one appearing.
@@ -1352,6 +1359,86 @@ class _SirahStoryGameState extends State<SirahStoryGame>
         ),
       ),
     ];
+  }
+
+  /// A hand tapping the lit layer: the "tap me" cue for learners who don't
+  /// read the glow alone as something to press. Taps pass through it.
+  Widget _buildTapHand(Offset at) {
+    const size = 120.0;
+    // Where the icon's fingertip sits in its box.
+    const tip = Offset(size * .42, size * .12);
+    final still = MediaQuery.of(context).disableAnimations;
+    // The star page waits for its star to finish rising.
+    final delay = _p.celebrate ? 1.6 : 0.5;
+    return Positioned(
+      left: at.dx - tip.dx,
+      top: at.dy - tip.dy,
+      width: size,
+      height: size,
+      child: IgnorePointer(
+        child: _fx((t) {
+          final e = t - _glowT0 - delay;
+          final show = Curves.easeOut.transform(_c01(e / .4));
+          // One press every 1.2s: dip, tap, lift, and a ring from the tip.
+          final ph = still ? 0.0 : (math.max(e, 0.0) % 1.2) / 1.2;
+          final press = math.sin(_c01(ph / .35) * math.pi);
+          final ring = _c01((ph - .25) / .6);
+          final r = 14 + 46 * ring;
+          return Opacity(
+            opacity: show,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                if (!still && ring > 0)
+                  Positioned(
+                    left: tip.dx - r,
+                    top: tip.dy - r,
+                    width: r * 2,
+                    height: r * 2,
+                    child: Opacity(
+                      opacity: (1 - ring) * .9,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFFFFE08A),
+                            width: 6,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                Transform.translate(
+                  offset: Offset(0, 12 * press),
+                  child: Transform.scale(
+                    scale: 1 - .1 * press,
+                    // Dark outline so the white hand still shows on light
+                    // art like the sheep's wool.
+                    child: Icon(
+                      Icons.touch_app_rounded,
+                      size: size,
+                      color: Colors.white,
+                      shadows: [
+                        for (var a = 0; a < 8; a++)
+                          Shadow(
+                            color: const Color(0xFF4A2E0E),
+                            offset: Offset.fromDirection(a * math.pi / 4, 3.5),
+                          ),
+                        const Shadow(
+                          color: Color(0x99000000),
+                          blurRadius: 12,
+                          offset: Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ),
+    );
   }
 
   /// Lit, and then steady — the glow marks the thing to tap, it does not keep

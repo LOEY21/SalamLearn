@@ -205,6 +205,8 @@ class DestinationLevelsSheet extends StatelessWidget {
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.88,
+              // Phone-width board on tablets instead of a full-width slab.
+              maxWidth: 640,
             ),
             // Same build as the bottom nav / QuestPanel: dark-wood frame,
             // parchment board, thin gold inner line.

@@ -1,4 +1,8 @@
+import 'dart:ui' show ImmutableBuffer;
+
 import 'package:flutter/material.dart' as m;
+import 'package:flutter/services.dart'
+    show AssetManifest, ByteData, PlatformAssetBundle, rootBundle;
 import 'package:hive/hive.dart';
 import '../../data/local/hive_boxes.dart';
 import 'filipino_strings.dart';
@@ -82,6 +86,11 @@ class AppTranslations {
       e.visitChildren(rebuild);
     }
 
+    // Button art is cached by path; drop it so the other language's
+    // version (see [LocalizedAssetBundle]) loads.
+    m.PaintingBinding.instance.imageCache
+      ..clear()
+      ..clearLiveImages();
     m.WidgetsBinding.instance.rootElement?.visitChildren(rebuild);
   }
 
@@ -96,6 +105,39 @@ class AppTranslations {
       return 'en';
     }
   }
+}
+
+/// Game buttons with English painted into the art have a Filipino copy at
+/// `<folder>/fil/<name>.png`; while the app is in Filipino this bundle
+/// serves that copy wherever the English one is asked for, so the games'
+/// own `Image.asset` calls need no change.
+class LocalizedAssetBundle extends PlatformAssetBundle {
+  static Set<String> _filAssets = const {};
+
+  /// Reads which Filipino copies exist. Run once before `runApp`.
+  static Future<void> init() async {
+    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    _filAssets = {
+      for (final a in manifest.listAssets())
+        if (a.contains('/fil/') && a.endsWith('.png')) a,
+    };
+  }
+
+  static String resolve(String key) {
+    // Also asked for root files like AssetManifest.bin — art only.
+    final i = key.lastIndexOf('/');
+    if (i < 0 || !key.endsWith('.png')) return key;
+    if (AppTranslations.currentLanguageCode != 'fil') return key;
+    final fil = '${key.substring(0, i)}/fil/${key.substring(i + 1)}';
+    return _filAssets.contains(fil) ? fil : key;
+  }
+
+  @override
+  Future<ByteData> load(String key) => super.load(resolve(key));
+
+  @override
+  Future<ImmutableBuffer> loadBuffer(String key) =>
+      super.loadBuffer(resolve(key));
 }
 
 /// A game voice clip in the learner's language: Tagalog recordings sit in

@@ -1315,11 +1315,13 @@ const String _kGreetAudio = 'audio/greetings';
 /// Greeting Match Session 1 (Stage 1): everyday greetings — morning,
 /// evening, meeting, welcoming and leaving a friend.
 const GreetingMatchSession greetingDailySession = GreetingMatchSession(
-  title: 'Session 1: Daily Greetings',
+  title: 'Greeting Match: Daily Life',
   subtitle: 'Learn everyday Islamic greetings with your friends.',
   questions: [
     GreetingQuestion(
       id: 'greet-daily-1',
+      prompt:
+          "It's early in the morning and Ahmad sees his friend. His friend says 'صَبَاحُ الْخَيْرِ' (Good Morning). How should Ahmad respond?",
       scenarioImage: '$_kGreetScenes/morning_greeting.jpg',
       audioAsset: '$_kGreetAudio/sabahul_khair.mp3',
       arabic: 'صَبَاحُ الْخَيْرِ',
@@ -1341,6 +1343,8 @@ const GreetingMatchSession greetingDailySession = GreetingMatchSession(
     ),
     GreetingQuestion(
       id: 'greet-daily-2',
+      prompt:
+          "The sun is setting and Amina meets her neighbor. Her neighbor says 'مَسَاءُ الْخَيْرِ' (Good Evening). How should Amina reply?",
       scenarioImage: '$_kGreetScenes/evening_greeting.jpg',
       audioAsset: '$_kGreetAudio/masaul_khair.mp3',
       arabic: 'مَسَاءُ الْخَيْرِ',
@@ -1362,6 +1366,8 @@ const GreetingMatchSession greetingDailySession = GreetingMatchSession(
     ),
     GreetingQuestion(
       id: 'greet-daily-3',
+      prompt:
+          "Ahmad meets his classmate at the park and asks 'كَيْفَ حَالُكَ؟' (How are you?). What is the best answer?",
       scenarioImage: '$_kGreetScenes/meeting_friend.jpg',
       audioAsset: '$_kGreetAudio/kaifa_haluk.mp3',
       arabic: 'كَيْفَ حَالُكَ؟',
@@ -1383,6 +1389,8 @@ const GreetingMatchSession greetingDailySession = GreetingMatchSession(
     ),
     GreetingQuestion(
       id: 'greet-daily-4',
+      prompt:
+          "A guest arrives at Amina's house. She greets them saying 'أَهْلًا وَسَهْلًا' (Welcome). How should the guest respond?",
       scenarioImage: '$_kGreetScenes/welcoming_guest.jpg',
       audioAsset: '$_kGreetAudio/ahlan_wa_sahlan.mp3',
       arabic: 'أَهْلًا وَسَهْلًا',
@@ -1404,6 +1412,8 @@ const GreetingMatchSession greetingDailySession = GreetingMatchSession(
     ),
     GreetingQuestion(
       id: 'greet-daily-5',
+      prompt:
+          "It is time to go home. Ahmad says 'إِلَى اللِّقَاءِ' (See you later) to his friends. What should they say back?",
       scenarioImage: '$_kGreetScenes/leaving_friend.jpg',
       audioAsset: '$_kGreetAudio/ilal_liqa.mp3',
       arabic: 'إِلَى اللِّقَاءِ',
@@ -1429,11 +1439,13 @@ const GreetingMatchSession greetingDailySession = GreetingMatchSession(
 /// Greeting Match Session 2 (Stage 2): classroom greetings and polite
 /// manners — thank you, sorry, excuse me, answering attendance.
 const GreetingMatchSession greetingMannersSession = GreetingMatchSession(
-  title: 'Session 2: Madrasah Manners',
+  title: 'Greeting Match: Classroom Manners',
   subtitle: 'Learn polite Islamic greetings and classroom manners.',
   questions: [
     GreetingQuestion(
       id: 'greet-manners-1',
+      prompt:
+          "The teacher enters the classroom and says 'السَّلَامُ عَلَيْكُمْ' (Peace be upon you). How should the students reply?",
       scenarioImage: '$_kGreetScenes/teacher_enters.jpg',
       audioAsset: '$_kGreetAudio/assalamu_alaykum.mp3',
       arabic: 'السَّلَامُ عَلَيْكُمْ',
@@ -1443,7 +1455,7 @@ const GreetingMatchSession greetingMannersSession = GreetingMatchSession(
           arabic: 'شُكْرًا',
           meaning: 'Thank you',
           correct: false,
-          audioAsset: '$_kGreetAudio/shukran.mp3',
+          audioAsset: '$_kGreetAudio/shukran_option.mp3',
         ),
         GreetingChoice(
           arabic: 'وَعَلَيْكُمُ السَّلَامُ',
@@ -1455,6 +1467,8 @@ const GreetingMatchSession greetingMannersSession = GreetingMatchSession(
     ),
     GreetingQuestion(
       id: 'greet-manners-2',
+      prompt:
+          "Amina borrows a pencil from her friend and says 'شُكْرًا' (Thank you). What should her friend say?",
       scenarioImage: '$_kGreetScenes/sharing_pencil.jpg',
       audioAsset: '$_kGreetAudio/shukran.mp3',
       arabic: 'شُكْرًا',
@@ -1476,6 +1490,8 @@ const GreetingMatchSession greetingMannersSession = GreetingMatchSession(
     ),
     GreetingQuestion(
       id: 'greet-manners-3',
+      prompt:
+          "Ahmad accidentally bumps into his classmate and says 'أَنَا آسِفٌ' (I am sorry). How should his classmate respond?",
       scenarioImage: '$_kGreetScenes/bumping_friend.jpg',
       audioAsset: '$_kGreetAudio/ana_asif.mp3',
       arabic: 'أَنَا آسِفٌ',
@@ -1497,6 +1513,8 @@ const GreetingMatchSession greetingMannersSession = GreetingMatchSession(
     ),
     GreetingQuestion(
       id: 'greet-manners-4',
+      prompt:
+          "Amina needs to pass by her classmates in the hallway and says 'سَمْحًا' (Excuse me). What should they reply?",
       scenarioImage: '$_kGreetScenes/passing_by.jpg',
       audioAsset: '$_kGreetAudio/samhan.mp3',
       arabic: 'سَمْحًا',
@@ -1518,6 +1536,8 @@ const GreetingMatchSession greetingMannersSession = GreetingMatchSession(
     ),
     GreetingQuestion(
       id: 'greet-manners-5',
+      prompt:
+          "The teacher is checking attendance and calls out 'أَحْمَد؟' (Ahmad?). How should Ahmad answer?",
       scenarioImage: '$_kGreetScenes/attendance_check.jpg',
       audioAsset: '$_kGreetAudio/calling_name.mp3',
       arabic: 'أَحْمَد؟',
@@ -3396,6 +3416,105 @@ const List<FlashCard> sandTracer4 = [
 // title and how-to screens -- only the scene changes.
 // ─────────────────────────────────────────────────────────────
 
+// Magic Sand Tracer's numbers sessions (Destinations 5 and 6): the Arabic
+// numerals 1-5 and 6-10, traced like the letters. Each card's last line is
+// the numeral the tracer looks up in `letterTraces`.
+const List<FlashCard> sandTracer5 = [
+  FlashCard(
+    id: 'st29',
+    audioAsset: 'assets/audio/numbers/wahid.mp3',
+    emoji: '1️⃣',
+    arabic: 'وَاحِد\n١',
+    translit: 'Wahid',
+    english: 'One — 1',
+    color: '#FDECC8',
+  ),
+  FlashCard(
+    id: 'st30',
+    audioAsset: 'assets/audio/numbers/ithnan.mp3',
+    emoji: '2️⃣',
+    arabic: 'اِثْنَان\n٢',
+    translit: 'Ithnan',
+    english: 'Two — 2',
+    color: '#FDDCCC',
+  ),
+  FlashCard(
+    id: 'st31',
+    audioAsset: 'assets/audio/numbers/thalathah.mp3',
+    emoji: '3️⃣',
+    arabic: 'ثَلَاثَة\n٣',
+    translit: 'Thalathah',
+    english: 'Three — 3',
+    color: '#DCF0E6',
+  ),
+  FlashCard(
+    id: 'st32',
+    audioAsset: 'assets/audio/numbers/arbaah.mp3',
+    emoji: '4️⃣',
+    arabic: 'أَرْبَعَة\n٤',
+    translit: "Arba'ah",
+    english: 'Four — 4',
+    color: '#E8E4FF',
+  ),
+  FlashCard(
+    id: 'st33',
+    audioAsset: 'assets/audio/numbers/khamsah.mp3',
+    emoji: '5️⃣',
+    arabic: 'خَمْسَة\n٥',
+    translit: 'Khamsah',
+    english: 'Five — 5',
+    color: '#E8F4FF',
+  ),
+];
+
+const List<FlashCard> sandTracer6 = [
+  FlashCard(
+    id: 'st34',
+    audioAsset: 'assets/audio/numbers/sittah.mp3',
+    emoji: '6️⃣',
+    arabic: 'سِتَّة\n٦',
+    translit: 'Sittah',
+    english: 'Six — 6',
+    color: '#FDECC8',
+  ),
+  FlashCard(
+    id: 'st35',
+    audioAsset: 'assets/audio/numbers/sabah.mp3',
+    emoji: '7️⃣',
+    arabic: 'سَبْعَة\n٧',
+    translit: "Sab'ah",
+    english: 'Seven — 7',
+    color: '#FDDCCC',
+  ),
+  FlashCard(
+    id: 'st36',
+    audioAsset: 'assets/audio/numbers/thamaniyah.mp3',
+    emoji: '8️⃣',
+    arabic: 'ثَمَانِيَة\n٨',
+    translit: 'Thamaniyah',
+    english: 'Eight — 8',
+    color: '#DCF0E6',
+  ),
+  FlashCard(
+    id: 'st37',
+    audioAsset: 'assets/audio/numbers/tisah.mp3',
+    emoji: '9️⃣',
+    arabic: 'تِسْعَة\n٩',
+    translit: "Tis'ah",
+    english: 'Nine — 9',
+    color: '#E8E4FF',
+  ),
+  FlashCard(
+    id: 'st38',
+    audioAsset: 'assets/audio/numbers/asharah.mp3',
+    emoji: '🔟',
+    arabic: 'عَشَرَة\n١٠',
+    translit: "'Asharah",
+    english: 'Ten — 10',
+    color: '#E8F4FF',
+  ),
+];
+
 const CreationHuntStage forestHuntStage = CreationHuntStage(
   name: 'The Forest',
   icon: '🌳',
@@ -3532,6 +3651,7 @@ const CreationHuntStage forestHuntStage = CreationHuntStage(
     CreationHuntSpot(
       id: 'river_waterfall',
       group: 'river',
+      segment: true,
       alias: true,
       isCreation: true,
       x: 0.500,
@@ -3545,6 +3665,7 @@ const CreationHuntStage forestHuntStage = CreationHuntStage(
     CreationHuntSpot(
       id: 'river_upper',
       group: 'river',
+      segment: true,
       alias: true,
       isCreation: true,
       x: 0.400,
@@ -3558,6 +3679,7 @@ const CreationHuntStage forestHuntStage = CreationHuntStage(
     CreationHuntSpot(
       id: 'river_middle',
       group: 'river',
+      segment: true,
       alias: true,
       isCreation: true,
       x: 0.545,
@@ -3571,6 +3693,7 @@ const CreationHuntStage forestHuntStage = CreationHuntStage(
     CreationHuntSpot(
       id: 'river_lower',
       group: 'river',
+      segment: true,
       alias: true,
       isCreation: true,
       x: 0.390,
@@ -3584,6 +3707,7 @@ const CreationHuntStage forestHuntStage = CreationHuntStage(
     CreationHuntSpot(
       id: 'river_bottom',
       group: 'river',
+      segment: true,
       alias: true,
       isCreation: true,
       x: 0.680,
@@ -4304,6 +4428,243 @@ const ClassroomHeroesSession heroesTeamworkSession = ClassroomHeroesSession(
   ],
 );
 
+// Classroom Heroes' vocabulary sessions -- Colors and Shapes, one of each
+// per stage (Part 1s in Destination 1, Part 2s in Destination 2). Same two-
+// card game as the manners sessions, but each question shows one object on
+// the title classroom's chalkboard instead of a full scene.
+const String _heroesBoard = 'assets/images/classroom_heroes/start_screen.png';
+const String _heroesItems = 'assets/images/classroom_heroes/items';
+
+const ClassroomHeroesSession heroesColors1Session = ClassroomHeroesSession(
+  number: 5,
+  tag: 'COLORS · PART 1',
+  title: 'Colors in Arabic',
+  blurb: 'Red · Blue · Yellow · Green · Orange',
+  retryText:
+      'That is not the right word. You don’t earn progress yet — '
+      'listen once more and pick again.',
+  finishText:
+      'You learned 5 colors in Arabic. Ahmad and Amina are proud of you!',
+  questions: [
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/red_apple_minimal.png',
+      objectEmoji: '🍎',
+      promptText: 'Ahmad is eating a tasty red apple. What is Red in Arabic?',
+      correctText: 'أَحْمَر (Ahmar)',
+      decoyText: 'أَزْرَق (Azraq)',
+      successFeedback: 'Mumtaz! Ahmar means Red.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/blue_sky_minimal.png',
+      objectEmoji: '🌤️',
+      promptText: 'Look at the clear blue sky. What is Blue in Arabic?',
+      correctText: 'أَزْرَق (Azraq)',
+      decoyText: 'أَصْفَر (Asfar)',
+      successFeedback: 'Mumtaz! Azraq means Blue.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/yellow_sun_minimal.png',
+      objectEmoji: '☀️',
+      promptText: 'The bright yellow sun is shining! What is Yellow in Arabic?',
+      correctText: 'أَصْفَر (Asfar)',
+      decoyText: 'أَخْضَر (Akhdar)',
+      successFeedback: 'Mumtaz! Asfar means Yellow.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/green_leaf_minimal.png',
+      objectEmoji: '🍃',
+      promptText: 'Amina found a pretty green leaf. What is Green in Arabic?',
+      correctText: 'أَخْضَر (Akhdar)',
+      decoyText: 'أَحْمَر (Ahmar)',
+      successFeedback: 'Mumtaz! Akhdar means Green.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/orange_shirt_minimal.png',
+      objectEmoji: '👕',
+      promptText:
+          'Ahmad is wearing a bright orange shirt. What is Orange in Arabic?',
+      correctText: 'بُرْتُقَالِيّ (Burtuqali)',
+      decoyText: 'بُنِّيّ (Bunni)',
+      successFeedback: 'Mumtaz! Burtuqali means Orange.',
+    ),
+  ],
+);
+
+const ClassroomHeroesSession heroesColors2Session = ClassroomHeroesSession(
+  number: 6,
+  tag: 'COLORS · PART 2',
+  title: 'Colors in Arabic',
+  blurb: 'Purple · Black · White · Brown',
+  retryText:
+      'That is not the right word. You don’t earn progress yet — '
+      'listen once more and pick again.',
+  finishText:
+      'You learned 4 colors in Arabic. Ahmad and Amina are proud of you!',
+  questions: [
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/purple_grape_minimal.png',
+      objectEmoji: '🍇',
+      promptText:
+          'Amina picked a bunch of purple grapes. What is Purple in Arabic?',
+      correctText: 'بَنَفْسَجِيّ (Banafsaji)',
+      decoyText: 'أَسْوَد (Aswad)',
+      successFeedback: 'Mumtaz! Banafsaji means Purple.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/black_night_minimal.png',
+      objectEmoji: '🌑',
+      promptText:
+          'The night sky is very dark and black. What is Black in Arabic?',
+      correctText: 'أَسْوَد (Aswad)',
+      decoyText: 'أَبْيَض (Abyad)',
+      successFeedback: 'Mumtaz! Aswad means Black.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/white_cloud_minimal.png',
+      objectEmoji: '☁️',
+      promptText:
+          'The fluffy clouds are clean and white. What is White in Arabic?',
+      correctText: 'أَبْيَض (Abyad)',
+      decoyText: 'أَسْوَد (Aswad)',
+      successFeedback: 'Mumtaz! Abyad means White.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/brown_log_minimal.png',
+      objectEmoji: '🪵',
+      promptText: 'The strong tree trunk is brown. What is Brown in Arabic?',
+      correctText: 'بُنِّيّ (Bunni)',
+      decoyText: 'بَنَفْسَجِيّ (Banafsaji)',
+      successFeedback: 'Mumtaz! Bunni means Brown.',
+    ),
+  ],
+);
+
+const ClassroomHeroesSession heroesShapes1Session = ClassroomHeroesSession(
+  number: 7,
+  tag: 'SHAPES · PART 1',
+  title: 'Shapes in Arabic',
+  blurb: 'Circle · Square · Triangle · Rectangle · Star',
+  retryText:
+      'That is not the right word. You don’t earn progress yet — '
+      'listen once more and pick again.',
+  finishText:
+      'You learned 5 shapes in Arabic. Ahmad and Amina are proud of you!',
+  questions: [
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/ball_circle_minimal.png',
+      objectEmoji: '⚽',
+      promptText:
+          'Ahmad is bouncing a ball that is a perfect circle. What is a Circle in Arabic?',
+      correctText: "دَائِرَة (Da'irah)",
+      decoyText: "مُرَبَّع (Murabba')",
+      successFeedback: "Mumtaz! Da'irah means Circle.",
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/block_square_minimal.png',
+      objectEmoji: '🟧',
+      promptText:
+          'Amina is building with a square block. What is a Square in Arabic?',
+      correctText: "مُرَبَّع (Murabba')",
+      decoyText: 'مُثَلَّث (Muthallath)',
+      successFeedback: "Mumtaz! Murabba' means Square.",
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/tent_triangle_minimal.png',
+      objectEmoji: '⛺',
+      promptText:
+          'Look at this triangular camping tent! What is a Triangle in Arabic?',
+      correctText: 'مُثَلَّث (Muthallath)',
+      decoyText: "دَائِرَة (Da'irah)",
+      successFeedback: 'Mumtaz! Muthallath means Triangle.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/door_rectangle_minimal.png',
+      objectEmoji: '🚪',
+      promptText:
+          'The tall classroom door is a rectangle. What is a Rectangle in Arabic?',
+      correctText: 'مُسْتَطِيل (Mustatil)',
+      decoyText: 'نَجْمَة (Najmah)',
+      successFeedback: 'Mumtaz! Mustatil means Rectangle.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/star_minimal.png',
+      objectEmoji: '⭐',
+      promptText:
+          'There is a bright, glowing star in the sky. What is a Star in Arabic?',
+      correctText: 'نَجْمَة (Najmah)',
+      decoyText: 'هِلَال (Hilal)',
+      successFeedback: 'Mumtaz! Najmah means Star.',
+    ),
+  ],
+);
+
+const ClassroomHeroesSession heroesShapes2Session = ClassroomHeroesSession(
+  number: 8,
+  tag: 'SHAPES · PART 2',
+  title: 'Shapes in Arabic',
+  blurb: 'Heart · Diamond · Crescent · Oval',
+  retryText:
+      'That is not the right word. You don’t earn progress yet — '
+      'listen once more and pick again.',
+  finishText:
+      'You learned 4 shapes in Arabic. Ahmad and Amina are proud of you!',
+  questions: [
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/heart_minimal.png',
+      objectEmoji: '❤️',
+      promptText:
+          'Amina drew a red heart shape to show love. What is a Heart in Arabic?',
+      correctText: 'قَلْب (Qalb)',
+      decoyText: "مُعَيَّن (Mu'ayyan)",
+      successFeedback: 'Mumtaz! Qalb means Heart.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/kite_diamond_minimal.png',
+      objectEmoji: '🪁',
+      promptText:
+          'Ahmad is flying a diamond shaped kite in the park. What is a Diamond in Arabic?',
+      correctText: "مُعَيَّن (Mu'ayyan)",
+      decoyText: 'بَيْضَوِيّ (Baydawi)',
+      successFeedback: "Mumtaz! Mu'ayyan means Diamond.",
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/moon_crescent_minimal.png',
+      objectEmoji: '🌙',
+      promptText:
+          'The moon looks like a smiling crescent tonight. What is a Crescent in Arabic?',
+      correctText: 'هِلَال (Hilal)',
+      decoyText: 'قَلْب (Qalb)',
+      successFeedback: 'Mumtaz! Hilal means Crescent.',
+    ),
+    ClassroomHeroesQuestion(
+      scenarioImage: _heroesBoard,
+      objectImage: '$_heroesItems/egg_oval_minimal.png',
+      objectEmoji: '🥚',
+      promptText: 'The bird laid a small oval egg. What is an Oval in Arabic?',
+      correctText: 'بَيْضَوِيّ (Baydawi)',
+      decoyText: 'مُسْتَطِيل (Mustatil)',
+      successFeedback: 'Mumtaz! Baydawi means Oval.',
+    ),
+  ],
+);
+
 // ─────────────────────────────────────────────────────────────
 // THE QUR'AN ETIQUETTE
 // Ported 1:1 from the supplied "Qur'an Etiquette" prototype (v2): both
@@ -4468,6 +4829,11 @@ const List<QuranEtiquetteSession> etiquetteSessions = [
 // FULL CURRICULUM ARRAY -- Journey Map (7 stages, 38 sessions)
 // ─────────────────────────────────────────────────────────────
 
+/// Classroom Heroes' Colors and Shapes lessons are temporarily hidden from
+/// the curriculum (their sessions below stay intact). Flip back to `true`
+/// to restore them.
+const bool kHeroesVocabEnabled = false;
+
 const List<Destination> curriculum = [
   Destination(
     id: 1,
@@ -4482,42 +4848,6 @@ const List<Destination> curriculum = [
         'Meet your Madrasah family, learn Arabic greetings, and take your first steps into Islamic learning.',
     state: DestinationState.completed,
     lessons: [
-      Lesson(
-        id: 'dest1-s1',
-        title: 'The Greeting Match - Session 1',
-        titleAr: 'لُعْبَة التَّحِيَّة 1',
-        icon: '👋',
-        color: '#EF9F27',
-        xp: 20,
-        activities: [
-          Activity(
-            id: 'dest1-s1-act',
-            type: ActivityType.pronounce,
-            title: 'The Greeting Match',
-            icon: '👋',
-            xp: 20,
-            greetingSession: greetingDailySession,
-          ),
-        ],
-      ),
-      Lesson(
-        id: 'dest1-s2',
-        title: "Allah's Creation Hunt - Session 1 (Forest)",
-        titleAr: 'مُطَارَدَةُ خَلْقِ اللّٰه 1 (الغَابَة)',
-        icon: '🌳',
-        color: '#5B9A1E',
-        xp: 30,
-        activities: [
-          Activity(
-            id: 'dest1-s2-act',
-            type: ActivityType.creationHunt,
-            title: "Allah's Creation Hunt (Forest)",
-            icon: '🌳',
-            xp: 30,
-            huntStage: forestHuntStage,
-          ),
-        ],
-      ),
       Lesson(
         id: 'dest1-s3',
         title: 'Magic Sand Tracer - Session 1 (Alif to Kha)',
@@ -4555,6 +4885,42 @@ const List<Destination> curriculum = [
         ],
       ),
       Lesson(
+        id: 'dest1-s1',
+        title: 'The Greeting Match - Session 1',
+        titleAr: 'لُعْبَة التَّحِيَّة 1',
+        icon: '👋',
+        color: '#EF9F27',
+        xp: 20,
+        activities: [
+          Activity(
+            id: 'dest1-s1-act',
+            type: ActivityType.pronounce,
+            title: 'The Greeting Match',
+            icon: '👋',
+            xp: 20,
+            greetingSession: greetingDailySession,
+          ),
+        ],
+      ),
+      Lesson(
+        id: 'dest1-s2',
+        title: "Allah's Creation Hunt - Session 1 (Forest)",
+        titleAr: 'مُطَارَدَةُ خَلْقِ اللّٰه 1 (الغَابَة)',
+        icon: '🌳',
+        color: '#5B9A1E',
+        xp: 30,
+        activities: [
+          Activity(
+            id: 'dest1-s2-act',
+            type: ActivityType.creationHunt,
+            title: "Allah's Creation Hunt (Forest)",
+            icon: '🌳',
+            xp: 30,
+            huntStage: forestHuntStage,
+          ),
+        ],
+      ),
+      Lesson(
         id: 'dest1-s5',
         title: "The Qur'an Etiquette - Session 1",
         titleAr: 'آدَابُ القُرْآن 1',
@@ -4572,6 +4938,44 @@ const List<Destination> curriculum = [
           ),
         ],
       ),
+      if (kHeroesVocabEnabled)
+        Lesson(
+          id: 'dest1-s6',
+          title: 'Classroom Heroes - Colors (Part 1)',
+          titleAr: 'أَبْطَالُ الصَّفّ (الأَلْوَان 1)',
+          icon: '🎨',
+          color: '#D85A30',
+          xp: 30,
+          activities: [
+            Activity(
+              id: 'dest1-s6-act',
+              type: ActivityType.classroomHeroes,
+              title: 'Classroom Heroes (Colors 1)',
+              icon: '🎨',
+              xp: 30,
+              heroesSession: heroesColors1Session,
+            ),
+          ],
+        ),
+      if (kHeroesVocabEnabled)
+        Lesson(
+          id: 'dest1-s7',
+          title: 'Classroom Heroes - Shapes (Part 1)',
+          titleAr: 'أَبْطَالُ الصَّفّ (الأَشْكَال 1)',
+          icon: '🔺',
+          color: '#D85A30',
+          xp: 30,
+          activities: [
+            Activity(
+              id: 'dest1-s7-act',
+              type: ActivityType.classroomHeroes,
+              title: 'Classroom Heroes (Shapes 1)',
+              icon: '🔺',
+              xp: 30,
+              heroesSession: heroesShapes1Session,
+            ),
+          ],
+        ),
     ],
   ),
 
@@ -4588,6 +4992,42 @@ const List<Destination> curriculum = [
         "Discover Allah's creation in the sky, meet new letters, and build your first Ayah.",
     state: DestinationState.current,
     lessons: [
+      Lesson(
+        id: 'dest2-s4',
+        title: 'Magic Sand Tracer - Session 2 (Dal to Sad)',
+        titleAr: 'تَتَبُّعُ الرَّمْل السِّحْرِيّ 2',
+        icon: '✍️',
+        color: '#0F6E56',
+        xp: 20,
+        activities: [
+          Activity(
+            id: 'dest2-s4-act',
+            type: ActivityType.trace,
+            title: 'Magic Sand Tracer (Dal to Sad)',
+            icon: '✍️',
+            xp: 20,
+            cards: sandTracer2,
+          ),
+        ],
+      ),
+      Lesson(
+        id: 'dest2-s5',
+        title: 'Arabic Sound Detective - Session 2',
+        titleAr: 'مُحَقِّقُ الأَصْوَاتِ العَرَبِيَّة 2',
+        icon: '🎈',
+        color: '#D85A30',
+        xp: 30,
+        activities: [
+          Activity(
+            id: 'dest2-s5-act',
+            type: ActivityType.soundDetective,
+            title: 'Arabic Sound Detective',
+            icon: '🎈',
+            xp: 30,
+            soundSession: SoundDetectiveSession.dalToDad,
+          ),
+        ],
+      ),
       Lesson(
         id: 'dest2-s1',
         title: 'The Greeting Match - Session 2',
@@ -4643,42 +5083,6 @@ const List<Destination> curriculum = [
         ],
       ),
       Lesson(
-        id: 'dest2-s4',
-        title: 'Magic Sand Tracer - Session 2 (Dal to Sad)',
-        titleAr: 'تَتَبُّعُ الرَّمْل السِّحْرِيّ 2',
-        icon: '✍️',
-        color: '#0F6E56',
-        xp: 20,
-        activities: [
-          Activity(
-            id: 'dest2-s4-act',
-            type: ActivityType.trace,
-            title: 'Magic Sand Tracer (Dal to Sad)',
-            icon: '✍️',
-            xp: 20,
-            cards: sandTracer2,
-          ),
-        ],
-      ),
-      Lesson(
-        id: 'dest2-s5',
-        title: 'Arabic Sound Detective - Session 2',
-        titleAr: 'مُحَقِّقُ الأَصْوَاتِ العَرَبِيَّة 2',
-        icon: '🎈',
-        color: '#D85A30',
-        xp: 30,
-        activities: [
-          Activity(
-            id: 'dest2-s5-act',
-            type: ActivityType.soundDetective,
-            title: 'Arabic Sound Detective',
-            icon: '🎈',
-            xp: 30,
-            soundSession: SoundDetectiveSession.dalToDad,
-          ),
-        ],
-      ),
-      Lesson(
         id: 'dest2-s6',
         title: 'Ayah Builder - Session 1 (Basmalah)',
         titleAr: 'بِنَاءُ الْآيَةِ 1 (البَسْمَلَة)',
@@ -4696,6 +5100,44 @@ const List<Destination> curriculum = [
           ),
         ],
       ),
+      if (kHeroesVocabEnabled)
+        Lesson(
+          id: 'dest2-s7',
+          title: 'Classroom Heroes - Colors (Part 2)',
+          titleAr: 'أَبْطَالُ الصَّفّ (الأَلْوَان 2)',
+          icon: '🎨',
+          color: '#D85A30',
+          xp: 30,
+          activities: [
+            Activity(
+              id: 'dest2-s7-act',
+              type: ActivityType.classroomHeroes,
+              title: 'Classroom Heroes (Colors 2)',
+              icon: '🎨',
+              xp: 30,
+              heroesSession: heroesColors2Session,
+            ),
+          ],
+        ),
+      if (kHeroesVocabEnabled)
+        Lesson(
+          id: 'dest2-s8',
+          title: 'Classroom Heroes - Shapes (Part 2)',
+          titleAr: 'أَبْطَالُ الصَّفّ (الأَشْكَال 2)',
+          icon: '🔺',
+          color: '#D85A30',
+          xp: 30,
+          activities: [
+            Activity(
+              id: 'dest2-s8-act',
+              type: ActivityType.classroomHeroes,
+              title: 'Classroom Heroes (Shapes 2)',
+              icon: '🔺',
+              xp: 30,
+              heroesSession: heroesShapes2Session,
+            ),
+          ],
+        ),
     ],
   ),
 
@@ -4712,6 +5154,42 @@ const List<Destination> curriculum = [
         "Grow in faith and vocabulary through Qur'an etiquette, body-part words, and daily Ayahs.",
     state: DestinationState.locked,
     lessons: [
+      Lesson(
+        id: 'dest3-s4',
+        title: 'Magic Sand Tracer - Session 3 (Dad to Qaf)',
+        titleAr: 'تَتَبُّعُ الرَّمْل السِّحْرِيّ 3',
+        icon: '✍️',
+        color: '#0F6E56',
+        xp: 20,
+        activities: [
+          Activity(
+            id: 'dest3-s4-act',
+            type: ActivityType.trace,
+            title: 'Magic Sand Tracer (Dad to Qaf)',
+            icon: '✍️',
+            xp: 20,
+            cards: sandTracer3,
+          ),
+        ],
+      ),
+      Lesson(
+        id: 'dest3-s5',
+        title: 'Arabic Sound Detective - Session 3',
+        titleAr: 'مُحَقِّقُ الأَصْوَاتِ العَرَبِيَّة 3',
+        icon: '🎈',
+        color: '#D85A30',
+        xp: 30,
+        activities: [
+          Activity(
+            id: 'dest3-s5-act',
+            type: ActivityType.soundDetective,
+            title: 'Arabic Sound Detective',
+            icon: '🎈',
+            xp: 30,
+            soundSession: SoundDetectiveSession.taToQaf,
+          ),
+        ],
+      ),
       Lesson(
         id: 'dest3-s1',
         title: "The Qur'an Etiquette - Session 2",
@@ -4767,42 +5245,6 @@ const List<Destination> curriculum = [
         ],
       ),
       Lesson(
-        id: 'dest3-s4',
-        title: 'Magic Sand Tracer - Session 3 (Dad to Qaf)',
-        titleAr: 'تَتَبُّعُ الرَّمْل السِّحْرِيّ 3',
-        icon: '✍️',
-        color: '#0F6E56',
-        xp: 20,
-        activities: [
-          Activity(
-            id: 'dest3-s4-act',
-            type: ActivityType.trace,
-            title: 'Magic Sand Tracer (Dad to Qaf)',
-            icon: '✍️',
-            xp: 20,
-            cards: sandTracer3,
-          ),
-        ],
-      ),
-      Lesson(
-        id: 'dest3-s5',
-        title: 'Arabic Sound Detective - Session 3',
-        titleAr: 'مُحَقِّقُ الأَصْوَاتِ العَرَبِيَّة 3',
-        icon: '🎈',
-        color: '#D85A30',
-        xp: 30,
-        activities: [
-          Activity(
-            id: 'dest3-s5-act',
-            type: ActivityType.soundDetective,
-            title: 'Arabic Sound Detective',
-            icon: '🎈',
-            xp: 30,
-            soundSession: SoundDetectiveSession.taToQaf,
-          ),
-        ],
-      ),
-      Lesson(
         id: 'dest3-s6',
         title: 'Ayah Builder - Session 2 (Al-Fatihah 1)',
         titleAr: 'بِنَاءُ الْآيَةِ 2 (الفَاتِحَة ١)',
@@ -4836,42 +5278,6 @@ const List<Destination> curriculum = [
         "Meet Prophet Muhammad ﷺ's story, practice respect, and finish tracing the Arabic alphabet.",
     state: DestinationState.locked,
     lessons: [
-      Lesson(
-        id: 'dest4-s1',
-        title: 'Sirah Story Module - Session 1 (Birth)',
-        titleAr: 'وَحْدَةُ السِّيرَة 1 (المَوْلِد)',
-        icon: '🌙',
-        color: '#5B9A1E',
-        xp: 40,
-        activities: [
-          Activity(
-            id: 'dest4-s1-act',
-            type: ActivityType.sirahStory,
-            title: 'Sirah Story Module (Birth)',
-            icon: '🌙',
-            xp: 40,
-            sirahSession: sirahBirthSession,
-          ),
-        ],
-      ),
-      Lesson(
-        id: 'dest4-s2',
-        title: 'Classroom Heroes - Session 1 (Respect)',
-        titleAr: 'أَبْطَالُ الصَّفّ 1 (الاِحْتِرَام)',
-        icon: '🤝',
-        color: '#D85A30',
-        xp: 30,
-        activities: [
-          Activity(
-            id: 'dest4-s2-act',
-            type: ActivityType.classroomHeroes,
-            title: 'Classroom Heroes (Respect)',
-            icon: '🤝',
-            xp: 30,
-            heroesSession: heroesRespectSession,
-          ),
-        ],
-      ),
       Lesson(
         id: 'dest4-s3',
         title: 'Magic Sand Tracer - Session 4 (Kaf to Ya)',
@@ -4909,6 +5315,42 @@ const List<Destination> curriculum = [
         ],
       ),
       Lesson(
+        id: 'dest4-s1',
+        title: 'Sirah Story Module - Session 1 (Birth)',
+        titleAr: 'وَحْدَةُ السِّيرَة 1 (المَوْلِد)',
+        icon: '🌙',
+        color: '#5B9A1E',
+        xp: 40,
+        activities: [
+          Activity(
+            id: 'dest4-s1-act',
+            type: ActivityType.sirahStory,
+            title: 'Sirah Story Module (Birth)',
+            icon: '🌙',
+            xp: 40,
+            sirahSession: sirahBirthSession,
+          ),
+        ],
+      ),
+      Lesson(
+        id: 'dest4-s2',
+        title: 'Classroom Heroes - Session 1 (Respect)',
+        titleAr: 'أَبْطَالُ الصَّفّ 1 (الاِحْتِرَام)',
+        icon: '🤝',
+        color: '#D85A30',
+        xp: 30,
+        activities: [
+          Activity(
+            id: 'dest4-s2-act',
+            type: ActivityType.classroomHeroes,
+            title: 'Classroom Heroes (Respect)',
+            icon: '🤝',
+            xp: 30,
+            heroesSession: heroesRespectSession,
+          ),
+        ],
+      ),
+      Lesson(
         id: 'dest4-s5',
         title: 'Ayah Builder - Session 3 (Al-Fatihah 2)',
         titleAr: 'بِنَاءُ الْآيَةِ 3 (الفَاتِحَة ٢)',
@@ -4942,6 +5384,42 @@ const List<Destination> curriculum = [
         'Practice classroom kindness, meet Halimah, and take the first steps of wudu.',
     state: DestinationState.locked,
     lessons: [
+      Lesson(
+        id: 'dest5-s7',
+        title: 'Magic Sand Tracer - Session 5 (Numbers 1 to 5)',
+        titleAr: 'تَتَبُّعُ الرَّمْل السِّحْرِيّ 5 (الأَرْقَام)',
+        icon: '✍️',
+        color: '#0F6E56',
+        xp: 20,
+        activities: [
+          Activity(
+            id: 'dest5-s7-act',
+            type: ActivityType.trace,
+            title: 'Magic Sand Tracer (Numbers 1 to 5)',
+            icon: '✍️',
+            xp: 20,
+            cards: sandTracer5,
+          ),
+        ],
+      ),
+      Lesson(
+        id: 'dest5-s8',
+        title: 'Arabic Sound Detective - Session 5 (Numbers 1 to 5)',
+        titleAr: 'مُحَقِّقُ الأَصْوَاتِ العَرَبِيَّة 5 (الأَرْقَام)',
+        icon: '🎈',
+        color: '#D85A30',
+        xp: 30,
+        activities: [
+          Activity(
+            id: 'dest5-s8-act',
+            type: ActivityType.soundDetective,
+            title: 'Arabic Sound Detective',
+            icon: '🎈',
+            xp: 30,
+            soundSession: SoundDetectiveSession.oneToFive,
+          ),
+        ],
+      ),
       Lesson(
         id: 'dest5-s1',
         title: 'Label Maker - Session 3 (Classroom)',
@@ -5067,6 +5545,42 @@ const List<Destination> curriculum = [
     state: DestinationState.locked,
     lessons: [
       Lesson(
+        id: 'dest6-s7',
+        title: 'Magic Sand Tracer - Session 6 (Numbers 6 to 10)',
+        titleAr: 'تَتَبُّعُ الرَّمْل السِّحْرِيّ 6 (الأَرْقَام)',
+        icon: '✍️',
+        color: '#0F6E56',
+        xp: 20,
+        activities: [
+          Activity(
+            id: 'dest6-s7-act',
+            type: ActivityType.trace,
+            title: 'Magic Sand Tracer (Numbers 6 to 10)',
+            icon: '✍️',
+            xp: 20,
+            cards: sandTracer6,
+          ),
+        ],
+      ),
+      Lesson(
+        id: 'dest6-s8',
+        title: 'Arabic Sound Detective - Session 6 (Numbers 6 to 10)',
+        titleAr: 'مُحَقِّقُ الأَصْوَاتِ العَرَبِيَّة 6 (الأَرْقَام)',
+        icon: '🎈',
+        color: '#D85A30',
+        xp: 30,
+        activities: [
+          Activity(
+            id: 'dest6-s8-act',
+            type: ActivityType.soundDetective,
+            title: 'Arabic Sound Detective',
+            icon: '🎈',
+            xp: 30,
+            soundSession: SoundDetectiveSession.sixToTen,
+          ),
+        ],
+      ),
+      Lesson(
         id: 'dest6-s1',
         title: 'Sirah Story Module - Session 3 (Family Care)',
         titleAr: 'وَحْدَةُ السِّيرَة 3 (رِعَايَةُ الأُسْرَة)',
@@ -5099,6 +5613,24 @@ const List<Destination> curriculum = [
             icon: '🤝',
             xp: 30,
             heroesSession: heroesResponsibilitySession,
+          ),
+        ],
+      ),
+      Lesson(
+        id: 'dest6-s3',
+        title: 'Taharah Adventure - Session 2 (Wudhu Practice)',
+        titleAr: 'مُغَامَرَةُ الطَّهَارَة 2 (تَدْرِيبُ الوُضُوء)',
+        icon: '🚿',
+        color: '#D85A30',
+        xp: 40,
+        activities: [
+          Activity(
+            id: 'dest6-s3-act',
+            type: ActivityType.taharahAdventure,
+            title: 'Taharah Adventure (Wudhu Practice)',
+            icon: '🚿',
+            xp: 40,
+            taharahSession: TaharahSession.wudhuPractice,
           ),
         ],
       ),

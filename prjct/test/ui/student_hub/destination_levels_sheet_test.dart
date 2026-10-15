@@ -180,15 +180,13 @@ void main() {
   });
 
   testWidgets(
-    'finishing the first game of a level marks only that game done — the '
-    'next one (Creation Hunt, whose own colour is the "done" green) stays '
-    'unplayed',
+    'finishing the games before Creation Hunt marks only those done — the '
+    'hunt (whose own colour is the "done" green) stays unplayed',
     (tester) async {
       final destination = curriculum.firstWhere((d) => d.id == 2);
-      final greeting = destination.lessons[0];
-      final hunt = destination.lessons[1];
-      expect(greeting.id, 'dest2-s1');
-      expect(hunt.id, 'dest2-s2');
+      final huntIdx = destination.lessons.indexWhere((l) => l.id == 'dest2-s2');
+      final before = destination.lessons.take(huntIdx).map((l) => l.id);
+      final hunt = destination.lessons[huntIdx];
 
       await tester.pumpWidget(
         MaterialApp(
@@ -198,7 +196,7 @@ void main() {
                 onPressed: () => DestinationLevelsSheet.show(
                   context,
                   destination: destination,
-                  completedLessons: ValueNotifier({greeting.id}),
+                  completedLessons: ValueNotifier(before.toSet()),
                   noorEnergy: 5,
                   onStartLesson: (_, _) {},
                 ),
@@ -212,8 +210,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
 
-      expect(find.text('✓ Completed'), findsOneWidget);
-      expect(find.byKey(ValueKey('lesson-done-${greeting.id}')), findsOneWidget);
+      expect(find.text('✓ Completed'), findsNWidgets(before.length));
+      for (final id in before) {
+        expect(find.byKey(ValueKey('lesson-done-$id')), findsOneWidget);
+      }
       expect(find.byKey(ValueKey('lesson-done-${hunt.id}')), findsNothing);
       expect(find.byKey(ValueKey('lesson-play-${hunt.id}')), findsOneWidget);
     },

@@ -12,39 +12,17 @@ void main() {
       final gameName = gameNameOf(sandTracerGame.lesson);
       final sessions = gameSessions[gameName]!;
 
-      expect(sessions.length, 4);
+      expect(sessions.length, 6);
 
+      // Every session but the last leaves the badge locked.
       final completedIds = <String>{};
-
-      // 0 sessions completed
-      expect(
-        areAllGameSessionsCompleted(sandTracerGame.lesson, completedIds),
-        isFalse,
-      );
-
-      // 1 session completed
-      completedIds.add(sessions[0].id);
-      expect(
-        areAllGameSessionsCompleted(sandTracerGame.lesson, completedIds),
-        isFalse,
-      );
-
-      // 2 sessions completed
-      completedIds.add(sessions[1].id);
-      expect(
-        areAllGameSessionsCompleted(sandTracerGame.lesson, completedIds),
-        isFalse,
-      );
-
-      // 3 sessions completed
-      completedIds.add(sessions[2].id);
-      expect(
-        areAllGameSessionsCompleted(sandTracerGame.lesson, completedIds),
-        isFalse,
-      );
-
-      // All 4 sessions completed
-      completedIds.add(sessions[3].id);
+      for (final session in sessions) {
+        expect(
+          areAllGameSessionsCompleted(sandTracerGame.lesson, completedIds),
+          isFalse,
+        );
+        completedIds.add(session.id);
+      }
       expect(
         areAllGameSessionsCompleted(sandTracerGame.lesson, completedIds),
         isTrue,

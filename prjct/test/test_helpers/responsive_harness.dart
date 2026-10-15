@@ -75,12 +75,14 @@ Future<void> scrollThroughChecking(
     expect(brokenWords(tester), isEmpty, reason: label);
     // Innermost *vertical* scroll view — a text field's own horizontal
     // scroller doesn't count.
-    final inner = find
+    final vertical = find
         .byType(Scrollable)
         .evaluate()
         .map((e) => (e as StatefulElement).state as ScrollableState)
-        .lastWhere((s) => axisDirectionToAxis(s.axisDirection) == Axis.vertical)
-        .position;
+        .where((s) => axisDirectionToAxis(s.axisDirection) == Axis.vertical);
+    // A screen that fits without any scroll view is fully checked already.
+    if (vertical.isEmpty) return;
+    final inner = vertical.last.position;
     if (inner.pixels >= inner.maxScrollExtent) return;
     final before = totalScroll(tester);
     await tester.dragFrom(onScreen(tester, dragAt), const Offset(0, -250));
@@ -97,7 +99,7 @@ Future<void> scrollUntilFound(
   Finder finder, {
   required bool towardsTop,
 }) async {
-  for (var i = 0; i < 60 && finder.evaluate().isEmpty; i++) {
+  for (var i = 0; i < 120 && finder.evaluate().isEmpty; i++) {
     await tester.dragFrom(
       onScreen(tester, 0.6),
       Offset(0, towardsTop ? 250 : -250),

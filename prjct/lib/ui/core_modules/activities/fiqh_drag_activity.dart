@@ -5,6 +5,7 @@ import 'package:lottie/lottie.dart';
 import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../theme/app_colors.dart';
 import 'wudhu_master_game.dart';
+import '../game_ui_audio.dart';
 
 /// FR-4.5: Fiqh & Taharah — three sub-games auto-selected by [activityId]:
 ///   *-fiqh-1  → Water Purity Sorter      (FR-4.5.1 / FR-4.5.2)
@@ -27,8 +28,10 @@ class FiqhDragActivity extends StatefulWidget {
   final int xp;
   final Color color;
   final void Function(int xp, double accuracyPct, int errors) onComplete;
+
   /// Activity ID used to derive which sub-game to render.
   final String activityId;
+
   /// Exit hook — only the full-bleed Wudhu Master game uses it, since it
   /// renders without the shared lesson top bar.
   final VoidCallback? onBack;
@@ -74,9 +77,8 @@ class _FiqhDragActivityState extends State<FiqhDragActivity>
 
   static const _overshoot = Cubic(0.34, 1.56, 0.64, 1.0);
 
-  bool get _allPlaced => widget.items.every(
-    (i) => _placedInZone.values.contains(i.id),
-  );
+  bool get _allPlaced =>
+      widget.items.every((i) => _placedInZone.values.contains(i.id));
 
   /// One-to-one zone drop (hygiene match).
   void _handleDrop(FiqhDragItem item, FiqhDropZone zone) {
@@ -87,6 +89,7 @@ class _FiqhDragActivityState extends State<FiqhDragActivity>
       if (_allPlaced) _triggerSuccess();
     } else {
       _wrongAttempts++;
+      GameUiAudio.instance.wrong();
       setState(() => _wrongZone.add(zone.id));
       Future.delayed(const Duration(milliseconds: 600), () {
         if (mounted) setState(() => _wrongZone.remove(zone.id));
@@ -103,6 +106,7 @@ class _FiqhDragActivityState extends State<FiqhDragActivity>
       if (_allPlaced) _triggerSuccess();
     } else {
       _wrongAttempts++;
+      GameUiAudio.instance.wrong();
       setState(() => _wrongZone.add(zone.id));
       Future.delayed(const Duration(milliseconds: 600), () {
         if (mounted) setState(() => _wrongZone.remove(zone.id));
@@ -248,9 +252,13 @@ class _WaterSorterGameState extends State<_WaterSorterGame> {
         .where((i) => !widget.placedInZone.values.contains(i.id))
         .toList();
     final cleanZone = widget.zones.firstWhere(
-      (z) => z.id == 'bucketA', orElse: () => widget.zones.first);
+      (z) => z.id == 'bucketA',
+      orElse: () => widget.zones.first,
+    );
     final impureZone = widget.zones.firstWhere(
-      (z) => z.id == 'bucketB', orElse: () => widget.zones.last);
+      (z) => z.id == 'bucketB',
+      orElse: () => widget.zones.last,
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
@@ -262,9 +270,23 @@ class _WaterSorterGameState extends State<_WaterSorterGame> {
             flex: 5,
             child: Row(
               children: [
-                Expanded(child: _buildBucket(cleanZone, '🪣', const Color(0xFF0097A7), const Color(0xFFE0F7FA))),
+                Expanded(
+                  child: _buildBucket(
+                    cleanZone,
+                    '🪣',
+                    const Color(0xFF0097A7),
+                    const Color(0xFFE0F7FA),
+                  ),
+                ),
                 const SizedBox(width: 12),
-                Expanded(child: _buildBucket(impureZone, '🗑️', const Color(0xFFD32F2F), const Color(0xFFFFEBEE))),
+                Expanded(
+                  child: _buildBucket(
+                    impureZone,
+                    '🗑️',
+                    const Color(0xFFD32F2F),
+                    const Color(0xFFFFEBEE),
+                  ),
+                ),
               ],
             ),
           ),
@@ -275,12 +297,18 @@ class _WaterSorterGameState extends State<_WaterSorterGame> {
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF0097A7).withValues(alpha: 0.2), width: 2),
+                border: Border.all(
+                  color: const Color(0xFF0097A7).withValues(alpha: 0.2),
+                  width: 2,
+                ),
               ),
               child: Wrap(
                 alignment: WrapAlignment.center,
-                spacing: 10, runSpacing: 10,
-                children: tray.map((item) => _WaterSourceChip(item: item)).toList(),
+                spacing: 10,
+                runSpacing: 10,
+                children: tray
+                    .map((item) => _WaterSourceChip(item: item))
+                    .toList(),
               ),
             ),
         ],
@@ -292,81 +320,227 @@ class _WaterSorterGameState extends State<_WaterSorterGame> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF1565C0), Color(0xFF0097A7)]),
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: const Color(0xFF1565C0).withValues(alpha: 0.25), blurRadius: 10, offset: const Offset(0,4))],
-      ),
-      child: Row(children: [
-        const Text('💧', style: TextStyle(fontSize: 26)),
-        const SizedBox(width: 10),
-        const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Water Purity Sorter', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Colors.white)),
-          Text('Sort each water source into the correct bucket!', style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w600)),
-        ])),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
-          child: Text('$placed/$total', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white)),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1565C0), Color(0xFF0097A7)],
         ),
-      ]),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1565C0).withValues(alpha: 0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Text('💧', style: TextStyle(fontSize: 26)),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Water Purity Sorter',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  'Sort each water source into the correct bucket!',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '$placed/$total',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildBucket(FiqhDropZone zone, String bucketEmoji, Color accent, Color bgColor) {
-    final itemsHere = widget.items.where((i) =>
-        widget.placedInZone.values.contains(i.id) && i.correctZoneId == zone.id).toList();
+  Widget _buildBucket(
+    FiqhDropZone zone,
+    String bucketEmoji,
+    Color accent,
+    Color bgColor,
+  ) {
+    final itemsHere = widget.items
+        .where(
+          (i) =>
+              widget.placedInZone.values.contains(i.id) &&
+              i.correctZoneId == zone.id,
+        )
+        .toList();
     final isWrong = widget.wrongZone.contains(zone.id);
     final isHovering = _hovering.contains(zone.id);
 
     return DragTarget<FiqhDragItem>(
-      onWillAcceptWithDetails: (_) { setState(() => _hovering.add(zone.id)); return true; },
+      onWillAcceptWithDetails: (_) {
+        setState(() => _hovering.add(zone.id));
+        return true;
+      },
       onLeave: (_) => setState(() => _hovering.remove(zone.id)),
-      onAcceptWithDetails: (details) { setState(() => _hovering.remove(zone.id)); widget.onDrop(details.data, zone); },
+      onAcceptWithDetails: (details) {
+        setState(() => _hovering.remove(zone.id));
+        widget.onDrop(details.data, zone);
+      },
       builder: (context, candidate, rejected) {
         return AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           decoration: BoxDecoration(
-            color: isWrong ? AppColors.coralTint : isHovering ? accent.withValues(alpha: 0.12) : bgColor,
+            color: isWrong
+                ? AppColors.coralTint
+                : isHovering
+                ? accent.withValues(alpha: 0.12)
+                : bgColor,
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: isWrong ? AppColors.coral : isHovering ? accent : accent.withValues(alpha: 0.35), width: isHovering ? 3 : 2),
-            boxShadow: isHovering ? [BoxShadow(color: accent.withValues(alpha: 0.28), blurRadius: 12, offset: const Offset(0,4))] : [],
-          ),
-          child: Column(children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-              decoration: BoxDecoration(color: accent, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
-              child: Column(children: [
-                Text(bucketEmoji, style: const TextStyle(fontSize: 28)),
-                const SizedBox(height: 4),
-                Text(zone.label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.white)),
-              ]),
+            border: Border.all(
+              color: isWrong
+                  ? AppColors.coral
+                  : isHovering
+                  ? accent
+                  : accent.withValues(alpha: 0.35),
+              width: isHovering ? 3 : 2,
             ),
-            Expanded(child: itemsHere.isEmpty
-              ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(Icons.arrow_downward_rounded, size: 26, color: accent.withValues(alpha: 0.3)),
-                  const SizedBox(height: 4),
-                  Text('Drop here', style: TextStyle(fontSize: 10, color: accent.withValues(alpha: 0.4), fontWeight: FontWeight.w700)),
-                ]))
-              : Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Wrap(spacing: 6, runSpacing: 6, alignment: WrapAlignment.center,
-                    children: itemsHere.map((item) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                      decoration: BoxDecoration(color: accent.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10), border: Border.all(color: accent.withValues(alpha: 0.35), width: 1.5)),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Text(item.emoji, style: const TextStyle(fontSize: 16)),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(item.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: accent)),
-                        ),
-                        const SizedBox(width: 4),
-                        Icon(Icons.check_circle, size: 12, color: accent),
-                      ]),
-                    )).toList(),
+            boxShadow: isHovering
+                ? [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.28),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : [],
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20),
                   ),
-                )),
-          ]),
+                ),
+                child: Column(
+                  children: [
+                    Text(bucketEmoji, style: const TextStyle(fontSize: 28)),
+                    const SizedBox(height: 4),
+                    Text(
+                      zone.label,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: itemsHere.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.arrow_downward_rounded,
+                              size: 26,
+                              color: accent.withValues(alpha: 0.3),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Drop here',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: accent.withValues(alpha: 0.4),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          alignment: WrapAlignment.center,
+                          children: itemsHere
+                              .map(
+                                (item) => Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: accent.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: accent.withValues(alpha: 0.35),
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        item.emoji,
+                                        style: const TextStyle(fontSize: 16),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Flexible(
+                                        child: Text(
+                                          item.label,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w800,
+                                            color: accent,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.check_circle,
+                                        size: 12,
+                                        color: accent,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -383,18 +557,40 @@ class _WaterSourceChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF0097A7).withValues(alpha: 0.35), width: 2),
-        boxShadow: const [BoxShadow(color: Color(0x12000000), blurRadius: 6, offset: Offset(0, 2))],
+        border: Border.all(
+          color: const Color(0xFF0097A7).withValues(alpha: 0.35),
+          width: 2,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text(item.emoji, style: const TextStyle(fontSize: 22)),
-        const SizedBox(width: 6),
-        Text(item.label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.ink)),
-      ]),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(item.emoji, style: const TextStyle(fontSize: 22)),
+          const SizedBox(width: 6),
+          Text(
+            item.label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: AppColors.ink,
+            ),
+          ),
+        ],
+      ),
     );
     return Draggable<FiqhDragItem>(
       data: item,
-      feedback: Material(color: Colors.transparent, child: Transform.scale(scale: 1.1, child: chip)),
+      feedback: Material(
+        color: Colors.transparent,
+        child: Transform.scale(scale: 1.1, child: chip),
+      ),
       childWhenDragging: Opacity(opacity: 0.3, child: chip),
       child: chip,
     );
@@ -405,7 +601,13 @@ class _WaterSourceChip extends StatelessWidget {
 // FR-4.5.3 / FR-4.5.4  FITRAH HYGIENE MATCH
 // =============================================================================
 class _HygieneMatchGame extends StatefulWidget {
-  const _HygieneMatchGame({required this.items, required this.zones, required this.placedInZone, required this.wrongZone, required this.onDrop});
+  const _HygieneMatchGame({
+    required this.items,
+    required this.zones,
+    required this.placedInZone,
+    required this.wrongZone,
+    required this.onDrop,
+  });
   final List<FiqhDragItem> items;
   final List<FiqhDropZone> zones;
   final Map<String, String> placedInZone;
@@ -418,65 +620,154 @@ class _HygieneMatchGame extends StatefulWidget {
 class _HygieneMatchGameState extends State<_HygieneMatchGame> {
   final Set<String> _hovering = {};
   static const Map<String, Offset> _zoneOffsets = {
-    'mouth':    Offset(0.50, 0.22),
-    'nails':    Offset(0.78, 0.55),
-    'istinja':  Offset(0.50, 0.78),
+    'mouth': Offset(0.50, 0.22),
+    'nails': Offset(0.78, 0.55),
+    'istinja': Offset(0.50, 0.78),
   };
 
   @override
   Widget build(BuildContext context) {
-    final tray = widget.items.where((i) => !widget.placedInZone.values.contains(i.id)).toList();
+    final tray = widget.items
+        .where((i) => !widget.placedInZone.values.contains(i.id))
+        .toList();
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-      child: Column(children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF2E7D32), Color(0xFF00897B)]), borderRadius: BorderRadius.circular(18)),
-          child: const Row(children: [
-            Text('🧼', style: TextStyle(fontSize: 24)),
-            SizedBox(width: 10),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Fitrah Hygiene Match', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Colors.white)),
-              Text('Drag each hygiene tool to where it belongs!', style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w600)),
-            ])),
-          ]),
-        ),
-        const SizedBox(height: 12),
-        Expanded(flex: 5, child: LayoutBuilder(builder: (context, constraints) {
-          final w = constraints.maxWidth;
-          final h = constraints.maxHeight;
-          return Stack(children: [
-            Container(
-              width: w, height: h,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [Color(0xFFF1F8E9), Color(0xFFE8F5E9)], begin: Alignment.topCenter, end: Alignment.bottomCenter),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0xFF2E7D32).withValues(alpha: 0.18), width: 2),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF2E7D32), Color(0xFF00897B)],
+              ),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Row(
+              children: [
+                Text('🧼', style: TextStyle(fontSize: 24)),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Fitrah Hygiene Match',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                      ),
+                      Text(
+                        'Drag each hygiene tool to where it belongs!',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            flex: 5,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final w = constraints.maxWidth;
+                final h = constraints.maxHeight;
+                return Stack(
+                  children: [
+                    Container(
+                      width: w,
+                      height: h,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFF1F8E9), Color(0xFFE8F5E9)],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: const Color(
+                            0xFF2E7D32,
+                          ).withValues(alpha: 0.18),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text('👦🏽', style: TextStyle(fontSize: 58)),
+                          const SizedBox(height: 2),
+                          Container(
+                            width: 68,
+                            height: 76,
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFF5D4037,
+                              ).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(
+                                  0xFF5D4037,
+                                ).withValues(alpha: 0.18),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: const Center(
+                              child: Text('👕', style: TextStyle(fontSize: 38)),
+                            ),
+                          ),
+                          const Text('👖', style: TextStyle(fontSize: 34)),
+                        ],
+                      ),
+                    ),
+                    for (final zone in widget.zones)
+                      _buildZoneOverlay(zone, w, h),
+                    for (final zone in widget.zones)
+                      _buildZoneLabel(zone, w, h),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: const Color(0xFF2E7D32).withValues(alpha: 0.18),
+                width: 1.5,
               ),
             ),
-            Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Text('👦🏽', style: TextStyle(fontSize: 58)),
-              const SizedBox(height: 2),
-              Container(
-                width: 68, height: 76,
-                decoration: BoxDecoration(color: const Color(0xFF5D4037).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFF5D4037).withValues(alpha: 0.18), width: 1.5)),
-                child: const Center(child: Text('👕', style: TextStyle(fontSize: 38))),
-              ),
-              const Text('👖', style: TextStyle(fontSize: 34)),
-            ])),
-            for (final zone in widget.zones) _buildZoneOverlay(zone, w, h),
-            for (final zone in widget.zones) _buildZoneLabel(zone, w, h),
-          ]);
-        })),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFF2E7D32).withValues(alpha: 0.18), width: 1.5)),
-          child: tray.isEmpty
-            ? const Center(child: Text('✅ All tools placed!', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.adventureGreen)))
-            : Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: tray.map((item) => _HygieneTool(item: item)).toList()),
-        ),
-      ]),
+            child: tray.isEmpty
+                ? const Center(
+                    child: Text(
+                      '✅ All tools placed!',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.adventureGreen,
+                      ),
+                    ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: tray
+                        .map((item) => _HygieneTool(item: item))
+                        .toList(),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -486,29 +777,68 @@ class _HygieneMatchGameState extends State<_HygieneMatchGame> {
     final isFilled = widget.placedInZone.containsKey(zone.id);
     final isWrong = widget.wrongZone.contains(zone.id);
     final isHovering = _hovering.contains(zone.id);
-    final placedItem = isFilled ? widget.items.firstWhere((i) => i.id == widget.placedInZone[zone.id], orElse: () => widget.items.first) : null;
+    final placedItem = isFilled
+        ? widget.items.firstWhere(
+            (i) => i.id == widget.placedInZone[zone.id],
+            orElse: () => widget.items.first,
+          )
+        : null;
 
     return Positioned(
       left: w * pos.dx - size / 2,
       top: h * pos.dy - size / 2,
       child: DragTarget<FiqhDragItem>(
-        onWillAcceptWithDetails: (_) { setState(() => _hovering.add(zone.id)); return !isFilled; },
+        onWillAcceptWithDetails: (_) {
+          setState(() => _hovering.add(zone.id));
+          return !isFilled;
+        },
         onLeave: (_) => setState(() => _hovering.remove(zone.id)),
-        onAcceptWithDetails: (details) { setState(() => _hovering.remove(zone.id)); widget.onDrop(details.data, zone); },
+        onAcceptWithDetails: (details) {
+          setState(() => _hovering.remove(zone.id));
+          widget.onDrop(details.data, zone);
+        },
         builder: (context, candidate, rejected) {
           return AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            width: size, height: size,
+            width: size,
+            height: size,
             decoration: BoxDecoration(
-              color: isWrong ? AppColors.coralTint : isFilled ? const Color(0xFFC8E6C9) : isHovering ? const Color(0xFFB3E5FC) : Colors.white.withValues(alpha: 0.7),
+              color: isWrong
+                  ? AppColors.coralTint
+                  : isFilled
+                  ? const Color(0xFFC8E6C9)
+                  : isHovering
+                  ? const Color(0xFFB3E5FC)
+                  : Colors.white.withValues(alpha: 0.7),
               shape: BoxShape.circle,
-              border: Border.all(color: isWrong ? AppColors.coral : isFilled ? AppColors.adventureGreen : isHovering ? const Color(0xFF0097A7) : const Color(0xFF2E7D32).withValues(alpha: 0.4), width: 2.5),
-              boxShadow: (isHovering || isFilled) ? [BoxShadow(color: (isFilled ? AppColors.adventureGreen : const Color(0xFF0097A7)).withValues(alpha: 0.28), blurRadius: 10, offset: const Offset(0,3))] : [],
+              border: Border.all(
+                color: isWrong
+                    ? AppColors.coral
+                    : isFilled
+                    ? AppColors.adventureGreen
+                    : isHovering
+                    ? const Color(0xFF0097A7)
+                    : const Color(0xFF2E7D32).withValues(alpha: 0.4),
+                width: 2.5,
+              ),
+              boxShadow: (isHovering || isFilled)
+                  ? [
+                      BoxShadow(
+                        color:
+                            (isFilled
+                                    ? AppColors.adventureGreen
+                                    : const Color(0xFF0097A7))
+                                .withValues(alpha: 0.28),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                  : [],
             ),
             alignment: Alignment.center,
             child: isFilled
-              ? Text(placedItem!.emoji, style: const TextStyle(fontSize: 24))
-              : Text(zone.icon ?? '?', style: const TextStyle(fontSize: 22)),
+                ? Text(placedItem!.emoji, style: const TextStyle(fontSize: 24))
+                : Text(zone.icon ?? '?', style: const TextStyle(fontSize: 22)),
           );
         },
       ),
@@ -524,8 +854,21 @@ class _HygieneMatchGameState extends State<_HygieneMatchGame> {
       child: Container(
         width: 84,
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        decoration: BoxDecoration(color: isFilled ? AppColors.adventureGreen.withValues(alpha: 0.9) : Colors.black54, borderRadius: BorderRadius.circular(8)),
-        child: Text(zone.label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.white)),
+        decoration: BoxDecoration(
+          color: isFilled
+              ? AppColors.adventureGreen.withValues(alpha: 0.9)
+              : Colors.black54,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          zone.label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+          ),
+        ),
       ),
     );
   }
@@ -537,17 +880,46 @@ class _HygieneTool extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final chip = Container(
-      width: 78, height: 78,
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFF2E7D32).withValues(alpha: 0.28), width: 2), boxShadow: const [BoxShadow(color: Color(0x10000000), blurRadius: 6, offset: Offset(0, 2))]),
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Text(item.emoji, style: const TextStyle(fontSize: 30)),
-        const SizedBox(height: 3),
-        Text(item.label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppColors.ink)),
-      ]),
+      width: 78,
+      height: 78,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: const Color(0xFF2E7D32).withValues(alpha: 0.28),
+          width: 2,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x10000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(item.emoji, style: const TextStyle(fontSize: 30)),
+          const SizedBox(height: 3),
+          Text(
+            item.label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              color: AppColors.ink,
+            ),
+          ),
+        ],
+      ),
     );
     return Draggable<FiqhDragItem>(
       data: item,
-      feedback: Material(color: Colors.transparent, child: Transform.scale(scale: 1.1, child: chip)),
+      feedback: Material(
+        color: Colors.transparent,
+        child: Transform.scale(scale: 1.1, child: chip),
+      ),
       childWhenDragging: Opacity(opacity: 0.25, child: chip),
       child: chip,
     );

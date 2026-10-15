@@ -1957,12 +1957,12 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
                                       ),
                                       const SizedBox(width: 8),
                                       Expanded(
-                                        child: Text(
-                                          '${item['module']} (${item['doneLabel']})',
-                                          style: const TextStyle(
-                                            fontSize: 13.5,
-                                            color: AppColors.ink,
-                                          ),
+                                        child: _SubmissionLine(
+                                          title: item['module'] as String,
+                                          submission:
+                                              item['submission']
+                                                  as HomeworkSubmission,
+                                          dueDate: item['dueDate'] as String?,
                                         ),
                                       ),
                                       IconButton(
@@ -3694,6 +3694,38 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
   String _selectedModule = allGames.first.lesson.id;
   String _assigneeType = 'class'; // 'class' or 'student'
   String? _selectedStudent;
+  DateTime? _dueAt;
+
+  /// Date first, then time — defaults to 11:59 PM so "due that day" stays
+  /// the easy choice.
+  Future<void> _pickDueDate() async {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _dueAt ?? today.add(const Duration(days: 7)),
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 365)),
+      helpText: 'Due date',
+    );
+    if (date == null || !mounted) return;
+    final time = await showAppTimePicker(
+      context: context,
+      initialTime: _dueAt == null
+          ? const TimeOfDay(hour: 23, minute: 59)
+          : TimeOfDay.fromDateTime(_dueAt!),
+      label: 'Due time',
+    );
+    if (time == null) return;
+    setState(
+      () => _dueAt = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3773,6 +3805,34 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
             },
           ),
         ],
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.teal,
+                  minimumSize: const Size(64, 46),
+                  shape: const StadiumBorder(),
+                  side: const BorderSide(color: AppColors.mintBorder),
+                ),
+                onPressed: _pickDueDate,
+                icon: const Icon(Icons.event_rounded, size: 20),
+                label: Text(
+                  _dueAt == null
+                      ? 'Due date (optional)'
+                      : 'Due date: ${formatDateTime(_dueAt!)}',
+                ),
+              ),
+            ),
+            if (_dueAt != null)
+              IconButton(
+                tooltip: 'Remove due date',
+                icon: const Icon(Icons.close_rounded, color: AppColors.inkSoft),
+                onPressed: () => setState(() => _dueAt = null),
+              ),
+          ],
+        ),
         const SizedBox(height: 14),
         FilledButton.icon(
           style: FilledButton.styleFrom(
@@ -3790,7 +3850,11 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
 
             if (_assigneeType == 'class') {
               ClassRepository()
-                  .assignModule(classId: classId, moduleId: _selectedModule)
+                  .assignModule(
+                    classId: classId,
+                    moduleId: _selectedModule,
+                    dueDate: _dueAt,
+                  )
                   .then((_) => ref.invalidate(classHomeworkProvider));
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -3810,6 +3874,7 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
                     classId: classId,
                     learnerId: learnerId,
                     moduleId: _selectedModule,
+                    dueDate: _dueAt,
                   )
                   .then((_) {
                     ref.invalidate(teacherRosterProvider);
@@ -3848,25 +3913,47 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            hw['module'] as String,
-                            style: const TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.ink,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => _showSubmissions(context, hw),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              hw['module'] as String,
+                              style: const TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.ink,
+                              ),
                             ),
-                          ),
-                          Text(
-                            hw['doneLabel'] as String,
-                            style: const TextStyle(
-                              fontSize: 12.5,
-                              color: AppColors.inkSoft,
+                            Text(
+                              hw['dueDate'] == null
+                                  ? 'No due date'
+                                  : 'Due date: ${hw['dueDate']}',
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                color: AppColors.inkSoft,
+                              ),
                             ),
-                          ),
-                        ],
+                            if ((hw['doneLabel'] as String).isNotEmpty)
+                              Text(
+                                hw['doneLabel'] as String,
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  color: AppColors.inkSoft,
+                                ),
+                              ),
+                            const Text(
+                              'View submissions',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.teal,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     IconButton(
@@ -3893,6 +3980,52 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
             ),
         ],
       ],
+    );
+  }
+
+  void _showSubmissions(BuildContext context, Map<String, dynamic> hw) {
+    // Students who still owe work first.
+    const order = [
+      HomeworkStatus.overdue,
+      HomeworkStatus.pending,
+      HomeworkStatus.late,
+      HomeworkStatus.accomplished,
+    ];
+    final submissions = [...hw['submissions'] as List<HomeworkSubmission>]
+      ..sort(
+        (a, b) => order.indexOf(a.status).compareTo(order.indexOf(b.status)),
+      );
+    final assignedAt = hw['assignedAt'] as DateTime;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _TeacherSheet(
+        title: hw['module'] as String,
+        subtitle: [
+          'Assigned on ${formatDate(assignedAt)}',
+          hw['dueDate'] == null ? 'No due date' : 'Due date: ${hw['dueDate']}',
+        ].join(' · '),
+        child: submissions.isEmpty
+            ? const Text(
+                'No students in this class yet',
+                style: TextStyle(fontSize: 14, color: AppColors.inkSoft),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final s in submissions)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: SoftCard(
+                        radius: 14,
+                        padding: const EdgeInsets.all(12),
+                        child: _SubmissionLine(title: s.name, submission: s),
+                      ),
+                    ),
+                ],
+              ),
+      ),
     );
   }
 
@@ -3973,6 +4106,77 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
         );
       }
     }
+  }
+}
+
+/// A homework row: [title], a status chip (Accomplished / Late / Pending /
+/// Overdue), and when it was finished or how far along it is.
+class _SubmissionLine extends StatelessWidget {
+  const _SubmissionLine({
+    required this.title,
+    required this.submission,
+    this.dueDate,
+  });
+
+  final String title;
+  final HomeworkSubmission submission;
+  final String? dueDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = submission;
+    final (fg, bg) = switch (s.status) {
+      HomeworkStatus.accomplished => (AppColors.teal, AppColors.mint),
+      HomeworkStatus.late => (const Color(0xFF9A5B0B), AppColors.goldTint),
+      HomeworkStatus.pending => (AppColors.inkSoft, AppColors.neutralTint),
+      HomeworkStatus.overdue => (AppColors.coral, AppColors.coralTint),
+    };
+    final detail = [
+      s.isDone
+          ? 'Completed on ${formatDateTime(s.completedAt!)}'
+          : '${s.gamesDone} of ${s.gamesTotal} game${s.gamesTotal == 1 ? '' : 's'} done',
+      if (dueDate != null) 'Due date: $dueDate',
+    ].join(' · ');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: AppColors.ink,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                s.status.label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: fg,
+                ),
+              ),
+            ),
+            Text(
+              detail,
+              style: const TextStyle(fontSize: 12.5, color: AppColors.inkSoft),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 }
 

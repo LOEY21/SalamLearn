@@ -1175,6 +1175,31 @@ class SessionNotifier extends Notifier<SessionState> {
         await _parents.updatePin(account: account, newPin: newPin);
       }
     }
+    final key = _pinChangedKey;
+    if (key != null) {
+      await _settings.put(key, DateTime.now().millisecondsSinceEpoch);
+    }
+  }
+
+  /// Settings key holding when the active Parent/Teacher last changed PIN.
+  String? get _pinChangedKey => state.activeRole == UserRole.asatidz
+      ? state.activeTeacherId == null
+            ? null
+            : 'pinChangedAt:teacher:${state.activeTeacherId}'
+      : state.activeParentId == null
+      ? null
+      : 'pinChangedAt:parent:${state.activeParentId}';
+
+  /// Time left before Settings "Change PIN" is allowed again (one change
+  /// per day), or null when it's allowed now.
+  Duration? pinChangeCooldown() {
+    final key = _pinChangedKey;
+    final at = key == null ? null : _settings.get(key) as int?;
+    if (at == null) return null;
+    final left = DateTime.fromMillisecondsSinceEpoch(
+      at,
+    ).add(const Duration(days: 1)).difference(DateTime.now());
+    return left.isNegative ? null : left;
   }
 
   /// Email + display name of the active Parent/Teacher account — where the

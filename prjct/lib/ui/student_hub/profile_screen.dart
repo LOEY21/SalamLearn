@@ -17,6 +17,7 @@ import 'hub_bottom_nav.dart' show HubTab;
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../logic/learner/learner_xp_provider.dart';
 import '../../logic/learner/noor_energy_provider.dart';
+import '../../logic/notifications/notification_provider.dart';
 import '../../logic/recent_module_provider.dart';
 import '../core_modules/lesson_player_screen.dart';
 import '../core_modules/module_registry.dart';
@@ -60,93 +61,90 @@ class ProfileScreen extends ConsumerWidget {
             age: learner?.age,
             gradeLevel: learner?.gradeLevel,
           ),
-          Transform.translate(
-            offset: const Offset(0, -30),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              // Equal-height tiles, whatever the label length.
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: _StatTile(
-                        icon: StreakFlame(lit: streakDays > 0, size: 30),
-                        value: '$streakDays',
-                        label: 'Day Streak',
-                        color: AppColors.coral,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _StatTile(
-                        icon: Image.asset(
-                          'assets/images/xp_star.webp',
-                          width: 30,
-                          height: 30,
-                          excludeFromSemantics: true,
+          // Header art stays full-bleed; the content below keeps a
+          // readable phone-like width on tablets.
+          _Readable(
+            child: Transform.translate(
+              offset: const Offset(0, -30),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                // Equal-height tiles, whatever the label length.
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _StatTile(
+                          icon: StreakFlame(lit: streakDays > 0, size: 30),
+                          value: '$streakDays',
+                          label: 'Day Streak',
+                          color: AppColors.coral,
                         ),
-                        value: '$xp',
-                        label: 'XP',
-                        color: HubWorld.goldDeep,
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _StatTile(
-                        icon: Image.asset(
-                          'assets/images/adventure_map/tab_backpack.png',
-                          width: 30,
-                          height: 30,
-                          excludeFromSemantics: true,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _StatTile(
+                          icon: Image.asset(
+                            'assets/images/xp_star.webp',
+                            width: 30,
+                            height: 30,
+                            excludeFromSemantics: true,
+                          ),
+                          value: '$xp',
+                          label: 'XP',
+                          color: HubWorld.goldDeep,
                         ),
-                        value: '$earnedCount',
-                        label: 'Badges',
-                        color: AppColors.teal,
-                        onTap: () => _openBackpack(context, ref),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _StatTile(
+                          icon: Image.asset(
+                            'assets/images/adventure_map/tab_backpack.png',
+                            width: 30,
+                            height: 30,
+                            excludeFromSemantics: true,
+                          ),
+                          value: '$earnedCount',
+                          label: 'Badges',
+                          color: AppColors.teal,
+                          onTap: () => _openBackpack(context, ref),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 150),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _MascotNote(name: name, streakDays: streakDays),
-                const SizedBox(height: 24),
-                const _SectionTitle('My Homework'),
-                const SizedBox(height: 10),
-                const _HomeworkCard(),
-                const SizedBox(height: 26),
-                const _SectionTitle('Settings'),
-                const SizedBox(height: 10),
-                _SettingRow(
-                  icon: Icons.notifications_rounded,
-                  label: 'Notifications',
-                  sublabel: 'Manage your alerts',
-                  color: AppColors.adventurePurple,
-                  onTap: () => NotificationsSheet.show(context),
-                ),
-
-                const SizedBox(height: 12),
-                _SettingRow(
-                  icon: Icons.switch_account_rounded,
-                  label: 'Switch Account',
-                  sublabel: 'Requires parent PIN',
-                  color: AppColors.teal,
-                  trailingIcon: Icons.lock_rounded,
-                  onTap: () {
-                    ref
-                        .read(sessionProvider.notifier)
-                        .selectRole(UserRole.parent);
-                    context.go('/parent?from=hub');
-                  },
-                ),
-              ],
+          _Readable(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 150),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _MascotNote(name: name, streakDays: streakDays),
+                  const SizedBox(height: 24),
+                  const _SectionTitle('My Homework'),
+                  const SizedBox(height: 10),
+                  const _HomeworkCard(),
+                  const SizedBox(height: 26),
+                  const _SectionTitle('Settings'),
+                  const SizedBox(height: 10),
+                  _SettingRow(
+                    icon: Icons.switch_account_rounded,
+                    label: 'Switch Account',
+                    sublabel: 'Requires parent PIN',
+                    color: AppColors.teal,
+                    trailingIcon: Icons.lock_rounded,
+                    onTap: () {
+                      ref
+                          .read(sessionProvider.notifier)
+                          .selectRole(UserRole.parent);
+                      context.go('/parent?from=hub');
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -185,85 +183,154 @@ class _ProfileHeader extends StatelessWidget {
       height: 320,
       image: HubWorld.meArt,
       focusY: -0.3,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 48),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            // Avatar set in a gold-rimmed wooden medallion, like the nav.
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: HubWorld.wood,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.gold.withValues(alpha: 0.45),
-                    blurRadius: 22,
-                  ),
-                ],
-              ),
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(
-                  color: AppColors.goldSoft,
-                  shape: BoxShape.circle,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _headerContent(),
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + 12,
+            right: 16,
+            child: const _NotificationBell(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _headerContent() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 48),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          // Avatar set in a gold-rimmed wooden medallion, like the nav.
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: HubWorld.wood,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.gold.withValues(alpha: 0.45),
+                  blurRadius: 22,
                 ),
-                child: ClipOval(
-                  child: ColoredBox(
-                    color: HubWorld.parchment,
-                    child: LearnerAvatar(avatar: avatar, size: 96),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              name,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: hubText(
-                30,
-                Colors.white,
-                height: 1.1,
-                shadows: hubTextShadow,
-              ),
-            ),
-            if (studentId != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Student ID: $studentId',
-                textAlign: TextAlign.center,
-                style: hubText(14, AppColors.goldSoft, shadows: hubTextShadow),
-              ),
-            ],
-            const SizedBox(height: 8),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                if (age != null)
-                  WoodChip(
-                    label: 'Age $age',
-                    icon: const Icon(
-                      Icons.cake_rounded,
-                      size: 15,
-                      color: AppColors.goldSoft,
-                    ),
-                  ),
-                if (gradeLevel != null)
-                  WoodChip(
-                    label: gradeLevel!,
-                    icon: const Icon(
-                      Icons.school_rounded,
-                      size: 15,
-                      color: AppColors.goldSoft,
-                    ),
-                  ),
               ],
             ),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                color: AppColors.goldSoft,
+                shape: BoxShape.circle,
+              ),
+              child: ClipOval(
+                child: ColoredBox(
+                  color: HubWorld.parchment,
+                  child: LearnerAvatar(avatar: avatar, size: 96),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            name,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: hubText(
+              30,
+              Colors.white,
+              height: 1.1,
+              shadows: hubTextShadow,
+            ),
+          ),
+          if (studentId != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Student ID: $studentId',
+              textAlign: TextAlign.center,
+              style: hubText(14, AppColors.goldSoft, shadows: hubTextShadow),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              if (age != null)
+                WoodChip(
+                  label: 'Age $age',
+                  icon: const Icon(
+                    Icons.cake_rounded,
+                    size: 15,
+                    color: AppColors.goldSoft,
+                  ),
+                ),
+              if (gradeLevel != null)
+                WoodChip(
+                  label: gradeLevel!,
+                  icon: const Icon(
+                    Icons.school_rounded,
+                    size: 15,
+                    color: AppColors.goldSoft,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotificationBell extends ConsumerWidget {
+  const _NotificationBell();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unread = ref.watch(unreadNotificationCountProvider);
+    return Semantics(
+      button: true,
+      label: unread > 0 ? 'Notifications, $unread unread' : 'Notifications',
+      child: GestureDetector(
+        onTap: () => NotificationsSheet.show(context),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: HubWorld.wood.withValues(alpha: 0.82),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.goldSoft, width: 1.5),
+              ),
+              child: const Icon(
+                Icons.notifications_rounded,
+                color: AppColors.goldSoft,
+                size: 26,
+              ),
+            ),
+            if (unread > 0)
+              Positioned(
+                top: -4,
+                right: -4,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 22),
+                  height: 22,
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  decoration: BoxDecoration(
+                    color: AppColors.coral,
+                    borderRadius: BorderRadius.circular(11),
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    unread > 9 ? '9+' : '$unread',
+                    style: hubText(11, Colors.white, height: 1),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -999,3 +1066,20 @@ class AssignedHomeworkScreen extends ConsumerWidget {
 }
 
 // Removed old _AssignedHomeworkSection class.
+
+/// Centres [child] at a phone-like reading width on wide windows.
+class _Readable extends StatelessWidget {
+  const _Readable({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: child,
+      ),
+    );
+  }
+}

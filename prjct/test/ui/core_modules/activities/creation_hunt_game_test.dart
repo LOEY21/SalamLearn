@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:salamlearn/data/curriculum_data.dart';
 import 'package:salamlearn/data/models/curriculum/curriculum_models.dart';
+import 'package:salamlearn/ui/core_modules/activities/creation_hunt_audio.dart';
 import 'package:salamlearn/ui/core_modules/activities/creation_hunt_game.dart';
 
 void main() {
@@ -37,6 +38,7 @@ void main() {
         xp: 30,
         onComplete: onComplete ?? (_, _, _) {},
         onExit: onExit,
+        audio: _SilentAudio(),
       ),
     ),
   );
@@ -345,4 +347,11 @@ void main() {
       }
     }
   });
+}
+
+/// Narration that ends at once, so the how-to start button falls back to
+/// its 5s floor.
+class _SilentAudio extends CreationHuntAudio {
+  @override
+  Future<void> say(List<String> clips) async {}
 }

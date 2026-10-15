@@ -10,19 +10,26 @@ import 'soft_card.dart';
 /// Settings "Change PIN" row, shared by the Parent and Teacher dashboards.
 /// Opens a sheet that walks current PIN -> new PIN -> confirm new PIN on
 /// the same [PinPad] used by the PIN gate screens.
-class ChangePinCard extends StatelessWidget {
+class ChangePinCard extends ConsumerWidget {
   const ChangePinCard({super.key, this.accentColor = AppColors.teal});
 
   final Color accentColor;
 
   @override
-  Widget build(BuildContext context) {
-    final button = OutlinedButton(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.teal,
-        side: const BorderSide(color: AppColors.teal),
-      ),
-      onPressed: () => showModalBottomSheet<void>(
+  Widget build(BuildContext context, WidgetRef ref) {
+    void open() {
+      final left = ref.read(sessionProvider.notifier).pinChangeCooldown();
+      if (left != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'You can change your PIN again in ${left.inHours}h ${left.inMinutes % 60}m.',
+            ),
+          ),
+        );
+        return;
+      }
+      showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.white,
@@ -30,7 +37,15 @@ class ChangePinCard extends StatelessWidget {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         builder: (_) => _ChangePinSheet(accentColor: accentColor),
+      );
+    }
+
+    final button = OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.teal,
+        side: const BorderSide(color: AppColors.teal),
       ),
+      onPressed: open,
       child: const Text('Change'),
     );
     return SoftCard(
@@ -76,7 +91,7 @@ class ChangePinCard extends StatelessWidget {
                       ),
                     ),
                     const Text(
-                      'Update the 4-digit PIN for this account',
+                      'Update the 4-digit PIN for this account (once a day)',
                       style: TextStyle(
                         fontSize: 11.5,
                         color: AppColors.textMuted,

@@ -23,24 +23,84 @@ import '../progress_providers.dart';
 
 String _moduleTitle(String moduleId) => assignmentTitle(moduleId);
 
-DateTime? _doneAt(
-  ProgressRepository progress,
-  String learnerId,
-  AssignedModule a,
-) => progress.homeworkDoneAt(
-  learnerId,
-  assignedLessonsFor(a.moduleId, a.maxLevel, a.maxLessons).map((l) => l.id),
-);
+/// Whether the teacher set a due date (otherwise it's [noDueDate]).
+bool hasDueDate(AssignedModule a) => a.dueDate.year < noDueDate.year;
 
-/// "Done: 6/10/2026" once the learner has played every assigned game, else
-/// "Not done yet" — replaces the old teacher-set due date.
-String _doneLabel(
+String formatDate(DateTime d) => '${d.day}/${d.month}/${d.year}';
+
+String formatDateTime(DateTime d) {
+  final hour = d.hour % 12 == 0 ? 12 : d.hour % 12;
+  final minute = d.minute.toString().padLeft(2, '0');
+  return '${formatDate(d)}, $hour:$minute ${d.hour < 12 ? 'AM' : 'PM'}';
+}
+
+enum HomeworkStatus {
+  accomplished('Accomplished'),
+  late('Late'),
+  pending('Pending'),
+  overdue('Overdue');
+
+  const HomeworkStatus(this.label);
+  final String label;
+}
+
+/// One learner's standing on one assignment: finished on time, finished
+/// after the due date, not finished yet, or not finished and past due.
+class HomeworkSubmission {
+  const HomeworkSubmission({
+    required this.learnerId,
+    required this.name,
+    required this.status,
+    required this.gamesDone,
+    required this.gamesTotal,
+    this.completedAt,
+  });
+
+  final String learnerId;
+  final String name;
+  final HomeworkStatus status;
+  final int gamesDone;
+  final int gamesTotal;
+  final DateTime? completedAt;
+
+  bool get isDone => completedAt != null;
+
+  /// "Accomplished · 6/10/2026, 3:45 PM" / "Pending · 1 of 3 games".
+  String get label => isDone
+      ? '${status.label} · ${formatDateTime(completedAt!)}'
+      : '${status.label} · $gamesDone of $gamesTotal game${gamesTotal == 1 ? '' : 's'}';
+}
+
+HomeworkSubmission homeworkSubmission(
   ProgressRepository progress,
   String learnerId,
-  AssignedModule a,
-) {
-  final d = _doneAt(progress, learnerId, a);
-  return d == null ? 'Not done yet' : 'Done: ${d.day}/${d.month}/${d.year}';
+  String name,
+  AssignedModule a, {
+  DateTime? now,
+}) {
+  final lessonIds = assignedLessonsFor(
+    a.moduleId,
+    a.maxLevel,
+    a.maxLessons,
+  ).map((l) => l.id).toList();
+  final done = progress.completedHomeworkLessonIds(learnerId);
+  final doneAt = progress.homeworkDoneAt(learnerId, lessonIds);
+  final due = hasDueDate(a) ? a.dueDate : null;
+  final status = doneAt != null
+      ? (due != null && doneAt.isAfter(due)
+            ? HomeworkStatus.late
+            : HomeworkStatus.accomplished)
+      : (due != null && (now ?? DateTime.now()).isAfter(due)
+            ? HomeworkStatus.overdue
+            : HomeworkStatus.pending);
+  return HomeworkSubmission(
+    learnerId: learnerId,
+    name: name,
+    status: status,
+    gamesDone: lessonIds.where(done.contains).length,
+    gamesTotal: lessonIds.length,
+    completedAt: doneAt,
+  );
 }
 
 /// Real, Hive-backed replacement for the hardcoded Ali/Yusra/Hamza roster
@@ -302,81 +362,83 @@ final teacherEnrollmentSyncProvider = StreamProvider.autoDispose<void>((
 /// class) so the Profile tab's per-class management cards can show every
 /// owned class's students at once, not just whichever one happens to be
 /// active.
-final classRosterProvider = Provider.family<List<Map<String, dynamic>>, String>((
-  ref,
-  classId,
-) {
-  ref.watch(rosterRefreshProvider);
-  ref.watch(progressChangesProvider);
-  final classes = ClassRepository();
-  final learners = LearnerRepository();
-  final progress = ProgressRepository();
+final classRosterProvider = Provider.family<List<Map<String, dynamic>>, String>(
+  (ref, classId) {
+    ref.watch(rosterRefreshProvider);
+    ref.watch(progressChangesProvider);
+    final classes = ClassRepository();
+    final learners = LearnerRepository();
+    final progress = ProgressRepository();
 
-  final enrollments = classes.byClassId(classId);
-  final allLessonIds = {
-    for (final destination in curriculum)
-      for (final lesson in destination.lessons) lesson.id,
-  };
-  final roster = <Map<String, dynamic>>[];
-  for (final enrollment in enrollments) {
-    final learner = learners.findById(enrollment.learnerId);
-    if (learner == null) continue;
-    final summary = progress.summary(enrollment.learnerId);
-    final lessonsDone = progress
-        .completedLessonIds(enrollment.learnerId)
-        .intersection(allLessonIds)
-        .length;
-    final rawAssignments = classes.assignmentsFor(
-      classId: classId,
-      learnerId: enrollment.learnerId,
-    );
-    final assignments = rawAssignments
-        .map(
-          (a) =>
-              '${_moduleTitle(a.moduleId)} (${_doneLabel(progress, enrollment.learnerId, a)})',
-        )
-        .toList();
-    roster.add({
-      'learnerId': enrollment.learnerId,
-      'name': learner.name,
-      'studentId': studentIdFor(enrollment.learnerId),
-      // Share of curriculum lessons finished — not accuracy, which is
-      // already shown as 'tracing'/mastery.
-      'completion': allLessonIds.isEmpty
-          ? 0.0
-          : lessonsDone / allLessonIds.length,
-      'tracing': '${summary.accuracyPct.round()}%',
-      'activity': summary.timeOnTaskMinutes == 0
-          ? 'No activity yet'
-          : '${summary.timeOnTaskMinutes}m logged',
-      'errorCount': summary.errorCount,
-      'mastery': _masteryFor(summary.accuracyPct),
-      'assignedModules': assignments,
-      'assignmentsDetail': [
+    final enrollments = classes.byClassId(classId);
+    final allLessonIds = {
+      for (final destination in curriculum)
+        for (final lesson in destination.lessons) lesson.id,
+    };
+    final roster = <Map<String, dynamic>>[];
+    for (final enrollment in enrollments) {
+      final learner = learners.findById(enrollment.learnerId);
+      if (learner == null) continue;
+      final summary = progress.summary(enrollment.learnerId);
+      final lessonsDone = progress
+          .completedLessonIds(enrollment.learnerId)
+          .intersection(allLessonIds)
+          .length;
+      final rawAssignments = classes.assignmentsFor(
+        classId: classId,
+        learnerId: enrollment.learnerId,
+      );
+      final submissions = [
         for (final a in rawAssignments)
-          {
-            'id': a.id,
-            'moduleId': a.moduleId,
-            'module': _moduleTitle(a.moduleId),
-            'dueDate': '${a.dueDate.day}/${a.dueDate.month}/${a.dueDate.year}',
-            'dueDateRaw': a.dueDate,
-            'doneLabel': _doneLabel(progress, enrollment.learnerId, a),
-            'maxLevel': a.maxLevel,
-            'maxLessons': a.maxLessons,
-          },
-      ],
-      // Raw (moduleId, dueDate, maxLevel, maxLessons) tuples — used by the
-      // learner Adventure Map to flag overdue nodes and gate level/lesson
-      // access; the formatted `assignedModules` strings above are
-      // display-only and stay untouched for the teacher dashboard.
-      'assignedModuleDues': [
-        for (final a in rawAssignments)
-          (a.moduleId, a.dueDate, a.maxLevel, a.maxLessons),
-      ],
-    });
-  }
-  return roster;
-});
+          homeworkSubmission(progress, enrollment.learnerId, learner.name, a),
+      ];
+      final assignments = [
+        for (final (i, a) in rawAssignments.indexed)
+          '${_moduleTitle(a.moduleId)} (${submissions[i].label})',
+      ];
+      roster.add({
+        'learnerId': enrollment.learnerId,
+        'name': learner.name,
+        'studentId': studentIdFor(enrollment.learnerId),
+        // Share of curriculum lessons finished — not accuracy, which is
+        // already shown as 'tracing'/mastery.
+        'completion': allLessonIds.isEmpty
+            ? 0.0
+            : lessonsDone / allLessonIds.length,
+        'tracing': '${summary.accuracyPct.round()}%',
+        'activity': summary.timeOnTaskMinutes == 0
+            ? 'No activity yet'
+            : '${summary.timeOnTaskMinutes}m logged',
+        'errorCount': summary.errorCount,
+        'mastery': _masteryFor(summary.accuracyPct),
+        'assignedModules': assignments,
+        'assignmentsDetail': [
+          for (final (i, a) in rawAssignments.indexed)
+            {
+              'id': a.id,
+              'moduleId': a.moduleId,
+              'module': _moduleTitle(a.moduleId),
+              'dueDate': hasDueDate(a) ? formatDateTime(a.dueDate) : null,
+              'dueDateRaw': a.dueDate,
+              'doneLabel': submissions[i].label,
+              'submission': submissions[i],
+              'maxLevel': a.maxLevel,
+              'maxLessons': a.maxLessons,
+            },
+        ],
+        // Raw (moduleId, dueDate, maxLevel, maxLessons) tuples — used by the
+        // learner Adventure Map to flag overdue nodes and gate level/lesson
+        // access; the formatted `assignedModules` strings above are
+        // display-only and stay untouched for the teacher dashboard.
+        'assignedModuleDues': [
+          for (final a in rawAssignments)
+            (a.moduleId, a.dueDate, a.maxLevel, a.maxLessons),
+        ],
+      });
+    }
+    return roster;
+  },
+);
 
 /// The active class's roster — what the Roster tab and homework assigner
 /// read. Thin wrapper over [classRosterProvider] scoped to whichever class
@@ -392,31 +454,39 @@ final classHomeworkProvider = Provider<List<Map<String, dynamic>>>((ref) {
   final section = ref.watch(teacherClassControllerProvider);
   if (section == null) return const [];
   ref.watch(progressChangesProvider);
+  ref.watch(rosterRefreshProvider);
   final classes = ClassRepository();
+  final learners = LearnerRepository();
   final progress = ProgressRepository();
-  final learnerIds = classes
-      .byClassId(section.id)
-      .map((e) => e.learnerId)
-      .toList();
-  return classes
-      .assignmentsFor(classId: section.id, learnerId: null)
-      .map(
-        (a) => {
-          'id': a.id,
-          'classId': a.classId,
-          'moduleId': a.moduleId,
-          'module': _moduleTitle(a.moduleId),
-          'dueDate': '${a.dueDate.day}/${a.dueDate.month}/${a.dueDate.year}',
-          'dueDateRaw': a.dueDate,
-          // One date can't describe a whole class, so this counts finishers.
-          'doneLabel':
-              'Done by ${learnerIds.where((id) => _doneAt(progress, id, a) != null).length}'
-              ' of ${learnerIds.length} students',
-          'maxLevel': a.maxLevel,
-          'maxLessons': a.maxLessons,
-        },
-      )
-      .toList();
+  final roster = [
+    for (final e in classes.byClassId(section.id))
+      if (learners.findById(e.learnerId) case final learner?)
+        (id: e.learnerId, name: learner.name),
+  ];
+  return classes.assignmentsFor(classId: section.id, learnerId: null).map((a) {
+    final submissions = [
+      for (final s in roster) homeworkSubmission(progress, s.id, s.name, a),
+    ];
+    int count(HomeworkStatus status) =>
+        submissions.where((s) => s.status == status).length;
+    return {
+      'id': a.id,
+      'classId': a.classId,
+      'moduleId': a.moduleId,
+      'module': _moduleTitle(a.moduleId),
+      'dueDate': hasDueDate(a) ? formatDateTime(a.dueDate) : null,
+      'dueDateRaw': a.dueDate,
+      'assignedAt': a.assignedAt,
+      // One date can't describe a whole class, so this tallies statuses.
+      'doneLabel': [
+        for (final status in HomeworkStatus.values)
+          if (count(status) > 0) '${count(status)} ${status.label}',
+      ].join(' · '),
+      'submissions': submissions,
+      'maxLevel': a.maxLevel,
+      'maxLessons': a.maxLessons,
+    };
+  }).toList();
 });
 
 /// A class's freeform lessons (title/instructions/body), newest first —

@@ -9,7 +9,8 @@ typedef ClassroomQuestionAudio = ({
   String decoy,
 });
 
-/// The supplied recordings in the four sessions' question order.
+/// The recordings in each session's question order, indexed by session
+/// number: the four manners sessions, then the colors and shapes ones.
 const classroomAudio = <List<ClassroomQuestionAudio>>[
   [
     (
@@ -79,6 +80,104 @@ const classroomAudio = <List<ClassroomQuestionAudio>>[
       decoy: 'teamwork/make_feel_left_out.mp3',
     ),
   ],
+  [
+    (
+      prompt: 'vocab/story_red.mp3',
+      correct: 'vocab/ahmar.mp3',
+      decoy: 'vocab/azraq.mp3',
+    ),
+    (
+      prompt: 'vocab/story_blue.mp3',
+      correct: 'vocab/azraq.mp3',
+      decoy: 'vocab/asfar.mp3',
+    ),
+    (
+      prompt: 'vocab/story_yellow.mp3',
+      correct: 'vocab/asfar.mp3',
+      decoy: 'vocab/akhdar.mp3',
+    ),
+    (
+      prompt: 'vocab/story_green.mp3',
+      correct: 'vocab/akhdar.mp3',
+      decoy: 'vocab/ahmar.mp3',
+    ),
+    (
+      prompt: 'vocab/story_orange.mp3',
+      correct: 'vocab/burtuqali.mp3',
+      decoy: 'vocab/bunni.mp3',
+    ),
+  ],
+  [
+    (
+      prompt: 'vocab/story_purple.mp3',
+      correct: 'vocab/banafsaji.mp3',
+      decoy: 'vocab/aswad.mp3',
+    ),
+    (
+      prompt: 'vocab/story_black.mp3',
+      correct: 'vocab/aswad.mp3',
+      decoy: 'vocab/abyad.mp3',
+    ),
+    (
+      prompt: 'vocab/story_white.mp3',
+      correct: 'vocab/abyad.mp3',
+      decoy: 'vocab/aswad.mp3',
+    ),
+    (
+      prompt: 'vocab/story_brown.mp3',
+      correct: 'vocab/bunni.mp3',
+      decoy: 'vocab/banafsaji.mp3',
+    ),
+  ],
+  [
+    (
+      prompt: 'vocab/story_circle.mp3',
+      correct: 'vocab/dairah.mp3',
+      decoy: 'vocab/murabba.mp3',
+    ),
+    (
+      prompt: 'vocab/story_square.mp3',
+      correct: 'vocab/murabba.mp3',
+      decoy: 'vocab/muthallath.mp3',
+    ),
+    (
+      prompt: 'vocab/story_triangle.mp3',
+      correct: 'vocab/muthallath.mp3',
+      decoy: 'vocab/dairah.mp3',
+    ),
+    (
+      prompt: 'vocab/story_rectangle.mp3',
+      correct: 'vocab/mustatil.mp3',
+      decoy: 'vocab/najmah.mp3',
+    ),
+    (
+      prompt: 'vocab/story_star.mp3',
+      correct: 'vocab/najmah.mp3',
+      decoy: 'vocab/hilal.mp3',
+    ),
+  ],
+  [
+    (
+      prompt: 'vocab/story_heart.mp3',
+      correct: 'vocab/qalb.mp3',
+      decoy: 'vocab/muayyan.mp3',
+    ),
+    (
+      prompt: 'vocab/story_diamond.mp3',
+      correct: 'vocab/muayyan.mp3',
+      decoy: 'vocab/baydawi.mp3',
+    ),
+    (
+      prompt: 'vocab/story_crescent.mp3',
+      correct: 'vocab/hilal.mp3',
+      decoy: 'vocab/qalb.mp3',
+    ),
+    (
+      prompt: 'vocab/story_oval.mp3',
+      correct: 'vocab/baydawi.mp3',
+      decoy: 'vocab/mustatil.mp3',
+    ),
+  ],
 ];
 
 abstract interface class ClassroomAudioPlayback {
@@ -88,12 +187,17 @@ abstract interface class ClassroomAudioPlayback {
     void Function()? onComplete,
     void Function()? onError,
     void Function(Duration)? onDuration,
+    bool localized = true,
   });
   Future<void> stopVoice();
   Future<void> dispose();
 }
 
 class ClassroomHeroesAudio implements ClassroomAudioPlayback {
+  /// The title has no Tagalog take, so it plays with `localized: false`.
+  static const title = 'classroom_heroes.mp3';
+  static const mumtaz = 'mumtaz.mp3';
+
   final AudioPlayer _voice = AudioPlayer();
   final AudioPlayer _music = AudioPlayer();
   StreamSubscription<void>? _complete;
@@ -104,7 +208,7 @@ class ClassroomHeroesAudio implements ClassroomAudioPlayback {
   Future<void> startMusic() async {
     try {
       await _music.setReleaseMode(ReleaseMode.loop);
-      await _music.setVolume(0.18);
+      await _music.setVolume(0.06);
       await _music.play(AssetSource('audio/classroom_heroes/ambient.mp3'));
     } catch (_) {
       // Audio device failures must not block the game.
@@ -117,6 +221,7 @@ class ClassroomHeroesAudio implements ClassroomAudioPlayback {
     void Function()? onComplete,
     void Function()? onError,
     void Function(Duration)? onDuration,
+    bool localized = true,
   }) async {
     final generation = ++_generation;
     await _complete?.cancel();
@@ -134,7 +239,9 @@ class ClassroomHeroesAudio implements ClassroomAudioPlayback {
         if (generation == _generation) onDuration?.call(duration);
       });
       await _voice.play(
-        AssetSource('audio/classroom_heroes/${localizedVoice(asset)}'),
+        AssetSource(
+          'audio/classroom_heroes/${localized ? localizedVoice(asset) : asset}',
+        ),
       );
     } catch (_) {
       if (generation == _generation) onError?.call();

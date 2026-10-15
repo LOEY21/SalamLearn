@@ -44,7 +44,8 @@ class _PillarConcept {
   });
 }
 
-class _StoryActivityState extends State<StoryActivity> with TickerProviderStateMixin {
+class _StoryActivityState extends State<StoryActivity>
+    with TickerProviderStateMixin {
   bool _success = false;
   int _mismatchCount = 0;
 
@@ -62,16 +63,56 @@ class _StoryActivityState extends State<StoryActivity> with TickerProviderStateM
 
   // Full pool of concepts
   final List<_PillarConcept> _allConcepts = const [
-    _PillarConcept(id: 'sh1', name: 'Declaration', emoji: '☝️', targetPillar: 'Shahada'),
-    _PillarConcept(id: 'sh2', name: 'Testimony', emoji: '📜', targetPillar: 'Shahada'),
-    _PillarConcept(id: 'sa1', name: 'Prayer Mat', emoji: '🧎', targetPillar: 'Salah'),
-    _PillarConcept(id: 'sa2', name: 'Mosque', emoji: '🕌', targetPillar: 'Salah'),
-    _PillarConcept(id: 'zk1', name: 'Charity Box', emoji: '🪙', targetPillar: 'Zakat'),
-    _PillarConcept(id: 'zk2', name: 'Gold Coins', emoji: '💰', targetPillar: 'Zakat'),
-    _PillarConcept(id: 'sw1', name: 'Crescent Moon', emoji: '🌙', targetPillar: 'Sawm'),
+    _PillarConcept(
+      id: 'sh1',
+      name: 'Declaration',
+      emoji: '☝️',
+      targetPillar: 'Shahada',
+    ),
+    _PillarConcept(
+      id: 'sh2',
+      name: 'Testimony',
+      emoji: '📜',
+      targetPillar: 'Shahada',
+    ),
+    _PillarConcept(
+      id: 'sa1',
+      name: 'Prayer Mat',
+      emoji: '🧎',
+      targetPillar: 'Salah',
+    ),
+    _PillarConcept(
+      id: 'sa2',
+      name: 'Mosque',
+      emoji: '🕌',
+      targetPillar: 'Salah',
+    ),
+    _PillarConcept(
+      id: 'zk1',
+      name: 'Charity Box',
+      emoji: '🪙',
+      targetPillar: 'Zakat',
+    ),
+    _PillarConcept(
+      id: 'zk2',
+      name: 'Gold Coins',
+      emoji: '💰',
+      targetPillar: 'Zakat',
+    ),
+    _PillarConcept(
+      id: 'sw1',
+      name: 'Crescent Moon',
+      emoji: '🌙',
+      targetPillar: 'Sawm',
+    ),
     _PillarConcept(id: 'sw2', name: 'Dates', emoji: '🌴', targetPillar: 'Sawm'),
     _PillarConcept(id: 'hj1', name: 'Kaaba', emoji: '🕋', targetPillar: 'Hajj'),
-    _PillarConcept(id: 'hj2', name: 'Pilgrim', emoji: '✈️', targetPillar: 'Hajj'),
+    _PillarConcept(
+      id: 'hj2',
+      name: 'Pilgrim',
+      emoji: '✈️',
+      targetPillar: 'Hajj',
+    ),
   ];
 
   late List<_PillarConcept> _levelConcepts;
@@ -133,8 +174,12 @@ class _StoryActivityState extends State<StoryActivity> with TickerProviderStateM
     // Level 7  → 7 cards
     // ...continuing...
     // Level 10+→ all 10 cards (2 per pillar)
-    final firstConcepts = _allConcepts.where((c) => c.id.endsWith('1')).toList();
-    final secondConcepts = _allConcepts.where((c) => c.id.endsWith('2')).toList();
+    final firstConcepts = _allConcepts
+        .where((c) => c.id.endsWith('1'))
+        .toList();
+    final secondConcepts = _allConcepts
+        .where((c) => c.id.endsWith('2'))
+        .toList();
 
     if (level <= 5) {
       // Take the first N 'easy' concepts (1 per pillar progressively)
@@ -142,16 +187,11 @@ class _StoryActivityState extends State<StoryActivity> with TickerProviderStateM
     } else {
       // All 5 first-concepts + progressively add second-concepts
       final extra = (level - 5).clamp(0, 5);
-      _levelConcepts = [
-        ...firstConcepts,
-        ...secondConcepts.take(extra),
-      ];
+      _levelConcepts = [...firstConcepts, ...secondConcepts.take(extra)];
     }
 
     _remainingPool = List<_PillarConcept>.from(_levelConcepts)..shuffle();
-    _matchedPillars = {
-      for (final p in _pillars) p: <_PillarConcept>[],
-    };
+    _matchedPillars = {for (final p in _pillars) p: <_PillarConcept>[]};
     _success = false;
   }
 
@@ -312,7 +352,8 @@ class _StoryActivityState extends State<StoryActivity> with TickerProviderStateM
                     return Transform.translate(
                       offset: Offset(shakeOffset, 0),
                       child: DragTarget<_PillarConcept>(
-                        onAcceptWithDetails: (details) => _onCardDropped(pillar, details.data),
+                        onAcceptWithDetails: (details) =>
+                            _onCardDropped(pillar, details.data),
                         builder: (context, candidateData, rejectedData) {
                           final isHovering = candidateData.isNotEmpty;
 
@@ -332,10 +373,12 @@ class _StoryActivityState extends State<StoryActivity> with TickerProviderStateM
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.deepPurple.withValues(alpha: 0.07),
+                                  color: Colors.deepPurple.withValues(
+                                    alpha: 0.07,
+                                  ),
                                   blurRadius: 8,
                                   offset: const Offset(0, 3),
-                                )
+                                ),
                               ],
                             ),
                             child: Column(
@@ -343,10 +386,16 @@ class _StoryActivityState extends State<StoryActivity> with TickerProviderStateM
                                 // Pillar header
                                 Container(
                                   width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: isHovering ? AppColors.gold : Colors.deepPurple,
-                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                                    color: isHovering
+                                        ? AppColors.gold
+                                        : Colors.deepPurple,
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(16),
+                                    ),
                                   ),
                                   child: Column(
                                     children: [
@@ -363,7 +412,9 @@ class _StoryActivityState extends State<StoryActivity> with TickerProviderStateM
                                         style: TextStyle(
                                           fontSize: 10,
                                           fontWeight: FontWeight.w800,
-                                          color: Colors.white.withValues(alpha: 0.85),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.85,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -375,19 +426,22 @@ class _StoryActivityState extends State<StoryActivity> with TickerProviderStateM
                                     alignment: Alignment.center,
                                     child: matches.isEmpty
                                         ? Column(
-                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
                                             children: [
                                               Icon(
                                                 Icons.arrow_downward_rounded,
                                                 size: 22,
-                                                color: Colors.deepPurple.withValues(alpha: 0.25),
+                                                color: Colors.deepPurple
+                                                    .withValues(alpha: 0.25),
                                               ),
                                               const SizedBox(height: 4),
                                               Text(
                                                 'Drop here',
                                                 style: TextStyle(
                                                   fontSize: 10,
-                                                  color: Colors.deepPurple.withValues(alpha: 0.3),
+                                                  color: Colors.deepPurple
+                                                      .withValues(alpha: 0.3),
                                                   fontWeight: FontWeight.w600,
                                                 ),
                                               ),
@@ -399,14 +453,19 @@ class _StoryActivityState extends State<StoryActivity> with TickerProviderStateM
                                             alignment: WrapAlignment.center,
                                             children: matches.map((concept) {
                                               return Container(
-                                                padding: const EdgeInsets.all(4),
+                                                padding: const EdgeInsets.all(
+                                                  4,
+                                                ),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.deepPurple.withValues(alpha: 0.08),
+                                                  color: Colors.deepPurple
+                                                      .withValues(alpha: 0.08),
                                                   shape: BoxShape.circle,
                                                 ),
                                                 child: Text(
                                                   concept.emoji,
-                                                  style: const TextStyle(fontSize: 22),
+                                                  style: const TextStyle(
+                                                    fontSize: 22,
+                                                  ),
                                                 ),
                                               );
                                             }).toList(),
@@ -416,12 +475,16 @@ class _StoryActivityState extends State<StoryActivity> with TickerProviderStateM
                                 // Base strip
                                 Container(
                                   width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(vertical: 5),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 5,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: isHovering
                                         ? AppColors.gold.withValues(alpha: 0.15)
                                         : Colors.grey[100],
-                                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                                    borderRadius: const BorderRadius.vertical(
+                                      bottom: Radius.circular(16),
+                                    ),
                                   ),
                                   child: Text(
                                     'BASE',
@@ -430,7 +493,9 @@ class _StoryActivityState extends State<StoryActivity> with TickerProviderStateM
                                       fontSize: 9,
                                       fontWeight: FontWeight.w900,
                                       letterSpacing: 1,
-                                      color: isHovering ? AppColors.gold : Colors.grey[500],
+                                      color: isHovering
+                                          ? AppColors.gold
+                                          : Colors.grey[500],
                                     ),
                                   ),
                                 ),
@@ -500,11 +565,17 @@ class _StoryActivityState extends State<StoryActivity> with TickerProviderStateM
                     )
                   : Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.9),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.1), width: 1.5),
+                        border: Border.all(
+                          color: Colors.deepPurple.withValues(alpha: 0.1),
+                          width: 1.5,
+                        ),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.deepPurple.withValues(alpha: 0.04),
@@ -570,22 +641,22 @@ class _ConceptCardWidget extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.2), width: 1.5),
+        border: Border.all(
+          color: Colors.deepPurple.withValues(alpha: 0.2),
+          width: 1.5,
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x08000000),
             blurRadius: 3,
             offset: Offset(0, 1.5),
-          )
+          ),
         ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            concept.emoji,
-            style: const TextStyle(fontSize: 16),
-          ),
+          Text(concept.emoji, style: const TextStyle(fontSize: 16)),
           const SizedBox(width: 4),
           Text(
             concept.name,

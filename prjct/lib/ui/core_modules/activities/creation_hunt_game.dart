@@ -8,6 +8,7 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 import 'creation_hunt_audio.dart';
+import '../game_ui_audio.dart';
 
 /// Allah's Creation Hunt — a hidden-object hunt across one illustrated
 /// scene. Ported 1:1 from the supplied "Allah's Creation Hunt" design
@@ -31,6 +32,7 @@ class CreationHuntGame extends StatefulWidget {
     required this.onComplete,
     this.onEnding,
     this.onExit,
+    this.audio,
   });
 
   final CreationHuntStage stage;
@@ -44,6 +46,9 @@ class CreationHuntGame extends StatefulWidget {
   /// Leaves the lesson — wired to the hunt HUD's ✕ chip, which is the only
   /// exit the prototype's layout has room for.
   final VoidCallback? onExit;
+
+  /// Swapped for a silent stand-in by tests.
+  final CreationHuntAudio? audio;
 
   @override
   State<CreationHuntGame> createState() => _CreationHuntGameState();
@@ -186,6 +191,10 @@ class _CreationHuntGameState extends State<CreationHuntGame>
   bool _counting = false; // the 3-2-1 before the hunt opens
   int _recapCount = 0; // found spots lit so far in the end-of-hunt recap
   bool _startPressed = false;
+
+  /// Screen time the how-to narration ended; the start button waits for it.
+  double? _startAt;
+  Future<void>? _tutorial;
   bool _keepPressed = false;
 
   int _tapId = 0;
@@ -199,7 +208,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
   Timer? _countTimer;
   final Set<Timer> _rippleTimers = {};
 
-  final CreationHuntAudio _audio = CreationHuntAudio();
+  late final CreationHuntAudio _audio = widget.audio ?? CreationHuntAudio();
 
   /// Music button state: off silences the forest ambience.
   bool _sound = true;
@@ -212,6 +221,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
   void initState() {
     super.initState();
     _audio.startMusic();
+    _audio.say(const ['allahs_creation_hunt.mp3']);
   }
 
   @override
@@ -242,12 +252,24 @@ class _CreationHuntGameState extends State<CreationHuntGame>
   void _startHunt() {
     if (_loading) return;
     _goto(_Screen.howTo);
+    _startAt = null;
+    final tutorial = _tutorial = _audio.say(const [
+      'tutorial_look_closely.mp3',
+      'tutorial_gold_ring.mp3',
+      'tutorial_people_made.mp3',
+      'tutorial_lamp_hint.mp3',
+    ]);
+    tutorial.then((_) {
+      if (!mounted || _tutorial != tutorial) return;
+      setState(() => _startAt = math.max(_st, _kStartDelay));
+    });
   }
 
   /// The prototype's `begin(i)` — a 1.1s "setting out on the hunt" beat
   /// before the scene appears, with every hunt-local bit of state reset.
   void _begin() {
     if (_loading) return;
+    _audio.stopVoice();
     setState(() => _loading = true);
     _beginTimer?.cancel();
     _beginTimer = Timer(const Duration(milliseconds: 1100), () {
@@ -349,6 +371,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
         _mark = _Mark(spot.id, true);
         _markT0 = _st;
       });
+      _audio.say(['allah_created_${spot.key}.mp3']);
       if (_found.length == _total) {
         _scheduleDone();
         return;
@@ -356,11 +379,13 @@ class _CreationHuntGameState extends State<CreationHuntGame>
       _showReveal(spot, true);
     } else {
       _wrongTaps++;
+      GameUiAudio.instance.wrong();
       setState(() {
         if (!_missed.contains(spot.id)) _missed.add(spot.id);
         _mark = _Mark(spot.id, false);
         _markT0 = _st;
       });
+      _audio.say(const ['decoy_people_made.mp3']);
       _showReveal(spot, false);
     }
     _markTimer?.cancel();
@@ -1120,7 +1145,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
                         child: _fxWrap(
                           _entrance(
                             dur: 0.5,
-                            delay: _kStartDelay,
+                            delay: _startAt ?? double.infinity,
                             child: _pressImage(
                               pressed: _startPressed,
                               up: '$_kA/btn_start_blank_up.png',
@@ -1152,7 +1177,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
                             ),
                           ),
                           (t, c) => IgnorePointer(
-                            ignoring: t < _kStartDelay,
+                            ignoring: t < (_startAt ?? double.infinity),
                             child: c,
                           ),
                         ),
@@ -1268,7 +1293,12 @@ class _CreationHuntGameState extends State<CreationHuntGame>
           curve: _easeOut,
           child: label == null
               ? art
-              : Stack(children: [art, Positioned.fill(child: label)]),
+              : Stack(
+                  children: [
+                    art,
+                    Positioned.fill(child: label),
+                  ],
+                ),
         ),
       ),
     );
@@ -1341,6 +1371,11 @@ class _CreationHuntGameState extends State<CreationHuntGame>
             ),
           ),
           for (final spot in _stage.spots) _buildSpot(spot),
+          for (final key in {
+            for (final s in _stage.spots)
+              if (s.segment) s.key,
+          })
+            _buildSegmentOutline(key),
           // One fixed slot, not one child per ripple: adding a child here
           // would shift every later child's index, and an unkeyed Stack
           // matches children by index — which tears down and rebuilds the
@@ -1431,13 +1466,17 @@ class _CreationHuntGameState extends State<CreationHuntGame>
     final w = spot.w * _kW;
     final h = spot.h * _kH;
     final radius = _radiusFor(spot.radius, w, h);
-    final isFound = _hit.contains(spot.id);
+    // A segmented creation's ring and glow come from _buildSegmentOutline.
+    final seg = _segmented(spot);
+    final isFound = !seg && _hit.contains(spot.id);
     final recapIdx = _hit.indexOf(spot.id);
-    final isLit = recapIdx >= 0 && recapIdx < _recapCount;
+    final isLit = !seg && recapIdx >= 0 && recapIdx < _recapCount;
     final isMissed = _missed.contains(spot.id);
     final m = _mark;
     // null = not marked, true = a find, false = a decoy.
-    final bool? markRight = (m != null && m.id == spot.id) ? m.right : null;
+    final bool? markRight = (!seg && m != null && m.id == spot.id)
+        ? m.right
+        : null;
     final hinting = _hinting == spot.id;
 
     return Positioned(
@@ -1447,7 +1486,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
       height: h,
       child: Semantics(
         button: true,
-        label: spot.name,
+        label: spot.name.tr,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => _tapSpot(spot),
@@ -2004,6 +2043,56 @@ class _CreationHuntGameState extends State<CreationHuntGame>
     );
   }
 
+  /// Whether [spot] is one piece of a segmented creation (the river).
+  bool _segmented(CreationHuntSpot spot) =>
+      _stage.spots.any((s) => s.segment && s.key == spot.key);
+
+  /// The outline drawn around [spot]: its own rounded box, or for a
+  /// segmented creation the union of every piece, so the whole river
+  /// lights up whichever bend was tapped.
+  Path _outline(CreationHuntSpot spot) {
+    final pieces = _segmented(spot)
+        ? _stage.spots.where((s) => s.key == spot.key)
+        : [spot];
+    var shape = Path();
+    for (final s in pieces) {
+      final r = Rect.fromLTWH(
+        (s.x - s.w / 2) * _kW,
+        (s.y - s.h / 2) * _kH,
+        s.w * _kW,
+        s.h * _kH,
+      );
+      final piece = Path()
+        ..addRRect(_radiusFor(s.radius, r.width, r.height).toRRect(r));
+      shape = Path.combine(PathOperation.union, shape, piece);
+    }
+    return shape;
+  }
+
+  Widget _buildSegmentOutline(String key) {
+    final pieces = _stage.spots.where((s) => s.key == key);
+    final idx = pieces.map((s) => _hit.indexOf(s.id)).reduce(math.max);
+    final shape = _outline(pieces.first);
+    Widget layer(bool on, int ms, bool glow) => AnimatedOpacity(
+      opacity: on ? 1 : 0,
+      duration: Duration(milliseconds: ms),
+      child: CustomPaint(
+        painter: _OutlinePainter(shape, glow: glow),
+        child: const SizedBox.expand(),
+      ),
+    );
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Stack(
+          children: [
+            layer(idx >= 0, 350, false),
+            layer(idx >= 0 && idx < _recapCount, 400, true),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _spotlight(CreationHuntSpot spot, bool right) {
     return _fx((_) {
       var sc = 1.0;
@@ -2028,13 +2117,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
       }
       return CustomPaint(
         painter: _SpotlightPainter(
-          rect: Rect.fromLTWH(
-            (spot.x - spot.w / 2) * _kW,
-            (spot.y - spot.h / 2) * _kH,
-            spot.w * _kW,
-            spot.h * _kH,
-          ),
-          radius: spot.radius,
+          shape: _outline(spot),
           right: right,
           scale: sc,
           dx: tx,
@@ -3177,16 +3260,14 @@ class _PressDownState extends State<_PressDown> {
 /// punched-out path so it stays cheap.
 class _SpotlightPainter extends CustomPainter {
   const _SpotlightPainter({
-    required this.rect,
-    required this.radius,
+    required this.shape,
     required this.right,
     required this.scale,
     required this.dx,
     required this.rotation,
   });
 
-  final Rect rect;
-  final CreationHuntRadius radius;
+  final Path shape;
   final bool right;
   final double scale;
   final double dx;
@@ -3194,35 +3275,33 @@ class _SpotlightPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final centre = rect.center;
+    final centre = shape.getBounds().center;
     canvas.save();
     canvas.translate(centre.dx + dx, centre.dy);
     canvas.rotate(rotation);
     canvas.scale(scale);
     canvas.translate(-centre.dx, -centre.dy);
 
-    final rr = _radiusFor(radius, rect.width, rect.height).toRRect(rect);
-    final hole = Path()..addRRect(rr);
     final everything = Path()
       ..addRect(const Rect.fromLTWH(-9999, -9999, 20000, 20000));
 
     canvas.drawPath(
-      Path.combine(PathOperation.difference, everything, hole),
+      Path.combine(PathOperation.difference, everything, shape),
       Paint()..color = const Color(0xC7051A0A),
     );
 
     final rim = right ? const Color(0xF2FFEC96) : const Color(0xE6FFC48C);
     final glow = right ? const Color(0xBFFFD666) : const Color(0x99C98A4A);
-    canvas.drawRRect(
-      rr,
+    canvas.drawPath(
+      shape,
       Paint()
         ..color = glow
         ..style = PaintingStyle.stroke
         ..strokeWidth = right ? 20 : 16
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, right ? 15 : 13),
     );
-    canvas.drawRRect(
-      rr,
+    canvas.drawPath(
+      shape,
       Paint()
         ..color = rim
         ..style = PaintingStyle.stroke
@@ -3233,10 +3312,45 @@ class _SpotlightPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SpotlightPainter old) =>
-      old.rect != rect ||
+      old.shape != shape ||
       old.scale != scale ||
       old.dx != dx ||
       old.rotation != rotation ||
-      old.right != right ||
-      old.radius != radius;
+      old.right != right;
+}
+
+/// The found ring (and recap glow) for a segmented creation, drawn once
+/// around the union of its pieces instead of a ring per piece.
+class _OutlinePainter extends CustomPainter {
+  const _OutlinePainter(this.shape, {required this.glow});
+
+  final Path shape;
+  final bool glow;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (glow) {
+      canvas.drawPath(
+        shape,
+        Paint()
+          ..color = const Color(0x80FFD666)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 12
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 11),
+      );
+      canvas.drawPath(shape, Paint()..color = const Color(0x29FFEC96));
+    } else {
+      canvas.drawPath(
+        shape,
+        Paint()
+          ..color = const Color(0xCCFFEC96)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_OutlinePainter old) =>
+      old.shape != shape || old.glow != glow;
 }

@@ -1054,7 +1054,7 @@ class HubHeaderChip extends StatelessWidget {
 /// windows and scrolling away with the content on short ones (landscape
 /// phone, large text), then [body] (usually a [HubTabBody] or
 /// [HubListBody]).
-class HubSubpage extends StatelessWidget {
+class HubSubpage extends StatefulWidget {
   const HubSubpage({
     super.key,
     required this.header,
@@ -1071,17 +1071,32 @@ class HubSubpage extends StatelessWidget {
   final Widget? bottomBar;
 
   @override
+  State<HubSubpage> createState() => _HubSubpageState();
+}
+
+class _HubSubpageState extends State<HubSubpage> {
+  /// Layout picked while the keyboard was closed. Opening the keyboard
+  /// shrinks the page, and swapping layouts then would rebuild the focused
+  /// field and close the keyboard straight away.
+  bool? _short;
+
+  @override
   Widget build(BuildContext context) {
+    final header = widget.header;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: AppColors.cream,
-        floatingActionButton: floatingActionButton,
-        bottomNavigationBar: bottomBar,
+        floatingActionButton: widget.floatingActionButton,
+        bottomNavigationBar: widget.bottomBar,
         body: LayoutBuilder(
           builder: (context, constraints) {
-            final content = SafeArea(top: false, child: body);
-            if (scaledExtent(context, constraints.maxHeight) < 640) {
+            final content = SafeArea(top: false, child: widget.body);
+            if (!keyboardOpen || _short == null) {
+              _short = scaledExtent(context, constraints.maxHeight) < 640;
+            }
+            if (_short!) {
               return NestedScrollView(
                 headerSliverBuilder: (context, _) => [
                   SliverToBoxAdapter(child: header),

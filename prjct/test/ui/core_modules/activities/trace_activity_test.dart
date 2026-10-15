@@ -31,6 +31,8 @@ void main() {
       ...sandTracer2,
       ...sandTracer3,
       ...sandTracer4,
+      ...sandTracer5,
+      ...sandTracer6,
     ]) {
       final letter = card.arabic.split('\n').last.trim();
       final t = letterTraces[letter];

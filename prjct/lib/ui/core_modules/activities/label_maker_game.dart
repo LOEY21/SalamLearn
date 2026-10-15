@@ -10,6 +10,8 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../widgets/arc_text_painter.dart';
 import 'bend_sprite.dart';
+import '../../widgets/app_orientation.dart';
+import '../game_ui_audio.dart';
 
 const _kA = 'assets/images/label_maker';
 
@@ -18,6 +20,12 @@ const _kA = 'assets/images/label_maker';
 const _kW = 1870.0;
 const _kH = 841.0;
 
+/// Portrait stage; the Body Parts art (a close crop, same shape) fills it.
+const _kPortrait = Size(853, 1844);
+
+/// How far (stage px) a full-screen dim reaches past the stage.
+const _kBleed = 4000.0;
+
 /// A drop this close (stage px) to the right object always counts, so
 /// small targets (nose, key, eraser) stay fair for small fingers.
 const _kTolerance = 26.0;
@@ -25,8 +33,12 @@ const _kTolerance = 26.0;
 /// Drops further than this from every object snap back without a penalty.
 const _kReach = 60.0;
 
-/// How long the How to Play steps stay up before Let's Go appears.
+/// How long the "Get ready" bar takes to fill; with sound on, Let's Go
+/// waits for the spoken steps instead, with it muted for this long.
 const _kHowToWaitMs = 5000;
+
+/// How long the turn-your-phone step plays before Let's Go appears anyway.
+const _kRotateWaitMs = 3000;
 
 /// The all-found finale: every object lights up in the order it was
 /// labelled, then they pulse together until the congrats screen.
@@ -37,13 +49,25 @@ const _kCream = Color(0xFFFFF8E6);
 const _kGold = Color(0xFFF5B400);
 
 class _Word {
-  const _Word(this.ar, this.en, this.audio, this.point, this.label, this.rects);
+  const _Word(
+    this.ar,
+    this.en,
+    this.fil,
+    this.audio,
+    this.point,
+    this.label,
+    this.rects,
+  );
 
   final String ar;
   final String en;
+  final String fil;
 
   /// Spoken Arabic word, played on each new prompt, speaker and word-wall taps.
   final String audio;
+
+  /// Narrator line naming the word in both languages, said once it's placed.
+  String get feedback => 'feedback_${audio.split('/').last}';
 
   /// Where the placed label's pin touches the object.
   final Offset point;
@@ -56,11 +80,18 @@ class _Word {
 }
 
 class _Session {
-  const _Session(this.title, this.bg, this.words);
+  const _Session(this.title, this.bg, this.words, {this.portraitBg});
 
   final String title;
   final String bg;
   final List<_Word> words;
+
+  /// Set when the round itself (play + congrats) runs in portrait on this
+  /// art instead of [bg]; the words' coordinates are then in [_kPortrait].
+  final String? portraitBg;
+
+  String get room => portraitBg ?? bg;
+  Size get roomSize => portraitBg == null ? const Size(_kW, _kH) : _kPortrait;
 }
 
 const _kSessions = {
@@ -68,6 +99,7 @@ const _kSessions = {
     _Word(
       'بَابٌ',
       'Door',
+      'Pinto',
       'audio/label_maker/vocab/bab.mp3',
       Offset(290, 470),
       Offset(290, 330),
@@ -76,15 +108,17 @@ const _kSessions = {
     _Word(
       'سَرِيرٌ',
       'Bed',
+      'Kama',
       'audio/label_maker/vocab/sarir.mp3',
       Offset(670, 160),
       Offset(670, 282),
       [Rect.fromLTWH(505, 80, 330, 150)],
     ),
     _Word(
-      'شُبَّاكٌ',
+      'نَافِذَةٌ',
       'Window',
-      'audio/label_maker/vocab/shubbak.mp3',
+      'Bintana',
+      'audio/label_maker/vocab/nafidhah.mp3',
       Offset(1150, 110),
       Offset(1150, 205),
       [Rect.fromLTWH(1030, 25, 240, 165)],
@@ -92,6 +126,7 @@ const _kSessions = {
     _Word(
       'بَيْتٌ',
       'House',
+      'Bahay',
       'audio/label_maker/vocab/bayt.mp3',
       Offset(1288, 480),
       Offset(1270, 345),
@@ -100,6 +135,7 @@ const _kSessions = {
     _Word(
       'طَاوِلَةٌ',
       'Table',
+      'Mesa',
       'audio/label_maker/vocab/tawila.mp3',
       Offset(758, 640),
       Offset(758, 725),
@@ -108,6 +144,7 @@ const _kSessions = {
     _Word(
       'تِلْفَازٌ',
       'TV',
+      'Telebisyon',
       'audio/label_maker/vocab/tilfaz.mp3',
       Offset(637, 457),
       Offset(637, 355),
@@ -116,6 +153,7 @@ const _kSessions = {
     _Word(
       'مِصْبَاحٌ',
       'Lamp',
+      'Lampara',
       'audio/label_maker/vocab/misbah.mp3',
       Offset(1115, 440),
       Offset(1100, 345),
@@ -124,6 +162,7 @@ const _kSessions = {
     _Word(
       'مَطْبَخٌ',
       'Kitchen',
+      'Kusina',
       'audio/label_maker/vocab/matbakh.mp3',
       Offset(1620, 450),
       Offset(1640, 262),
@@ -132,6 +171,7 @@ const _kSessions = {
     _Word(
       'كُوبٌ',
       'Cup',
+      'Tasa',
       'audio/label_maker/vocab/kub.mp3',
       Offset(1558, 700),
       Offset(1450, 600),
@@ -140,94 +180,118 @@ const _kSessions = {
     _Word(
       'مِفْتَاحٌ',
       'Key',
+      'Susi',
       'audio/label_maker/vocab/miftah.mp3',
       Offset(1628, 758),
       Offset(1785, 785),
       [Rect.fromLTWH(1570, 728, 120, 60)],
     ),
   ]),
-  LabelMakerSession.body: _Session('Label Maker: Body Parts', 'room_body', [
-    _Word(
-      'رَأْسٌ',
-      'Head',
-      'audio/label_maker/vocab/rasun.mp3',
-      Offset(924, 205),
-      Offset(670, 190),
-      [Rect.fromLTWH(830, 185, 185, 52)],
-    ),
-    _Word(
-      'عَيْنٌ',
-      'Eye',
-      'audio/label_maker/vocab/aynun.mp3',
-      Offset(889, 310),
-      Offset(670, 334),
-      [Rect.fromLTWH(866, 288, 46, 44), Rect.fromLTWH(934, 288, 46, 44)],
-    ),
-    _Word(
-      'أَنْفٌ',
-      'Nose',
-      'audio/label_maker/vocab/anfun.mp3',
-      Offset(923, 322),
-      Offset(670, 406),
-      [Rect.fromLTWH(910, 308, 26, 30)],
-    ),
-    _Word(
-      'فَمٌ',
-      'Mouth',
-      'audio/label_maker/vocab/famun.mp3',
-      Offset(924, 350),
-      Offset(1180, 406),
-      [Rect.fromLTWH(898, 338, 52, 30)],
-    ),
-    _Word(
-      'يَدٌ',
-      'Hand',
-      'audio/label_maker/vocab/yadun.mp3',
-      Offset(1050, 500),
-      Offset(1180, 520),
-      [Rect.fromLTWH(755, 470, 80, 65), Rect.fromLTWH(1010, 470, 80, 65)],
-    ),
-    _Word(
-      'شَعْرٌ',
-      'Hair',
-      'audio/label_maker/vocab/sharun.mp3',
-      Offset(870, 255),
-      Offset(670, 262),
-      [Rect.fromLTWH(822, 237, 200, 38)],
-    ),
-    _Word(
-      'أُذُنٌ',
-      'Ear',
-      'audio/label_maker/vocab/udhun.mp3',
-      Offset(1004, 328),
-      Offset(1180, 262),
-      [Rect.fromLTWH(826, 300, 32, 56), Rect.fromLTWH(988, 300, 32, 56)],
-    ),
-    _Word(
-      'قَدَمٌ',
-      'Foot',
-      'audio/label_maker/vocab/qadam.mp3',
-      Offset(870, 712),
-      Offset(705, 700),
-      [Rect.fromLTWH(818, 680, 95, 58), Rect.fromLTWH(930, 680, 100, 58)],
-    ),
-    _Word(
-      'رِجْلٌ',
-      'Leg',
-      'audio/label_maker/vocab/rijl.mp3',
-      Offset(960, 620),
-      Offset(1180, 640),
-      [Rect.fromLTWH(845, 565, 160, 112)],
-    ),
-    _Word(
-      'وَجْهٌ',
-      'Face',
-      'audio/label_maker/vocab/wajh.mp3',
-      Offset(955, 352),
-      Offset(1180, 334),
-      [Rect.fromLTWH(842, 262, 165, 110)],
-    ),
-  ]),
+  // Body Parts plays in portrait on its own standing-boy art; coordinates
+  // are in that 853x1844 stage (see _kPortrait).
+  LabelMakerSession.body: _Session(
+    'Label Maker: Body Parts',
+    'room_body',
+    portraitBg: 'room_body_portrait',
+    [
+      _Word(
+        'رَأْسٌ',
+        'Head',
+        'Ulo',
+        'audio/label_maker/vocab/rasun.mp3',
+        Offset(294, 360),
+        Offset(110, 330),
+        [Rect.fromLTRB(231, 304, 625, 410)],
+      ),
+      _Word(
+        'عَيْنٌ',
+        'Eye',
+        'Mata',
+        'audio/label_maker/vocab/aynun.mp3',
+        Offset(339, 582),
+        Offset(110, 450),
+        [Rect.fromLTRB(300, 544, 378, 619), Rect.fromLTRB(459, 544, 539, 619)],
+      ),
+      _Word(
+        'أَنْفٌ',
+        'Nose',
+        'Ilong',
+        'audio/label_maker/vocab/anfun.mp3',
+        Offset(421, 618),
+        Offset(110, 570),
+        [Rect.fromLTRB(400, 600, 444, 635)],
+      ),
+      _Word(
+        'فَمٌ',
+        'Mouth',
+        'Bibig',
+        'audio/label_maker/vocab/famun.mp3',
+        Offset(444, 667),
+        Offset(743, 640),
+        [Rect.fromLTRB(375, 638, 472, 692)],
+      ),
+      _Word(
+        'يَدٌ',
+        'Hand',
+        'Kamay',
+        'audio/label_maker/vocab/yadun.mp3',
+        Offset(131, 986),
+        Offset(110, 1130),
+        [Rect.fromLTRB(66, 929, 200, 1048), Rect.fromLTRB(650, 929, 779, 1054)],
+      ),
+      _Word(
+        'شَعْرٌ',
+        'Hair',
+        'Buhok',
+        'audio/label_maker/vocab/sharun.mp3',
+        Offset(594, 473),
+        Offset(743, 400),
+        [Rect.fromLTRB(206, 413, 644, 500)],
+      ),
+      _Word(
+        'أُذُنٌ',
+        'Ear',
+        'Tainga',
+        'audio/label_maker/vocab/udhun.mp3',
+        Offset(604, 623),
+        Offset(743, 520),
+        [Rect.fromLTRB(213, 575, 275, 673), Rect.fromLTRB(575, 575, 634, 670)],
+      ),
+      _Word(
+        'قَدَمٌ',
+        'Foot',
+        'Paa',
+        'audio/label_maker/vocab/qadam.mp3',
+        Offset(582, 1442),
+        Offset(743, 1560),
+        [
+          Rect.fromLTRB(199, 1376, 359, 1498),
+          Rect.fromLTRB(500, 1376, 659, 1498),
+        ],
+      ),
+      _Word(
+        'رِجْلٌ',
+        'Leg',
+        'Binti',
+        'audio/label_maker/vocab/rijl.mp3',
+        Offset(331, 1248),
+        Offset(110, 1290),
+        [
+          Rect.fromLTRB(246, 1129, 419, 1367),
+          Rect.fromLTRB(432, 1129, 609, 1367),
+        ],
+      ),
+      _Word(
+        'وَجْهٌ',
+        'Face',
+        'Mukha',
+        'audio/label_maker/vocab/wajh.mp3',
+        Offset(532, 679),
+        Offset(743, 760),
+        [Rect.fromLTRB(275, 500, 579, 725)],
+      ),
+    ],
+  ),
   LabelMakerSession.classroom: _Session(
     'Label Maker: Classroom',
     'room_classroom',
@@ -235,6 +299,7 @@ const _kSessions = {
       _Word(
         'كِتَابٌ',
         'Book',
+        'Libro',
         'audio/label_maker/vocab/kitab.mp3',
         Offset(535, 290),
         Offset(535, 122),
@@ -243,6 +308,7 @@ const _kSessions = {
       _Word(
         'قَلَمٌ',
         'Pen',
+        'Bolpen',
         'audio/label_maker/vocab/qalam.mp3',
         Offset(1000, 768),
         Offset(1200, 760),
@@ -251,6 +317,7 @@ const _kSessions = {
       _Word(
         'سَبُّورَةٌ',
         'Blackboard',
+        'Pisara',
         'audio/label_maker/vocab/sabburah.mp3',
         Offset(975, 230),
         Offset(975, 230),
@@ -259,6 +326,7 @@ const _kSessions = {
       _Word(
         'كُرْسِيٌّ',
         'Chair',
+        'Upuan',
         'audio/label_maker/vocab/kursi.mp3',
         Offset(895, 505),
         Offset(895, 440),
@@ -272,6 +340,7 @@ const _kSessions = {
       _Word(
         'مَكْتَبٌ',
         'Desk',
+        'Lamesa',
         'audio/label_maker/vocab/maktab.mp3',
         Offset(885, 420),
         Offset(1200, 400),
@@ -284,6 +353,7 @@ const _kSessions = {
       _Word(
         'حَقِيبَةٌ',
         'Bag',
+        'Bag',
         'audio/label_maker/vocab/haqiba.mp3',
         Offset(300, 510),
         Offset(300, 410),
@@ -292,6 +362,7 @@ const _kSessions = {
       _Word(
         'وَرَقَةٌ',
         'Paper',
+        'Papel',
         'audio/label_maker/vocab/waraqa.mp3',
         Offset(748, 758),
         Offset(560, 610),
@@ -300,6 +371,7 @@ const _kSessions = {
       _Word(
         'مِمْحَاةٌ',
         'Eraser',
+        'Pambura',
         'audio/label_maker/vocab/mimha.mp3',
         Offset(1518, 740),
         Offset(1440, 650),
@@ -307,6 +379,7 @@ const _kSessions = {
       ),
       _Word(
         'مِسْطَرَةٌ',
+        'Ruler',
         'Ruler',
         'audio/label_maker/vocab/mistara.mp3',
         Offset(1650, 772),
@@ -318,7 +391,8 @@ const _kSessions = {
       _Word(
         'نَافِذَةٌ',
         'Window',
-        'audio/label_maker/vocab/nafidha.mp3',
+        'Bintana',
+        'audio/label_maker/vocab/nafidhah.mp3',
         Offset(170, 200),
         Offset(170, 440),
         [Rect.fromLTWH(60, 15, 225, 390)],
@@ -374,7 +448,7 @@ class LabelMakerGame extends StatefulWidget {
   State<LabelMakerGame> createState() => _LabelMakerGameState();
 }
 
-enum _Screen { start, howTo, play, congrats, summary }
+enum _Screen { start, howTo, rotate, play, congrats, summary }
 
 class _LabelMakerGameState extends State<LabelMakerGame>
     with TickerProviderStateMixin {
@@ -410,13 +484,17 @@ class _LabelMakerGameState extends State<LabelMakerGame>
   /// Bumped on Play Again so a stale congrats timer can't skip ahead.
   int _round = 0;
 
-  /// How to Play holds its Let's Go button back until the child has had
-  /// time to read the steps.
+  /// How to Play holds its Let's Go button back until the spoken steps
+  /// finish (or a 5s read when muted).
   bool _howReady = false;
 
   /// Bumped on every visit to How to Play, so a wait timer from an earlier
   /// visit can't reveal Let's Go early.
   int _howN = 0;
+
+  /// The turn-your-phone step shows Let's Go once the phone is upright, or
+  /// after [_kRotateWaitMs] regardless.
+  bool _rotateReady = false;
 
   /// Pre-game countdown step: 0-2 show 3, 2, 1; 3 shows Go!; null once the
   /// round is live. Dragging is locked while it runs.
@@ -439,14 +517,30 @@ class _LabelMakerGameState extends State<LabelMakerGame>
 
   int get _cur => _order[_pos];
 
+  /// The round (play + congrats) of a portrait session.
+  bool get _portrait =>
+      _s.portraitBg != null &&
+      (_screen == _Screen.play ||
+          _screen == _Screen.congrats ||
+          (_screen == _Screen.rotate && _upright));
+
+  bool get _upright =>
+      MediaQuery.orientationOf(context) == Orientation.portrait;
+
+  Size get _size => _portrait ? _kPortrait : const Size(_kW, _kH);
+
+  void _orient(bool portrait) => SystemChrome.setPreferredOrientations(
+    portrait
+        ? [DeviceOrientation.portraitUp]
+        : [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight],
+  );
+
   @override
   void initState() {
     super.initState();
     _audio.startMusic();
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+    _audio.say([LabelMakerAudio.title]);
+    _orient(false);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
@@ -484,6 +578,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
       'girl_encourage',
       'boy_encourage',
       _s.bg,
+      _s.room,
     ]) {
       precacheImage(AssetImage('$_kA/$n.png'), context);
     }
@@ -496,10 +591,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
       t.cancel();
     }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
+    restoreAppOrientations();
     _c.dispose();
     _light.dispose();
     super.dispose();
@@ -576,6 +668,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
     setState(() {
       _hover = null;
       if (hit == _cur || _distTo(_cur, p) <= _kTolerance) {
+        final feedback = _audio.say([_s.words[_cur].feedback]);
         _placed.add(_cur);
         _click();
         HapticFeedback.mediumImpact();
@@ -585,10 +678,15 @@ class _LabelMakerGameState extends State<LabelMakerGame>
           _after(_kFinaleMs + 400, _toCongrats);
         } else {
           _pos++;
-          _after(450, _sayNow);
+          // The next word waits for the feedback line to finish.
+          final round = _round;
+          feedback.then((done) {
+            if (done && mounted && _round == round) _say();
+          });
         }
       } else if (hit != null) {
         _errors++;
+        GameUiAudio.instance.wrong();
         _shakeN++;
         HapticFeedback.heavyImpact();
         _showToast('Try again!', false);
@@ -608,6 +706,28 @@ class _LabelMakerGameState extends State<LabelMakerGame>
     );
   }
 
+  /// How to Play's steps are over: Let's Go, or for a portrait round first
+  /// the turn-your-phone step. Call inside setState.
+  void _howDone() {
+    if (_s.portraitBg == null) {
+      _howReady = true;
+      return;
+    }
+    _screen = _Screen.rotate;
+    _rotateReady = false;
+    final n = _howN;
+    // Either way up works here: turning the phone flips the stage to
+    // portrait at once; a rotation-locked phone still gets Let's Go soon.
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.portraitUp,
+    ]);
+    _after(_kRotateWaitMs, () {
+      if (_howN == n) _rotateReady = true;
+    });
+  }
+
   /// How to Play's Back: return to the start screen (not out of the lesson).
   void _toStart() {
     setState(() {
@@ -615,11 +735,15 @@ class _LabelMakerGameState extends State<LabelMakerGame>
       _howReady = false;
       _screen = _Screen.start;
     });
+    _orient(false);
     _light.repeat();
+    _audio.say([LabelMakerAudio.title]);
   }
 
   void _toSummary() {
-    if (_screen == _Screen.congrats) setState(() => _screen = _Screen.summary);
+    if (_screen != _Screen.congrats) return;
+    setState(() => _screen = _Screen.summary);
+    _orient(false);
   }
 
   /// Play Again: same room, fresh shuffle, straight back into the game.
@@ -645,6 +769,8 @@ class _LabelMakerGameState extends State<LabelMakerGame>
       _screen = _Screen.play;
       _count = 0;
     });
+    if (_portrait) _orient(true);
+    _audio.say([LabelMakerAudio.letsGo]);
     for (var i = 1; i <= 3; i++) {
       _after(1000 * i, () {
         if (_round == round) _count = i;
@@ -673,10 +799,18 @@ class _LabelMakerGameState extends State<LabelMakerGame>
 
   @override
   Widget build(BuildContext context) {
-    final bg = _screen == _Screen.start ? 'bg_plate' : _s.bg;
+    final bg = _screen == _Screen.start
+        ? 'bg_plate'
+        : _portrait
+        ? _s.room
+        : _s.bg;
+    final size = _size;
     return LayoutBuilder(
       builder: (context, box) {
-        final scale = math.min(box.maxWidth / _kW, box.maxHeight / _kH);
+        final scale = math.min(
+          box.maxWidth / size.width,
+          box.maxHeight / size.height,
+        );
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -690,11 +824,14 @@ class _LabelMakerGameState extends State<LabelMakerGame>
                 height: double.infinity,
               ),
             ),
+            // Keyed by orientation: a landscape screen never cross-fades
+            // inside the portrait stage (or the other way round).
             FittedBox(
+              key: ValueKey(_portrait),
               child: SizedBox(
                 key: _stageKey,
-                width: _kW,
-                height: _kH,
+                width: size.width,
+                height: size.height,
                 child: TweenAnimationBuilder<double>(
                   tween: Tween(begin: 0, end: 1),
                   duration: _kSwap,
@@ -704,8 +841,11 @@ class _LabelMakerGameState extends State<LabelMakerGame>
                     duration: _kSwap,
                     switchInCurve: Curves.easeOutCubic,
                     switchOutCurve: Curves.easeInCubic,
-                    layoutBuilder: (cur, prev) =>
-                        Stack(fit: StackFit.expand, children: [...prev, ?cur]),
+                    layoutBuilder: (cur, prev) => Stack(
+                      fit: StackFit.expand,
+                      clipBehavior: Clip.none,
+                      children: [...prev, ?cur],
+                    ),
                     transitionBuilder: (c, a) => AnimatedBuilder(
                       animation: a,
                       // Outgoing screen stays visible but can't be tapped.
@@ -730,6 +870,10 @@ class _LabelMakerGameState extends State<LabelMakerGame>
                         _Screen.howTo => AnimatedBuilder(
                           animation: _c,
                           builder: (context, _) => _buildHowTo(_c.value),
+                        ),
+                        _Screen.rotate => AnimatedBuilder(
+                          animation: _c,
+                          builder: (context, _) => _buildRotate(_c.value),
                         ),
                         _Screen.play => _buildPlay(scale),
                         _Screen.congrats => AnimatedBuilder(
@@ -763,6 +907,16 @@ class _LabelMakerGameState extends State<LabelMakerGame>
       offset: Offset(0, 24 * (1 - v)),
       child: Transform.scale(scale: .96 + .04 * v, child: c),
     ),
+  );
+
+  /// A full-screen dim: bleeds past the stage so it also covers the bars a
+  /// screen of another shape leaves around it. Its Stack must not clip.
+  static Widget _dim(Color c) => Positioned(
+    left: -_kBleed,
+    top: -_kBleed,
+    right: -_kBleed,
+    bottom: -_kBleed,
+    child: IgnorePointer(child: ColoredBox(color: c)),
   );
 
   Widget _at(double l, double t, double w, double h, Widget c) =>
@@ -984,8 +1138,16 @@ class _LabelMakerGameState extends State<LabelMakerGame>
                   _howReady = false;
                 });
                 final n = ++_howN;
-                _after(_kHowToWaitMs, () {
-                  if (_howN == n) _howReady = true;
+                if (!_sound) {
+                  _after(_kHowToWaitMs, () {
+                    if (_howN == n) _howDone();
+                  });
+                  return;
+                }
+                _audio.say(LabelMakerAudio.howTo).then((done) {
+                  if (done && mounted && _howN == n) {
+                    setState(_howDone);
+                  }
                 });
               },
               child: _img(_playDown ? 'play_down' : 'play'),
@@ -1067,11 +1229,12 @@ class _LabelMakerGameState extends State<LabelMakerGame>
     );
 
     return Stack(
+      clipBehavior: Clip.none,
       children: [
         Positioned.fill(
           child: Image.asset('$_kA/${_s.bg}.png', fit: BoxFit.fill),
         ),
-        Positioned.fill(child: Container(color: const Color(0xB30E1A40))),
+        _dim(const Color(0xB30E1A40)),
         _at(
           655,
           34,
@@ -1109,7 +1272,8 @@ class _LabelMakerGameState extends State<LabelMakerGame>
                 2,
                 'Drag the speaker onto\nthe right object',
                 _RoomPeek(
-                  bg: _s.bg,
+                  bg: _s.room,
+                  size: _s.roomSize,
                   centre: word.point,
                   children: [
                     Positioned(
@@ -1134,7 +1298,8 @@ class _LabelMakerGameState extends State<LabelMakerGame>
                 3,
                 'Get it right and it\nbecomes a label!',
                 _RoomPeek(
-                  bg: _s.bg,
+                  bg: _s.room,
+                  size: _s.roomSize,
                   centre: word.point,
                   children: [
                     Positioned(
@@ -1172,41 +1337,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
           400,
           138,
           _howReady
-              ? TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0, end: 1),
-                  duration: const Duration(milliseconds: 500),
-                  curve: Curves.easeOutQuart,
-                  builder: (context, v, c) => Opacity(
-                    opacity: v,
-                    child: Transform.scale(
-                      scale: (.7 + .3 * v) * (1 + .03 * wave),
-                      child: c,
-                    ),
-                  ),
-                  child: _ImgBtn(
-                    key: const ValueKey('lm-go'),
-                    up: 'btn_blank',
-                    down: 'btn_blank_down',
-                    onTap: () {
-                      _c.stop();
-                      _startPlay();
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(40, 0, 40, 8),
-                      child: Center(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: _outlined(
-                            "Let's Go!",
-                            _fredoka(60, Colors.white),
-                            const Color(0xFF0E4A10),
-                            10,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                )
+              ? _letsGoBtn(wave)
               : Center(
                   child: SizedBox(
                     width: 380,
@@ -1250,6 +1381,173 @@ class _LabelMakerGameState extends State<LabelMakerGame>
     );
   }
 
+  /// Let's Go, popping in once the child is ready to play.
+  Widget _letsGoBtn(double wave) => TweenAnimationBuilder<double>(
+    tween: Tween(begin: 0, end: 1),
+    duration: const Duration(milliseconds: 500),
+    curve: Curves.easeOutQuart,
+    builder: (context, v, c) => Opacity(
+      opacity: v,
+      child: Transform.scale(scale: (.7 + .3 * v) * (1 + .03 * wave), child: c),
+    ),
+    child: _ImgBtn(
+      key: const ValueKey('lm-go'),
+      up: 'btn_blank',
+      down: 'btn_blank_down',
+      onTap: () {
+        _c.stop();
+        _startPlay();
+      },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(40, 0, 40, 8),
+        child: Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: _outlined(
+              "Let's Go!",
+              _fredoka(60, Colors.white),
+              const Color(0xFF0E4A10),
+              10,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  /// Portrait rounds only: after How to Play a phone turns upright on screen
+  /// until the child turns theirs, then Let's Go. [u] runs 0..1 every 4s.
+  Widget _buildRotate(double u) {
+    final upright = _upright;
+    final still = upright || MediaQuery.of(context).disableAnimations;
+    // Hold sideways, turn upright, hold, fade out and go again.
+    final turn = still
+        ? 1.0
+        : Curves.easeInOutBack.transform(((u - .2) / .3).clamp(0.0, 1.0));
+    final fade = still
+        ? 1.0
+        : u < .08
+        ? u / .08
+        : u > .92
+        ? (1 - u) / .08
+        : 1.0;
+    final wave = math.sin(u * 2 * math.pi);
+
+    final phone = Container(
+      width: 150,
+      height: 264,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: _kNavy,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x40000000),
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      // The round's own room on the phone's screen.
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Image.asset('$_kA/${_s.room}.png', fit: BoxFit.cover),
+      ),
+    );
+
+    // One cream card over a dark room, so the prompt never sits on top of
+    // the busy art behind it.
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        _dim(const Color(0xD90E1A40)),
+        Center(
+          child: Container(
+            width: 700,
+            padding: const EdgeInsets.fromLTRB(40, 32, 40, 28),
+            decoration: BoxDecoration(
+              color: _kCream,
+              borderRadius: BorderRadius.circular(48),
+              border: Border.all(color: _kGold, width: 7),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x66000000),
+                  blurRadius: 24,
+                  offset: Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 300,
+                  height: 280,
+                  child: Opacity(
+                    opacity: fade.clamp(0.0, 1.0),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Transform.rotate(
+                          angle: -math.pi / 2 * (1 - turn),
+                          child: phone,
+                        ),
+                        // Turning: an arrow shows which way. Upright: a tick.
+                        Positioned(
+                          right: upright ? 46 : 0,
+                          top: upright ? 0 : 4,
+                          child: upright
+                              ? Container(
+                                  width: 64,
+                                  height: 64,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF2FA84F),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 5,
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.check_rounded,
+                                    size: 40,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Opacity(
+                                  opacity: (1 - turn).clamp(0.0, 1.0),
+                                  child: const Icon(
+                                    Icons.rotate_right_rounded,
+                                    size: 88,
+                                    color: Color(0xFFF08A24),
+                                  ),
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Hold your phone upright!',
+                  textAlign: TextAlign.center,
+                  style: _fredoka(50, _kNavy),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: 400,
+                  height: 138,
+                  child: _rotateReady || upright ? _letsGoBtn(wave) : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+        ..._topButtons(onBack: _toStart),
+      ],
+    );
+  }
+
   /// Back (top-left) and Music (top-right), shared by every screen.
   List<Widget> _topButtons({VoidCallback? onBack}) => [
     if (onBack != null || widget.onExit != null)
@@ -1266,7 +1564,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
         ),
       ),
     _at(
-      _kW - 24 - _kBtnW,
+      _size.width - 24 - _kBtnW,
       20,
       _kBtnW,
       _kBtnH,
@@ -1286,9 +1584,10 @@ class _LabelMakerGameState extends State<LabelMakerGame>
   Widget _buildPlay(double scale) {
     final words = _s.words;
     return Stack(
+      clipBehavior: Clip.none,
       children: [
         Positioned.fill(
-          child: Image.asset('$_kA/${_s.bg}.png', fit: BoxFit.fill),
+          child: Image.asset('$_kA/${_s.room}.png', fit: BoxFit.fill),
         ),
         // One drop zone over the whole room: the drop point decides which
         // object was meant (see _hitAt), so tiny parts stay reachable.
@@ -1389,9 +1688,11 @@ class _LabelMakerGameState extends State<LabelMakerGame>
               ),
             ),
           ),
+        // Portrait has no room between Back and Music, so the title sits
+        // centred under them.
         _at(
-          _kBtnW + 40,
-          10,
+          _portrait ? (_size.width - 480) / 2 : _kBtnW + 40,
+          _portrait ? 108 : 10,
           480,
           96,
           IgnorePointer(
@@ -1417,7 +1718,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
         if (_count != null) _buildCountdown(),
         if (_toast != null)
           Positioned(
-            top: 24,
+            top: _portrait ? 224 : 24,
             left: 0,
             right: 0,
             child: IgnorePointer(
@@ -1507,42 +1808,45 @@ class _LabelMakerGameState extends State<LabelMakerGame>
     final go = _count == 3;
     return Positioned.fill(
       child: IgnorePointer(
-        child: Container(
-          color: const Color(0x800E1A40),
+        child: Stack(
+          clipBehavior: Clip.none,
           alignment: Alignment.center,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Opacity(
-                opacity: go ? 0 : 1,
-                child: _outlined(
-                  'Get Ready!',
-                  _fredoka(64, Colors.white),
-                  _kNavy,
-                  12,
-                ),
-              ),
-              TweenAnimationBuilder<double>(
-                key: ValueKey('count$_count'),
-                tween: Tween(begin: 0, end: 1),
-                duration: const Duration(milliseconds: 650),
-                curve: Curves.easeOutQuart,
-                builder: (context, v, c) => Opacity(
-                  opacity: v,
-                  child: Transform.scale(scale: 1.7 - .7 * v, child: c),
-                ),
-                child: _outlined(
-                  const ['3', '2', '1', 'Go!'][_count!],
-                  _fredoka(
-                    230,
-                    go ? const Color(0xFF7BE04A) : const Color(0xFFFFD23F),
+          children: [
+            _dim(const Color(0x800E1A40)),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Opacity(
+                  opacity: go ? 0 : 1,
+                  child: _outlined(
+                    'Get Ready!',
+                    _fredoka(64, Colors.white),
+                    _kNavy,
+                    12,
                   ),
-                  go ? const Color(0xFF0E4A10) : const Color(0xFF8A3B00),
-                  22,
                 ),
-              ),
-            ],
-          ),
+                TweenAnimationBuilder<double>(
+                  key: ValueKey('count$_count'),
+                  tween: Tween(begin: 0, end: 1),
+                  duration: const Duration(milliseconds: 650),
+                  curve: Curves.easeOutQuart,
+                  builder: (context, v, c) => Opacity(
+                    opacity: v,
+                    child: Transform.scale(scale: 1.7 - .7 * v, child: c),
+                  ),
+                  child: _outlined(
+                    const ['3', '2', '1', 'Go!'][_count!],
+                    _fredoka(
+                      230,
+                      go ? const Color(0xFF7BE04A) : const Color(0xFFFFD23F),
+                    ),
+                    go ? const Color(0xFF0E4A10) : const Color(0xFF8A3B00),
+                    22,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -1555,8 +1859,8 @@ class _LabelMakerGameState extends State<LabelMakerGame>
     final badge = _Badge(word: word, down: _badgeDown);
 
     return _at(
-      20,
-      690,
+      _portrait ? (_size.width - 590) / 2 : 20,
+      _portrait ? _size.height - 145 - 24 : 690,
       590,
       145,
       Stack(
@@ -1632,7 +1936,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
-                      '${math.min(_placed.length + 1, n)}/$n',
+                      '${_placed.length}/$n',
                       style: _fredoka(40, _kNavy),
                     ),
                   ),
@@ -1654,73 +1958,81 @@ class _LabelMakerGameState extends State<LabelMakerGame>
       behavior: HitTestBehavior.opaque,
       onTap: _toSummary,
       child: Stack(
+        clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            child: Image.asset('$_kA/${_s.bg}.png', fit: BoxFit.fill),
+            child: Image.asset('$_kA/${_s.room}.png', fit: BoxFit.fill),
           ),
-          Positioned.fill(child: Container(color: const Color(0xA60E1A40))),
+          _dim(const Color(0xA60E1A40)),
           Positioned.fill(child: CustomPaint(painter: _RaysPainter(u))),
           Positioned.fill(child: CustomPaint(painter: _ConfettiPainter(u))),
-          Center(
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: 1),
-              duration: const Duration(milliseconds: 2200),
-              builder: (context, t, _) {
-                double stage(double a, double b, Curve c) =>
-                    c.transform(((t - a) / (b - a)).clamp(0.0, 1.0));
-                final title = stage(0, .35, Curves.elasticOut);
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Transform.scale(
-                      scale: title,
-                      child: _outlined(
-                        'Mumtaz!',
-                        _fredoka(170, const Color(0xFFFFD23F)),
-                        const Color(0xFF8A3B00),
-                        18,
-                      ),
-                    ),
-                    Opacity(
-                      opacity: stage(.2, .4, Curves.easeOut),
-                      child: _outlined(
-                        'You labelled all $n words!',
-                        _fredoka(58, Colors.white),
-                        _kNavy,
-                        10,
-                      ),
-                    ),
-                    const SizedBox(height: 26),
-                    Row(
+          // Scales down to fit the narrow portrait stage.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: const Duration(milliseconds: 2200),
+                  builder: (context, t, _) {
+                    double stage(double a, double b, Curve c) =>
+                        c.transform(((t - a) / (b - a)).clamp(0.0, 1.0));
+                    final title = stage(0, .35, Curves.elasticOut);
+                    return Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        for (var i = 0; i < 3; i++)
-                          Transform.translate(
-                            offset: Offset(0, i == 1 ? -26 : 0),
-                            child: Transform.scale(
-                              scale: stage(
-                                .4 + .15 * i,
-                                .7 + .15 * i,
-                                Curves.elasticOut,
-                              ),
-                              child: _Star(on: i < _stars, size: 150),
-                            ),
+                        Transform.scale(
+                          scale: title,
+                          child: _outlined(
+                            'Mumtaz!',
+                            _fredoka(170, const Color(0xFFFFD23F)),
+                            const Color(0xFF8A3B00),
+                            18,
                           ),
+                        ),
+                        Opacity(
+                          opacity: stage(.2, .4, Curves.easeOut),
+                          child: _outlined(
+                            'You labelled all $n words!',
+                            _fredoka(58, Colors.white),
+                            _kNavy,
+                            10,
+                          ),
+                        ),
+                        const SizedBox(height: 26),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (var i = 0; i < 3; i++)
+                              Transform.translate(
+                                offset: Offset(0, i == 1 ? -26 : 0),
+                                child: Transform.scale(
+                                  scale: stage(
+                                    .4 + .15 * i,
+                                    .7 + .15 * i,
+                                    Curves.elasticOut,
+                                  ),
+                                  child: _Star(on: i < _stars, size: 150),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 30),
+                        Opacity(
+                          opacity:
+                              stage(.85, 1, Curves.easeOut) *
+                              (.6 + .4 * math.sin(u * 4 * math.pi).abs()),
+                          child: Text(
+                            'Tap to continue',
+                            style: _fredoka(34, Colors.white),
+                          ),
+                        ),
                       ],
-                    ),
-                    const SizedBox(height: 30),
-                    Opacity(
-                      opacity:
-                          stage(.85, 1, Curves.easeOut) *
-                          (.6 + .4 * math.sin(u * 4 * math.pi).abs()),
-                      child: Text(
-                        'Tap to continue',
-                        style: _fredoka(34, Colors.white),
-                      ),
-                    ),
-                  ],
-                );
-              },
+                    );
+                  },
+                ),
+              ),
             ),
           ),
         ],
@@ -1784,19 +2096,22 @@ class _LabelMakerGameState extends State<LabelMakerGame>
         }
 
         return Stack(
+          clipBehavior: Clip.none,
           children: [
             Positioned.fill(
               child: Image.asset('$_kA/${_s.bg}.png', fit: BoxFit.fill),
             ),
             // Vignette: the room stays readable at the edges, darkest behind
-            // the wall so the labels carry the screen.
+            // the wall so the labels carry the screen. The edge tone covers
+            // the whole screen; the centre darkens on top of it.
+            _dim(const Color(0x990E1A40)),
             Positioned.fill(
               child: Container(
                 decoration: const BoxDecoration(
                   gradient: RadialGradient(
                     center: Alignment(0, -.1),
                     radius: 1.1,
-                    colors: [Color(0xCC0E1A40), Color(0x990E1A40)],
+                    colors: [Color(0x800E1A40), Color(0x000E1A40)],
                   ),
                 ),
               ),
@@ -2542,11 +2857,15 @@ const _kPeekH = 250.0;
 class _RoomPeek extends StatelessWidget {
   const _RoomPeek({
     required this.bg,
+    required this.size,
     required this.centre,
     required this.children,
   });
 
   final String bg;
+
+  /// The room art's stage size, which [centre] is measured in.
+  final Size size;
   final Offset centre;
   final List<Widget> children;
 
@@ -2558,8 +2877,8 @@ class _RoomPeek extends StatelessWidget {
         Positioned(
           left: _kPeekW / 2 - centre.dx,
           top: _kPeekH / 2 - centre.dy,
-          width: _kW,
-          height: _kH,
+          width: size.width,
+          height: size.height,
           child: Image.asset('$_kA/$bg.png', fit: BoxFit.fill),
         ),
         ...children,
@@ -2604,8 +2923,13 @@ class _Label extends StatelessWidget {
                 flex: 2,
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
+                  // Locale en: show the word as given, not the app-wide
+                  // dictionary's Filipino (e.g. Book is Libro here).
                   child: Text(
-                    word.en,
+                    AppTranslations.currentLanguageCode == 'fil'
+                        ? word.fil
+                        : word.en,
+                    locale: const Locale('en'),
                     style: _fredoka(22, const Color(0xFF5E4630)),
                   ),
                 ),

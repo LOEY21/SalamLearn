@@ -100,11 +100,9 @@ void main() {
     await tester.pump();
     expect(audio.played.last, correctFirst ? clips.decoy : clips.correct);
 
-    final beforeTap = audio.played.length;
     await tester.tap(find.text(page.correct));
     await tester.pump();
-    expect(audio.played.length, beforeTap);
-    expect(audio.stops, greaterThan(0));
+    expect(audio.played.last, 'mumtaz.mp3');
   });
 
   /// Advances [total] in real frames. The game's clock only moves on frame
@@ -209,9 +207,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1600));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text(session.pages.first.prompt), findsNothing);
+    // No tapping hand while the line is read...
+    expect(find.byIcon(Icons.touch_app_rounded), findsNothing);
 
     await hearOut(tester, session.pages.first);
+    // ...then a hand points at the lit layer, and taps pass through it.
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byIcon(Icons.touch_app_rounded), findsOneWidget);
     await openQuestion(tester);
+    expect(find.byIcon(Icons.touch_app_rounded), findsNothing);
     expect(find.text(session.pages.first.prompt), findsOneWidget);
   });
 

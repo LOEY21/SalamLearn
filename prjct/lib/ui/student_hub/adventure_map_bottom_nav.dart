@@ -68,6 +68,21 @@ class AdventureMapBottomNav extends StatelessWidget {
       HubTab.profile => AppColors.gold,
     };
 
+    // Capped so the three tabs don't spread across a landscape tablet.
+    return Center(
+      heightFactor: 1,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: _buildBoard(activeIndex, activeGradient, activeShadowColor),
+      ),
+    );
+  }
+
+  Widget _buildBoard(
+    int activeIndex,
+    Gradient activeGradient,
+    Color activeShadowColor,
+  ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
       child: Stack(

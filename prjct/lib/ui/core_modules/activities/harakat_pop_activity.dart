@@ -5,6 +5,7 @@ import 'package:lottie/lottie.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../theme/app_colors.dart';
+import '../game_ui_audio.dart';
 
 class HarakatPopActivity extends StatefulWidget {
   const HarakatPopActivity({
@@ -42,15 +43,16 @@ class _HarakatPopActivityState extends State<HarakatPopActivity>
   @override
   void initState() {
     super.initState();
-    _wobbleController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    )..addListener(() {
-        setState(() {
-          final t = _wobbleController.value;
-          _wobble = math.sin(t * math.pi * 5) * 8 * (1 - t);
+    _wobbleController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 500),
+        )..addListener(() {
+          setState(() {
+            final t = _wobbleController.value;
+            _wobble = math.sin(t * math.pi * 5) * 8 * (1 - t);
+          });
         });
-      });
 
     _pulseController = AnimationController(
       vsync: this,
@@ -111,13 +113,16 @@ class _HarakatPopActivityState extends State<HarakatPopActivity>
     } else {
       // Wrong bubble - trigger shake animation
       _wrongDrops++;
+      GameUiAudio.instance.wrong();
       _wobbleController.forward(from: 0);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final correctMark = _vowels.firstWhere((v) => v['name'] == _targetVowelName)['mark']!;
+    final correctMark = _vowels.firstWhere(
+      (v) => v['name'] == _targetVowelName,
+    )['mark']!;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
@@ -137,8 +142,8 @@ class _HarakatPopActivityState extends State<HarakatPopActivity>
                     color: i < _idx
                         ? AppColors.adventureGreen
                         : i == _idx
-                            ? widget.color
-                            : AppColors.creamDark,
+                        ? widget.color
+                        : AppColors.creamDark,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -173,10 +178,16 @@ class _HarakatPopActivityState extends State<HarakatPopActivity>
             onTap: _playSound,
             child: ScaleTransition(
               scale: Tween<double>(begin: 1.0, end: 1.05).animate(
-                CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+                CurvedAnimation(
+                  parent: _pulseController,
+                  curve: Curves.easeInOut,
+                ),
               ),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
@@ -186,7 +197,7 @@ class _HarakatPopActivityState extends State<HarakatPopActivity>
                       color: widget.color.withValues(alpha: 0.15),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
-                    )
+                    ),
                   ],
                 ),
                 child: Row(
@@ -232,7 +243,7 @@ class _HarakatPopActivityState extends State<HarakatPopActivity>
                             color: Color(0x124A3A1E),
                             blurRadius: 12,
                             offset: Offset(0, 6),
-                          )
+                          ),
                         ],
                       ),
                       child: Stack(
@@ -255,7 +266,8 @@ class _HarakatPopActivityState extends State<HarakatPopActivity>
                             top: _targetVowelName == 'Kasrah' ? null : -24,
                             bottom: _targetVowelName == 'Kasrah' ? -24 : null,
                             child: DragTarget<String>(
-                              onAcceptWithDetails: (details) => _onDrop(details.data),
+                              onAcceptWithDetails: (details) =>
+                                  _onDrop(details.data),
                               builder: (context, candidateData, rejectedData) {
                                 final isHovering = candidateData.isNotEmpty;
                                 return AnimatedContainer(
@@ -264,17 +276,19 @@ class _HarakatPopActivityState extends State<HarakatPopActivity>
                                   height: 56,
                                   decoration: BoxDecoration(
                                     color: _success
-                                        ? AppColors.adventureGreen.withValues(alpha: 0.15)
+                                        ? AppColors.adventureGreen.withValues(
+                                            alpha: 0.15,
+                                          )
                                         : isHovering
-                                            ? widget.color.withValues(alpha: 0.25)
-                                            : Colors.white,
+                                        ? widget.color.withValues(alpha: 0.25)
+                                        : Colors.white,
                                     borderRadius: BorderRadius.circular(16),
                                     border: Border.all(
                                       color: _success
                                           ? AppColors.adventureGreen
                                           : isHovering
-                                              ? widget.color
-                                              : AppColors.goldSoft,
+                                          ? widget.color
+                                          : AppColors.goldSoft,
                                       width: 2.5,
                                     ),
                                   ),
@@ -314,7 +328,8 @@ class _HarakatPopActivityState extends State<HarakatPopActivity>
                                   child: Lottie.asset(
                                     'assets/lottie/milestone_burst.json',
                                     repeat: false,
-                                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                                    errorBuilder: (_, _, _) =>
+                                        const SizedBox.shrink(),
                                   ),
                                 ),
                               ),
@@ -379,11 +394,7 @@ class _HarakatPopActivityState extends State<HarakatPopActivity>
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({
-    required this.mark,
-    required this.name,
-    required this.color,
-  });
+  const _Bubble({required this.mark, required this.name, required this.color});
 
   final String mark;
   final String name;
@@ -403,7 +414,7 @@ class _Bubble extends StatelessWidget {
             color: color.withValues(alpha: 0.12),
             blurRadius: 10,
             offset: const Offset(0, 4),
-          )
+          ),
         ],
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -474,10 +485,7 @@ class _FloatingWidgetState extends State<_FloatingWidget>
       animation: _controller,
       builder: (context, child) {
         final float = math.sin(_controller.value * math.pi * 2 + _offset) * 6;
-        return Transform.translate(
-          offset: Offset(0, float),
-          child: child,
-        );
+        return Transform.translate(offset: Offset(0, float), child: child);
       },
       child: widget.child,
     );

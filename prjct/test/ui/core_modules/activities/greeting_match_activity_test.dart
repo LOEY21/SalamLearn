@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salamlearn/data/curriculum_data.dart';
 import 'package:salamlearn/data/models/curriculum/curriculum_models.dart';
 import 'package:salamlearn/ui/core_modules/activities/greeting_match_activity.dart';
+import 'package:salamlearn/ui/core_modules/activities/greeting_match_audio.dart';
 import 'package:salamlearn/ui/widgets/arc_text_painter.dart';
 
 void main() {
@@ -35,6 +38,7 @@ void main() {
     GreetingMatchSession session = testSession,
     void Function(int, double, int)? onComplete,
     VoidCallback? onBack,
+    GreetingMatchAudio? audio,
   }) {
     return MaterialApp(
       home: Scaffold(
@@ -43,14 +47,17 @@ void main() {
           xp: 100,
           onComplete: onComplete ?? (_, _, _) {},
           onBack: onBack ?? () {},
+          audio: audio,
         ),
       ),
     );
   }
 
-  /// How to Play holds Let's Play back 5 s, then a 3-2-1 countdown.
+  /// How to Play holds Let's Play back until the instruction audio ends —
+  /// tests have no audio output, so that's the 30 s stall cap — then a
+  /// 3-2-1 countdown.
   Future<void> letsPlay(WidgetTester tester) async {
-    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(seconds: 30));
     await tester.pump(const Duration(milliseconds: 700));
     await tester.tap(find.byKey(const Key('greeting-howto-play')));
     await tester.pump();
@@ -147,6 +154,21 @@ void main() {
     expect(find.byKey(const Key('greeting-star-0-empty')), findsOneWidget);
   });
 
+  testWidgets('question shows its narration line over the scene',
+      (tester) async {
+    await tester.pumpWidget(
+      buildTestWidget(session: greetingMannersSession),
+    );
+    await tester.pump();
+    await startGame(tester);
+
+    expect(find.byKey(const Key('greeting-narration')), findsOneWidget);
+    expect(
+      find.text(greetingMannersSession.questions.first.prompt!),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('scene shows alone for 4 seconds before choices respond',
       (tester) async {
     int? errors;
@@ -175,6 +197,29 @@ void main() {
     expect(errors, isNull);
     await continueFromEnd(tester);
     expect(errors, 0);
+  });
+
+  testWidgets('Play Audio hides the panel and replays the story first', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildTestWidget());
+    await tester.pump();
+    await startGame(tester);
+    await waitForChoices(tester);
+
+    final card = find.ancestor(
+      of: find.byKey(const Key('greeting-choice-1')),
+      matching: find.byType(AnimatedOpacity),
+    );
+    expect(tester.widget<AnimatedOpacity>(card.first).opacity, 1);
+
+    await tester.tap(find.text('Play Audio'));
+    await tester.pump();
+    expect(tester.widget<AnimatedOpacity>(card.first).opacity, 0);
+
+    await waitForChoices(tester);
+    expect(tester.widget<AnimatedOpacity>(card.first).opacity, 1);
+    await tester.pump(const Duration(seconds: 2));
   });
 
   testWidgets('wrong choice earns a red star, shows the answer, moves on',
@@ -234,7 +279,7 @@ void main() {
     await tester.pumpWidget(buildTestWidget());
     await tester.pump();
     await tester.tap(find.byKey(const Key('greeting-match-play-btn')));
-    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(seconds: 30));
     await tester.pump(const Duration(milliseconds: 700));
     await tester.tap(find.byKey(const Key('greeting-howto-play')));
     await tester.pump(const Duration(milliseconds: 500));
@@ -263,10 +308,11 @@ void main() {
     expect(find.text('Tap the Reply'), findsOneWidget);
     expect(find.text('Earn Stars'), findsOneWidget);
 
-    // Let's Play only appears after the 5-second hold.
-    await tester.pump(const Duration(seconds: 4));
+    // Let's Play stays hidden while the instructions are still playing,
+    // and appears once they finish (here: the stall cap, no audio output).
+    await tester.pump(const Duration(seconds: 5));
     expect(find.text("Let's Play!"), findsNothing);
-    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 25));
     expect(find.text("Let's Play!"), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('greeting-howto-back')));
@@ -335,6 +381,70 @@ void main() {
     expect(completed, 0);
   });
 
+  testWidgets(
+      'correct choice waits for audio to finish before proceeding to next question',
+      (tester) async {
+    final fakeAudio = _FakeGreetingAudio();
+    const sessionWithAudio = GreetingMatchSession(
+      title: 'Session 2: Madrasah Manners',
+      subtitle: 'Learn polite Islamic greetings and classroom manners.',
+      questions: [
+        GreetingQuestion(
+          id: 'gq1',
+          scenarioImage: 'assets/images/greeting_match/scenes/teacher_enters.jpg',
+          arabic: 'السَّلَامُ عَلَيْكُمْ',
+          meaning: 'Peace be upon you',
+          choices: [
+            GreetingChoice(
+              arabic: 'شُكْرًا',
+              meaning: 'Thank you',
+              correct: false,
+              audioAsset: 'audio/greetings/shukran_option.mp3',
+            ),
+            GreetingChoice(
+              arabic: 'وَعَلَيْكُمُ السَّلَامُ',
+              meaning: 'And peace be upon you',
+              correct: true,
+              audioAsset: 'audio/greetings/wa_alaikumus_salam.mp3',
+            ),
+          ],
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      buildTestWidget(
+        session: sessionWithAudio,
+        audio: fakeAudio,
+      ),
+    );
+    await tester.pump();
+    await startGame(tester);
+    await waitForChoices(tester);
+
+    // Prepare a completer so play() hangs until we resolve it.
+    final completer = Completer<void>();
+    fakeAudio.playCompleter = completer;
+
+    // Tap the correct answer.
+    await tester.tap(find.byKey(const Key('greeting-choice-1')));
+    await tester.pump();
+    expect(find.byKey(const Key('greeting-star-0-gold')), findsOneWidget);
+
+    // Pump past the 1.6s minimum visual timer. The audio hasn't completed yet,
+    // so it must NOT proceed to the next question / end screen.
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.byKey(const Key('greeting-end')), findsNothing);
+
+    // Now let the audio finish.
+    completer.complete();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // The game has now moved on to the end screen.
+    expect(find.byKey(const Key('greeting-end')), findsOneWidget);
+  });
+
   test('both sessions have 5 scenarios with exactly one correct choice', () {
     for (final session in [greetingDailySession, greetingMannersSession]) {
       expect(session.questions, hasLength(5));
@@ -343,4 +453,22 @@ void main() {
       }
     }
   });
+}
+
+class _FakeGreetingAudio extends GreetingMatchAudio {
+  Completer<void>? playCompleter;
+
+  @override
+  Future<void> play(List<String?> assets) async {
+    final c = playCompleter;
+    if (c != null) {
+      await c.future;
+    }
+  }
+
+  @override
+  Future<void> startMusic() async {}
+
+  @override
+  Future<void> dispose() async {}
 }

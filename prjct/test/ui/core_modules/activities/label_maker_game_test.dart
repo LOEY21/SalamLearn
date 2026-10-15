@@ -30,7 +30,94 @@ const _home = {
   'Key': Offset(1628, 758),
 };
 
+/// A point inside each body part, in the 853x1844 portrait stage.
+const _body = {
+  'Head': Offset(428, 348),
+  'Eye': Offset(339, 582),
+  'Nose': Offset(421, 618),
+  'Mouth': Offset(424, 667),
+  'Hand': Offset(131, 986),
+  'Hair': Offset(419, 454),
+  'Ear': Offset(244, 623),
+  'Foot': Offset(269, 1436),
+  'Leg': Offset(331, 1248),
+  'Face': Offset(544, 698),
+};
+
 void main() {
+  test('Body Parts portrait art is bundled', () async {
+    final bytes = await rootBundle.load(
+      'assets/images/label_maker/room_body_portrait.png',
+    );
+    expect(bytes.lengthInBytes, greaterThan(1000));
+  });
+
+  testWidgets('Body Parts round plays on the portrait stage', (tester) async {
+    // Starts landscape like the phone; turned upright before Let's Go.
+    tester.view.physicalSize = const Size(1870, 841);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    (int, double, int)? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: LabelMakerGame(
+            session: LabelMakerSession.body,
+            xp: 30,
+            random: math.Random(2),
+            onComplete: (xp, acc, errors) => result = (xp, acc, errors),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('lm-play')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 46));
+    await tester.pump(const Duration(milliseconds: 600));
+
+    // After the steps: a turn-your-phone prompt, no Let's Go yet...
+    expect(find.text('Hold your phone upright!'), findsWidgets);
+    expect(find.byKey(const ValueKey('lm-go')), findsNothing);
+    // ...until the phone is upright.
+    tester.view.physicalSize = const Size(853, 1844);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(find.byKey(const ValueKey('lm-go')));
+    await tester.pump();
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    await tester.pumpAndSettle();
+
+    final badge = find.byWidgetPredicate(
+      (w) =>
+          w.key is ValueKey<String> &&
+          (w.key! as ValueKey<String>).value.startsWith('lm-badge-'),
+    );
+    for (var i = 1; i <= 10; i++) {
+      final word = (tester.widget(badge).key! as ValueKey<String>).value
+          .substring('lm-badge-'.length);
+      final g = await tester.startGesture(tester.getCenter(badge));
+      await g.moveBy(const Offset(0, -30));
+      await tester.pump();
+      await g.moveTo(_body[word]!);
+      await tester.pump();
+      await g.up();
+      await tester.pumpAndSettle();
+      expect(find.text('$i/10'), findsOneWidget);
+    }
+
+    await tester.pump(const Duration(milliseconds: 4000));
+    expect(find.byKey(const ValueKey('lm-congrats')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('lm-congrats')));
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('Words You Learned'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('lm-home')));
+    expect(result?.$3, 0);
+  });
+
   test('Label Maker room music is bundled', () async {
     final bytes = await rootBundle.load(
       'assets/audio/label_maker/audio_bgm_label_maker_room.mp3',
@@ -96,10 +183,11 @@ void main() {
     await tester.pump();
     expect(find.text('How to Play'), findsOneWidget);
 
-    // Let's Go waits 5s behind a filling "Get ready" bar.
+    // Let's Go waits for the spoken steps behind a "Get ready" bar; with no
+    // audio plugin in tests each of the three lines runs to its 15s timeout.
     expect(find.byKey(const ValueKey('lm-go')), findsNothing);
     expect(find.text('Get ready...'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(seconds: 46));
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.byKey(const ValueKey('lm-go')), findsOneWidget);
     expect(find.text('Get ready...'), findsNothing);
@@ -176,12 +264,12 @@ void main() {
     final wrong = _home.keys.firstWhere((k) => k != first);
     await dragTo(_home[wrong]!);
     expect(current(), first);
-    expect(find.text('1/10'), findsOneWidget);
+    expect(find.text('0/10'), findsOneWidget);
 
     for (var i = 1; i <= 10; i++) {
       await dragTo(_home[current()]!);
-      // The counter shows the word being asked for, capped at the last.
-      expect(find.text('${i < 10 ? i + 1 : 10}/10'), findsOneWidget);
+      // The counter shows how many words are labelled so far.
+      expect(find.text('$i/10'), findsOneWidget);
     }
     // Every word now sits on its object as a white label.
     expect(find.text('بَابٌ'), findsOneWidget);

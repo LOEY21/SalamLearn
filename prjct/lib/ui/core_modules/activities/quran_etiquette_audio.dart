@@ -68,6 +68,10 @@ const etiquetteAudio = <List<EtiquetteQuestionAudio>>[
 ];
 
 class QuranEtiquetteAudio {
+  /// The title has no Tagalog take, so it plays with `localized: false`.
+  static const title = 'quran_etiquette.mp3';
+  static const mumtaz = 'mumtaz.mp3';
+
   final AudioPlayer _voice = AudioPlayer();
   final AudioPlayer _music = AudioPlayer();
   StreamSubscription<void>? _complete;
@@ -77,7 +81,7 @@ class QuranEtiquetteAudio {
   Future<void> startMusic() async {
     try {
       await _music.setReleaseMode(ReleaseMode.loop);
-      await _music.setVolume(0.18);
+      await _music.setVolume(0.06);
       await _music.play(AssetSource('audio/quran_etiquette/ambient.mp3'));
     } catch (_) {
       // Audio device failures must not block the lesson.
@@ -89,6 +93,7 @@ class QuranEtiquetteAudio {
     void Function()? onComplete,
     void Function()? onError,
     void Function(Duration)? onDuration,
+    bool localized = true,
   }) async {
     final generation = ++_generation;
     await _complete?.cancel();
@@ -106,7 +111,9 @@ class QuranEtiquetteAudio {
         if (generation == _generation) onDuration?.call(duration);
       });
       await _voice.play(
-        AssetSource('audio/quran_etiquette/${localizedVoice(asset)}'),
+        AssetSource(
+          'audio/quran_etiquette/${localized ? localizedVoice(asset) : asset}',
+        ),
       );
     } catch (_) {
       if (generation == _generation) onError?.call();

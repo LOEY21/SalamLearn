@@ -10,6 +10,7 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 import '../../../data/models/curriculum/curriculum_models.dart';
 import 'taharah_wudhu_audio.dart';
 import '../../widgets/arc_text_painter.dart';
+import '../game_ui_audio.dart';
 
 /// Taharah Adventure — ported 1:1 from the supplied "Taharah Adventure"
 /// prototypes:
@@ -20,8 +21,10 @@ import '../../widgets/arc_text_painter.dart';
 ///   hands, mouth, nose, face and arms in order.
 /// * [TaharahSession.wudhuPart2] — Session 3, Wudhu Part 2: left arm, head,
 ///   ears, right foot, left foot.
-/// * [TaharahSession.wudhu] — the whole wudhu, all ten steps in one session.
-///   This is the one the curriculum plays (Cleanliness & Character).
+/// * [TaharahSession.wudhu] — the whole wudhu, all ten steps in one session,
+///   with the step tour, glowing rings and named steps (curriculum Session 1).
+/// * [TaharahSession.wudhuPractice] — the same ten steps with every guide
+///   taken away, so the child does it from memory (curriculum Session 2).
 ///
 /// The prototypes are authored against a fixed 390x844 phone frame, so each
 /// screen is laid out inside that virtual stage and scaled to fit, while the
@@ -71,6 +74,13 @@ class TaharahAdventureGame extends StatelessWidget {
     ),
     TaharahSession.wudhu => _Wudhu(
       part: _kWudhuFull,
+      xp: xp,
+      onComplete: onComplete,
+      onEnding: onEnding,
+      onExit: onExit,
+    ),
+    TaharahSession.wudhuPractice => _Wudhu(
+      part: _kWudhuPractice,
       xp: xp,
       onComplete: onComplete,
       onEnding: onEnding,
@@ -1746,6 +1756,7 @@ class _CleanOrDirtyState extends State<_CleanOrDirty> {
       // wobbles there.
       setState(() {
         _errors++;
+        GameUiAudio.instance.wrong();
         _returning = card.id;
         _binNos[bin] = _binNos[bin]! + 1;
         _flights.add(_Flight(n, card.id, at, bin, accepted: false));
@@ -3481,6 +3492,13 @@ class _CleanOrDirtyState extends State<_CleanOrDirty> {
 
 class _WStep {
   const _WStep(this.id, this.n, this.label, this.short, this.pose, this.ok);
+
+  /// e.g. `step_01_wash_hands.mp3`, said when the step is tapped right.
+  String get clip {
+    final name = label.toLowerCase().replaceAll(' ', '_');
+    return 'step_${'$n'.padLeft(2, '0')}_$name.mp3';
+  }
+
   final String id;
   final int n;
   final String label;
@@ -3530,8 +3548,12 @@ class _WPart {
     required this.steps,
     required this.zones,
     required this.rings,
+    this.guided = true,
   });
 
+  /// False hides the step tour, glowing rings, step names and the "Oops!"
+  /// hint's body part.
+  final bool guided;
   final int sessionNo;
   final int stage;
   final String title;
@@ -3742,6 +3764,27 @@ const _kWudhuFull = _WPart(
   rings: [..._kRings2, ..._kRings1],
 );
 
+/// Session 2: the whole wudhu again, from memory.
+const _kWudhuPractice = _WPart(
+  sessionNo: 2,
+  stage: 6,
+  title: 'Wudhu Practice',
+  range: 'Steps 1 to 10',
+  startBoy: '$_kA/boy-cheer.png',
+  instructBoy: '$_kA/boy-cheer2.png',
+  goal: 'Learning goal: perform the steps of wudhu in order without help.',
+  instruction:
+      'Your turn! No glowing hints this time. Tap all 10 steps in the correct order.',
+  playLabel: 'Start Wudhu',
+  doneLine: 'You did your wudhu by yourself',
+  firstAsk: 'What should I wash first?',
+  lastAsk: "Last step! Let's finish.",
+  steps: [..._kSteps1, ..._kSteps2],
+  zones: [..._kZones2, ..._kZones1],
+  rings: [],
+  guided: false,
+);
+
 /// Figure box: `top: 150px; bottom: 108px; aspect-ratio: 1024 / 1536`.
 const double _kFigH = _kH - 150 - 108;
 const double _kFigW = _kFigH * 1024 / 1536;
@@ -3798,6 +3841,14 @@ class _WudhuState extends State<_Wudhu> {
   int _errors = 0;
   Timer? _toastT, _doneT, _poseT, _readyT, _readyEndT;
 
+  /// How to Play's step tour: the tile whose step is being said (-1: none),
+  /// whether Start may show, and a visit counter so a tour from an earlier
+  /// visit can't touch this one.
+  int _tourI = -1;
+  bool _tourDone = false;
+  int _tourN = 0;
+  final List<Timer> _tourTimers = [];
+
   _WPart get _p => widget.part;
   List<_WStep> get _steps => _p.steps;
 
@@ -3835,6 +3886,9 @@ class _WudhuState extends State<_Wudhu> {
     for (final t in [_toastT, _doneT, _poseT, _readyT, _readyEndT]) {
       t?.cancel();
     }
+    for (final t in _tourTimers) {
+      t.cancel();
+    }
     super.dispose();
   }
 
@@ -3848,13 +3902,77 @@ class _WudhuState extends State<_Wudhu> {
     _errors = 0;
   }
 
-  void _goStart() => setState(() {
-    _reset();
-    _screen = _WScreen.start;
-  });
+  void _goStart() {
+    _audio.stopVoice();
+    _endTour();
+    setState(() {
+      _reset();
+      _screen = _WScreen.start;
+    });
+  }
+
+  void _goInstruct() {
+    _endTour();
+    final n = _tourN;
+    setState(() {
+      _screen = _WScreen.instruct;
+      _tourI = -1;
+      _tourDone = !_p.guided;
+    });
+    // Only the Tagalog set has this line, and it counts all ten steps.
+    final intro = [
+      if (_steps.length == 10 && AppTranslations.currentLanguageCode == 'fil')
+        'instruction_tap_order_10_steps.mp3',
+    ];
+    if (!_p.guided) {
+      if (intro.isNotEmpty) _audio.say(intro.first);
+      return;
+    }
+    if (!_sound) return _timedTour(n);
+    // Every step is said in order, its tile lit while it plays; Start
+    // shows once the last one is done (or the tour is cut short).
+    _audio
+        .sayAll([...intro, for (final s in _steps) s.clip], (i) {
+          if (mounted && _tourN == n) {
+            setState(() => _tourI = i - intro.length);
+          }
+        })
+        .then((_) {
+          if (mounted && _tourN == n) {
+            setState(() {
+              _tourI = -1;
+              _tourDone = true;
+            });
+          }
+        });
+  }
+
+  /// Muted: the tiles light one after another on a clock instead.
+  void _timedTour(int n) {
+    for (var i = 0; i <= _steps.length; i++) {
+      _tourTimers.add(
+        Timer(Duration(milliseconds: _kTourStart + i * _kTourStep), () {
+          if (!mounted || _tourN != n) return;
+          setState(() {
+            _tourI = i < _steps.length ? i : -1;
+            _tourDone = i == _steps.length;
+          });
+        }),
+      );
+    }
+  }
+
+  void _endTour() {
+    _tourN++;
+    for (final t in _tourTimers) {
+      t.cancel();
+    }
+    _tourTimers.clear();
+  }
 
   void _goPlay() {
     if (_getReady) return;
+    _audio.say('lets_go.mp3');
     setState(() {
       _getReady = true;
       _readyN++;
@@ -3889,6 +4007,7 @@ class _WudhuState extends State<_Wudhu> {
         _toast = _Toast(step.ok, '✅', good: true);
         _toastN++;
       });
+      _audio.say(step.clip);
       _toastT = Timer(
         const Duration(milliseconds: 5000),
         () => setState(() => _toast = null),
@@ -3908,13 +4027,16 @@ class _WudhuState extends State<_Wudhu> {
     } else {
       setState(() {
         _toast = _Toast(
-          "Oops! That's not correct. Try tapping the ${step.short}.",
+          _p.guided
+              ? "Oops! That's not correct. Try tapping the ${step.short}."
+              : "Oops! That's not the next step. Think and try again!",
           '⚠️',
           good: false,
         );
         _toastN++;
         _shakeN++;
         _errors++;
+        GameUiAudio.instance.wrong();
       });
       _toastT = Timer(
         const Duration(milliseconds: 2100),
@@ -4093,7 +4215,8 @@ class _WudhuState extends State<_Wudhu> {
                             // 668 of 1300) rather than on the whole logo.
                             Align(
                               alignment: const Alignment(
-                                (668 / 1300 * 685 - 685 / 2) / ((685 - 270) / 2),
+                                (668 / 1300 * 685 - 685 / 2) /
+                                    ((685 - 270) / 2),
                                 .73,
                               ),
                               child: SizedBox(
@@ -4209,9 +4332,7 @@ class _WudhuState extends State<_Wudhu> {
                                   key: const ValueKey('ta-w-play'),
                                   up: '$_kA/s2_play.png',
                                   down: '$_kA/s2_play_down.png',
-                                  onTap: () => setState(
-                                    () => _screen = _WScreen.instruct,
-                                  ),
+                                  onTap: _goInstruct,
                                 ),
                               ),
                             ],
@@ -4253,14 +4374,11 @@ class _WudhuState extends State<_Wudhu> {
   /// How to Play, in the washroom at full brightness: the instruction card
   /// with its sound button, the five step tiles, the boy standing on the
   /// painted floor spot, and the glossy Start button.
-  /// Step tiles light up one after another from here (ms)…
+  /// Muted, step tiles light up one after another from here (ms)…
   static const _kTourStart = 900;
 
-  /// …each for this long…
+  /// …each for this long, then Start appears.
   static const _kTourStep = 850;
-
-  /// …and the Start button appears once the last one has had its turn.
-  int get _tourEnd => _kTourStart + _kTourStep * _steps.length;
 
   Widget _buildInstruct() {
     return Stack(
@@ -4276,10 +4394,9 @@ class _WudhuState extends State<_Wudhu> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _rise(const Duration(milliseconds: 450), _instructCard()),
-                    const SizedBox(height: 16),
-                    _stepTour(),
+                    if (_p.guided) ...[const SizedBox(height: 16), _stepTour()],
                     const Spacer(),
-                    _startButton(),
+                    if (_tourDone) _startButton(),
                   ],
                 ),
               ),
@@ -4302,25 +4419,19 @@ class _WudhuState extends State<_Wudhu> {
   /// The five step tiles: they rise in, then each one in turn swells, glows
   /// gold and lifts, walking the child through the order before play.
   Widget _stepTour() {
-    final total = _tourEnd + 200;
-    return _Once(
-      duration: Duration(milliseconds: total),
-      builder: (t, _) {
-        final ms = t * total;
-        Widget tile(int i) => _rise(
-          const Duration(milliseconds: 420),
-          delay: Duration(milliseconds: 180 + 90 * i),
-          _stepTile(
-            _steps[i],
-            glow: math.sin(
-              math.pi *
-                  ((ms - _kTourStart - i * _kTourStep) / _kTourStep).clamp(
-                    0.0,
-                    1.0,
-                  ),
-            ),
-          ),
-        );
+    Widget tile(int i) => _rise(
+      const Duration(milliseconds: 420),
+      delay: Duration(milliseconds: 180 + 90 * i),
+      // Lit while its step is being said.
+      TweenAnimationBuilder<double>(
+        tween: Tween(end: i == _tourI ? 1.0 : 0.0),
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+        builder: (context, glow, _) => _stepTile(_steps[i], glow: glow),
+      ),
+    );
+    return Builder(
+      builder: (context) {
         // Five tiles to a row, so the full ten-step wudhu wraps onto a
         // second row instead of squeezing every label.
         const perRow = 5;
@@ -4351,8 +4462,9 @@ class _WudhuState extends State<_Wudhu> {
   }
 
   Widget _startButton() => _Once(
+    key: const ValueKey('ta-w-start'),
     duration: const Duration(milliseconds: 500),
-    delay: Duration(milliseconds: _tourEnd),
+    delay: Duration(milliseconds: _p.guided ? 0 : 600),
     builder: (t, c) => IgnorePointer(
       ignoring: t == 0,
       child: Opacity(
@@ -4589,7 +4701,7 @@ class _WudhuState extends State<_Wudhu> {
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                s.label.replaceFirst(' ', '\n'),
+                _twoLines(s.label),
                 textAlign: TextAlign.center,
                 style: _baloo(12.5, const Color(0xFF5B3A1A), height: 1.12),
               ),
@@ -4599,6 +4711,21 @@ class _WudhuState extends State<_Wudhu> {
       ),
     ),
   );
+
+  /// A step name over two lines, translated first (the broken string has
+  /// no translation). English breaks after its verb; the longer Filipino
+  /// names break at the space nearest the middle.
+  static String _twoLines(String label) {
+    final t = label.tr;
+    if (t == label) return t.replaceFirst(' ', '\n');
+    var best = -1;
+    for (var i = t.indexOf(' '); i >= 0; i = t.indexOf(' ', i + 1)) {
+      if (best < 0 || (i - t.length / 2).abs() < (best - t.length / 2).abs()) {
+        best = i;
+      }
+    }
+    return best < 0 ? t : '${t.substring(0, best)}\n${t.substring(best + 1)}';
+  }
 
   /// Big glossy green pill, like the reference's Start Wudhu button.
   Widget _glossyButton(String label, VoidCallback onTap) => _Btn(
@@ -4849,14 +4976,19 @@ class _WudhuState extends State<_Wudhu> {
         children: [
           _wIconButton('back', _goStart),
           Expanded(
-            child: Center(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: _outlined(
-                  _p.title,
-                  _baloo(27, Colors.white, height: 1),
-                  const Color(0xFF123C86),
-                  7,
+            // A gap on each side: the outline paints past the text box, so
+            // a long (Tagalog) title would otherwise touch the buttons.
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: _outlined(
+                    _p.title,
+                    _baloo(27, Colors.white, height: 1),
+                    const Color(0xFF123C86),
+                    7,
+                  ),
                 ),
               ),
             ),
@@ -4952,7 +5084,9 @@ class _WudhuState extends State<_Wudhu> {
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                'Tap the glowing part on the boy',
+                _p.guided
+                    ? 'Tap the glowing part on the boy'
+                    : 'Remember the order and tap the boy',
                 style: _baloo(
                   15.5,
                   Colors.white,
@@ -4989,7 +5123,7 @@ class _WudhuState extends State<_Wudhu> {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
-                cur.label,
+                _p.guided ? cur.label : 'Think & Tap!',
                 style: _baloo(22, Colors.white, height: 1.1),
               ),
             ),

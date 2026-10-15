@@ -36,8 +36,9 @@ void main() {
   Future<void> toPuzzle(WidgetTester tester) async {
     await tester.tap(find.byKey(const ValueKey('ab-play')));
     await tester.pump(const Duration(milliseconds: 600));
-    // I'm ready appears after a 5s read of the board.
-    await tester.pump(const Duration(milliseconds: 5600));
+    // I'm ready waits for the spoken steps; with no audio plugin in tests
+    // each of the three lines runs to its 15s timeout.
+    await tester.pump(const Duration(seconds: 46));
     await tester.tap(find.bySemanticsLabel("I'm ready"));
     // 3-2-1 countdown, then the fade into the listen screen.
     await tester.pump(const Duration(seconds: 3));
@@ -82,7 +83,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('ab-play')));
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.bySemanticsLabel("I'm ready"), findsNothing);
-    await tester.pump(const Duration(milliseconds: 5600));
+    await tester.pump(const Duration(seconds: 46));
     expect(find.bySemanticsLabel("I'm ready"), findsOneWidget);
     expect(find.text("Let's build Al-Kawthar together!"), findsOneWidget);
 

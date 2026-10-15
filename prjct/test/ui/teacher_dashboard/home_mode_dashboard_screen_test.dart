@@ -146,10 +146,17 @@ void main() {
       await tester.ensureVisible(find.text('Stage 1: Welcome to Madrasah'));
       await tester.tap(find.text('Stage 1: Welcome to Madrasah'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('1 of 5 sessions played · '), findsOneWidget);
+      expect(find.textContaining('1 of 7 sessions played · '), findsOneWidget);
 
       // The top-bar back arrow returns to the list before leaving the screen.
-      await tester.tap(find.byIcon(Icons.arrow_back_rounded).first);
+      await tester.dragUntilVisible(
+        find.text('All students'),
+        find.byType(ListView).first,
+        const Offset(0, 300),
+      );
+      await tester.ensureVisible(find.text('All students'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('All students'));
       await tester.pumpAndSettle();
       expect(find.text('All students · 1'), findsOneWidget);
     },
@@ -220,7 +227,7 @@ void main() {
       await tester.tap(find.text('7 Stages'));
       await tester.pumpAndSettle();
       expect(find.text('Stage 1: Welcome to Madrasah'), findsOneWidget);
-      expect(find.text('1 of 1 student played · 5 sessions'), findsOneWidget);
+      expect(find.text('1 of 1 student played · 7 sessions'), findsOneWidget);
     },
   );
 }

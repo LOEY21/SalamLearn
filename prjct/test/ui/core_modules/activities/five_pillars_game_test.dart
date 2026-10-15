@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:salamlearn/data/curriculum_data.dart';
 import 'package:salamlearn/data/models/curriculum/curriculum_models.dart';
+import 'package:salamlearn/ui/core_modules/activities/five_pillars_audio.dart';
 import 'package:salamlearn/ui/core_modules/activities/five_pillars_game.dart';
 
 void main() {
@@ -30,6 +31,7 @@ void main() {
             xp: 40,
             onComplete: done,
             onExit: () {},
+            audio: _SilentAudio(),
           ),
         ),
       );
@@ -121,4 +123,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('fp-continue')));
     expect(errors, 1);
   });
+}
+
+/// Narration that ends at once, so "I'm Ready!" shows on its usual beat.
+class _SilentAudio extends FivePillarsAudio {
+  @override
+  Future<void> say(List<String> clips) async {}
 }

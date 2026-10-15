@@ -15,7 +15,7 @@ class GameUiAudio implements GameUiAudioPlayback {
   final AudioPlayer _tap = AudioPlayer();
   final AudioPlayer _level = AudioPlayer();
   final AudioPlayer _star = AudioPlayer();
-  int _tapIndex = 0;
+  final AudioPlayer _wrong = AudioPlayer();
   int _starIndex = 0;
   int _tapGeneration = 0;
 
@@ -27,7 +27,7 @@ class GameUiAudio implements GameUiAudioPlayback {
   late final Future<void> _ready = () async {
     try {
       await Future.wait([
-        for (final p in [_tap, _level, _star])
+        for (final p in [_tap, _level, _star, _wrong])
           p.setAudioContext(
             AudioContextConfig(
               focus: AudioContextConfigFocus.mixWithOthers,
@@ -52,9 +52,7 @@ class GameUiAudio implements GameUiAudioPlayback {
   @override
   void tap() {
     final generation = ++_tapGeneration;
-    final name = _tapIndex++ % 2 == 0
-        ? 'audio_sfx_button_tap.mp3'
-        : 'audio_sfx_button_tap(1).mp3';
+    const name = 'audio_sfx_button_tap.mp3';
     () async {
       try {
         await _ready;
@@ -66,6 +64,13 @@ class GameUiAudio implements GameUiAudioPlayback {
         // Ignore an unavailable audio device.
       }
     }();
+  }
+
+  /// A wrong answer in any game. Replaces the plain tap of the same touch
+  /// (the lesson player's tap fires first, on pointer up).
+  void wrong() {
+    ++_tapGeneration;
+    _play(_wrong, 'audio_sfx_button_tap(1).mp3');
   }
 
   @override

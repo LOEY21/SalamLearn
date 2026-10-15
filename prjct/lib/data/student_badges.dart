@@ -61,7 +61,7 @@ const allStudentBadges = <BadgeItem>[
     id: 'desert_calligrapher',
     name: 'Desert Calligrapher Badge',
     requirement:
-        'Complete all 4 sessions of The Magic Sand Tracer (mastering all 28 Arabic letters with correct right-to-left stroke direction).',
+        'Complete all 6 sessions of The Magic Sand Tracer (mastering all 28 Arabic letters and the numbers 1 to 10 with the correct stroke direction).',
     category: BadgeCategory.milestone,
     icon: Icons.brush_rounded,
     emoji: '🏜️',
@@ -73,7 +73,7 @@ const allStudentBadges = <BadgeItem>[
     id: 'sound_detective_star',
     name: 'Sound Detective Star Badge',
     requirement:
-        'Finish all 4 sessions of Arabic Sound Detective with a 100% correct audio-matching score.',
+        'Finish all 6 sessions of Arabic Sound Detective with a 100% correct audio-matching score.',
     category: BadgeCategory.milestone,
     icon: Icons.hearing_rounded,
     emoji: '🔍',
@@ -157,7 +157,7 @@ const allStudentBadges = <BadgeItem>[
     id: 'classroom_hero',
     name: 'Classroom Hero Badge',
     requirement:
-        'Complete all 4 values modules (Respect, Kindness, Responsibility, Teamwork) and completely fill the Classroom Hero Meter.',
+        'Complete all 8 Classroom Heroes sessions (Colors, Shapes, Respect, Kindness, Responsibility, Teamwork) and completely fill the Classroom Hero Meter.',
     category: BadgeCategory.milestone,
     icon: Icons.shield_rounded,
     emoji: '🦸',

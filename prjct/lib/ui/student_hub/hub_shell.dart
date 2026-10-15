@@ -43,17 +43,26 @@ class _HubShellState extends ConsumerState<HubShell>
     // switch, etc.) doesn't leave Parent/Teacher stuck in immersive mode.
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    // Games restore edgeToEdge in their own dispose, which runs after the
-    // hub is already back on top — so re-hide the bars whenever they
-    // reappear while the hub is the visible route.
+    // Games restore edgeToEdge in their own dispose, and some never go
+    // immersive at all — so re-hide the bars whenever they reappear, on the
+    // map or in a lesson pushed over it. Everything above the hub is the
+    // learner's; leaving for Parent/Teacher disposes the shell.
     SystemChrome.setSystemUIChangeCallback((barsVisible) async {
       if (barsVisible) _enterImmersive();
     });
   }
 
   void _enterImmersive() {
-    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
+    if (!mounted) return;
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  }
+
+  /// The callback above doesn't fire on every Android version; the nav
+  /// bar's inset coming back does, and it is what leaves the cream strip.
+  @override
+  void didChangeMetrics() {
+    final view = WidgetsBinding.instance.platformDispatcher.views.first;
+    if (view.viewPadding.bottom > 0) _enterImmersive();
   }
 
   @override

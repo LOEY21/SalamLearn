@@ -178,6 +178,27 @@ void main() {
     expect(saved.fullName, 'Ustadh Yusuf Abdurrahman Al-Farouqi');
   });
 
+  testWidgets('name field keeps focus when the keyboard opens', (
+    tester,
+  ) async {
+    await pumpRow(tester, UserRole.parent);
+    await open(tester);
+    await tester.tap(find.widgetWithText(TextField, 'Aisha'));
+    await tester.pump();
+
+    // Keyboard shrinks the page under the short-layout breakpoint.
+    tester.view.viewInsets = const FakeViewPadding(bottom: 350);
+    await settle(tester);
+
+    final field = tester.state<EditableTextState>(
+      find.descendant(
+        of: find.widgetWithText(TextField, 'Aisha'),
+        matching: find.byType(EditableText),
+      ),
+    );
+    expect(field.widget.focusNode.hasFocus, isTrue);
+  });
+
   for (final scale in responsiveTextScales) {
     testWidgets('fits at every size, with errors showing, text x$scale', (
       tester,

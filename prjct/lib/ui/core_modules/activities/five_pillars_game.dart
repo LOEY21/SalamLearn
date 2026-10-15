@@ -8,6 +8,8 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../widgets/arc_text_painter.dart';
+import 'five_pillars_audio.dart';
+import '../game_ui_audio.dart';
 
 /// The Five Pillars — drag the five pillar columns onto the mosque wall.
 /// Ported 1:1 from the supplied "Five Pillars" (Session 1, Scenarios) and
@@ -30,6 +32,7 @@ class FivePillarsGame extends StatefulWidget {
     required this.onComplete,
     this.onEnding,
     this.onExit,
+    this.audio,
   });
 
   final FivePillarsMode mode;
@@ -42,6 +45,9 @@ class FivePillarsGame extends StatefulWidget {
 
   /// Leaves the lesson from the start screen's back button.
   final VoidCallback? onExit;
+
+  /// Swapped for a silent stand-in by tests.
+  final FivePillarsAudio? audio;
 
   @override
   State<FivePillarsGame> createState() => _FivePillarsGameState();
@@ -204,6 +210,17 @@ const String _kInstruction =
 const List<String> _kTargets = ['shahadah', 'salah', 'zakah', 'sawm', 'hajj'];
 const List<String> _kTrayOrder = ['sawm', 'shahadah', 'hajj', 'zakah', 'salah'];
 
+/// Voice clips for Session 1's questions, in [_kQuestions] order.
+const List<String> _kQuestionClips = [
+  'q1_first_pillar_shahadah.mp3',
+  'q2_adhan_salah.mp3',
+  'q3_charity_zakah.mp3',
+  'q4_ramadan_sawm.mp3',
+  'q5_makkah_hajj.mp3',
+];
+const String _kInstructionClip = 'prompt_put_in_order.mp3';
+String _pillarClip(String id) => 'pillar_${_kTargets.indexOf(id) + 1}_$id.mp3';
+
 // Slot row: left .4%, right .6%, top 45.6%, height 18.3% of the stage.
 const double _kSlotL = _kW * 0.004;
 const double _kSlotT = _kH * 0.456;
@@ -343,6 +360,12 @@ class _FivePillarsGameState extends State<FivePillarsGame>
   bool _entering = false;
   bool _howTo = false;
   double _howT0 = 0;
+
+  /// How-to time the narration ended; "I'm Ready!" waits for it.
+  double? _readyAt;
+  Future<void>? _tutorial;
+
+  late final FivePillarsAudio _audio = widget.audio ?? FivePillarsAudio();
   double _enterT0 = 0;
   Alignment _sceneAlign = Alignment.center;
   int _wrongIdx = -1;
@@ -389,6 +412,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
       duration: const Duration(hours: 1),
     )..forward();
     _loadLiveBg();
+    _audio.say(const ['the_five_pillars_of_islam.mp3']);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
@@ -456,6 +480,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
 
   @override
   void dispose() {
+    _audio.dispose();
     _bgShader?.dispose();
     _bgImage?.dispose();
     _bgMask?.dispose();
@@ -512,13 +537,44 @@ class _FivePillarsGameState extends State<FivePillarsGame>
     setState(() {
       _howTo = true;
       _howT0 = _now;
+      _readyAt = null;
     });
+    final fil = AppTranslations.currentLanguageCode == 'fil';
+    final tutorial = _tutorial = _audio.say(
+      _scenarios
+          ? [
+              if (fil) 'tutorial_title_s1.mp3',
+              'tutorial_listen_question.mp3',
+              'tutorial_drag_pillar.mp3',
+              'tutorial_build_five_pillars.mp3',
+            ]
+          : [
+              if (fil) 'tutorial_title_s2.mp3',
+              'tutorial_order_instruction.mp3',
+              'tutorial_order_move_slot.mp3',
+              'tutorial_order_arrange_1_to_5.mp3',
+            ],
+    );
+    tutorial.then((_) {
+      if (!mounted || _tutorial != tutorial || !_howTo) return;
+      setState(() => _readyAt = math.max(_now - _howT0, 0.85));
+    });
+  }
+
+  /// The prompt card's sound button: hear the current question again.
+  void _sayPrompt() {
+    if (!_scenarios) {
+      _audio.say(const [_kInstructionClip]);
+    } else if (_step < 5) {
+      _audio.say([_kQuestionClips[_step]]);
+    }
   }
 
   void _start() {
     if (_screen == _Screen.start) {
       if (_entering) return;
       _chime();
+      _audio.stop();
       setState(() {
         _entering = true;
         _enterT0 = _now;
@@ -553,6 +609,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
       _missed.clear();
       _finaleT0 = null;
     });
+    _sayPrompt();
     _leaveT?.cancel();
     if (fromStart) {
       _leaveT = Timer(_ms((_kFlashDur * 1000).round()), () {
@@ -562,6 +619,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
   }
 
   void _reset() {
+    _audio.stop();
     _cheerT?.cancel();
     for (final t in _finaleTs) {
       t.cancel();
@@ -661,6 +719,10 @@ class _FivePillarsGameState extends State<FivePillarsGame>
       _step = next;
       _setCheer('Excellent!');
     });
+    _audio.say([
+      _pillarClip(id),
+      if (next < _kQuestionClips.length) _kQuestionClips[next],
+    ]);
     _cheerT?.cancel();
     _cheerT = Timer(_ms(1500), () {
       if (!mounted) return;
@@ -705,6 +767,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
     _nope();
     if (!onSlot) return;
     _errors++;
+    GameUiAudio.instance.wrong();
     final want = _kQuestions[_step].$2;
     _missed[want] = (_missed[want] ?? 0) + 1;
     final was = _shakingSlot();
@@ -724,6 +787,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
       _wrongIdx = -1;
       _setCheer(_placedCount >= 5 ? null : 'Excellent!');
     });
+    _audio.say([_pillarClip(id)]);
     final count = _placedCount;
     _cheerT?.cancel();
     if (count >= 5) {
@@ -740,6 +804,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
   void _wrongOrdering(int idx) {
     _nope();
     _errors++;
+    GameUiAudio.instance.wrong();
     _missed[_kTargets[idx]] = (_missed[_kTargets[idx]] ?? 0) + 1;
     final was = _shakingSlot();
     setState(() {
@@ -1047,7 +1112,9 @@ class _FivePillarsGameState extends State<FivePillarsGame>
     // down to flank the panel, which rises in with its steps one by one.
     final ho = _howTo ? _now - _howT0 : 0.0;
     final out = _howTo ? Curves.easeOut.transform(_c01(ho / 0.35)) : 0.0;
-    final ready = _howTo ? _dropCurve.transform(_once(ho, 0.45, 0.85)) : 0.0;
+    final ready = _howTo
+        ? _dropCurve.transform(_once(ho, 0.45, _readyAt ?? double.infinity))
+        : 0.0;
 
     final shader = _bgShader;
     // The shader zooms itself (its pixels are mapped from the canvas);
@@ -1122,11 +1189,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
                                   child: CustomPaint(
                                     painter: ArcTextPainter(
                                       'Build Your Faith'.tr,
-                                      _baloo(
-                                        24,
-                                        800,
-                                        const Color(0xFF5D2001),
-                                      ),
+                                      _baloo(24, 800, const Color(0xFF5D2001)),
                                       radius: 520,
                                     ),
                                   ),
@@ -1247,7 +1310,9 @@ class _FivePillarsGameState extends State<FivePillarsGame>
                                 key: const ValueKey('fp-ready'),
                                 up: _kHowReady,
                                 down: _kHowReadyDown,
-                                onTap: _start,
+                                onTap: () {
+                                  if (ready > 0) _start();
+                                },
                                 label: "I'm Ready!  \u203A",
                               ),
                             ),
@@ -1362,10 +1427,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
             // padding) stays just narrower than the gap between two pillars.
             Text(parts[0], style: _baloo(9.5, 800, _howInk, height: 1)),
             if (parts.length > 1)
-              Text(
-                '(${parts[1]}',
-                style: _baloo(8, 700, _howInk, height: 1.1),
-              ),
+              Text('(${parts[1]}', style: _baloo(8, 700, _howInk, height: 1.1)),
           ],
         ),
       );
@@ -1771,9 +1833,10 @@ class _FivePillarsGameState extends State<FivePillarsGame>
           ),
         ),
         const SizedBox(width: 10),
-        // Voice-over is off in the prototype's defaults, so the prompt
-        // button only acknowledges the tap.
-        _iconButton('fp-sound', _kBtnSound, _kBtnSoundDown, _pick),
+        _iconButton('fp-sound', _kBtnSound, _kBtnSoundDown, () {
+          _pick();
+          _sayPrompt();
+        }),
       ],
     );
   }

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:audioplayers/audioplayers.dart';
+import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 
@@ -50,6 +53,66 @@ class AyahBuilderAudio {
   final AudioPlayer _music = AudioPlayer();
   bool _on = true;
   bool _disposed = false;
+  int _generation = 0;
+  Completer<void>? _line;
+  Timer? _lineTimer;
+
+  /// Ends the narrator line in flight, so a stop or dispose leaves no timer.
+  void _endLine() {
+    _lineTimer?.cancel();
+    final line = _line;
+    if (line != null && !line.isCompleted) line.complete();
+  }
+
+  /// Narrator lines in `audio/ayah_builder/`, Tagalog ones in its `fil/`
+  /// folder. The title has no Tagalog take, so it always plays as is.
+  static const title = 'ayah_builder.mp3';
+  static const howTo = [
+    'instruction_listen_first.mp3',
+    'instruction_tap_word_card.mp3',
+    'instruction_drag_correct_order.mp3',
+  ];
+  static const mashaAllah = 'masha_allah.mp3';
+
+  /// This session's surah introduction, if it has one.
+  String? get intro {
+    final clips = _clips;
+    return clips == null ? null : 'surah_intro_${clips.$1}.mp3';
+  }
+
+  /// Plays [lines] back to back; any other word, ayah or stop cuts the
+  /// sequence. Resolves true only if it ran (or was muted) to the end.
+  Future<bool> say(List<String?> lines) async {
+    final generation = ++_generation;
+    _endLine();
+    for (final line in lines) {
+      if (line == null) continue;
+      if (_disposed || generation != _generation) return false;
+      if (!_on) continue;
+      final done = _line = Completer<void>();
+      // A player that never gets ready must not stall the how-to screen.
+      _lineTimer = Timer(const Duration(seconds: 15), _endLine);
+      final sub = _voice.onPlayerComplete.listen((_) => _endLine());
+      unawaited(() async {
+        try {
+          await _voice.stop();
+          if (generation != _generation) return _endLine();
+          await _voice.play(
+            AssetSource(
+              'audio/ayah_builder/'
+              '${line == title ? line : localizedVoice(line)}',
+            ),
+          );
+        } catch (_) {
+          // A missing recording or audio device must not block the game.
+          if (done == _line) _endLine();
+        }
+      }());
+      await done.future;
+      unawaited(sub.cancel());
+    }
+    return !_disposed && generation == _generation;
+  }
 
   String _asset(String name) => 'audio/ayah_builder/${_clips!.$1}/$name.mp3';
 
@@ -57,7 +120,7 @@ class AyahBuilderAudio {
     if (!_on || _disposed) return;
     try {
       await _music.setReleaseMode(ReleaseMode.loop);
-      await _music.setVolume(0.18);
+      await _music.setVolume(0.06);
       if (!_on || _disposed) return;
       await _music.play(AssetSource('audio/ayah_builder/ambient.mp3'));
     } catch (_) {
@@ -81,6 +144,8 @@ class AyahBuilderAudio {
   Future<void> playWord(int index) async {
     final clips = _clips;
     if (!_on || _disposed || clips == null || index >= clips.$2.length) return;
+    _generation++;
+    _endLine();
     try {
       await _voice.stop();
       await _voice.play(AssetSource(_asset(clips.$2[index])));
@@ -95,6 +160,8 @@ class AyahBuilderAudio {
   Future<Duration?> playAyah() async {
     final clips = _clips;
     if (!_on || _disposed || clips == null) return null;
+    _generation++;
+    _endLine();
     try {
       // A player that never gets ready must not stall the listen screen.
       return await () async {
@@ -111,6 +178,8 @@ class AyahBuilderAudio {
 
   Future<void> stopVoice() async {
     if (_disposed) return;
+    _generation++;
+    _endLine();
     try {
       await _voice.stop();
     } catch (_) {
@@ -121,6 +190,7 @@ class AyahBuilderAudio {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _endLine();
     await _voice.dispose();
     await _music.dispose();
   }

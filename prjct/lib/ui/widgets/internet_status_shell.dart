@@ -103,13 +103,15 @@ class _InternetStatusShellState extends State<InternetStatusShell>
             top: 0,
             left: 0,
             right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: Semantics(
-                liveRegion: true,
-                child: const IgnorePointer(
-                  child: ColoredBox(
-                    color: AppColors.danger,
+            // Red runs up behind the status bar to the screen's top edge;
+            // the words stay below the status bar icons.
+            child: ColoredBox(
+              color: AppColors.danger,
+              child: SafeArea(
+                bottom: false,
+                child: Semantics(
+                  liveRegion: true,
+                  child: const IgnorePointer(
                     child: SizedBox(
                       key: Key('offline-internet-line'),
                       height: 24,
