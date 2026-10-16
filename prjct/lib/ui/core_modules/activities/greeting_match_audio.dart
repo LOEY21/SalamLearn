@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:salamlearn/logic/localization/app_translations.dart';
 
@@ -19,7 +21,7 @@ class GreetingMatchAudio {
   static const letsPlay = '${_dir}lets_play.mp3';
   static const listenCarefully = '${_dir}listen_carefully.mp3';
   static const mumtaz = '${_dir}mumtaz.mp3';
-  static const tryAgain = '${_dir}try_again.mp3';
+  static const tryAgain = '${_dir}try_again_next_time.mp3';
 
   final AudioPlayer _voice = AudioPlayer();
   final AudioPlayer _music = AudioPlayer();
@@ -33,7 +35,7 @@ class GreetingMatchAudio {
     if (_muted || _disposed) return;
     try {
       await _music.setReleaseMode(ReleaseMode.loop);
-      await _music.setVolume(0.06);
+      await _music.setVolume(_musicVolume);
       if (_muted || _disposed) return;
       await _music.play(
         AssetSource('audio/greetings/audio_bgm_greetings_ambient.mp3'),
@@ -43,37 +45,65 @@ class GreetingMatchAudio {
     }
   }
 
-  /// Sound on/off (the Music button). Muting cuts off whatever is playing.
+  /// The Music button: background music only — narration keeps playing.
   Future<void> setMuted(bool muted) async {
     _muted = muted;
     if (_disposed) return;
     if (!muted) return startMusic();
-    _generation++;
     try {
-      await _voice.stop();
       await _music.stop();
     } catch (_) {
       // Nothing playing / player already released.
     }
   }
 
+  static const _musicVolume = 0.06;
+
+  /// Music level under a voice line. Many voice clips are recorded ~14 dB
+  /// quieter than the music file, so it ducks to keep narration on top.
+  static const _duckedVolume = 0.015;
+
+  Future<void> _setMusicVolume(double v) async {
+    try {
+      await _music.setVolume(v);
+    } catch (_) {
+      // Player already released as the game closes.
+    }
+  }
+
   /// Plays [assets] back to back in the learner's language. A newer call
-  /// cuts off an older sequence.
+  /// cuts off an older sequence. Music ducks under the voice meanwhile.
   Future<void> play(List<String?> assets) async {
-    if (_muted) return;
     final generation = ++_generation;
+    // Not awaited: the volume change must never hold up the voice line.
+    if (!_disposed) unawaited(_setMusicVolume(_duckedVolume));
+    try {
+      await _playAll(assets, generation);
+    } finally {
+      // A newer sequence keeps the music ducked for itself.
+      if (!_disposed && generation == _generation) {
+        unawaited(_setMusicVolume(_musicVolume));
+      }
+    }
+  }
+
+  Future<void> _playAll(List<String?> assets, int generation) async {
     for (final asset in assets) {
       if (asset == null) continue;
       if (_disposed || generation != _generation) return;
       try {
         await _voice.stop();
-        await _voice.play(
-          AssetSource(
-            asset.startsWith(_dir)
-                ? '$_dir${localizedVoice(asset.substring(_dir.length))}'
-                : asset,
-          ),
-        );
+        final local = asset.startsWith(_dir)
+            ? '$_dir${localizedVoice(asset.substring(_dir.length))}'
+            : asset;
+        try {
+          await _voice.play(AssetSource(local));
+        } catch (_) {
+          // No Tagalog take (e.g. the "Greeting Match" title): the English
+          // one, rather than silence.
+          if (local == asset) rethrow;
+          await _voice.play(AssetSource(asset));
+        }
         // Scenario narrations run up to ~14 s.
         await _voice.onPlayerComplete.first.timeout(
           const Duration(seconds: 20),

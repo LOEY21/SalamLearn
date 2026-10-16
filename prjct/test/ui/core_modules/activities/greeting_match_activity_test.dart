@@ -98,7 +98,7 @@ void main() {
     expect(exits, 2);
   });
 
-  testWidgets('Music button switches the game sound off and on', (
+  testWidgets('Music button switches the music off and on', (
     tester,
   ) async {
     await tester.pumpWidget(buildTestWidget());
@@ -106,15 +106,15 @@ void main() {
     // Corner buttons fade in just after the screen appears.
     await tester.pump(const Duration(milliseconds: 700));
     await tester.pump(const Duration(milliseconds: 700));
-    expect(find.bySemanticsLabel('Sound on'), findsOneWidget);
+    expect(find.bySemanticsLabel('Music on'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('greeting-start-music')));
     await tester.pump();
-    expect(find.bySemanticsLabel('Sound off'), findsOneWidget);
+    expect(find.bySemanticsLabel('Music off'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('greeting-start-music')));
     await tester.pump();
-    expect(find.bySemanticsLabel('Sound on'), findsOneWidget);
+    expect(find.bySemanticsLabel('Music on'), findsOneWidget);
   });
 
   testWidgets('start screen shows the session ribbon, subtitle and Play',
@@ -193,6 +193,8 @@ void main() {
     await waitForChoices(tester);
     expect(tester.widget<AnimatedOpacity>(card.first).opacity, 1);
     await tester.tap(find.byKey(const Key('greeting-choice-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('greeting-submit')));
     await tester.pump(const Duration(milliseconds: 1700));
     expect(errors, isNull);
     await continueFromEnd(tester);
@@ -239,16 +241,25 @@ void main() {
     await waitForChoices(tester);
 
     await tester.tap(find.byKey(const Key('greeting-choice-0')));
+
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('greeting-submit')));
     await tester.pump();
     expect(find.byKey(const Key('greeting-star-0-red')), findsOneWidget);
     expect(find.text('Mumtaz!'), findsNothing);
 
     // No second try: tapping the right answer now changes nothing.
     await tester.tap(find.byKey(const Key('greeting-choice-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('greeting-submit')));
     await tester.pump(const Duration(milliseconds: 800));
     expect(find.byKey(const Key('greeting-star-0-red')), findsOneWidget);
+    // It waits on the right reply and "Try again next time" before moving
+    // on (no audio output here, so each line runs to its timeout).
+    expect(find.byKey(const Key('greeting-end')), findsNothing);
 
-    await tester.pump(const Duration(milliseconds: 1700));
+    await tester.pump(const Duration(seconds: 17));
     await continueFromEnd(tester);
     expect(errors, 1);
     expect(accuracy, 0.0);
@@ -265,6 +276,10 @@ void main() {
     await waitForChoices(tester);
 
     await tester.tap(find.byKey(const Key('greeting-choice-1')));
+
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('greeting-submit')));
     await tester.pump();
     expect(find.byKey(const Key('greeting-star-0-gold')), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 1700));
@@ -347,11 +362,17 @@ void main() {
 
     // Round 1 right (gold), round 2 wrong (red): 50% -> 1 star.
     await tester.tap(find.byKey(const Key('greeting-choice-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('greeting-submit')));
     await tester.pump(const Duration(milliseconds: 1700));
     await waitForChoices(tester);
     await tester.pump(const Duration(milliseconds: 600));
     await tester.tap(find.byKey(const Key('greeting-choice-0')));
-    await tester.pump(const Duration(milliseconds: 2500));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('greeting-submit')));
+    // The wrong round says the right reply and "Try again next time" first
+    // (no audio output here, so each line runs to its timeout).
+    await tester.pump(const Duration(seconds: 17));
     await tester.pump(const Duration(milliseconds: 2000));
 
     expect(find.text('Great Job!'), findsOneWidget);
@@ -428,6 +449,8 @@ void main() {
 
     // Tap the correct answer.
     await tester.tap(find.byKey(const Key('greeting-choice-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('greeting-submit')));
     await tester.pump();
     expect(find.byKey(const Key('greeting-star-0-gold')), findsOneWidget);
 

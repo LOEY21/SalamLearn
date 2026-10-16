@@ -61,7 +61,7 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen> {
     ),
     (
       title: 'Choose a companion',
-      subtitle: "Pick Amir or Zara to be your child's learning companion.",
+      subtitle: "Pick Amir or Amira to be your child's learning companion.",
     ),
   ];
 
@@ -74,6 +74,14 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen> {
     _parentPasswordC.dispose();
     super.dispose();
   }
+
+  bool get _step0Complete =>
+      _firstNameC.text.trim().isNotEmpty &&
+      _lastNameC.text.trim().isNotEmpty &&
+      (_gradeLevel ?? '').isNotEmpty;
+
+  bool get _step1Complete =>
+      _usernameC.text.trim().isNotEmpty && _parentPasswordC.text.isNotEmpty;
 
   void _onStep0Next() {
     final firstName = _firstNameC.text.trim();
@@ -186,6 +194,7 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen> {
             ChildTextField(
               controller: _firstNameC,
               hint: 'e.g. Nurhana',
+              onChanged: (_) => setState(() {}),
               inputFormatters: [_CapitalizeFirstLetterFormatter()],
             ),
             const SizedBox(height: 16),
@@ -199,6 +208,7 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen> {
             ChildTextField(
               controller: _lastNameC,
               hint: 'e.g. Ali',
+              onChanged: (_) => setState(() {}),
               inputFormatters: [_CapitalizeFirstLetterFormatter()],
             ),
             const SizedBox(height: 16),
@@ -232,7 +242,11 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen> {
               'Profile nickname',
               helper: 'Shown on the Learner Hub and to the teacher.',
             ),
-            ChildTextField(controller: _usernameC, hint: 'e.g. nurhana_ali'),
+            ChildTextField(
+              controller: _usernameC,
+              hint: 'e.g. nurhana_ali',
+              onChanged: (_) => setState(() {}),
+            ),
             const SizedBox(height: 20),
             const ChildFieldLabel(
               'Confirm parent password',
@@ -244,6 +258,7 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen> {
               controller: _parentPasswordC,
               obscureText: true,
               autofillHints: const [AutofillHints.password],
+              onChanged: (_) => setState(() {}),
             ),
           ],
         ),
@@ -314,12 +329,12 @@ class _LearnerSetupScreenState extends ConsumerState<LearnerSetupScreen> {
               0 => ChildFormButton(
                 label: 'Next: Profile details',
                 icon: Icons.arrow_forward_rounded,
-                onPressed: _onStep0Next,
+                onPressed: _step0Complete ? _onStep0Next : null,
               ),
               1 => ChildFormButton(
                 label: 'Next',
                 icon: Icons.arrow_forward_rounded,
-                onPressed: _onStep1Next,
+                onPressed: _step1Complete ? _onStep1Next : null,
               ),
               _ => ChildFormButton(
                 label: 'Create Profile',

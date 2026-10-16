@@ -219,7 +219,8 @@ const List<String> _kQuestionClips = [
   'q5_makkah_hajj.mp3',
 ];
 const String _kInstructionClip = 'prompt_put_in_order.mp3';
-String _pillarClip(String id) => 'pillar_${_kTargets.indexOf(id) + 1}_$id.mp3';
+/// Each pillar's name, read aloud (English and Tagalog takes).
+String _pillarClip(String id) => '$id.mp3';
 
 // Slot row: left .4%, right .6%, top 45.6%, height 18.3% of the stage.
 const double _kSlotL = _kW * 0.004;
@@ -412,6 +413,7 @@ class _FivePillarsGameState extends State<FivePillarsGame>
       duration: const Duration(hours: 1),
     )..forward();
     _loadLiveBg();
+    unawaited(_audio.startMusic());
     _audio.say(const ['the_five_pillars_of_islam.mp3']);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
@@ -540,15 +542,18 @@ class _FivePillarsGameState extends State<FivePillarsGame>
       _readyAt = null;
     });
     final fil = AppTranslations.currentLanguageCode == 'fil';
+    // Play says "Let's go!" / "Tayo na!", then How to Play is read.
     final tutorial = _tutorial = _audio.say(
       _scenarios
           ? [
+              'lets_go.mp3',
               if (fil) 'tutorial_title_s1.mp3',
               'tutorial_listen_question.mp3',
               'tutorial_drag_pillar.mp3',
               'tutorial_build_five_pillars.mp3',
             ]
           : [
+              'lets_go.mp3',
               if (fil) 'tutorial_title_s2.mp3',
               'tutorial_order_instruction.mp3',
               'tutorial_order_move_slot.mp3',
@@ -574,7 +579,9 @@ class _FivePillarsGameState extends State<FivePillarsGame>
     if (_screen == _Screen.start) {
       if (_entering) return;
       _chime();
-      _audio.stop();
+      // "Let's go!" / "Tayo na!" (~1.3s) also cuts off How to Play, and
+      // ends well before the first question at the end of the 4s entry.
+      _audio.say(const ['lets_go.mp3']);
       setState(() {
         _entering = true;
         _enterT0 = _now;

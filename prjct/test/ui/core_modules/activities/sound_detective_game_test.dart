@@ -161,7 +161,7 @@ void main() {
     expect(await finish(), (30, 7 / 10 * 100, 3));
   });
 
-  testWidgets('back steps to the previous screen; only home leaves', (
+  testWidgets('How to Play backs out to start; Home in the game leaves', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(402, 874);
@@ -191,17 +191,16 @@ void main() {
     }
 
     await tapKey('sd-play');
-    await tester.pump(const Duration(seconds: 5));
-    await tapKey('sd-go');
-    expect(find.text('Q1 of 7'), findsOneWidget);
-
-    await tapKey('sd-back'); // game -> How to Play
-    expect(find.text('How to Play'), findsOneWidget);
     await tapKey('sd-back'); // How to Play -> start
     expect(find.byKey(const ValueKey('sd-play')), findsOneWidget);
     expect(exited, 0);
 
-    await tapKey('sd-home'); // only Home quits to the map
+    await tapKey('sd-play');
+    await tester.pump(const Duration(seconds: 5));
+    await tapKey('sd-go');
+    expect(find.text('Q1 of 7'), findsOneWidget);
+
+    await tapKey('sd-home'); // Home mid-game quits to the map
     expect(exited, 1);
   });
 }

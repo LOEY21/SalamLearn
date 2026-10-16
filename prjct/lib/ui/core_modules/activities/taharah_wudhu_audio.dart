@@ -27,7 +27,10 @@ class TaharahWudhuAudio {
     if (_disposed || !_enabled) return;
     try {
       await _music.setReleaseMode(ReleaseMode.loop);
-      await _music.setVolume(0.06);
+      // Full volume: the water ambience is recorded ~27 dB quieter than the
+      // other games' music (-40 dBFS), so 0.06 left it all but silent. At
+      // 1.0 it still sits well under the narration (-20 to -26 dBFS).
+      await _music.setVolume(1.0);
       if (_disposed || !_enabled) return;
       await _music.play(
         AssetSource('audio/taharah_wudhu/audio_bgm_water_ambient.mp3'),
@@ -37,15 +40,23 @@ class TaharahWudhuAudio {
     }
   }
 
+  /// The game's title, said on the start screen like every other game.
+  static const title = 'taharah_adventure.mp3';
+
   /// Says one wudhu clip; a newer one cuts off the one still playing.
   Future<void> say(String clip) async {
     if (_disposed || !_enabled) return;
     _cut();
     try {
       await _voice.stop();
-      await _voice.play(
-        AssetSource('audio/taharah_wudhu/${localizedVoice(clip)}'),
-      );
+      final local = localizedVoice(clip);
+      try {
+        await _voice.play(AssetSource('audio/taharah_wudhu/$local'));
+      } catch (_) {
+        // No Tagalog take: the English one rather than silence.
+        if (local == clip) rethrow;
+        await _voice.play(AssetSource('audio/taharah_wudhu/$clip'));
+      }
     } catch (_) {
       // A missing recording just stays silent.
     }
@@ -64,7 +75,9 @@ class TaharahWudhuAudio {
       }
 
       // A clip that never reports its end must not stall How to Play.
-      final guard = Timer(const Duration(seconds: 6), end);
+      // Long enough for the ~7.5s Tagalog instructions — at 6s it cut
+      // them off mid-sentence.
+      final guard = Timer(const Duration(seconds: 15), end);
       final sub = _voice.onPlayerComplete.listen((_) => end());
       unawaited(() async {
         try {

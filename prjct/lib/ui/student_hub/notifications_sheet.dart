@@ -79,6 +79,15 @@ class NotificationsSheet extends ConsumerWidget {
                 ],
               ),
             ),
+            if (items.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 16, 20, 28),
+                child: Text(
+                  'No notifications yet.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                ),
+              ),
             Flexible(
               child: ListView.separated(
                 shrinkWrap: true,

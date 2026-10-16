@@ -55,6 +55,29 @@ void main() {
     );
     expect(find.byKey(const Key('backpack-nav-badge-dot')), findsNothing);
   });
+
+  testWidgets('Me tab shows a dot while notifications are unread', (
+    tester,
+  ) async {
+    Widget nav({required bool unread}) => MaterialApp(
+      home: Scaffold(
+        body: AdventureMapBottomNav(
+          active: HubTab.home,
+          onHomeTap: _noop,
+          onBackpackTap: _noop,
+          onProfileTap: _noop,
+          showProfileBadge: unread,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(nav(unread: true));
+    expect(find.byKey(const Key('me-nav-badge-dot')), findsOneWidget);
+    expect(find.byKey(const Key('backpack-nav-badge-dot')), findsNothing);
+
+    await tester.pumpWidget(nav(unread: false));
+    expect(find.byKey(const Key('me-nav-badge-dot')), findsNothing);
+  });
 }
 
 void _noop() {}

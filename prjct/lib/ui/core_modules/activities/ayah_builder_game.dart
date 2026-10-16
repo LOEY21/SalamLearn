@@ -452,11 +452,22 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
     _audio.say([AyahBuilderAudio.title, _audio.intro]);
   });
 
+  /// Home in the puzzle: stops the voice and leaves the lesson, like the
+  /// start screen's Home (back to the start screen when nothing hosts it).
+  void _onHome() {
+    final exit = widget.onExit;
+    if (exit == null) return _onBack();
+    unawaited(_audio.stopVoice());
+    exit();
+  }
+
   /// I'm ready: a 3-2-1 countdown over the how-to board, then the listen
   /// screen.
   void _onReady() {
     if (_countT0 != null) return;
     setState(() => _countT0 = _now);
+    // "Let's go!" / "Tayo na!" over the 3-2-1; also ends the how-to lines.
+    _audio.say([AyahBuilderAudio.letsGo]);
     for (var i = 0; i < 3; i++) {
       _later(i * 1000, () => _sfx('word'));
     }
@@ -1779,7 +1790,7 @@ class _AyahBuilderGameState extends State<AyahBuilderGame>
   Widget _puzzleTopBar() {
     return Row(
       children: [
-        _backButton(38),
+        _imgButton('home', 38, _onHome, key: const ValueKey('ab-home')),
         const SizedBox(width: 6),
         Container(
           height: 36,

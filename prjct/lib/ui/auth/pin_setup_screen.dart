@@ -101,16 +101,18 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
     final role = ref.watch(
       sessionProvider.select((s) => s.activeRole ?? UserRole.parent),
     );
+    final isTeacher = role == UserRole.asatidz;
     // Identity is already proven (email + password just verified against
-    // Firebase Auth) — this PIN is only "pick this device's local unlock
-    // code", so skip the enter-then-confirm double entry a from-scratch
-    // account needs as a typo safety net. See `_remoteLinked`'s doc for
-    // why this reads that captured-at-mount field, not a live getter.
+    // Firebase Auth) — for parents this PIN is only "pick this device's
+    // local unlock code", so the enter-then-confirm typo safety net is
+    // skipped. Teachers always confirm (project-owner request). See
+    // `_remoteLinked`'s doc for why this reads that captured-at-mount
+    // field, not a live getter.
+    final skipConfirm = _remoteLinked && !isTeacher;
     final remoteLinked = _remoteLinked;
-    final confirming = !remoteLinked && _firstEntry != null;
+    final confirming = !skipConfirm && _firstEntry != null;
     final redirect = GoRouterState.of(context).uri.queryParameters['redirect'];
 
-    final isTeacher = role == UserRole.asatidz;
     final isParent = role == UserRole.parent;
     final isLearner = role == UserRole.learner;
     final accentColor = (isTeacher || isLearner)
@@ -120,7 +122,10 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
     String headingText;
     String subtitleText;
 
-    if (remoteLinked) {
+    if (confirming) {
+      headingText = 'Confirm your PIN';
+      subtitleText = 'Enter the same PIN once more';
+    } else if (remoteLinked) {
       // Still PIN *creation* — this is always a brand-new device (that's
       // the only way `remoteLinked` gets set, via the cross-device
       // sign-in/activation paths), so there is no existing local PIN to
@@ -132,9 +137,6 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
       subtitleText = isTeacher
           ? 'Choose a 4-digit PIN to lock the Teacher Dashboard on this device'
           : 'Choose a 4-digit PIN to lock the Parent Dashboard on this device';
-    } else if (confirming) {
-      headingText = 'Confirm your PIN';
-      subtitleText = 'Enter the same PIN once more';
     } else {
       if (isTeacher) {
         headingText = 'Create Asatidz PIN';
@@ -167,11 +169,11 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
           key: ValueKey(confirming),
           accentColor: accentColor,
           onSubmit: (pin) {
-            if (!remoteLinked && !confirming) {
+            if (!skipConfirm && !confirming) {
               setState(() => _firstEntry = pin);
               return true;
             }
-            if (!remoteLinked && pin != _firstEntry) {
+            if (!skipConfirm && pin != _firstEntry) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text("PINs didn't match — try again")),
               );

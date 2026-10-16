@@ -27,7 +27,7 @@ import '../settings/change_password_screen.dart' show ChangePasswordRow;
 import '../settings/personal_info_screen.dart' show PersonalInfoRow;
 import '../widgets/soft_card.dart';
 import '../widgets/child_profile_form.dart'
-    show KhatamPatternPainter, displayText, scaledExtent;
+    show GradePicker, KhatamPatternPainter, displayText, scaledExtent;
 import '../widgets/hub_kit.dart';
 import '../widgets/app_time_picker.dart';
 
@@ -412,7 +412,10 @@ class _TeacherShellState extends ConsumerState<_TeacherShell>
           1 => 'Classroom',
           _ => 'Settings',
         },
-        statusLabel: '$studentCount students synced',
+        // Updates the moment a sync finishes (see syncStatusLabelProvider).
+        statusLabel:
+            '$studentCount students · '
+            '${ref.watch(syncStatusLabelProvider).value ?? 'Not synced yet'}',
         tabs: _tabs,
         activeTab: _currentTab,
         onTabChanged: _switchTab,
@@ -1683,6 +1686,7 @@ class StudentDetailsDialog extends ConsumerStatefulWidget {
 
 class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
   String _selectedModule = allGames.first.lesson.id;
+  DateTime? _dueAt;
 
   @override
   Widget build(BuildContext context) {
@@ -1889,6 +1893,11 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
                                   setState(() => _selectedModule = v),
                             ),
                             const SizedBox(height: 12),
+                            _DueDateButton(
+                              dueAt: _dueAt,
+                              onChanged: (d) => setState(() => _dueAt = d),
+                            ),
+                            const SizedBox(height: 12),
                             FilledButton.icon(
                               onPressed: () {
                                 final classId = ref
@@ -1901,6 +1910,7 @@ class StudentDetailsDialogState extends ConsumerState<StudentDetailsDialog> {
                                       learnerId:
                                           currentStudent['learnerId'] as String,
                                       moduleId: _selectedModule,
+                                      dueDate: _dueAt,
                                     )
                                     .then((_) {
                                       ref.invalidate(teacherRosterProvider);
@@ -2358,7 +2368,7 @@ class _CreateClassSheet extends ConsumerStatefulWidget {
 }
 
 class _CreateClassSheetState extends ConsumerState<_CreateClassSheet> {
-  final _gradeLevelC = TextEditingController();
+  String? _gradeLevel;
   final _sectionC = TextEditingController();
   final Set<int> _selectedWeekdays = {};
   TimeOfDay? _startTime;
@@ -2366,7 +2376,6 @@ class _CreateClassSheetState extends ConsumerState<_CreateClassSheet> {
 
   @override
   void dispose() {
-    _gradeLevelC.dispose();
     _sectionC.dispose();
     super.dispose();
   }
@@ -2412,7 +2421,7 @@ class _CreateClassSheetState extends ConsumerState<_CreateClassSheet> {
   }
 
   Future<void> _createClass() async {
-    final gradeLevel = _gradeLevelC.text.trim();
+    final gradeLevel = _gradeLevel ?? '';
     final section = _sectionC.text.trim();
     if (gradeLevel.isEmpty || section.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2492,7 +2501,10 @@ class _CreateClassSheetState extends ConsumerState<_CreateClassSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         label('Grade Level', required: true),
-        TextField(controller: _gradeLevelC, decoration: field('e.g. Grade 1')),
+        GradePicker(
+          value: _gradeLevel,
+          onChanged: (g) => setState(() => _gradeLevel = g),
+        ),
       ],
     );
     final sectionField = Column(
@@ -3696,37 +3708,6 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
   String? _selectedStudent;
   DateTime? _dueAt;
 
-  /// Date first, then time — defaults to 11:59 PM so "due that day" stays
-  /// the easy choice.
-  Future<void> _pickDueDate() async {
-    final today = DateUtils.dateOnly(DateTime.now());
-    final date = await showDatePicker(
-      context: context,
-      initialDate: _dueAt ?? today.add(const Duration(days: 7)),
-      firstDate: today,
-      lastDate: today.add(const Duration(days: 365)),
-      helpText: 'Due date',
-    );
-    if (date == null || !mounted) return;
-    final time = await showAppTimePicker(
-      context: context,
-      initialTime: _dueAt == null
-          ? const TimeOfDay(hour: 23, minute: 59)
-          : TimeOfDay.fromDateTime(_dueAt!),
-      label: 'Due time',
-    );
-    if (time == null) return;
-    setState(
-      () => _dueAt = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        time.hour,
-        time.minute,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final homeworks = ref.watch(classHomeworkProvider);
@@ -3736,6 +3717,12 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
     if (_selectedStudent == null && students.isNotEmpty) {
       _selectedStudent = students.first['learnerId'] as String;
     }
+    final selected = students
+        .where((s) => s['learnerId'] == _selectedStudent)
+        .firstOrNull;
+    final studentHomework = _assigneeType == 'student' && selected != null
+        ? (selected['assignmentsDetail'] as List).cast<Map<String, dynamic>>()
+        : const <Map<String, dynamic>>[];
 
     Widget assignee(String value, String label) => RadioListTile<String>(
       title: Text(
@@ -3774,6 +3761,13 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
             );
           },
         ),
+        if (_assigneeType == 'student' && students.isEmpty) ...[
+          const SizedBox(height: 8),
+          const Text(
+            'No students in this class yet',
+            style: TextStyle(fontSize: 14, color: AppColors.inkSoft),
+          ),
+        ],
         if (_assigneeType == 'student' && students.isNotEmpty) ...[
           const SizedBox(height: 8),
           const Padding(
@@ -3806,32 +3800,9 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
           ),
         ],
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.teal,
-                  minimumSize: const Size(64, 46),
-                  shape: const StadiumBorder(),
-                  side: const BorderSide(color: AppColors.mintBorder),
-                ),
-                onPressed: _pickDueDate,
-                icon: const Icon(Icons.event_rounded, size: 20),
-                label: Text(
-                  _dueAt == null
-                      ? 'Due date (optional)'
-                      : 'Due date: ${formatDateTime(_dueAt!)}',
-                ),
-              ),
-            ),
-            if (_dueAt != null)
-              IconButton(
-                tooltip: 'Remove due date',
-                icon: const Icon(Icons.close_rounded, color: AppColors.inkSoft),
-                onPressed: () => setState(() => _dueAt = null),
-              ),
-          ],
+        _DueDateButton(
+          dueAt: _dueAt,
+          onChanged: (d) => setState(() => _dueAt = d),
         ),
         const SizedBox(height: 14),
         FilledButton.icon(
@@ -3894,7 +3865,27 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
             _assigneeType == 'class' ? 'Assign to Class' : 'Assign to Student',
           ),
         ),
-        if (homeworks.isNotEmpty) ...[
+        // The SnackBar shows behind this sheet, so the student's own
+        // homework (due date + submission status) is listed right here.
+        if (studentHomework.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Text('Homework for ${selected!['name']}', style: displayText(17)),
+          const SizedBox(height: 8),
+          for (final item in studentHomework)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: SoftCard(
+                radius: 16,
+                padding: const EdgeInsets.all(12),
+                child: _SubmissionLine(
+                  title: item['module'] as String,
+                  submission: item['submission'] as HomeworkSubmission,
+                  dueDate: item['dueDate'] as String?,
+                ),
+              ),
+            ),
+        ],
+        if (_assigneeType == 'class' && homeworks.isNotEmpty) ...[
           const SizedBox(height: 20),
           Text('Active class homework', style: displayText(17)),
           const SizedBox(height: 8),
@@ -4106,6 +4097,70 @@ class _HomeworkAssignerState extends ConsumerState<_HomeworkAssigner> {
         );
       }
     }
+  }
+}
+
+/// Due date + time picker row shared by the Assign Homework sheet and the
+/// student dialog. Date first, then time — defaults to 11:59 PM so "due that
+/// day" stays the easy choice.
+class _DueDateButton extends StatelessWidget {
+  const _DueDateButton({required this.dueAt, required this.onChanged});
+
+  final DateTime? dueAt;
+  final ValueChanged<DateTime?> onChanged;
+
+  Future<void> _pick(BuildContext context) async {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final date = await showDatePicker(
+      context: context,
+      initialDate: dueAt ?? today.add(const Duration(days: 7)),
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 365)),
+      helpText: 'Due date',
+    );
+    if (date == null || !context.mounted) return;
+    final time = await showAppTimePicker(
+      context: context,
+      initialTime: dueAt == null
+          ? const TimeOfDay(hour: 23, minute: 59)
+          : TimeOfDay.fromDateTime(dueAt!),
+      label: 'Due time',
+    );
+    if (time == null) return;
+    onChanged(
+      DateTime(date.year, date.month, date.day, time.hour, time.minute),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.teal,
+              minimumSize: const Size(64, 46),
+              shape: const StadiumBorder(),
+              side: const BorderSide(color: AppColors.mintBorder),
+            ),
+            onPressed: () => _pick(context),
+            icon: const Icon(Icons.event_rounded, size: 20),
+            label: Text(
+              dueAt == null
+                  ? 'Due date (optional)'
+                  : 'Due date: ${formatDateTime(dueAt!)}',
+            ),
+          ),
+        ),
+        if (dueAt != null)
+          IconButton(
+            tooltip: 'Remove due date',
+            icon: const Icon(Icons.close_rounded, color: AppColors.inkSoft),
+            onPressed: () => onChanged(null),
+          ),
+      ],
+    );
   }
 }
 

@@ -182,6 +182,9 @@ const classroomAudio = <List<ClassroomQuestionAudio>>[
 
 abstract interface class ClassroomAudioPlayback {
   Future<void> startMusic();
+
+  /// The Music button: background music only — narration keeps playing.
+  Future<void> setMusicEnabled(bool enabled);
   Future<void> play(
     String asset, {
     void Function()? onComplete,
@@ -197,18 +200,39 @@ class ClassroomHeroesAudio implements ClassroomAudioPlayback {
   /// The title has no Tagalog take, so it plays with `localized: false`.
   static const title = 'classroom_heroes.mp3';
   static const mumtaz = 'mumtaz.mp3';
+  static const letsGo = 'lets_go.mp3';
+
+  ClassroomHeroesAudio() {
+    // Music ducks under every voice line so narration sits well on top —
+    // the music file is ~10 dB hotter than the narration recordings.
+    _ducking = _voice.onPlayerStateChanged.listen((state) {
+      _setMusicVolume(
+        state == PlayerState.playing ? _duckedVolume : _musicVolume,
+      );
+    });
+  }
+
+  static const _musicVolume = 0.035;
+  static const _duckedVolume = 0.012;
 
   final AudioPlayer _voice = AudioPlayer();
   final AudioPlayer _music = AudioPlayer();
   StreamSubscription<void>? _complete;
   StreamSubscription<Duration>? _duration;
+  late final StreamSubscription<PlayerState> _ducking;
   int _generation = 0;
+  bool _musicEnabled = true;
+
+  void _setMusicVolume(double v) {
+    unawaited(_music.setVolume(v).catchError((Object _) {}));
+  }
 
   @override
   Future<void> startMusic() async {
+    if (!_musicEnabled) return;
     try {
       await _music.setReleaseMode(ReleaseMode.loop);
-      await _music.setVolume(0.06);
+      await _music.setVolume(_musicVolume);
       await _music.play(AssetSource('audio/classroom_heroes/ambient.mp3'));
     } catch (_) {
       // Audio device failures must not block the game.
@@ -264,8 +288,22 @@ class ClassroomHeroesAudio implements ClassroomAudioPlayback {
   }
 
   @override
+  @override
+  Future<void> setMusicEnabled(bool enabled) async {
+    if (_musicEnabled == enabled) return;
+    _musicEnabled = enabled;
+    if (enabled) return startMusic();
+    try {
+      await _music.stop();
+    } catch (_) {
+      // The player may already be released as the game closes.
+    }
+  }
+
+  @override
   Future<void> dispose() async {
     ++_generation;
+    await _ducking.cancel();
     await _complete?.cancel();
     await _duration?.cancel();
     await _voice.dispose();

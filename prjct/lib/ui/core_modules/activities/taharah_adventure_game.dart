@@ -341,6 +341,7 @@ Widget _shake(Duration d, Widget child, {Key? key, int times = 1}) => _Once(
 /// A button with the prototypes' chunky offset shadow that sinks on press.
 class _Btn extends StatefulWidget {
   const _Btn({
+    super.key,
     required this.child,
     required this.radius,
     this.onTap,
@@ -3822,6 +3823,7 @@ class _WudhuState extends State<_Wudhu> {
   void initState() {
     super.initState();
     _audio.start();
+    _audio.say(TaharahWudhuAudio.title);
   }
 
   void _toggleSound() {
@@ -3903,12 +3905,12 @@ class _WudhuState extends State<_Wudhu> {
   }
 
   void _goStart() {
-    _audio.stopVoice();
     _endTour();
     setState(() {
       _reset();
       _screen = _WScreen.start;
     });
+    _audio.say(TaharahWudhuAudio.title);
   }
 
   void _goInstruct() {
@@ -3919,10 +3921,13 @@ class _WudhuState extends State<_Wudhu> {
       _tourI = -1;
       _tourDone = !_p.guided;
     });
-    // Only the Tagalog set has this line, and it counts all ten steps.
+    // The ten-step sessions open with their own line: "tap all 10 in
+    // order" for the guided one, "your turn, no hints" for practice.
     final intro = [
-      if (_steps.length == 10 && AppTranslations.currentLanguageCode == 'fil')
-        'instruction_tap_order_10_steps.mp3',
+      if (_steps.length == 10)
+        _p.guided
+            ? 'instruction_tap_order_10_steps.mp3'
+            : 'instruction_your_turn_no_hints.mp3',
     ];
     if (!_p.guided) {
       if (intro.isNotEmpty) _audio.say(intro.first);
@@ -4591,6 +4596,9 @@ class _WudhuState extends State<_Wudhu> {
                 right: 0,
                 bottom: 0,
                 child: _Btn(
+                  key: const ValueKey('w-replay-instruction'),
+                  // Hear the instruction (and, when guided, the steps) again.
+                  onTap: _goInstruct,
                   width: 54,
                   height: 54,
                   radius: 27,

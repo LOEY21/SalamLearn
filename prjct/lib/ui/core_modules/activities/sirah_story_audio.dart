@@ -82,6 +82,9 @@ abstract interface class SirahAudioPlayback {
 }
 
 class SirahStoryAudio implements SirahAudioPlayback {
+  /// The game's title, said on the start screen like every other game.
+  static const title = 'sirah_story.mp3';
+
   final AudioPlayer _voice = AudioPlayer();
   final AudioPlayer _music = AudioPlayer();
   StreamSubscription<void>? _complete;
@@ -114,9 +117,14 @@ class SirahStoryAudio implements SirahAudioPlayback {
       _complete = _voice.onPlayerComplete.listen((_) {
         if (generation == _generation) onComplete?.call();
       });
-      await _voice.play(
-        AssetSource('audio/sirah_story/${localizedVoice(asset)}'),
-      );
+      final local = localizedVoice(asset);
+      try {
+        await _voice.play(AssetSource('audio/sirah_story/$local'));
+      } catch (_) {
+        // No Tagalog take: the English one rather than silence.
+        if (local == asset) rethrow;
+        await _voice.play(AssetSource('audio/sirah_story/$asset'));
+      }
     } catch (_) {
       if (generation == _generation) onError?.call();
     }

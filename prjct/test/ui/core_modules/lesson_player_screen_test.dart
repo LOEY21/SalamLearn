@@ -184,6 +184,8 @@ void main() {
       expect(find.text('وَعَلَيْكُمُ السَّلَامُ'), findsOneWidget);
       expect(find.byType(LessonCompleteScreen), findsNothing);
       await tester.tap(find.byKey(const Key('greeting-choice-1')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('greeting-submit')));
       await tester.pump(const Duration(milliseconds: 1700));
       await tester.pump(const Duration(milliseconds: 1500));
       // The cheer plays as the ending appears, not on Continue.
@@ -211,6 +213,8 @@ void main() {
       // Finish the last activity from its ending screen: XP is awarded and
       // the player closes without the generic completion screen.
       await tester.tap(find.byKey(const Key('greeting-choice-0')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('greeting-submit')));
       await tester.pump(const Duration(milliseconds: 1700));
       await tester.pump(const Duration(milliseconds: 1500));
       await tester.tap(find.byKey(const Key('greeting-end-continue')));

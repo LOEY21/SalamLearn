@@ -40,6 +40,7 @@ void main() {
   Widget host(
     QuranEtiquetteSession session, {
     void Function(int, double, int)? onComplete,
+    VoidCallback? onExit,
   }) => MaterialApp(
     home: Scaffold(
       body: QuranEtiquetteGame(
@@ -47,7 +48,7 @@ void main() {
         session: session,
         xp: 30,
         onComplete: onComplete ?? (_, _, _) {},
-        onExit: () {},
+        onExit: onExit ?? () {},
         audioEnabled: false,
       ),
     ),
@@ -59,6 +60,21 @@ void main() {
     await tester.tap(find.text('Skip'));
     await tester.pump(const Duration(milliseconds: 400));
   }
+
+  testWidgets('Home in the game leaves the lesson', (tester) async {
+    var exited = 0;
+    const session = etiquetteMasjidSession;
+    await tester.pumpWidget(host(session, onExit: () => exited++));
+    await tester.pump(const Duration(milliseconds: 2400));
+    await tester.tap(find.byKey(ValueKey('qe-play-${session.number}')));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.bySemanticsLabel('Back'), findsNothing);
+    await tester.tap(find.bySemanticsLabel('Home'));
+    await tester.pump();
+    expect(exited, 1);
+    await tester.pump(const Duration(seconds: 5));
+  });
 
   test('each session lands on its own stage', () {
     Activity actFor(String id) => curriculum
@@ -102,12 +118,16 @@ void main() {
         if (i == 0) {
           // A wrong pick ends the question too — red mask, then on.
           await tester.tap(find.text(q.decoy));
+          await tester.pump();
+          await tester.tap(find.byKey(const ValueKey('qe-submit')));
           await tester.pump(const Duration(milliseconds: 500));
           expect(find.text(q.decoy), findsNothing);
           await tester.pump(const Duration(milliseconds: 3600));
           continue;
         }
         await tester.tap(find.text(q.correct));
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('qe-submit')));
         await tester.pump(const Duration(milliseconds: 500));
         // Only the feedback art is on screen — no panel, no Next.
         expect(find.text(q.correct), findsNothing);
@@ -146,6 +166,8 @@ void main() {
     for (final q in session.questions) {
       await skipNarration(tester);
       await tester.tap(find.text(q.decoy));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('qe-submit')));
       await tester.pump(const Duration(milliseconds: 4100));
     }
     await tester.pump(const Duration(milliseconds: 800));

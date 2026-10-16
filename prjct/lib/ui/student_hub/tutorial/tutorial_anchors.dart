@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// long as the hub is open.
 class TutorialAnchors {
   final streakPillKey = GlobalKey();
+  final xpPillKey = GlobalKey();
   final energyPillKey = GlobalKey();
   final mapAvatarKey = GlobalKey();
   final currentNodeKey = GlobalKey();

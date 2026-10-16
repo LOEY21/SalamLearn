@@ -14,7 +14,9 @@ class TraceAudio {
     try {
       await _music.setReleaseMode(ReleaseMode.loop);
       await _music.setVolume(_musicEnabled ? 0.06 : 0);
-      await _music.play(AssetSource('audio/sand_tracer/ambient.mp3'));
+      await _music.play(
+        AssetSource('audio/good_deed_tree/audio_bgm_garden_blooming.mp3'),
+      );
       await _music.setVolume(_musicEnabled ? 0.06 : 0);
     } catch (_) {
       // Tracing remains available when the device has no audio output.
@@ -51,8 +53,17 @@ class TraceAudio {
     'tutorial_fill_check.mp3',
     'tutorial_get_ready.mp3',
   ];
+  /// The same steps for the numbers sessions (١-١٠).
+  static const howToNumbers = [
+    'tutorial_listen_sound.mp3',
+    'tutorial_tap_speaker_number.mp3',
+    'tutorial_follow_arrows.mp3',
+    'tutorial_fill_check_number.mp3',
+    'tutorial_get_ready.mp3',
+  ];
   static const letsGo = 'lets_go.mp3';
   static const praise = 'praise_great_tracing.mp3';
+  static const tryAgain = 'try_again.mp3';
   static const complete = 'completion_all_letters.mp3';
 
   /// Plays [lines] back to back; a newer line or letter cuts the sequence.

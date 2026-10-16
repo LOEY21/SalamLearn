@@ -52,6 +52,7 @@ class AdventureMapTopBar extends ConsumerWidget {
             ),
           ),
           _Pill(
+            key: anchors.xpPillKey,
             index: 1,
             onTap: () => showStarsInfoSheet(context),
             child: Row(

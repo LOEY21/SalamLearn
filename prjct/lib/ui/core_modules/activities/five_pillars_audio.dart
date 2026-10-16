@@ -5,10 +5,25 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 
 const _dir = 'audio/five_pillars/';
 
-/// Narration for The Five Pillars: title, how-to steps, questions and
-/// pillar names.
+/// Narration for The Five Pillars (title, how-to steps, questions and
+/// pillar names) over a looped background track.
 class FivePillarsAudio {
+  FivePillarsAudio() {
+    // The track is ~10-18 dB hotter than the narration, so it plays low and
+    // ducks further under every voice line.
+    _ducking = _voice.onPlayerStateChanged.listen((state) {
+      _setMusicVolume(
+        state == PlayerState.playing ? _duckedVolume : _musicVolume,
+      );
+    });
+  }
+
+  static const _musicVolume = 0.035;
+  static const _duckedVolume = 0.012;
+
   final AudioPlayer _voice = AudioPlayer();
+  final AudioPlayer _music = AudioPlayer();
+  late final StreamSubscription<PlayerState> _ducking;
   bool _disposed = false;
   int _generation = 0;
   Completer<void> _cut = Completer();
@@ -45,6 +60,22 @@ class FivePillarsAudio {
     }
   }
 
+  void _setMusicVolume(double v) {
+    if (_disposed) return;
+    unawaited(_music.setVolume(v).catchError((Object _) {}));
+  }
+
+  Future<void> startMusic() async {
+    if (_disposed) return;
+    try {
+      await _music.setReleaseMode(ReleaseMode.loop);
+      await _music.setVolume(_musicVolume);
+      await _music.play(AssetSource('${_dir}bgm_kids_joys.mp3'));
+    } catch (_) {
+      // No audio output: the game still runs, silently.
+    }
+  }
+
   void _interrupt() {
     ++_generation;
     _cut.complete();
@@ -64,6 +95,8 @@ class FivePillarsAudio {
     if (_disposed) return;
     _disposed = true;
     _interrupt();
+    await _ducking.cancel();
     await _voice.dispose();
+    await _music.dispose();
   }
 }

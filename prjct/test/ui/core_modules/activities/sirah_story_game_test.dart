@@ -101,6 +101,10 @@ void main() {
     expect(audio.played.last, correctFirst ? clips.decoy : clips.correct);
 
     await tester.tap(find.text(page.correct));
+
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('sirah-submit')));
     await tester.pump();
     expect(audio.played.last, 'mumtaz.mp3');
   });
@@ -409,6 +413,8 @@ void main() {
     await hearOut(tester, session.pages.first);
     await openQuestion(tester);
     await tester.tap(find.text(session.pages.first.correct));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('sirah-submit')));
     await advance(tester);
     expect(find.text(last.narration), findsOneWidget);
 
@@ -551,6 +557,10 @@ void main() {
     await openQuestion(tester);
 
     await tester.tap(find.text(session.pages.first.decoy));
+
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('sirah-submit')));
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('MUMTAZ!'), findsNothing);
@@ -569,6 +579,10 @@ void main() {
     await openQuestion(tester);
 
     await tester.tap(find.text(session.pages.first.correct));
+
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('sirah-submit')));
     await tester.pump(const Duration(milliseconds: 300));
     // MUMTAZ! is the painted ribbon now, not a text badge.
     expect(
@@ -610,6 +624,8 @@ void main() {
       await hearOut(tester, page);
       await openQuestion(tester);
       await tester.tap(find.text(page.correct));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('sirah-submit')));
       await advance(tester);
     }
 
@@ -685,6 +701,8 @@ void main() {
       await hearOut(tester, page);
       await openQuestion(tester);
       await tester.tap(find.text(page.decoy));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('sirah-submit')));
       await tester.pump();
       // The wrong pick gets its cross and the right answer its tick.
       expect(find.byIcon(Icons.close_rounded), findsOneWidget);

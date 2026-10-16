@@ -14,7 +14,7 @@ class LabelMakerAudio {
   Timer? _lineTimer;
 
   /// Narrator lines in `audio/label_maker/`, Tagalog ones in its `fil/`
-  /// folder. The title has no Tagalog take, so it always plays as is.
+  /// folder; a line with no Tagalog take plays the English one.
   /// Per-word `feedback_<word>.mp3` lines sit alongside them.
   static const title = 'arabic_label_maker.mp3';
   static const howTo = [
@@ -38,7 +38,6 @@ class LabelMakerAudio {
     _endLine();
     for (final line in lines) {
       if (_disposed || generation != _generation) return false;
-      if (!_enabled) continue;
       final done = _line = Completer<void>();
       // A player that never gets ready must not stall How to Play.
       _lineTimer = Timer(const Duration(seconds: 15), _endLine);
@@ -47,12 +46,13 @@ class LabelMakerAudio {
         try {
           await _voice.stop();
           if (generation != _generation) return _endLine();
-          await _voice.play(
-            AssetSource(
-              'audio/label_maker/'
-              '${line == title ? line : localizedVoice(line)}',
-            ),
-          );
+          final local = localizedVoice(line);
+          try {
+            await _voice.play(AssetSource('audio/label_maker/$local'));
+          } catch (_) {
+            if (local == line) rethrow;
+            await _voice.play(AssetSource('audio/label_maker/$line'));
+          }
         } catch (_) {
           // A missing recording or audio device must not block the game.
           if (done == _line) _endLine();
@@ -66,7 +66,7 @@ class LabelMakerAudio {
 
   /// Says one vocab word; a newer word cuts off the one still playing.
   Future<void> playWord(String asset) async {
-    if (_disposed || !_enabled) return;
+    if (_disposed) return;
     _generation++;
     _endLine();
     try {
@@ -91,17 +91,16 @@ class LabelMakerAudio {
     }
   }
 
+  /// The Music button: background music only — words and narration keep
+  /// playing.
   Future<void> setEnabled(bool enabled) async {
     if (_disposed || _enabled == enabled) return;
     _enabled = enabled;
     if (enabled) {
       await startMusic();
     } else {
-      _generation++;
-      _endLine();
       try {
         await _music.stop();
-        await _voice.stop();
       } catch (_) {
         // The player may already be stopping as the activity closes.
       }

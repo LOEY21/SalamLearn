@@ -22,3 +22,8 @@ dumps/open-design/
 
 # Secrets
 prjct/android/app/google-services.json
+
+# Local exports / caches
+users.csv
+__pycache__/
+.impeccable/

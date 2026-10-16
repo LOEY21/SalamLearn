@@ -73,6 +73,7 @@ class AyahBuilderAudio {
     'instruction_drag_correct_order.mp3',
   ];
   static const mashaAllah = 'masha_allah.mp3';
+  static const letsGo = 'lets_go.mp3';
 
   /// This session's surah introduction, if it has one.
   String? get intro {

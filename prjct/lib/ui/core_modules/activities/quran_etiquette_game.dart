@@ -225,6 +225,9 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
   final math.Random _rng = math.Random();
   bool _correctFirst = true;
   bool _answered = false;
+
+  /// The card tapped (and heard) but not yet submitted: true = right one.
+  bool? _selected;
   bool _showcase = false;
   bool _replaying = false;
   bool _curtain = false;
@@ -411,6 +414,14 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
     _reveal(_kRevealDelay);
   }
 
+  /// The start screen's button: "Let's go!" (~1.3s) finishes before the
+  /// first question's narration starts at [_kRevealDelay]. Played after
+  /// [_openSession], whose reveal stops any voice already playing.
+  void _start() {
+    _openSession();
+    if (_audio != null) unawaited(_audio!.play(QuranEtiquetteAudio.letsGo));
+  }
+
   void _openSession() {
     _showcaseTimer?.cancel();
     setState(() {
@@ -422,6 +433,7 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
       _results.clear();
       _missed = false;
       _answered = false;
+      _selected = null;
       _showcase = false;
       _finished = false;
       _prevImage = null;
@@ -434,11 +446,25 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
   /// under a green mask, the other keeps the scene under a red one. Both
   /// hold for [_kShowcase] with nothing else on screen, then move on, and
   /// the Star Meter marks the socket accordingly.
+  /// Tapping a card only selects it and reads it aloud; Submit answers.
+  void _select(bool good) {
+    if (_answered || _missed || _narrating) return;
+    HapticFeedback.selectionClick();
+    setState(() => _selected = good);
+    if (_audio != null) {
+      unawaited(
+        _audio!.play(good ? _questionAudio.correct : _questionAudio.decoy),
+      );
+    }
+  }
+
   void _pick(bool good) {
     if (_answered || _missed || _narrating) return;
     if (_audio != null) {
       unawaited(
-        good ? _audio!.play(QuranEtiquetteAudio.mumtaz) : _audio!.stopVoice(),
+        _audio!.play(
+          good ? QuranEtiquetteAudio.mumtaz : QuranEtiquetteAudio.tryAgain,
+        ),
       );
     }
     if (good) {
@@ -485,6 +511,7 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
     setState(() {
       _index += 1;
       _answered = false;
+      _selected = null;
       _missed = false;
       _showcase = false;
       _prevImage = shown;
@@ -505,6 +532,7 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
       _results.clear();
       _missed = false;
       _answered = false;
+      _selected = null;
       _showcase = false;
       _curtain = false;
       _finished = false;
@@ -583,11 +611,20 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
     );
   }
 
-  /// The back button, pinned to the screen's own left edge (not the
-  /// centred 1600x900 frame) and scaled with the frame. On the start screen
-  /// it leaves the lesson; in play it returns to the start screen.
+  /// Home mid-game: stops the narration and leaves the lesson, same as the
+  /// start screen's Home (or back to the start screen when nothing hosts it).
+  void _leave() {
+    _stopReveal();
+    _curtainTimer?.cancel();
+    _showcaseTimer?.cancel();
+    (widget.onExit ?? _home)();
+  }
+
+  /// The Home button, pinned to the screen's own left edge (not the
+  /// centred 1600x900 frame) and scaled with the frame. It leaves the
+  /// lesson from both the start screen and the game.
   Widget _buildBack(double k) {
-    final onBack = _screen == _Screen.start ? widget.onExit : _home;
+    final onBack = _screen == _Screen.start ? widget.onExit : _leave;
     if (onBack == null || _showcase || _finished) {
       return const SizedBox.shrink();
     }
@@ -595,10 +632,7 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
     return Positioned(
       left: pad.left + 16,
       top: pad.top + 20 * k,
-      // Home on the start screen (leaves the lesson), back arrow in play.
-      child: _screen == _Screen.start
-          ? _artButton('home_btn', 88 * k, onBack, label: 'Home')
-          : _artButton('back_btn', 88 * k, onBack, label: 'Back'),
+      child: _artButton('home_btn', 88 * k, onBack, label: 'Home'),
     );
   }
 
@@ -924,7 +958,7 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
                 label: 'Start',
                 child: _Push(
                   key: ValueKey('qe-play-${_session.number}'),
-                  onTap: _openSession,
+                  onTap: _start,
                   dy: 5,
                   builder: (down) => Image.asset(
                     down ? '$_kA/start_btn_down.png' : '$_kA/start_btn.png',
@@ -1496,7 +1530,11 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
                               text: (i == 0) == _correctFirst
                                   ? _q.correct
                                   : _q.decoy,
-                              onTap: () => _pick((i == 0) == _correctFirst),
+                              selected:
+                                  !_answered &&
+                                  !_missed &&
+                                  _selected == ((i == 0) == _correctFirst),
+                              onTap: () => _select((i == 0) == _correctFirst),
                             ),
                           ),
                         ],
@@ -1543,7 +1581,58 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
             ),
           );
         }),
+        const SizedBox(width: 18),
+        _submitButton(),
       ],
+    );
+  }
+
+  Widget _submitButton() {
+    final canSubmit = _selected != null;
+    return Opacity(
+      opacity: canSubmit ? 1 : 0.5,
+      child: _Push(
+        key: const ValueKey('qe-submit'),
+        onTap: () {
+          if (_selected case final good?) _pick(good);
+        },
+        builder: (down) => Container(
+          height: 92,
+          padding: const EdgeInsets.symmetric(horizontal: 34),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF4FB15F), _leafGreenDeep],
+            ),
+            border: Border.all(color: const Color(0xFF1F6B32), width: 5),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1F6B32),
+                offset: Offset(0, down && canSubmit ? 3 : 7),
+              ),
+            ],
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_rounded, size: 42, color: Colors.white),
+              SizedBox(width: 10),
+              Text(
+                'Submit',
+                style: TextStyle(
+                  fontFamily: _kBaloo,
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -1552,72 +1641,80 @@ class _QuranEtiquetteGameState extends State<QuranEtiquetteGame>
   Widget _choice({
     required String label,
     required String text,
+    required bool selected,
     required VoidCallback onTap,
   }) {
     return _Push(
       onTap: onTap,
-      builder: (down) => Container(
-        constraints: const BoxConstraints(minHeight: 132),
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 22),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFFFFBEF), Color(0xFFF6E9C8)],
+      builder: (down) => AnimatedScale(
+        scale: selected ? 1.03 : 1,
+        duration: const Duration(milliseconds: 160),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 132),
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 22),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFFFFFBEF), Color(0xFFF6E9C8)],
+            ),
+            border: Border.all(
+              color: selected ? const Color(0xFF2F6FB5) : _tileEdge,
+              width: selected ? 9 : 5,
+            ),
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFC99A2E),
+                offset: Offset(0, down ? 4 : 8),
+              ),
+              const BoxShadow(
+                color: Color(0x29000000),
+                offset: Offset(0, 12),
+                blurRadius: 22,
+              ),
+            ],
           ),
-          border: Border.all(color: _tileEdge, width: 5),
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFC99A2E),
-              offset: Offset(0, down ? 4 : 8),
-            ),
-            const BoxShadow(
-              color: Color(0x29000000),
-              offset: Offset(0, 12),
-              blurRadius: 22,
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 74,
-              height: 74,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [_tileTop, _tileBottom],
+          child: Row(
+            children: [
+              Container(
+                width: 74,
+                height: 74,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [_tileTop, _tileBottom],
+                  ),
+                ),
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontFamily: _kBaloo,
+                    fontSize: 44,
+                    fontWeight: FontWeight.w800,
+                    height: 1,
+                    color: _tileInk,
+                  ),
                 ),
               ),
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontFamily: _kBaloo,
-                  fontSize: 44,
-                  fontWeight: FontWeight.w800,
-                  height: 1,
-                  color: _tileInk,
+              const SizedBox(width: 24),
+              Expanded(
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                    fontFamily: _kBaloo,
+                    fontSize: 38,
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
+                    color: _endInk,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 24),
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(
-                  fontFamily: _kBaloo,
-                  fontSize: 38,
-                  fontWeight: FontWeight.w800,
-                  height: 1.2,
-                  color: _endInk,
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

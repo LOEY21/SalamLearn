@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../logic/auth/session.dart';
 import '../../logic/learner/hub_tab_provider.dart';
 import '../../logic/learner/map_zoom_provider.dart';
+import '../../logic/notifications/notification_provider.dart';
 import '../../logic/recent_module_provider.dart';
 import '../theme/app_colors.dart';
 import 'adventure_map_bottom_nav.dart';
@@ -140,6 +141,8 @@ class _HubShellState extends ConsumerState<HubShell>
                   onProfileTap: () => _switchTo(2),
                   learnerAvatar: learnerAvatar,
                   showBackpackBadge: hasNewBackpackItem,
+                  showProfileBadge:
+                      ref.watch(unreadNotificationCountProvider) > 0,
                   backpackKey: anchors.backpackTabKey,
                 ),
               ),

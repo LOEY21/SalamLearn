@@ -52,6 +52,8 @@ dependencies:
   path_parsing: ^1.1.0
   internet_connection_checker_plus: 3.1.2
   audioplayers: ^6.8.1
+  flutter_local_notifications: ^22.3.2
+  timezone: ^0.11.2
 
 dev_dependencies:
   flutter_test:
@@ -113,6 +115,8 @@ flutter:
     - assets/audio/creation_hunt/
     - assets/audio/creation_hunt/fil/
     - assets/audio/five_pillars/
+    - assets/audio/mascot/
+    - assets/audio/mascot/fil/
     - assets/audio/five_pillars/fil/
     - assets/audio/numbers/
     - assets/audio/greetings/
@@ -173,6 +177,7 @@ flutter:
     - assets/images/classroom_heroes/bg/
     - assets/images/classroom_heroes/items/
     - assets/images/creation_hunt/
+    - assets/images/creation_hunt/fil/
     - assets/images/five_pillars/
     - assets/images/five_pillars/fil/
     - assets/images/good_deed_tree/

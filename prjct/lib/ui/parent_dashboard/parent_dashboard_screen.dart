@@ -75,17 +75,10 @@ String _tabHeading(int tab, String name) => switch (tab) {
 /// the child profile forms (see `child_profile_form.dart`).
 const _display = displayText;
 
-/// Live "synced" status line shown under the header title — same wording
-/// this used to render inside the (now removed) gradient hero.
-String _syncStatusLabel(WidgetRef ref) {
-  final lastSynced = ref.read(syncManagerProvider).lastSyncedAt;
-  if (lastSynced == null) return 'Not synced yet';
-  final elapsed = DateTime.now().difference(lastSynced);
-  if (elapsed.inMinutes < 1) return 'Synced just now';
-  if (elapsed.inMinutes < 60) return 'Synced ${elapsed.inMinutes} min ago';
-  if (elapsed.inHours < 24) return 'Synced ${elapsed.inHours}h ago';
-  return 'Synced ${elapsed.inDays}d ago';
-}
+/// Live "synced" status line shown under the header title — updates the
+/// moment a sync finishes (see [syncStatusLabelProvider]).
+String _syncStatusLabel(WidgetRef ref) =>
+    ref.watch(syncStatusLabelProvider).value ?? 'Not synced yet';
 
 /// Parent analytics dashboard (mockup Figure 4.4, FR-5.1/5.2/7.2).
 /// Phone: gradient hero header + stacked cards + bottom nav. Wide/monitor:

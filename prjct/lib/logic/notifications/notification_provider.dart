@@ -7,8 +7,8 @@ import '../auth/session.dart';
 import '../recent_module_provider.dart';
 
 /// A single notification surfaced to the learner (streak reminders, module
-/// unlocks, completion cheers). Placeholder phase: seeded mock data only —
-/// no push/local-notification wiring yet.
+/// unlocks, completion cheers). Built only from the active learner's own
+/// data — no push/local-notification wiring yet.
 class NotificationItem {
   const NotificationItem({
     required this.id,
@@ -44,9 +44,17 @@ String _titleForModuleId(String id) => assignmentTitle(id);
 /// of session state — no persistence until Hive/Firebase land.
 class NotificationsNotifier extends Notifier<List<NotificationItem>> {
   final Set<String> _readIds = {};
+  String? _learnerId;
 
   @override
   List<NotificationItem> build() {
+    // Read state belongs to one learner; a new or switched child starts
+    // with a clean inbox.
+    final learnerId = ref.watch(sessionProvider.select((s) => s.learner?.id));
+    if (learnerId != _learnerId) {
+      _readIds.clear();
+      _learnerId = learnerId;
+    }
     final streak = ref.watch(learnerStreakProvider);
     final newBadges = ref.watch(unlockedBadgesProvider).reversed;
 
@@ -65,28 +73,16 @@ class NotificationsNotifier extends Notifier<List<NotificationItem>> {
           ),
     ];
 
-    // Seed default notifications
     final baseList = [
-      NotificationItem(
-        id: 'streak-$streak',
-        emoji: '🔥',
-        title: '$streak-day streak!',
-        body:
-            "You've learned something new $streak days in a row. Open your Backpack to see your streak!",
-        opensBackpack: true,
-      ),
-      const NotificationItem(
-        id: 'tracing-done',
-        emoji: '🎉',
-        title: 'Tracing completed',
-        body: 'Great job finishing all the Tracing cards.',
-      ),
-      const NotificationItem(
-        id: 'sorting-unlock',
-        emoji: '🧩',
-        title: 'Sort & Match unlocks soon',
-        body: 'Finish Stories to unlock the Sort & Match module.',
-      ),
+      if (streak > 0)
+        NotificationItem(
+          id: 'streak-$streak',
+          emoji: '🔥',
+          title: '$streak-day streak!',
+          body:
+              "You've learned something new $streak days in a row. Open your Backpack to see your streak!",
+          opensBackpack: true,
+        ),
     ];
 
     final learner = ref.watch(sessionProvider).learner;
@@ -143,9 +139,7 @@ class NotificationsNotifier extends Notifier<List<NotificationItem>> {
     ];
     return [
       for (final n in combined)
-        n.copyWith(
-          read: _readIds.contains(n.id) || n.id == 'sorting-unlock',
-        ),
+        n.copyWith(read: _readIds.contains(n.id)),
     ];
   }
 

@@ -121,11 +121,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 800));
       await tester.tap(find.byKey(const ValueKey('ta-w-play')));
       await tester.pump();
-      // Every step is said in turn (each clip, or its 6s guard here with
+      // Every step is said in turn (each clip, or its 15s guard here with
       // no audio plugin) before Start appears, then a 4s countdown.
       await tester.pump(const Duration(seconds: 2));
       expect(find.byKey(const ValueKey('ta-w-start')), findsNothing);
-      for (var i = 0; i < 40; i++) {
+      for (var i = 0; i < 100; i++) {
         if (find.byKey(const ValueKey('ta-w-start')).evaluate().isNotEmpty) {
           break;
         }

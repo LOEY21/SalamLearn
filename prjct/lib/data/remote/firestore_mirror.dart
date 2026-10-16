@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../local/hive_boxes.dart';
 import 'firebase_role_app.dart';
@@ -104,6 +105,21 @@ class RemoteClassRef {
   final String? schedule;
   final DateTime? createdAt;
   final DateTime? archivedAt;
+}
+
+/// Runs one record's push, skipping it when the security rules say the
+/// signed-in account may not write that record — a device can hold another
+/// account's data (a second parent, or a learner the teacher no longer has
+/// access to), and one such record used to fail the whole sync with
+/// `permission-denied`. The record stays in Hive for a later sync. Any
+/// other failure (offline, etc.) still throws.
+Future<void> pushIfAllowed(Future<void> Function() push) async {
+  try {
+    await push();
+  } on FirebaseException catch (e) {
+    if (e.code != 'permission-denied') rethrow;
+    debugPrint('Sync: skipped a record this account may not write: $e');
+  }
 }
 
 /// Pushes Hive records to Firestore, one collection per box (same names as

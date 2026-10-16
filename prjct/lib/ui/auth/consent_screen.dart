@@ -164,8 +164,8 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen>
                   number: 1,
                   title: 'Personal data we collect',
                   bullets: [
-                    'Account details: full name, email address, mobile '
-                        'number, and school (for teachers).',
+                    'Account details: full name, email address, and school '
+                        '(for teachers).',
                     'Child profile: name, age, grade level, avatar, and '
                         'username.',
                     'Learning activity: lesson progress, scores, accuracy, '
@@ -632,7 +632,7 @@ class _ContactCard extends StatelessWidget {
           children: [
             TextSpan(text: 'Reach our Data Protection contact anytime at '),
             TextSpan(
-              text: 'privacy@salamlearn.app',
+              text: 'salamlearn89@gmail.com',
               style: TextStyle(
                 color: AppColors.ink,
                 fontWeight: FontWeight.w700,

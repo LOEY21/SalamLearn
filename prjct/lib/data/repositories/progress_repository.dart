@@ -360,10 +360,10 @@ class ProgressRepository {
   /// pushes the telemetry data to Firebase" data-flow step).
   Future<void> pushAll(FirestoreMirror mirror) async {
     for (final record in _progress.values) {
-      await mirror.pushProgress(record);
+      await pushIfAllowed(() => mirror.pushProgress(record));
     }
     for (final award in _badges.values) {
-      await mirror.pushBadge(award);
+      await pushIfAllowed(() => mirror.pushBadge(award));
     }
   }
 }

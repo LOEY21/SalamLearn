@@ -229,6 +229,19 @@ async function fetchAll(name) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
+// Port of the app's `studentIdFor` (prjct/lib/data/models/learner_profile.dart):
+// FNV-1a over the learner doc id, 8 digits shown as "1234-5678". Must stay
+// in sync with the Dart version, since teachers enroll learners by this ID.
+function studentIdFor(learnerId) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < learnerId.length; i++) {
+    h = (h ^ learnerId.charCodeAt(i)) >>> 0;
+    h = (((h << 24) >>> 0) + h * 403) % 4294967296;
+  }
+  const digits = String(h % 100000000).padStart(8, "0");
+  return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+}
+
 function formatDate(value) {
   if (!value) return "—";
   const date = new Date(value);
@@ -744,6 +757,7 @@ async function loadAllData() {
       document.getElementById("table-learners"),
       [
         { label: "Name", value: (r) => r.name },
+        { label: "Student ID", value: (r) => studentIdFor(r.id) },
         { label: "Age", value: (r) => r.age },
         { label: "Grade", value: (r) => r.gradeLevel },
         { label: "Parent", value: (r) => parentNameById.get(r.parentId) ?? r.parentId },
@@ -914,6 +928,24 @@ document.querySelectorAll("[data-cancel-form]").forEach((btn) => {
     form.hidden = true;
     form.reset();
     form.querySelector(".form-error").hidden = true;
+  });
+});
+
+// Confirm-password check + show-password toggle on the add-account forms.
+document.querySelectorAll(".add-form").forEach((form) => {
+  const pw = form.querySelector('input[name="password"]');
+  const confirm = form.querySelector('input[name="confirmPassword"]');
+  if (!pw || !confirm) return;
+  const check = () =>
+    confirm.setCustomValidity(confirm.value === pw.value ? "" : "Passwords don't match.");
+  pw.addEventListener("input", check);
+  confirm.addEventListener("input", check);
+  form.querySelector("[data-show-password]").addEventListener("change", (e) => {
+    pw.type = confirm.type = e.target.checked ? "text" : "password";
+  });
+  form.addEventListener("reset", () => {
+    pw.type = confirm.type = "password";
+    confirm.setCustomValidity("");
   });
 });
 

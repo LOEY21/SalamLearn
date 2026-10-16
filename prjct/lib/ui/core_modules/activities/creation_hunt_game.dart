@@ -205,6 +205,12 @@ class _CreationHuntGameState extends State<CreationHuntGame>
   Timer? _closeTimer;
   Timer? _endTimer;
   Timer? _hintTimer;
+
+  /// Fires after [_kNudgeAfter] without finding a creation; while
+  /// [_nudging], the banner and the Hint button point the learner at it.
+  Timer? _nudgeTimer;
+  bool _nudging = false;
+  static const _kNudgeAfter = Duration(seconds: 15);
   Timer? _countTimer;
   final Set<Timer> _rippleTimers = {};
 
@@ -232,6 +238,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
     _closeTimer?.cancel();
     _endTimer?.cancel();
     _hintTimer?.cancel();
+    _nudgeTimer?.cancel();
     _countTimer?.cancel();
     for (final t in _rippleTimers) {
       t.cancel();
@@ -269,7 +276,8 @@ class _CreationHuntGameState extends State<CreationHuntGame>
   /// before the scene appears, with every hunt-local bit of state reset.
   void _begin() {
     if (_loading) return;
-    _audio.stopVoice();
+    // "Start the hunt!" — also cuts off any How to Play line still going.
+    _audio.say(const ['btn_start_hunt.mp3']);
     setState(() => _loading = true);
     _beginTimer?.cancel();
     _beginTimer = Timer(const Duration(milliseconds: 1100), () {
@@ -286,6 +294,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
         _mark = null;
         _reveal = null;
         _hinting = null;
+        _nudging = false;
         _closing = false;
         _recapCount = 0;
         _counting = true;
@@ -293,6 +302,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
       _countTimer?.cancel();
       _countTimer = Timer(const Duration(seconds: _kCountdown), () {
         if (mounted) setState(() => _counting = false);
+        _armNudge();
       });
     });
   }
@@ -360,10 +370,26 @@ class _CreationHuntGameState extends State<CreationHuntGame>
     widget.onComplete(widget.xp, accuracy, _wrongTaps);
   }
 
+  /// Restarts the "taking a while" clock. Wrong taps don't restart it — a
+  /// learner tapping only people-made things is struggling too.
+  void _armNudge() {
+    _nudgeTimer?.cancel();
+    _nudgeTimer = Timer(_kNudgeAfter, () {
+      if (!mounted || _screen != _Screen.play) return;
+      if (_found.length == _total) return;
+      // Wait for an open verdict card or the countdown to clear first.
+      if (_counting || _reveal != null) return _armNudge();
+      setState(() => _nudging = true);
+      _audio.say(const ['tutorial_lamp_hint.mp3']);
+    });
+  }
+
   void _tapSpot(CreationHuntSpot spot) {
     if (_counting || _reveal != null || _found.length == _total) return;
     if (_found.contains(spot.key)) return;
     if (spot.isCreation) {
+      _nudging = false;
+      _armNudge();
       setState(() {
         _found.add(spot.key);
         _hit.add(spot.id);
@@ -396,6 +422,8 @@ class _CreationHuntGameState extends State<CreationHuntGame>
 
   void _hint() {
     if (_counting) return;
+    _nudging = false;
+    _armNudge();
     final left = _creations.where((c) => !_found.contains(c.key)).toList();
     if (left.isEmpty) return;
     final pick = left[math.Random().nextInt(left.length)];
@@ -1825,7 +1853,16 @@ class _CreationHuntGameState extends State<CreationHuntGame>
       children: [
         _hudButton('$_kA/btn_hint.png', 'Exit', _exit),
         const SizedBox(height: 8),
-        _hudButton('$_kA/btn_close.png', 'Hint', _hint),
+        // Gently pulses while the learner is being nudged toward it.
+        _nudging
+            ? _fx((t) {
+                final s = 1 + 0.14 * (0.5 + 0.5 * math.sin(t * math.pi * 3));
+                return Transform.scale(
+                  scale: s,
+                  child: _hudButton('$_kA/btn_close.png', 'Hint', _hint),
+                );
+              })
+            : _hudButton('$_kA/btn_close.png', 'Hint', _hint),
       ],
     );
 
@@ -1872,11 +1909,13 @@ class _CreationHuntGameState extends State<CreationHuntGame>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
               decoration: BoxDecoration(
-                color: _inkPanel,
+                color: _nudging ? const Color(0xE6B9770E) : _inkPanel,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
-                _stage.instruction,
+                _nudging
+                    ? 'Taking a while? Tap the Hint button for help!'
+                    : _stage.instruction,
                 textAlign: TextAlign.center,
                 style: _t(16, FontWeight.w700, _cream, shadow: true),
               ),

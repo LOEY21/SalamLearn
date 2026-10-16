@@ -3,7 +3,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart' hide Text, TextSpan;
-import 'package:salamlearn/logic/localization/app_translations.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../theme/app_colors.dart';
@@ -139,7 +139,6 @@ class _MascotTutorialOverlayState extends ConsumerState<MascotTutorialOverlay>
   );
 
   Timer? _bubbleDelay;
-  Timer? _autoDismiss;
 
   @override
   void initState() {
@@ -149,10 +148,39 @@ class _MascotTutorialOverlayState extends ConsumerState<MascotTutorialOverlay>
     );
   }
 
+  /// The mascot's voice. Each new line cuts off the one before it.
+  final AudioPlayer _voice = AudioPlayer();
+  int _voiceGen = 0;
+
+  /// Says the current step's clip for line [i], if it has one. Completes
+  /// when it ends (or after a cap, or at once if it can't play).
+  Future<void> _say(int i) async {
+    final clips = _step.clips;
+    final gen = ++_voiceGen;
+    if (i >= clips.length) return;
+    try {
+      await _voice.stop();
+      if (gen != _voiceGen || !mounted) return;
+      final done = _voice.onPlayerComplete.first;
+      await _voice.play(
+        AssetSource('audio/mascot/${localizedVoice(clips[i])}'),
+      );
+      await done.timeout(const Duration(seconds: 12));
+    } catch (_) {
+      // No audio output: the tutorial still reads fine on its own.
+    }
+  }
+
+  void _stopVoice() {
+    _voiceGen++;
+    unawaited(_voice.stop().catchError((Object _) {}));
+  }
+
   @override
   void dispose() {
+    _voiceGen++;
+    unawaited(_voice.dispose().catchError((Object _) {}));
     _bubbleDelay?.cancel();
-    _autoDismiss?.cancel();
     _transition.dispose();
     _ringPulse.dispose();
     _mascotPop.dispose();
@@ -179,7 +207,13 @@ class _MascotTutorialOverlayState extends ConsumerState<MascotTutorialOverlay>
     final anchors = ref.read(tutorialAnchorsProvider);
     final step = _step;
     final anchorKey = step.anchorOf?.call(anchors);
-    final targetRect = anchorKey == null ? null : _padded(_measure(anchorKey));
+    var anchorRect = anchorKey == null ? null : _measure(anchorKey);
+    final alsoKey = step.alsoAnchorOf?.call(anchors);
+    final alsoRect = alsoKey == null ? null : _measure(alsoKey);
+    if (anchorRect != null && alsoRect != null) {
+      anchorRect = anchorRect.expandToInclude(alsoRect);
+    }
+    final targetRect = _padded(anchorRect);
     // One constant dark level for every step — a spotlight is only
     // legible against a background that's reliably dark, and varying it
     // (lighter for the ambient/no-anchor beats) read as the tutorial
@@ -215,9 +249,18 @@ class _MascotTutorialOverlayState extends ConsumerState<MascotTutorialOverlay>
 
     _lineFade.value = 1;
 
+    final said = _say(0);
     if (step.isFinal) {
-      _autoDismiss?.cancel();
-      _autoDismiss = Timer(const Duration(milliseconds: 2200), _finish);
+      // The cheer is said in full before the tutorial closes itself.
+        final gen = _voiceGen;
+      unawaited(
+        Future.wait([
+          said,
+          Future<void>.delayed(const Duration(milliseconds: 2200)),
+        ]).then((_) {
+          if (mounted && gen == _voiceGen) _finish();
+        }),
+      );
     }
   }
 
@@ -302,6 +345,7 @@ class _MascotTutorialOverlayState extends ConsumerState<MascotTutorialOverlay>
         if (!mounted) return;
         setState(() => _lineIdx++);
         _lineFade.forward();
+        _say(_lineIdx);
       });
       return;
     }
@@ -314,7 +358,7 @@ class _MascotTutorialOverlayState extends ConsumerState<MascotTutorialOverlay>
   void _finish() {
     if (_exiting) return;
     _exiting = true;
-    _autoDismiss?.cancel();
+    _stopVoice();
     _mascotExit.forward(from: 0);
     _bubbleExit.forward(from: 0);
     Future.delayed(const Duration(milliseconds: 320), () {

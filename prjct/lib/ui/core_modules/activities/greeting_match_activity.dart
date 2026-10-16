@@ -15,7 +15,7 @@ import '../game_ui_audio.dart';
 enum _Screen { start, howTo, countdown, play, done }
 
 /// Tapped-choice feedback state for one answer button.
-enum _ChoiceState { idle, correct, wrong }
+enum _ChoiceState { idle, selected, correct, wrong }
 
 const String _kArabicFont = 'ScheherazadeNew';
 const String _kUiFont = 'Baloo2Var';
@@ -378,7 +378,27 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
     _queuePrompt();
   }
 
-  /// One tap per question: right = gold star, wrong = red star (the right
+  /// The reply tapped (and heard) but not yet submitted.
+  int? _selectedIdx;
+
+  /// "Try again next time!" is up — after a wrong answer, once the right
+  /// reply has been said.
+  bool _tryAgainShown = false;
+
+  /// Tapping a reply only selects it and reads it aloud; Submit answers.
+  void _selectChoice(int i) {
+    if (_results.length > _idx || !_revealed) return;
+    _stopChoiceNarration();
+    HapticFeedback.selectionClick();
+    setState(() => _selectedIdx = i);
+    unawaited(_audio.play([_question.choices[i].audioAsset]));
+  }
+
+  void _submitChoice() {
+    if (_selectedIdx case final i?) _handleChoice(i);
+  }
+
+  /// One answer per question: right = gold star, wrong = red star (the right
   /// answer is shown, then the game moves on — no retry).
   void _handleChoice(int i) {
     if (_results.length > _idx || !_revealed) return;
@@ -424,17 +444,29 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
       if (!MediaQuery.of(context).disableAnimations) {
         _wobbleController.forward(from: 0);
       }
-      unawaited(
-        _audio.play([
-          GreetingMatchAudio.tryAgain,
-          _question.choices[right].audioAsset,
-        ]),
-      );
       _wrongTimer?.cancel();
       _wrongTimer = Timer(const Duration(milliseconds: 700), () {
         if (mounted) setState(() => _revealIdx = right);
       });
-      _nextTimer = Timer(const Duration(milliseconds: 2400), _next);
+      // Say the right reply, then "Try again next time" with its badge, and
+      // only move on once both have finished.
+      final idx = _idx;
+      _nextTimer?.cancel();
+      unawaited(() async {
+        await _audio
+            .play([_question.choices[right].audioAsset])
+            .timeout(const Duration(seconds: 8), onTimeout: () {});
+        if (!mounted || idx != _idx) return;
+        setState(() => _tryAgainShown = true);
+        await Future.wait([
+          _audio
+              .play([GreetingMatchAudio.tryAgain])
+              .timeout(const Duration(seconds: 8), onTimeout: () {}),
+          Future<void>.delayed(const Duration(milliseconds: 1600)),
+        ]);
+        if (!mounted || idx != _idx) return;
+        _next();
+      }());
     }
   }
 
@@ -452,6 +484,8 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
         _correctIdx = null;
         _wrongIdx = null;
         _revealIdx = null;
+        _selectedIdx = null;
+        _tryAgainShown = false;
       });
       _queuePrompt();
     }
@@ -866,12 +900,6 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
   void _toggleMuted() {
     setState(() => _muted = !_muted);
     unawaited(_audio.setMuted(_muted));
-    if (_muted) {
-      _narrated = true;
-      _maybeReveal();
-      _howToRead = true;
-      _maybeHowToReady();
-    }
   }
 
   /// Music note = sound on/off. Muted shows greyed out with a red slash.
@@ -886,7 +914,7 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
   Widget _musicToggle(Key key) => Semantics(
     button: true,
     toggled: !_muted,
-    label: _muted ? 'Sound off' : 'Sound on',
+    label: _muted ? 'Music off' : 'Music on',
     child: Stack(
       fit: StackFit.expand,
       children: [
@@ -1374,6 +1402,29 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                       ),
                     ),
 
+                    // "Try again next time!" over the scene while that line
+                    // plays on a wrong answer.
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 350,
+                      child: IgnorePointer(
+                        child: Center(
+                          child: AnimatedOpacity(
+                            key: const Key('greeting-try-again'),
+                            opacity: _tryAgainShown ? 1 : 0,
+                            duration: const Duration(milliseconds: 250),
+                            child: AnimatedScale(
+                              scale: _tryAgainShown ? 1 : 0.7,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeOutBack,
+                              child: const _MumtazBadge.tryAgain(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
                     // Prompt card: Play Audio beside the greeting, then the
                     // response buttons. Kept low so the scene stays in view.
                     Positioned(
@@ -1397,6 +1448,25 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                               color: Colors.white,
                             ),
                           ),
+                          submitButton: Opacity(
+                            opacity:
+                                _selectedIdx != null && _results.length <= _idx
+                                ? 1
+                                : 0.5,
+                            child: _GlossyButton(
+                              key: const Key('greeting-submit'),
+                              palette: _Palette.green,
+                              radius: 38,
+                              depth: 7,
+                              outline: Colors.white,
+                              onTap: _submitChoice,
+                              child: const _IconLabel(
+                                icon: Icons.check_rounded,
+                                label: 'Submit',
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
                           buttons: [
                             for (var i = 0; i < question.choices.length; i++)
                               Transform.translate(
@@ -1412,8 +1482,11 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
                                         ? _ChoiceState.correct
                                         : _wrongIdx == i
                                         ? _ChoiceState.wrong
+                                        : _selectedIdx == i &&
+                                              _results.length <= _idx
+                                        ? _ChoiceState.selected
                                         : _ChoiceState.idle,
-                                    onTap: () => _handleChoice(i),
+                                    onTap: () => _selectChoice(i),
                                   ),
                                 ),
                               ),
@@ -1938,11 +2011,13 @@ class _PromptCard extends StatelessWidget {
   const _PromptCard({
     required this.question,
     required this.audioButton,
+    required this.submitButton,
     required this.buttons,
   });
 
   final GreetingQuestion question;
   final Widget audioButton;
+  final Widget submitButton;
   final List<Widget> buttons;
 
   @override
@@ -1981,7 +2056,7 @@ class _PromptCard extends StatelessWidget {
                 children: [
                   SizedBox(width: 280, child: audioButton),
                   const SizedBox(width: 28),
-                  Flexible(
+                  Expanded(
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Row(
@@ -2012,6 +2087,8 @@ class _PromptCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(width: 28),
+                  SizedBox(width: 240, child: submitButton),
                 ],
               ),
             ),
@@ -2057,6 +2134,11 @@ class _ChoiceButton extends StatelessWidget {
         _Palette.red,
         Colors.white,
         const Color(0x806E0E0B),
+      ),
+      _ChoiceState.selected => (
+        _Palette.blue,
+        Colors.white,
+        const Color(0x800B2E66),
       ),
       _ChoiceState.idle => (
         _Palette.gold,
@@ -2113,7 +2195,7 @@ class _ChoiceButton extends StatelessWidget {
           ),
         ),
         // Check / cross so the result never relies on colour alone.
-        if (state != _ChoiceState.idle)
+        if (state == _ChoiceState.correct || state == _ChoiceState.wrong)
           Positioned(
             right: -10,
             top: -14,
@@ -2147,7 +2229,24 @@ class _ChoiceButton extends StatelessWidget {
 }
 
 class _MumtazBadge extends StatelessWidget {
-  const _MumtazBadge();
+  const _MumtazBadge()
+    : palette = _Palette.gold,
+      icon = Icons.star_rounded,
+      label = 'Mumtaz!',
+      ink = const Color(0xFF6E3A08);
+
+  /// The "Try again next time!" badge shown with that line on a wrong pick
+  /// (there is no retry — the game moves on).
+  const _MumtazBadge.tryAgain()
+    : palette = _Palette.red,
+      icon = Icons.replay_rounded,
+      label = 'Try again next time!',
+      ink = Colors.white;
+
+  final _Palette palette;
+  final IconData icon;
+  final String label;
+  final Color ink;
 
   @override
   Widget build(BuildContext context) {
@@ -2160,19 +2259,16 @@ class _MumtazBadge extends StatelessWidget {
           height: 66,
         ),
         const SizedBox(width: 8),
-        const SizedBox(
-          width: 360,
+        SizedBox(
+          // Mumtaz keeps its size; the longer "Try again next time!" gets room.
+          width: label == 'Mumtaz!' ? 360 : 560,
           height: 104,
           child: _GlossyButton(
-            palette: _Palette.gold,
+            palette: palette,
             radius: 52,
             depth: 8,
             outline: Colors.white,
-            child: _IconLabel(
-              icon: Icons.star_rounded,
-              label: 'Mumtaz!',
-              color: Color(0xFF6E3A08),
-            ),
+            child: _IconLabel(icon: icon, label: label, color: ink),
           ),
         ),
         const SizedBox(width: 8),

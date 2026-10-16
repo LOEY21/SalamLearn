@@ -21,17 +21,21 @@ void main() {
     view.resetDevicePixelRatio();
   });
 
-  Widget host(int index, {void Function(int, double, int)? onComplete}) =>
-      MaterialApp(
-        home: Scaffold(
-          body: AyahBuilderGame(
-            sessions: ayahBuilderSessions,
-            initialIndex: index,
-            xp: 50,
-            onComplete: onComplete ?? (_, _, _) {},
-          ),
-        ),
-      );
+  Widget host(
+    int index, {
+    void Function(int, double, int)? onComplete,
+    VoidCallback? onExit,
+  }) => MaterialApp(
+    home: Scaffold(
+      body: AyahBuilderGame(
+        sessions: ayahBuilderSessions,
+        initialIndex: index,
+        xp: 50,
+        onComplete: onComplete ?? (_, _, _) {},
+        onExit: onExit,
+      ),
+    ),
+  );
 
   Future<void> toPuzzle(WidgetTester tester) async {
     await tester.tap(find.byKey(const ValueKey('ab-play')));
@@ -102,6 +106,18 @@ void main() {
     final four = tester.getRect(find.text('4'));
     expect(four.top, greaterThan(one.bottom));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Home in the puzzle leaves the lesson', (tester) async {
+    var exited = 0;
+    await tester.pumpWidget(host(6, onExit: () => exited++));
+    await tester.pump(const Duration(milliseconds: 600));
+    await toPuzzle(tester);
+    expect(find.byKey(const ValueKey('ab-back')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('ab-home')));
+    await tester.pump();
+    expect(exited, 1);
+    await tester.pump(const Duration(seconds: 2));
   });
 
   testWidgets('dropping on an already-filled slot is not an error', (

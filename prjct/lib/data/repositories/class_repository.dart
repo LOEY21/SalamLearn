@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -8,7 +9,8 @@ import '../local/hive_boxes.dart';
 import '../models/assigned_module.dart';
 import '../models/class_section.dart';
 import '../models/enrollment.dart';
-import '../remote/firestore_mirror.dart' show FirestoreMirror, RemoteClassRef;
+import '../remote/firestore_mirror.dart'
+    show FirestoreMirror, RemoteClassRef, pushIfAllowed;
 import 'custom_lesson_repository.dart';
 import 'teacher_repository.dart';
 
@@ -370,12 +372,15 @@ class ClassRepository {
     await _assignments.put(assignment.id, assignment);
     // Best-effort — uploads right away so the learner's device can pull it
     // without waiting for the teacher to tap Sync; the next full sync
-    // retries if this fails (e.g. offline).
-    try {
-      await FirestoreMirror().pushAssignedModule(assignment);
-    } catch (e) {
-      debugPrint('ClassRepository.assignModule: push failed: $e');
-    }
+    // retries if this fails (e.g. offline). Not awaited: Firestore's `set`
+    // only completes on server ack, so awaiting it held back the teacher's
+    // UI refresh on a slow or offline connection.
+    unawaited(
+      Future(() => FirestoreMirror().pushAssignedModule(assignment)).catchError(
+        (Object e) =>
+            debugPrint('ClassRepository.assignModule: push failed: $e'),
+      ),
+    );
     return assignment;
   }
 
@@ -475,13 +480,13 @@ class ClassRepository {
     final teachers = TeacherRepository();
     for (final section in _classes.values) {
       if (teachers.findById(section.teacherId)?.firebaseUid == null) continue;
-      await mirror.pushClass(section);
+      await pushIfAllowed(() => mirror.pushClass(section));
     }
     for (final enrollment in _enrollments.values) {
-      await mirror.pushEnrollment(enrollment);
+      await pushIfAllowed(() => mirror.pushEnrollment(enrollment));
     }
     for (final assignment in _assignments.values) {
-      await mirror.pushAssignedModule(assignment);
+      await pushIfAllowed(() => mirror.pushAssignedModule(assignment));
     }
   }
 }

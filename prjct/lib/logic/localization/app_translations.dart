@@ -34,9 +34,22 @@ class AppTranslations {
     }
     final transCleaned = filipinoStrings[cleaned] ??
         filipinoStrings[cleaned.toLowerCase()] ??
-        filipinoStrings[cleaned.toUpperCase()] ??
         _upper[cleaned];
-    return transCleaned != null ? '$transCleaned$suffix' : text;
+    if (transCleaned != null) return '$transCleaned$suffix';
+
+    // Only an all-caps key exists (e.g. 'BACKPACK'): reuse it, but in the
+    // casing of the text asked for, so a 'Backpack' tab isn't shouted.
+    final shouted = filipinoStrings[cleaned.toUpperCase()];
+    return shouted != null ? '${_matchCase(shouted, cleaned)}$suffix' : text;
+  }
+
+  static String _matchCase(String value, String source) {
+    if (source == source.toUpperCase()) return value;
+    final lower = value.toLowerCase();
+    final titled = source.contains(' ') &&
+        source.split(' ').every((w) => w.isEmpty || w[0] == w[0].toUpperCase());
+    String cap(String w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1);
+    return titled ? lower.split(' ').map(cap).join(' ') : cap(lower);
   }
 
   // Headers often render `title.toUpperCase()`, so index keys by their

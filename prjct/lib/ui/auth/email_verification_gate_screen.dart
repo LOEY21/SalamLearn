@@ -197,6 +197,37 @@ class _EmailVerificationGateScreenState
                             height: 1.4,
                           ),
                         ),
+                        if (!_sending && _sendError == null) ...[
+                          const SizedBox(height: 14),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppColors.goldTint,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.mark_email_unread_outlined,
+                                  size: 18,
+                                  color: AppColors.gold,
+                                ),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    "Don't see it? Check your Spam or Junk folder. It can take a few minutes to arrive.",
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: AppColors.ink,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 24),
                         if (_sending)
                           const CircularProgressIndicator(color: AppColors.teal)

@@ -102,6 +102,10 @@ void main() {
     expect(first == clips.correct, heroX < decoyX);
 
     await tester.tap(find.text(session.questions.first.correctText));
+
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('ch-submit')));
     await tester.pump();
     expect(audio.played.last, ClassroomHeroesAudio.mumtaz);
   });
@@ -126,6 +130,27 @@ void main() {
     await tester.pump();
     await skipNarration(tester);
   }
+
+  testWidgets('in the game, Music toggles and Home leaves the lesson', (
+    tester,
+  ) async {
+    var exited = 0;
+    const session = heroesRespectSession;
+    await tester.pumpWidget(host(session, onExit: () => exited++));
+    await startSession(tester, session);
+
+    expect(find.byIcon(Icons.arrow_back), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('ch-music')));
+    await tester.pump();
+    expect(find.byIcon(Icons.music_off_rounded), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('ch-music')));
+    await tester.pump();
+    expect(find.byIcon(Icons.music_note_rounded), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('ch-home')));
+    await tester.pump();
+    expect(exited, 1);
+  });
 
   testWidgets('opens on the same title screen for every session', (
     tester,
@@ -168,6 +193,10 @@ void main() {
     expect(find.text('🍎'), findsOneWidget);
 
     await tester.tap(find.text(session.questions.first.correctText));
+
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('ch-submit')));
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text('Next'));
     await tester.pump();
@@ -207,6 +236,10 @@ void main() {
     await startSession(tester, session);
 
     await tester.tap(find.text(session.questions.first.decoyText));
+
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('ch-submit')));
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.text('Try again!'), findsNothing);
@@ -229,6 +262,10 @@ void main() {
     await startSession(tester, session);
 
     await tester.tap(find.text(session.questions.first.correctText));
+
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('ch-submit')));
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.text('MUMTAZ!'), findsWidgets);
@@ -265,6 +302,8 @@ void main() {
       // The first scenario is answered wrong — it still moves on.
       final q = session.questions[i];
       await tester.tap(find.text(i == 0 ? q.decoyText : q.correctText));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('ch-submit')));
       await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(
         find.text(i == session.questions.length - 1 ? 'Finish' : 'Next'),
@@ -313,6 +352,9 @@ class _FakeClassroomAudio implements ClassroomAudioPlayback {
 
   @override
   Future<void> startMusic() async {}
+
+  @override
+  Future<void> setMusicEnabled(bool enabled) async {}
 
   @override
   Future<void> play(

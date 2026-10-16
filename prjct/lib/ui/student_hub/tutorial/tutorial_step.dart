@@ -64,7 +64,9 @@ class TutorialStep {
     required this.pose,
     required this.side,
     required this.lines,
+    this.clips = const [],
     this.anchorOf,
+    this.alsoAnchorOf,
     this.dock = MascotDock.auto,
     this.dimOnly = false,
     this.isFinal = false,
@@ -73,11 +75,19 @@ class TutorialStep {
   final MascotPose pose;
   final MascotSide side;
   final List<String> lines;
+
+  /// The mascot's voice for each of [lines], in order — file names under
+  /// `audio/mascot/` (Tagalog takes in its `fil/` folder).
+  final List<String> clips;
   final MascotDock dock;
 
   /// Picks this step's spotlight target out of the shared anchors — null
   /// means "no spotlight" (full dim instead).
   final GlobalKey? Function(TutorialAnchors anchors)? anchorOf;
+
+  /// A second anchor the spotlight stretches to cover too, for a line that
+  /// talks about two things side by side (stars and the streak flame).
+  final GlobalKey? Function(TutorialAnchors anchors)? alsoAnchorOf;
 
   /// True for a full-dim step with no anchor at all (the map-intro beat) —
   /// distinct from "no anchor found" so it always reads as a lighter,
@@ -111,6 +121,12 @@ List<TutorialStep> buildTutorialSteps(
       "Assalamu'alaikum, $learnerName! 🌟",
       "I'm $mascotName, and I'll be your friend on this whole adventure!",
     ],
+    clips: [
+      'onboarding_01_greeting.mp3',
+      isGirl
+          ? 'onboarding_02_intro_amira.mp3'
+          : 'onboarding_02_intro_amir.mp3',
+    ],
   ),
   TutorialStep(
     // Girl mascot stands on the opposite side from the wave beat here —
@@ -123,6 +139,7 @@ List<TutorialStep> buildTutorialSteps(
     lines: [
       "This is our Adventure Map. Every place here has something new to learn!",
     ],
+    clips: ['onboarding_03_map.mp3'],
   ),
   TutorialStep(
     pose: MascotPose.pointUp,
@@ -132,14 +149,17 @@ List<TutorialStep> buildTutorialSteps(
     lines: [
       "These lanterns are your Noor Energy. Each lesson uses one — they refill when you rest!",
     ],
+    clips: ['onboarding_04_energy.mp3'],
   ),
   TutorialStep(
     pose: MascotPose.pointUpLeft,
     side: MascotSide.left,
     anchorOf: (a) => a.streakPillKey,
+    alsoAnchorOf: (a) => a.xpPillKey,
     lines: [
       "Stars are the points you earn. The flame counts your days in a row!",
     ],
+    clips: ['onboarding_05_streak.mp3'],
   ),
   TutorialStep(
     pose: MascotPose.present,
@@ -149,6 +169,7 @@ List<TutorialStep> buildTutorialSteps(
     lines: [
       "See that? That's YOU, standing on the map. You move forward with every lesson you finish!",
     ],
+    clips: ['onboarding_06_avatar.mp3'],
   ),
   TutorialStep(
     pose: MascotPose.pointDown,
@@ -158,6 +179,7 @@ List<TutorialStep> buildTutorialSteps(
     lines: [
       "Your Backpack keeps every badge you win. Check it any time!",
     ],
+    clips: ['onboarding_07_backpack.mp3'],
   ),
   TutorialStep(
     pose: MascotPose.pointDown,
@@ -167,6 +189,7 @@ List<TutorialStep> buildTutorialSteps(
     lines: [
       "Now — tap the glowing place to start your very first lesson. Bismillah!",
     ],
+    clips: ['onboarding_08_first_step.mp3'],
   ),
   const TutorialStep(
     pose: MascotPose.cheer,
@@ -176,6 +199,7 @@ List<TutorialStep> buildTutorialSteps(
     lines: [
       "Masha'Allah! You did it! I'll be right here whenever you need me. 🎉",
     ],
+    clips: ['onboarding_09_cheer.mp3'],
   ),
 ];
 }

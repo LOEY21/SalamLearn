@@ -41,7 +41,6 @@ const _body = {
   'Ear': Offset(244, 623),
   'Foot': Offset(269, 1436),
   'Leg': Offset(331, 1248),
-  'Face': Offset(544, 698),
 };
 
 void main() {
@@ -96,7 +95,7 @@ void main() {
           w.key is ValueKey<String> &&
           (w.key! as ValueKey<String>).value.startsWith('lm-badge-'),
     );
-    for (var i = 1; i <= 10; i++) {
+    for (var i = 1; i <= 9; i++) {
       final word = (tester.widget(badge).key! as ValueKey<String>).value
           .substring('lm-badge-'.length);
       final g = await tester.startGesture(tester.getCenter(badge));
@@ -106,7 +105,7 @@ void main() {
       await tester.pump();
       await g.up();
       await tester.pumpAndSettle();
-      expect(find.text('$i/10'), findsOneWidget);
+      expect(find.text('$i/9'), findsOneWidget);
     }
 
     await tester.pump(const Duration(milliseconds: 4000));

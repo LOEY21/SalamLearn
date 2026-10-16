@@ -325,6 +325,9 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   bool _showModal = false;
   bool _answered = false;
 
+  /// The tile tapped (and heard) but not yet submitted: true = right one.
+  bool? _selected;
+
   /// The card was answered with the decoy: marked wrong, no celebration.
   bool _missed = false;
   bool _shake = false;
@@ -365,6 +368,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
     if (widget.audioEnabled) {
       _audio = widget.audio ?? SirahStoryAudio();
       unawaited(_audio!.startMusic());
+      unawaited(_audio!.play(SirahStoryAudio.title));
     }
     // The scenes are painted landscape — the app is portrait-locked
     // everywhere else, so this activity flips the device for as long as it is
@@ -540,6 +544,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
     setState(() {
       _showModal = false;
       _answered = false;
+      _selected = null;
       _shake = false;
     });
     _beginPage();
@@ -551,6 +556,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
     setState(() {
       _opening = true;
       _answered = false;
+      _selected = null;
       _missed = false;
     });
     _openTimer?.cancel();
@@ -589,6 +595,29 @@ class _SirahStoryGameState extends State<SirahStoryGame>
         onError: playFirst,
       ),
     );
+  }
+
+  /// Tapping a tile only selects it and reads it aloud; Submit answers.
+  void _select(bool isCorrect) {
+    if (_answered) return;
+    HapticFeedback.selectionClick();
+    setState(() => _selected = isCorrect);
+    if (_audio != null) {
+      unawaited(
+        _audio!.play(isCorrect ? _pageAudio.correct : _pageAudio.decoy),
+      );
+    }
+  }
+
+  void _submit() {
+    switch (_selected) {
+      case true:
+        _pickCorrect();
+      case false:
+        _pickWrong();
+      case null:
+        return;
+    }
   }
 
   void _pickCorrect() {
@@ -698,6 +727,7 @@ class _SirahStoryGameState extends State<SirahStoryGame>
       _glowReady = false;
       _finished = false;
     });
+    if (_audio != null) unawaited(_audio!.play(SirahStoryAudio.title));
   }
 
   /// The ending screen's Continue Next Lesson — the lesson's only way on, so
@@ -1089,6 +1119,8 @@ class _SirahStoryGameState extends State<SirahStoryGame>
               aspect: _kBackAspect,
             ),
           ),
+        if (_showModal && !_answered)
+          Positioned(right: 110, bottom: 120, child: _submitButton()),
         if (_answered && !_missed) _buildConfetti(_badgeT0),
         if (_confirmExit) _buildConfirmExit(),
         if (_finished) _buildFinish(),
@@ -2010,10 +2042,11 @@ class _SirahStoryGameState extends State<SirahStoryGame>
     // gets its tick alongside the wrong pick's cross.
     final won = isCorrect && _answered;
     final lost = !isCorrect && _missed;
+    final selected = !_answered && _selected == isCorrect;
     // The tile is the painted pill; the label sits on it and the win state
     // is a gold glow and a tick rather than a repaint of the art.
     final button = _Push(
-      onTap: isCorrect ? _pickCorrect : _pickWrong,
+      onTap: () => _select(isCorrect),
       dy: 4,
       builder: (down) => AspectRatio(
         aspectRatio: _kTileAspect,
@@ -2034,6 +2067,14 @@ class _SirahStoryGameState extends State<SirahStoryGame>
                       color: Color(0x80C2452D),
                       spreadRadius: 6,
                       blurRadius: 22,
+                    ),
+                  ]
+                : selected
+                ? const [
+                    BoxShadow(
+                      color: Color(0xCC4FA8E8),
+                      spreadRadius: 7,
+                      blurRadius: 18,
                     ),
                   ]
                 : const [],
@@ -2118,10 +2159,57 @@ class _SirahStoryGameState extends State<SirahStoryGame>
       index == 0 ? _inAnswerA : _inAnswerB,
       0.35,
       AnimatedScale(
-        scale: won ? 1.03 : 1,
+        scale: won || selected ? 1.03 : 1,
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOut,
         child: settled,
+      ),
+    );
+  }
+
+  Widget _submitButton() {
+    final canSubmit = _selected != null;
+    return Opacity(
+      opacity: canSubmit ? 1 : 0.5,
+      child: _Push(
+        key: const ValueKey('sirah-submit'),
+        onTap: _submit,
+        dy: 4,
+        builder: (down) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [_greenMid, _green],
+            ),
+            border: Border.all(color: _panelTop, width: 5),
+            boxShadow: [
+              BoxShadow(
+                color: _greenBtnShade,
+                offset: Offset(0, down && canSubmit ? 3 : 8),
+              ),
+            ],
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_rounded, size: 44, color: Colors.white),
+              SizedBox(width: 10),
+              Text(
+                'Submit',
+                style: TextStyle(
+                  fontFamily: 'Baloo2Var',
+                  fontVariations: [FontVariation('wght', 800)],
+                  fontSize: 40,
+                  color: Colors.white,
+                  height: 1.1,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

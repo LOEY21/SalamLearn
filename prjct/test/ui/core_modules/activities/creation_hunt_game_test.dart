@@ -327,6 +327,33 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('a slow hunt points the learner at the Hint button', (
+    tester,
+  ) async {
+    const nudge = 'Taking a while? Tap the Hint button for help!';
+    await tester.pumpWidget(host(skyHuntStage));
+    await startHunt(tester);
+    expect(find.text(nudge), findsNothing);
+
+    await tester.pump(const Duration(seconds: 16));
+    expect(find.text(nudge), findsOneWidget);
+
+    // Using the hint clears the nudge and restarts the clock.
+    await tester.tap(find.bySemanticsLabel('Hint'), warnIfMissed: false);
+    await tester.pump();
+    expect(find.text(nudge), findsNothing);
+  });
+
+  testWidgets('every Sky cloud counts as clouds; the low sun is the sun', (
+    tester,
+  ) async {
+    final keys = {for (final s in skyHuntStage.spots) s.id: s.key};
+    for (final id in keys.keys.where((k) => k.startsWith('cloud'))) {
+      expect(keys[id], 'clouds', reason: id);
+    }
+    expect(keys['sun2'], 'sun');
+  });
+
   testWidgets('every stage has six creations and its own decoys', (
     tester,
   ) async {

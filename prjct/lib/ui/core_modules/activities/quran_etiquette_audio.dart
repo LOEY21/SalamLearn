@@ -71,6 +71,8 @@ class QuranEtiquetteAudio {
   /// The title has no Tagalog take, so it plays with `localized: false`.
   static const title = 'quran_etiquette.mp3';
   static const mumtaz = 'mumtaz.mp3';
+  static const letsGo = 'lets_go.mp3';
+  static const tryAgain = 'try_again.mp3';
 
   final AudioPlayer _voice = AudioPlayer();
   final AudioPlayer _music = AudioPlayer();

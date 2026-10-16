@@ -61,6 +61,8 @@ const double _kW = 368;
 const double _kH = 822;
 const String _kA = 'assets/images/good_deed_tree';
 const String _kBg = '$_kA/bg_garden_v5.png';
+const double _kBgW = 853;
+const double _kBgH = 1844;
 const String _kBin = '$_kA/bin.png';
 
 /// Start screen: the painted garden with its bare tree, and the pieces laid
@@ -149,8 +151,68 @@ const Rect _kTreeRect = Rect.fromLTWH(
 const double _kBinH = 96 + 4 + 18.5;
 const Rect _kBinRect = Rect.fromLTWH(11, _kH - 239 - _kBinH, 96, _kBinH);
 
-/// The bin's open rim (stage px), where bad deeds drop in.
-final Offset _kBinMouth = _kBinRect.topLeft + const Offset(44, 4);
+/// How the garden art sits behind the stage: pinned so its dirt circle
+/// stays under the tree, scaled up just enough to still fill the screen.
+/// The phone-shaped stage it was laid out on ([_kW] x [_kH], art covering
+/// it) is the reference — there this matches a plain cover fit, so phones
+/// look as before; on tablets a cover fit pushed the circle and the bin's
+/// painted shadow away from the tree and bin.
+class _GardenFit {
+  factory _GardenFit(Size screen) {
+    // Art points under the tree's base and the bin's foot on the reference.
+    final refScale = math.max(_kW / _kBgW, _kH / _kBgH);
+    final refOrigin = Offset(
+      (_kW - _kBgW * refScale) / 2,
+      _kH - _kBgH * refScale,
+    );
+    Offset toArt(Offset stage) => (stage - refOrigin) / refScale;
+    final treeArt = toArt(_kTreeRect.bottomCenter);
+    final binArt = toArt(_kBinRect.bottomCenter);
+
+    final k = math.min(screen.width / _kW, screen.height / _kH);
+    final stageOrigin = Offset(
+      (screen.width - _kW * k) / 2,
+      screen.height - _kH * k,
+    );
+    final tree = stageOrigin + _kTreeRect.bottomCenter * k;
+    // Smallest scale that still covers the screen with treeArt held at tree.
+    final scale = [
+      refScale * k,
+      tree.dx / treeArt.dx,
+      (screen.width - tree.dx) / (_kBgW - treeArt.dx),
+      tree.dy / treeArt.dy,
+      (screen.height - tree.dy) / (_kBgH - treeArt.dy),
+    ].reduce(math.max);
+    final origin = tree - treeArt * scale;
+    // The bin follows its shadow — into the side margin a wide screen
+    // leaves beside the stage if need be — kept on screen and above the
+    // card tray.
+    final binFoot = (origin + binArt * scale - stageOrigin) / k;
+    final bin = _kBinRect.shift(binFoot - _kBinRect.bottomCenter);
+    final minX = -stageOrigin.dx / k;
+    final maxX = (screen.width - stageOrigin.dx) / k;
+    final clamped = bin.translate(
+      bin.left < minX
+          ? minX - bin.left
+          : bin.right > maxX
+          ? maxX - bin.right
+          : 0,
+      bin.bottom > _kTrayTop - 8 ? _kTrayTop - 8 - bin.bottom : 0,
+    );
+    return _GardenFit._(
+      Rect.fromLTWH(origin.dx, origin.dy, _kBgW * scale, _kBgH * scale),
+      clamped,
+    );
+  }
+
+  const _GardenFit._(this.art, this.bin);
+
+  /// Where the garden art is drawn (screen px).
+  final Rect art;
+
+  /// The bin (stage px).
+  final Rect bin;
+}
 
 const List<double> _kHomeX = [9, 80, 151, 222, 293];
 const double _kHomeY = 684;
@@ -590,6 +652,8 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
   int? _dragIdx;
   int? _dragPointer;
   Offset _dragStart = Offset.zero;
+  /// Farthest the finger got from [_dragStart] — under 8px is a tap.
+  double _dragFar = 0;
   bool _dragLast = false;
 
   final List<Timer> _timers = [];
@@ -769,12 +833,18 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
   // Drag and tap
   // -------------------------------------------------------------------------
 
+  /// The bin's place for the current screen (see [_GardenFit]).
+  Rect _binRect = _kBinRect;
+
+  /// The bin's open rim (stage px), where bad deeds drop in.
+  Offset get _binMouth => _binRect.topLeft + const Offset(44, 4);
+
   Offset _local(Offset global) =>
       (_stageKey.currentContext!.findRenderObject()! as RenderBox)
           .globalToLocal(global);
 
   _Target? _targetAt(Offset p) {
-    if (_kBinRect.inflate(18).contains(p)) return _Target.bin;
+    if (_binRect.inflate(18).contains(p)) return _Target.bin;
     if (_kTreeRect.inflate(18).contains(p)) return _Target.tree;
     return null;
   }
@@ -786,6 +856,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
     _dragIdx = i;
     _dragPointer = e.pointer;
     _dragStart = _local(e.position);
+    _dragFar = 0;
     _dragLast = _d.cards.length - _sorted.length == 1;
     if (_dragLast) _trayCtl.stop();
     _cardCtl[i].stop();
@@ -797,6 +868,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
     final i = _dragIdx!;
     final p = _local(e.position);
     final d = p - _dragStart;
+    _dragFar = math.max(_dragFar, d.distance);
     setState(() {
       _lifts[i] = _Lift(d, d.dx * 0.03 * math.pi / 180, 1.05, 1);
       if (_dragLast) _trayY = (-d.dy / 280).clamp(0.0, 1.0) * 200;
@@ -809,11 +881,16 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
     final i = _dragIdx!;
     _dragIdx = null;
     _dragPointer = null;
-    final t = e is PointerCancelEvent ? null : _targetAt(_local(e.position));
+    final p = e is PointerCancelEvent ? null : _local(e.position);
+    final t = p == null ? null : _targetAt(p);
     _setOver(null);
     if (t != null) {
       _resolve(t, i);
       return;
+    }
+    // A tap (not a drag, even one brought back) reads the card again.
+    if (p != null && _dragFar < 8) {
+      _audio.say(['${_kCardVoice[_d.cards[i].id]!.$1}.mp3']);
     }
     _restoreTray();
     _snapBack(i);
@@ -869,7 +946,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
     } else {
       _animLift(
         i,
-        _Lift(_kBinMouth + const Offset(0, 10) - home, -0.9, 0.22, 0.4),
+        _Lift(_binMouth + const Offset(0, 10) - home, -0.9, 0.22, 0.4),
         400,
         Curves.easeIn,
         arc: 70,
@@ -1162,6 +1239,8 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
     return LayoutBuilder(
       builder: (context, box) {
         final k = math.min(box.maxWidth / _kW, box.maxHeight / _kH);
+        final garden = _GardenFit(box.biggest);
+        _binRect = garden.bin;
         final stageTop = box.maxHeight - _kH * k;
         final padTop = MediaQuery.paddingOf(context).top;
         final shift = math.max(0.0, padTop - stageTop) / k;
@@ -1170,7 +1249,7 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
           child: Stack(
             fit: StackFit.expand,
             children: [
-              RepaintBoundary(child: _background(box)),
+              RepaintBoundary(child: _background(box, garden.art)),
               if (_screen == _Screen.start ||
                   _screen == _Screen.how ||
                   (_screen == _Screen.play && _fromHow))
@@ -1265,14 +1344,18 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
           );
   }
 
-  Widget _background(BoxConstraints box) {
+  Widget _background(BoxConstraints box, Rect garden) {
     final art = _startArt();
     if (_screen == _Screen.start || _screen == _Screen.how) return art;
-    final game = Image.asset(
-      _kBg,
-      fit: BoxFit.cover,
-      alignment: Alignment.bottomCenter,
-      gaplessPlayback: true,
+    final game = Stack(
+      fit: StackFit.expand,
+      clipBehavior: Clip.hardEdge,
+      children: [
+        Positioned.fromRect(
+          rect: garden,
+          child: Image.asset(_kBg, fit: BoxFit.fill, gaplessPlayback: true),
+        ),
+      ],
     );
     if (!_fromHow) return game;
     return AnimatedBuilder(
@@ -2318,12 +2401,18 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
                 color: const Color(0xE6FFFFFF),
                 borderRadius: BorderRadius.circular(999),
               ),
-              child: Text(
-                'Bin',
-                style: _f(
-                  12,
-                  w: FontWeight.w700,
-                  color: const Color(0xFF14537F),
+              // One line, shrunk to fit: "Basurahan" is wider than the bin.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  'Bin',
+                  maxLines: 1,
+                  softWrap: false,
+                  style: _f(
+                    12,
+                    w: FontWeight.w700,
+                    color: const Color(0xFF14537F),
+                  ),
                 ),
               ),
             ),
@@ -2354,7 +2443,10 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
           )..layout();
           widest = math.max(widest, tp.width);
         }
-        final k = widest > box.maxWidth ? box.maxWidth / widest : 1.0;
+        // Some slack: fitted exactly, rounding broke the longest Tagalog
+        // word mid-way ("Pagdarasa / l", "Pagtawana / n").
+        final fit = box.maxWidth * 0.92;
+        final k = widest > fit ? fit / widest : 1.0;
         return Center(
           child: FittedBox(
             fit: BoxFit.scaleDown,
@@ -2363,7 +2455,9 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
               child: Text(
                 c.text,
                 textAlign: TextAlign.center,
-                maxLines: 3,
+                // No line cap: the longest Tagalog label ("Maayos na pagtayo
+                // para sa Pambansang Awit") needs five, and a cap cut its
+                // last words off. FittedBox shrinks the block to fit.
                 style: style.copyWith(fontSize: style.fontSize! * k),
               ),
             ),
@@ -2563,9 +2657,9 @@ class _GoodDeedTreeGameState extends State<GoodDeedTreeGame>
         ),
         if (!done)
           Positioned(
-            left: _kBinRect.left,
-            top: _kBinRect.top,
-            width: _kBinRect.width,
+            left: _binRect.left,
+            top: _binRect.top,
+            width: _binRect.width,
             child: GestureDetector(
               key: const ValueKey('gdt-bin'),
               behavior: HitTestBehavior.opaque,

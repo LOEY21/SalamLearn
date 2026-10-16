@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
 
 import '../auth/session.dart';
+import '../localization/app_translations.dart';
+import '../notifications/local_notifications.dart';
 import '../parent/analytics_providers.dart';
 import '../teacher/teacher_providers.dart';
 
@@ -27,6 +29,7 @@ import '../../data/repositories/learner_repository.dart';
 import '../../data/repositories/parent_repository.dart';
 import '../../data/repositories/progress_repository.dart';
 import '../../data/repositories/teacher_repository.dart';
+import '../../ui/core_modules/module_registry.dart' show assignmentTitle;
 
 /// FR-7.2 — pushes every Hive box to Firestore, either on a manual "Sync
 /// now" tap or automatically once Wi-Fi is detected (Diagrams Figure 2:
@@ -243,6 +246,7 @@ class SyncManager {
       final assignmentsBox = Hive.box<AssignedModule>(
         HiveBoxes.assignedModules,
       );
+      final fresh = <String, AssignedModule>{};
 
       for (final classId in enrolledClassIds) {
         // Fetch class-wide assignments from Firestore
@@ -278,11 +282,69 @@ class SyncManager {
           ...remoteClassAssignments,
           ...remotePersonalAssignments,
         ]) {
+          if (!assignmentsBox.containsKey(remote.id)) fresh[remote.id] = remote;
           await assignmentsBox.put(remote.id, remote);
         }
       }
+      await _notifyHomework(learnerId, fresh.values.toList());
     } catch (e) {
       debugPrint('SyncManager: pulling learner assignments failed: $e');
+    }
+  }
+
+  static const _newHomeworkNotificationId = 1;
+
+  /// New-homework alert plus deadline reminders (a day and an hour before
+  /// each unfinished due date). The first pull for a learner on this
+  /// device only seeds, or every existing assignment would arrive as "new".
+  // ponytail: reminders are refreshed per pull, so one for homework finished
+  // since the last pull can still fire; cancel on completion if that nags.
+  Future<void> _notifyHomework(
+    String learnerId,
+    List<AssignedModule> fresh,
+  ) async {
+    final settings = Hive.box<dynamic>(HiveBoxes.settings);
+    final seededKey = 'homeworkNotifySeeded_$learnerId';
+    if (settings.get(seededKey) == true && fresh.isNotEmpty) {
+      await LocalNotifications.show(
+        _newHomeworkNotificationId,
+        'New Teacher Homework!'.tr,
+        fresh.length == 1
+            ? 'Your teacher assigned "${assignmentTitle(fresh.single.moduleId)}". Tap to start!'
+                  .tr
+            : 'You have ${fresh.length} new homework assignments!'.tr,
+      );
+    }
+    await settings.put(seededKey, true);
+
+    await LocalNotifications.cancelScheduled(
+      LocalNotifications.deadlinePayload,
+    );
+    var id = 100;
+    for (final e in _classes.byLearnerId(learnerId)) {
+      for (final a in [
+        ..._classes.assignmentsFor(classId: e.classId),
+        ..._classes.assignmentsFor(classId: e.classId, learnerId: learnerId),
+      ]) {
+        if (!hasDueDate(a) ||
+            homeworkSubmission(_progress, learnerId, '', a).isDone) {
+          continue;
+        }
+        final title = assignmentTitle(a.moduleId);
+        final due = formatDateTime(a.dueDate);
+        for (final (before, heading) in [
+          (const Duration(days: 1), 'Homework due tomorrow'),
+          (const Duration(hours: 1), 'Homework due in 1 hour'),
+        ]) {
+          await LocalNotifications.scheduleAt(
+            id++,
+            a.dueDate.subtract(before),
+            heading.tr,
+            '"$title" is due $due.'.tr,
+            payload: LocalNotifications.deadlinePayload,
+          );
+        }
+      }
     }
   }
 
@@ -356,4 +418,33 @@ final syncManagerProvider = Provider<SyncManager>((ref) {
   manager.startWatching();
   ref.onDispose(manager.dispose);
   return manager;
+});
+
+/// "Synced just now" / "Synced 5 min ago" / "Not synced yet", for the hubs'
+/// headers. Updates the moment a sync lands (it watches the stored
+/// `lastSyncedAt`); the "N min ago" age refreshes whenever the header
+/// rebuilds.
+final syncStatusLabelProvider = StreamProvider.autoDispose<String>((ref) {
+  final box = Hive.box<dynamic>(HiveBoxes.settings);
+  String label() {
+    final raw = box.get('lastSyncedAt') as String?;
+    final last = raw == null ? null : DateTime.tryParse(raw);
+    if (last == null) return 'Not synced yet';
+    final elapsed = DateTime.now().difference(last);
+    if (elapsed.inMinutes < 1) return 'Synced just now';
+    if (elapsed.inMinutes < 60) return 'Synced ${elapsed.inMinutes} min ago';
+    if (elapsed.inHours < 24) return 'Synced ${elapsed.inHours}h ago';
+    return 'Synced ${elapsed.inDays}d ago';
+  }
+
+  final out = StreamController<String>();
+  final sub = box
+      .watch(key: 'lastSyncedAt')
+      .listen((_) => out.add(label()));
+  ref.onDispose(() {
+    sub.cancel();
+    out.close();
+  });
+  out.add(label());
+  return out.stream;
 });

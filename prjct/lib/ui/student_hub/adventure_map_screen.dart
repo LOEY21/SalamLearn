@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -76,6 +75,11 @@ Color _hexColor(String hex) {
 const _overshoot = Cubic(0.34, 1.56, 0.64, 1.0);
 
 const _debugUnlockAllModules = false;
+
+/// Shows the unlock-all test button — in every build while the app is being
+/// tested, release APKs included. For the final release to learners, build
+/// with `--dart-define=TEST_TOOLS=false` to hide it.
+const _showTestTools = bool.fromEnvironment('TEST_TOOLS', defaultValue: true);
 
 /// The painted road from each stage to the next, keyed by the stage it
 /// leaves from, in the same 1080x3060 art pixels as `mapX`/`mapY` — traced
@@ -886,7 +890,7 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
               // The map holds still while the avatar walks.
               if (_stageWalk != null)
                 const Positioned.fill(child: AbsorbPointer()),
-              if (kDebugMode)
+              if (_showTestTools)
                 Positioned(
                   left: 12,
                   bottom: 120,

@@ -259,12 +259,6 @@ const Map<String, (double, double, double, double)> _kLetterInk = {
   '10': (0.472, -0.300, 0.825, 0.625),
 };
 
-const _kPraise = [
-  ('Mumtaz!', 'ممتاز!'),
-  ('Great listening!', 'أحسنت!'),
-  ('Well done!', 'رائع!'),
-  ('Excellent!', 'ممتاز!'),
-];
 
 const _kSpeakerSvg =
     '<svg viewBox="0 0 46 42"><path d="M6 15h8L26 5v32L14 27H6z" fill="#fff"/><path d="M32 13c3.6 3 3.6 13 0 16M38 8c6 6 6 20 0 26" stroke="#fff" stroke-width="3.4" fill="none" stroke-linecap="round"/></svg>';
@@ -434,6 +428,10 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
   AudioPlayer? _voice;
   int _voiceGeneration = 0;
 
+  /// True while the question's sound (or the retry line before it) is still
+  /// playing — choices ignore taps until the learner has heard it out.
+  bool _listening = false;
+
   final List<Timer> _timers = [];
 
   /// Scene layers the painters animate: each forest's waterfall texture and
@@ -552,7 +550,7 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
   // ---- game logic ----
 
   void _sfx() {
-    if (_sound) SystemSound.play(SystemSoundType.click);
+    SystemSound.play(SystemSoundType.click);
   }
 
   Future<void> _startMusic() async {
@@ -572,22 +570,31 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
 
   void _toggleSound() {
     setState(() => _sound = !_sound);
+    // Music only — letter sounds and narration keep playing.
     if (_music != null) {
       unawaited(_setMusicVolume());
     }
-    if (!_sound) unawaited(_stopLetterAudio());
   }
 
   Future<void> _playLetterAudio(String asset) async {
     final generation = ++_voiceGeneration;
+    _listening = true;
     try {
       final player = _voice;
       if (player == null) return;
       await player.stop();
-      if (generation != _voiceGeneration || !_sound) return;
+      if (generation != _voiceGeneration) return;
+      final done = player.onPlayerStateChanged.firstWhere(
+        (s) => s == PlayerState.completed,
+      );
       await player.play(AssetSource(asset.replaceFirst('assets/', '')));
+      // A clip that never reports its end must not lock the choices.
+      await done.timeout(const Duration(seconds: 8));
     } catch (_) {
       // The game remains playable if the audio device cannot play a clip.
+    } finally {
+      // A newer sound owns the flag once it has taken over the player.
+      if (generation == _voiceGeneration) _listening = false;
     }
   }
 
@@ -599,7 +606,7 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
     final player = _voice;
     if (player == null) return;
     for (final clip in clips) {
-      if (generation != _voiceGeneration || !_sound) return;
+      if (generation != _voiceGeneration) return;
       try {
         await player.stop();
         // Stopped counts as done too, so muting or leaving never strands a
@@ -623,6 +630,7 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
 
   Future<void> _stopLetterAudio() async {
     ++_voiceGeneration;
+    _listening = false;
     try {
       await _voice?.stop();
     } catch (_) {
@@ -670,6 +678,14 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
     to();
   });
 
+  /// Home mid-game leaves straight to the map, like the start screen's.
+  Widget _homeBtn() => _gameBtn('home', () {
+    _clear();
+    _count = null;
+    unawaited(_stopLetterAudio());
+    widget.onExit?.call();
+  });
+
   List<String> _shuffled(int qi) {
     final q = _s.questions[qi];
     return [q.letter, ...q.decoys]..shuffle(_rng);
@@ -715,13 +731,12 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
   }
 
   void _playAudio() {
-    if (_sound) {
-      final asset = soundDetectiveLetterAudio[_q.name];
-      if (asset != null && _voice != null) {
-        unawaited(_playLetterAudio(asset));
-      } else {
-        _sfx();
-      }
+    final asset = soundDetectiveLetterAudio[_q.name];
+    if (asset != null && _voice != null) {
+      unawaited(_playLetterAudio(asset));
+    } else {
+      _listening = false;
+      _sfx();
     }
     _wave = true;
     _after(1000, () => _wave = false);
@@ -732,11 +747,10 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
   }
 
   void _tap(int slot) {
-    if (_locked || _screen != _Screen.play) return;
+    if (_locked || _listening || _screen != _Screen.play) return;
     unawaited(_stopLetterAudio());
     final q = _q;
     final right = _order[slot] == q.letter;
-    final praise = _kPraise[_qi % _kPraise.length];
     setState(() {
       _locked = true;
       _pose = List.filled(3, _Pose.idle)
@@ -746,9 +760,10 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
       _fb = right;
       _fbAt = _now;
       _fbEn = right
-          ? '${praise.$1} ${q.name} is ${q.letter}'
+          ? 'Great listening! ${q.name} is ${q.letter}'
           : 'Oops — listen again!';
-      _fbAr = right ? praise.$2 : 'حاول مرة أخرى';
+      // Matches the praise_great_listening.mp3 clip played below.
+      _fbAr = right ? 'أحسنت!' : 'حاول مرة أخرى';
       if (right) {
         _flying = slot;
         _flyAt = _now;
@@ -758,11 +773,9 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
         _missed.add(_qi);
       }
     });
-    if (!right) {
-      unawaited(_say(['retry_oops_listen_again.mp3']));
-    } else {
-      unawaited(_say(['praise_great_listening.mp3']));
-    }
+    final feedback = _say([
+      right ? 'praise_great_listening.mp3' : 'retry_oops_listen_again.mp3',
+    ]);
     if (right) {
       _sfx();
       HapticFeedback.mediumImpact();
@@ -802,7 +815,15 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
         _pose = List.filled(3, _Pose.idle);
         _fb = null;
         _locked = false;
-        _playAudio();
+        // "Oops, listen again" finishes before the sound replays, and the
+        // choices wait for both.
+        _listening = true;
+        final qi = _qi;
+        feedback.then((_) {
+          if (mounted && _qi == qi && _screen == _Screen.play) {
+            setState(_playAudio);
+          }
+        });
       });
     }
   }
@@ -1223,7 +1244,9 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
     _after(5000, ready);
     _say([
       'instruction_listen_sound.mp3',
-      'instruction_tap_animal.mp3',
+      _s.numbers
+          ? 'instruction_tap_animal_number.mp3'
+          : 'instruction_tap_animal.mp3',
       'instruction_win_star.mp3',
       'tip_look_dots.mp3',
     ]).then((_) {
@@ -1555,7 +1578,7 @@ class _SoundDetectiveGameState extends State<SoundDetectiveGame>
             children: [
               Row(
                 children: [
-                  _backBtn(_toHowTo),
+                  _homeBtn(),
                   const SizedBox(width: 6),
                   _boardText(
                     'board_star',

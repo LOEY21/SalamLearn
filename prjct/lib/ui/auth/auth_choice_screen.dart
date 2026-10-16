@@ -169,8 +169,9 @@ class _AuthChoiceScreenState extends ConsumerState<AuthChoiceScreen>
                   copy: copy,
                   onCreateProfile: () => _goStep(_Step.signup),
                 ),
-                _Step.activate => const _ActivateView(
-                  key: ValueKey('activate'),
+                _Step.activate => _ActivateView(
+                  key: const ValueKey('activate'),
+                  onSignIn: () => _goStep(_Step.signin),
                 ),
               },
             ),
@@ -637,7 +638,6 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
   final _parentLastNameC = TextEditingController();
   final _schoolC = TextEditingController();
   final _emailC = TextEditingController();
-  final _mobileC = TextEditingController();
   final _passwordC = TextEditingController();
   final _confirmPasswordC = TextEditingController();
 
@@ -655,7 +655,6 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
     'lastName': _parentLastNameC,
     'school': _schoolC,
     'email': _emailC,
-    'mobile': _mobileC,
     'password': _passwordC,
     'confirmPassword': _confirmPasswordC,
   };
@@ -683,7 +682,6 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
     _parentLastNameC.dispose();
     _schoolC.dispose();
     _emailC.dispose();
-    _mobileC.dispose();
     _passwordC.dispose();
     _confirmPasswordC.dispose();
     super.dispose();
@@ -983,13 +981,6 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
         ),
         const SizedBox(height: 14),
         _TextField(
-          controller: _mobileC,
-          label: 'Mobile number (optional)',
-          keyboardType: TextInputType.phone,
-          prefixText: '+63 ',
-        ),
-        const SizedBox(height: 14),
-        _TextField(
           controller: _passwordC,
           label: 'Password',
           obscureText: true,
@@ -1120,18 +1111,6 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
                 middleName,
                 lastName,
               ].where((s) => s.isNotEmpty).join(' ');
-              final mobileDigits = _mobileC.text.trim();
-              // The field only ever collects the local digits (see the
-              // `+63` prefix baked into its decoration below) — this is
-              // where that gets turned into the real E.164-ish number.
-              // Philippine mobile numbers are quoted with a leading 0
-              // locally (e.g. 0912 345 6789); strip it before prefixing so
-              // this doesn't produce "+630912..." if someone types it out
-              // of habit.
-              final mobile = mobileDigits.isEmpty
-                  ? null
-                  : '+63${mobileDigits.startsWith('0') ? mobileDigits.substring(1) : mobileDigits}';
-
               // Personal info is staged, not saved yet — the account only
               // gets created once they've entered + confirmed their own
               // PIN on the next screen (pin_setup_screen.dart).
@@ -1141,14 +1120,12 @@ class _SignUpViewState extends ConsumerState<_SignUpView> {
                   school: school,
                   email: email,
                   password: password,
-                  mobileNumber: mobile,
                 );
               } else {
                 notifier.stageParentRegistration(
                   fullName: fullName,
                   email: email,
                   password: password,
-                  mobileNumber: mobile,
                 );
                 final error = await notifier.ensureParentFirebaseUser();
                 if (!context.mounted) return;
@@ -1364,7 +1341,9 @@ class _SignInView extends ConsumerWidget {
 /// through PIN setup for a first-time device via `SessionNotifier.signIn`'s
 /// `needsLocalPinSetup` path, so nothing else needs to change for that part.
 class _ActivateView extends StatefulWidget {
-  const _ActivateView({super.key});
+  const _ActivateView({super.key, required this.onSignIn});
+
+  final VoidCallback onSignIn;
 
   @override
   State<_ActivateView> createState() => _ActivateViewState();
@@ -1553,6 +1532,20 @@ class _ActivateViewState extends State<_ActivateView> {
               child: const Text(
                 'Resend email',
                 style: TextStyle(color: AppColors.teal),
+              ),
+            ),
+          ],
+          if (_sent || _alreadyActivated) ...[
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: widget.onSignIn,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.teal,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: const Text(
+                'Go to Sign In',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -1963,7 +1956,6 @@ class _TextField extends StatefulWidget {
     this.keyboardType = TextInputType.text,
     this.errorText,
     this.onChanged,
-    this.prefixText,
     this.inputFormatters,
   });
 
@@ -1978,11 +1970,6 @@ class _TextField extends StatefulWidget {
   final String? errorText;
   final ValueChanged<String>? onChanged;
   final List<TextInputFormatter>? inputFormatters;
-
-  /// Fixed, non-editable prefix shown inside the field (e.g. `+63 ` for
-  /// the Philippines-only mobile number field) — not part of the typed
-  /// text, so the controller's value stays just the local digits.
-  final String? prefixText;
 
   @override
   State<_TextField> createState() => _TextFieldState();
@@ -2036,11 +2023,6 @@ class _TextFieldState extends State<_TextField> {
           label: Text(widget.label),
           errorText: widget.errorText?.tr,
           errorMaxLines: 2,
-          prefixText: widget.prefixText,
-          prefixStyle: const TextStyle(
-            color: AppColors.ink,
-            fontWeight: FontWeight.w600,
-          ),
           labelStyle: const TextStyle(
             color: AppColors.textMuted,
             fontWeight: FontWeight.w700,

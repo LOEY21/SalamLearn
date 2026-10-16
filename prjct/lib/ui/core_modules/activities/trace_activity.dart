@@ -425,7 +425,7 @@ class _TraceActivityState extends State<TraceActivity>
 
   void _showVerdict(bool pass) {
     _verdictPass = pass;
-    if (pass) _voice([TraceAudio.praise]);
+    _voice([pass ? TraceAudio.praise : TraceAudio.tryAgain]);
     _verdict.forward(from: 0);
   }
 
@@ -608,7 +608,9 @@ class _TraceActivityState extends State<TraceActivity>
     _ready.value = 0;
     _ready.animateTo(.9, duration: const Duration(seconds: 12));
     unawaited(
-      audio.say(TraceAudio.howTo).then((done) {
+      audio.say(_numbers ? TraceAudio.howToNumbers : TraceAudio.howTo).then((
+        done,
+      ) {
         if (done && mounted && _screen == _Screen.howTo) {
           _ready.animateTo(1, duration: const Duration(milliseconds: 300));
         }

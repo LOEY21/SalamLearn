@@ -281,15 +281,6 @@ const _kSessions = {
           Rect.fromLTRB(432, 1129, 609, 1367),
         ],
       ),
-      _Word(
-        'وَجْهٌ',
-        'Face',
-        'Mukha',
-        'audio/label_maker/vocab/wajh.mp3',
-        Offset(532, 679),
-        Offset(743, 760),
-        [Rect.fromLTRB(275, 500, 579, 725)],
-      ),
     ],
   ),
   LabelMakerSession.classroom: _Session(
@@ -613,7 +604,7 @@ class _LabelMakerGameState extends State<LabelMakerGame>
   }
 
   void _click() {
-    if (_sound) SystemSound.play(SystemSoundType.click);
+    SystemSound.play(SystemSoundType.click);
   }
 
   void _setBadgeDown(bool v) {
@@ -1138,14 +1129,11 @@ class _LabelMakerGameState extends State<LabelMakerGame>
                   _howReady = false;
                 });
                 final n = ++_howN;
-                if (!_sound) {
-                  _after(_kHowToWaitMs, () {
-                    if (_howN == n) _howDone();
-                  });
-                  return;
-                }
-                _audio.say(LabelMakerAudio.howTo).then((done) {
-                  if (done && mounted && _howN == n) {
+                // Let's Go once the steps stop being read — even if muting,
+                // a word tap or anything else cut them short. Only leaving
+                // How to Play (Back bumps [_howN]) cancels it.
+                _audio.say(LabelMakerAudio.howTo).then((_) {
+                  if (mounted && _howN == n && _screen == _Screen.howTo) {
                     setState(_howDone);
                   }
                 });

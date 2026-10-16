@@ -18,6 +18,7 @@ class AdventureMapBottomNav extends StatelessWidget {
     required this.onProfileTap,
     this.learnerAvatar,
     this.showBackpackBadge = false,
+    this.showProfileBadge = false,
     this.backpackKey,
   });
 
@@ -38,6 +39,10 @@ class AdventureMapBottomNav extends StatelessWidget {
   /// true when a badge has been earned since the learner last opened that
   /// tab (see `seenBadgeCountProvider`).
   final bool showBackpackBadge;
+
+  /// Same dot on the "Me" tab while the learner has unread notifications
+  /// (the bell on that tab opens them).
+  final bool showProfileBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -174,6 +179,7 @@ class AdventureMapBottomNav extends StatelessWidget {
                           label: 'Me',
                           active: active == HubTab.profile,
                           onTap: onProfileTap,
+                          showBadge: showProfileBadge,
                         ),
                       ),
                     ],
@@ -284,7 +290,9 @@ class _ItemState extends State<_Item> {
                         top: -2,
                         right: -4,
                         child: Container(
-                          key: const Key('backpack-nav-badge-dot'),
+                          key: Key(
+                            '${widget.label.toLowerCase()}-nav-badge-dot',
+                          ),
                           width: 9,
                           height: 9,
                           decoration: BoxDecoration(

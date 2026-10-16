@@ -22,7 +22,9 @@ class ConsentRepository {
   Future<void> pushAll(FirestoreMirror mirror) async {
     for (final key in _box.keys) {
       final record = _box.get(key);
-      if (record != null) await mirror.pushConsent(key.toString(), record);
+      if (record != null) {
+        await pushIfAllowed(() => mirror.pushConsent(key.toString(), record));
+      }
     }
   }
 }

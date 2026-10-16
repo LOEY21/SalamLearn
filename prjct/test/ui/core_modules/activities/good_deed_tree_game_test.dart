@@ -88,7 +88,7 @@ void main() {
     await wait(tester, 300);
     expect(find.textContaining('Pick a card first'), findsOneWidget);
 
-    // Touching or dragging a card no longer says its name again.
+    // Dragging a card (even back to where it was) doesn't say its name.
     final card = find.byWidgetPredicate(
       (w) =>
           w.key is ValueKey<String> &&
@@ -101,6 +101,11 @@ void main() {
     await g.up();
     await wait(tester, 300);
     expect(audio.said.where((c) => c.startsWith('card_')).length, 5);
+
+    // A plain tap reads the card's words again.
+    await tester.tap(card.first);
+    await wait(tester, 300);
+    expect(audio.said.where((c) => c.startsWith('card_')).length, 6);
     await wait(tester, 2000);
   });
 

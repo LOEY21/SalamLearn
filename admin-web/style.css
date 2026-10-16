@@ -749,6 +749,20 @@ body {
 
 .add-form label[hidden] { display: none; }
 
+.add-form label.show-password {
+  flex-direction: row;
+  align-items: center;
+  align-self: end;
+  gap: 6px;
+  padding-bottom: 8px;
+  cursor: pointer;
+}
+
+.add-form .show-password input {
+  padding: 0;
+  accent-color: var(--teal);
+}
+
 .add-form input,
 .add-form select {
   font: inherit;

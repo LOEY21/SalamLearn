@@ -794,7 +794,7 @@ void main() {
         ]) {
           expect(find.text(title), findsOneWidget);
         }
-        expect(find.textContaining('privacy@salamlearn.app'), findsOneWidget);
+        expect(find.textContaining('salamlearn89@gmail.com'), findsOneWidget);
         expect(find.text('Last updated: September 2026'), findsOneWidget);
 
         final agreeButton = find.widgetWithText(FilledButton, 'I agree');

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:flutter/services.dart';
@@ -103,6 +104,14 @@ const _ringYellow = Color(0xFFFFD75E);
 const _successBg = Color(0xFFEEF7EA);
 const _successEdge = Color(0xFF9FC9A6);
 const _successCircle = Color(0xFFDCEFD6);
+// The same band and cards on a wrong pick.
+const _missBg = Color(0xFFFBEAE8);
+const _missEdge = Color(0xFFE3A39B);
+const _missCircle = Color(0xFFF6D6D1);
+const _missRed = Color(0xFFE0574A);
+const _missRedDeep = Color(0xFFC03A2F);
+const _missRedEdge = Color(0xFF8E2219);
+const _inkRed = Color(0xFF7A1F17);
 const _scenarioFallback = Color(0xFFDCD0B4);
 const _stageBack = Color(0xFF0F1A12);
 
@@ -201,6 +210,9 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   int _index = 0;
   int _correct = 0;
   bool _answered = false;
+
+  /// The card tapped (and heard) but not yet submitted: true = hero card.
+  bool? _selected;
   bool _wrong = false;
   bool _mumtaz = false;
   bool _curtain = false;
@@ -378,6 +390,9 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
 
   void _play() {
     if (_swapping) return;
+    // "Let's go!" / "Tayo na!" (~1.3s) ends long before the first prompt is
+    // read at the curtain's midpoint ([_kCurtainMid]).
+    if (_audio != null) unawaited(_audio!.play(ClassroomHeroesAudio.letsGo));
     _wipe(1, () {
       setState(() {
         _screen = _Screen.play;
@@ -385,6 +400,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
         _index = 0;
         _correct = 0;
         _answered = false;
+        _selected = null;
         _wrong = false;
         _mumtaz = false;
         _finished = false;
@@ -400,6 +416,26 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     unawaited(_audio!.play(ClassroomHeroesAudio.title, localized: false));
   }
 
+  bool _musicOn = true;
+
+  void _toggleMusic() {
+    setState(() => _musicOn = !_musicOn);
+    if (_audio != null) unawaited(_audio!.setMusicEnabled(_musicOn));
+  }
+
+  /// Home in the game: stops the narration and leaves the lesson, like the
+  /// start screen's close button (or back to the start screen when nothing
+  /// hosts the game).
+  void _home() {
+    final exit = widget.onExit;
+    if (exit == null) return _backToStart();
+    _curtainTimer?.cancel();
+    _curtainMidTimer?.cancel();
+    _mumtazTimer?.cancel();
+    _stopNarration();
+    exit();
+  }
+
   void _backToStart() {
     _curtainTimer?.cancel();
     _curtainMidTimer?.cancel();
@@ -411,6 +447,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       _index = 0;
       _correct = 0;
       _answered = false;
+      _selected = null;
       _wrong = false;
       _mumtaz = false;
       _curtain = false;
@@ -419,6 +456,19 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       _results.clear();
     });
     _sayTitle();
+  }
+
+  /// Tapping a card only selects it and reads it aloud; Submit answers.
+  void _select(bool good) {
+    if (_answered || _swapping) return;
+    HapticFeedback.selectionClick();
+    _stopNarration();
+    setState(() => _selected = good);
+    if (_audio != null) {
+      unawaited(
+        _audio!.play(good ? _questionAudio.correct : _questionAudio.decoy),
+      );
+    }
   }
 
   void _pick(bool good) {
@@ -479,6 +529,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       setState(() {
         _index += 1;
         _answered = false;
+        _selected = null;
         _wrong = false;
         _mumtaz = false;
       });
@@ -513,7 +564,23 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     final game = SizedBox(
       width: _kW,
       height: _kH,
-      child: _screen == _Screen.start ? _buildStart() : _buildPlay(),
+      child: Stack(
+        fit: StackFit.expand,
+        clipBehavior: Clip.none,
+        children: [
+          // Full art height, centred: the 1870x841 art is wider than the
+          // 16:9 frame, so it spills past the frame's sides and fills a
+          // wide phone edge to edge — still lined up with the frame.
+          Positioned(
+            left: (_kW - _kArtW) / 2,
+            top: 0,
+            width: _kArtW,
+            height: _kH,
+            child: _backdrop(backdrop),
+          ),
+          _screen == _Screen.start ? _buildStart() : _buildPlay(),
+        ],
+      ),
     );
     return ColoredBox(
       color: _stageBack,
@@ -522,50 +589,11 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
           return Stack(
             fit: StackFit.expand,
             children: [
-              ColoredBox(
-                color: _scenarioFallback,
-                child: _screen == _Screen.start
-                    ? _fx((t) {
-                        final p = Curves.easeOutCubic.transform(_once(t, 1.8));
-                        return Opacity(
-                          opacity: math.min(1.0, p * 3),
-                          child: Transform.scale(
-                            scale: 1.07 - 0.07 * p,
-                            child: SizedBox.expand(
-                              child: Image.asset(backdrop, fit: BoxFit.cover),
-                            ),
-                          ),
-                        );
-                      })
-                    : _finished
-                    ? _fx((_) {
-                        final p = _easeOut.transform(
-                          _once(_now - _finishT0, 0.6),
-                        );
-                        // Blur by decoding tiny and upscaling smoothly - no
-                        // blur filter, so no soft/dark edge at the screen
-                        // border. Cross-fades over the sharp scene.
-                        return Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            Image.asset(backdrop, fit: BoxFit.cover),
-                            Opacity(
-                              opacity: p,
-                              child: Image.asset(
-                                backdrop,
-                                fit: BoxFit.cover,
-                                cacheWidth: 80,
-                                filterQuality: FilterQuality.high,
-                              ),
-                            ),
-                            ColoredBox(
-                              color: Color.fromRGBO(255, 214, 120, 0.18 * p),
-                            ),
-                          ],
-                        );
-                      })
-                    : Image.asset(backdrop, fit: BoxFit.cover),
+              ImageFiltered(
+                imageFilter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: _backdrop(backdrop),
               ),
+              const ColoredBox(color: Color(0x33000000)),
               Center(
                 child: AspectRatio(
                   aspectRatio: _kW / _kH,
@@ -581,6 +609,56 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
           );
         },
       ),
+    );
+  }
+
+  /// The scene art's width at the frame's height (art is 1870x841).
+  static const double _kArtW = _kH * 1870 / 841;
+
+  /// The scene art, animated as each screen needs. Drawn twice: inside the
+  /// frame, where the logo and vocab objects sit on its chalkboard, and —
+  /// blurred — behind it to fill the margins a non-phone screen leaves (a
+  /// lone full-screen copy moved the board out from under them on tablets).
+  Widget _backdrop(String backdrop) {
+    return ColoredBox(
+      color: _scenarioFallback,
+      child: _screen == _Screen.start
+          ? _fx((t) {
+              final p = Curves.easeOutCubic.transform(_once(t, 1.8));
+              return Opacity(
+                opacity: math.min(1.0, p * 3),
+                child: Transform.scale(
+                  scale: 1.07 - 0.07 * p,
+                  child: SizedBox.expand(
+                    child: Image.asset(backdrop, fit: BoxFit.cover),
+                  ),
+                ),
+              );
+            })
+          : _finished
+          ? _fx((_) {
+              final p = _easeOut.transform(_once(_now - _finishT0, 0.6));
+              // Blur by decoding tiny and upscaling smoothly - no
+              // blur filter, so no soft/dark edge at the screen
+              // border. Cross-fades over the sharp scene.
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.asset(backdrop, fit: BoxFit.cover),
+                  Opacity(
+                    opacity: p,
+                    child: Image.asset(
+                      backdrop,
+                      fit: BoxFit.cover,
+                      cacheWidth: 80,
+                      filterQuality: FilterQuality.high,
+                    ),
+                  ),
+                  ColoredBox(color: Color.fromRGBO(255, 214, 120, 0.18 * p)),
+                ],
+              );
+            })
+          : Image.asset(backdrop, fit: BoxFit.cover),
     );
   }
 
@@ -686,12 +764,19 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
             }),
           ),
         ),
+        // Same Home and Music buttons as the game screen, same spots.
         if (widget.onExit != null)
           Positioned(
-            left: 30,
-            top: 24,
-            child: _roundGold(Icons.close, 80, 38, widget.onExit!),
+            left: 26,
+            top: 20,
+            child: _roundArt(
+              Icons.home_rounded,
+              widget.onExit!,
+              label: 'Home',
+              key: const ValueKey('ch-start-home'),
+            ),
           ),
+        Positioned(right: 26, top: 20, child: _musicButton()),
       ],
     );
   }
@@ -753,7 +838,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     );
   }
 
-  /// Back arrow + the Classroom Hero Meter, one chunk per question.
+  /// Home + the Classroom Hero Meter (one chunk per question) + Music.
   Widget _buildChrome() {
     return Positioned(
       top: 20,
@@ -762,10 +847,68 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _roundGold(Icons.arrow_back, 88, 46, _backToStart),
+          _roundArt(
+            Icons.home_rounded,
+            _home,
+            label: 'Home',
+            key: const ValueKey('ch-home'),
+          ),
           Expanded(child: Center(child: _heroMeter())),
-          const SizedBox(width: 88),
+          _musicButton(),
         ],
+      ),
+    );
+  }
+
+  Widget _musicButton() => _roundArt(
+    _musicOn ? Icons.music_note_rounded : Icons.music_off_rounded,
+    _toggleMusic,
+    label: _musicOn ? 'Music on' : 'Music off',
+    key: const ValueKey('ch-music'),
+    dim: !_musicOn,
+  );
+
+  /// The painted gold round button with [icon] on it (Home, Music).
+  Widget _roundArt(
+    IconData icon,
+    VoidCallback onTap, {
+    required String label,
+    Key? key,
+    bool dim = false,
+  }) {
+    const size = 96.0;
+    return Semantics(
+      button: true,
+      label: label,
+      child: _Push(
+        key: key,
+        onTap: onTap,
+        builder: (down) => Opacity(
+          opacity: dim ? 0.6 : 1,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Image.asset(
+                  down ? '$_kA/btn_round_down.png' : '$_kA/btn_round.png',
+                  width: size,
+                  height: size,
+                  gaplessPlayback: true,
+                ),
+                Icon(
+                  icon,
+                  size: 50,
+                  color: const Color(0xFFFFFBE9),
+                  shadows: const [
+                    Shadow(color: _goldShade, offset: Offset(0, 3)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1009,14 +1152,20 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
       shake: false,
       dim: 1,
       tick: _answered,
-      onTap: () => _pick(true),
+      result: _answered ? true : null,
+      selected: !_answered && _selected == true,
+      onTap: () => _select(true),
     );
     final decoy = _choice(
       text: _q.decoyText,
       shake: _wrong,
-      dim: _answered ? 0.55 : 1,
-      tick: false,
-      onTap: () => _pick(false),
+      // The wrong pick stays bright in red; an unpicked decoy fades back.
+      dim: _answered && !_wrong ? 0.55 : 1,
+      // A cross on the wrong pick, so the result isn't colour alone.
+      tick: _wrong,
+      result: _answered ? false : null,
+      selected: !_answered && _selected == false,
+      onTap: () => _select(false),
     );
     return Positioned(
       left: 26,
@@ -1070,6 +1219,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   }
 
   Widget _promptRow() {
+    final canSubmit = _selected != null;
     return Row(
       children: [
         Expanded(
@@ -1129,6 +1279,52 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
             ),
           ),
         ),
+        const SizedBox(width: 18),
+        Opacity(
+          opacity: canSubmit ? 1 : 0.5,
+          child: _Push(
+            key: const ValueKey('ch-submit'),
+            onTap: () {
+              if (_selected case final good?) _pick(good);
+            },
+            builder: (down) => Container(
+              height: 92,
+              padding: const EdgeInsets.symmetric(horizontal: 34),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [_leafGreen, _leafGreenDeep],
+                ),
+                border: Border.all(color: _leafGreenShade, width: 5),
+                boxShadow: [
+                  BoxShadow(
+                    color: _leafGreenShade,
+                    offset: Offset(0, down && canSubmit ? 3 : 7),
+                  ),
+                ],
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_rounded, size: 42, color: Colors.white),
+                  SizedBox(width: 10),
+                  Text(
+                    'Submit',
+                    style: TextStyle(
+                      fontFamily: _kBaloo,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -1143,8 +1339,11 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             decoration: BoxDecoration(
-              color: _successBg,
-              border: Border.all(color: _successEdge, width: 4),
+              color: _wrong ? _missBg : _successBg,
+              border: Border.all(
+                color: _wrong ? _missEdge : _successEdge,
+                width: 4,
+              ),
               borderRadius: BorderRadius.circular(24),
             ),
             child: Row(
@@ -1154,14 +1353,17 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
                   height: 76,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: _successCircle,
+                    color: _wrong ? _missCircle : _successCircle,
                     shape: BoxShape.circle,
-                    border: Border.all(color: _successEdge, width: 5),
+                    border: Border.all(
+                      color: _wrong ? _missEdge : _successEdge,
+                      width: 5,
+                    ),
                   ),
                   child: Icon(
-                    _wrong ? Icons.lightbulb_outline : Icons.check,
+                    _wrong ? Icons.close_rounded : Icons.check,
                     size: 44,
-                    color: _leafGreenDeep,
+                    color: _wrong ? _missRedDeep : _leafGreenDeep,
                   ),
                 ),
                 const SizedBox(width: 24),
@@ -1170,12 +1372,12 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
                     _wrong
                         ? 'Good try! The hero choice is marked.'
                         : _q.successFeedback,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: _kBaloo,
                       fontSize: 36,
                       fontWeight: FontWeight.w800,
                       height: 1.22,
-                      color: _inkGreen,
+                      color: _wrong ? _inkRed : _inkGreen,
                     ),
                   ),
                 ),
@@ -1236,76 +1438,95 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     required bool shake,
     required double dim,
     required bool tick,
+    required bool selected,
     required VoidCallback onTap,
+    bool? result,
   }) {
+    // Once answered: the hero card turns green, the decoy red.
+    final (top, deep, edge) = switch (result) {
+      true => (_leafGreen, _leafGreenDeep, _leafGreenShade),
+      false => (_missRed, _missRedDeep, _missRedEdge),
+      null => (_choiceBlue, _choiceBlueDeep, _choiceBlueEdge),
+    };
     final card = _Push(
       onTap: onTap,
-      builder: (down) => Container(
-        constraints: const BoxConstraints(minHeight: 132),
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 22),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [_choiceBlue, _choiceBlueDeep],
-          ),
-          border: Border.all(color: _choiceBlueEdge, width: 5),
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: [
-            BoxShadow(color: _choiceBlueEdge, offset: Offset(0, down ? 4 : 8)),
-            const BoxShadow(
-              color: Color(0x29000000),
-              offset: Offset(0, 12),
-              blurRadius: 22,
+      builder: (down) => AnimatedScale(
+        scale: selected ? 1.03 : 1,
+        duration: const Duration(milliseconds: 160),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 132),
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 22),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [top, deep],
             ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 74,
-              height: 74,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: const Color(0x33FFFFFF),
-                borderRadius: BorderRadius.circular(22),
-              ),
-              child: const Icon(
-                Icons.touch_app_rounded,
-                size: 52,
-                color: Colors.white,
-              ),
+            border: Border.all(
+              color: selected ? _gold : edge,
+              width: selected ? 9 : 5,
             ),
-            const SizedBox(width: 24),
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(
-                  fontFamily: _kBaloo,
-                  fontSize: 38,
-                  fontWeight: FontWeight.w800,
-                  height: 1.2,
-                  color: Colors.white,
-                  shadows: [
-                    Shadow(color: Color(0x33000000), offset: Offset(0, 2)),
-                  ],
-                ),
-              ),
-            ),
-            if (tick) ...[
-              const SizedBox(width: 24),
-              Container(
-                width: 64,
-                height: 64,
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.check, size: 40, color: _leafGreenDeep),
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(color: edge, offset: Offset(0, down ? 4 : 8)),
+              const BoxShadow(
+                color: Color(0x29000000),
+                offset: Offset(0, 12),
+                blurRadius: 22,
               ),
             ],
-          ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 74,
+                height: 74,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0x33FFFFFF),
+                  borderRadius: BorderRadius.circular(22),
+                ),
+                child: const Icon(
+                  Icons.touch_app_rounded,
+                  size: 52,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                    fontFamily: _kBaloo,
+                    fontSize: 38,
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
+                    color: Colors.white,
+                    shadows: [
+                      Shadow(color: Color(0x33000000), offset: Offset(0, 2)),
+                    ],
+                  ),
+                ),
+              ),
+              if (tick) ...[
+                const SizedBox(width: 24),
+                Container(
+                  width: 64,
+                  height: 64,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    result == false ? Icons.close_rounded : Icons.check,
+                    size: 40,
+                    color: result == false ? _missRedDeep : _leafGreenDeep,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -1911,39 +2132,6 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   }
 
   /// The prototype's round gold button — back, home and close all share it.
-  Widget _roundGold(
-    IconData icon,
-    double size,
-    double iconSize,
-    VoidCallback onTap,
-  ) {
-    return _Push(
-      onTap: onTap,
-      builder: (down) => Container(
-        width: size,
-        height: size,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: const [_gold, _goldDeep],
-          ),
-          border: Border.all(color: _goldEdge, width: 5),
-          boxShadow: [
-            BoxShadow(color: _goldShade, offset: Offset(0, down ? 3 : 6)),
-            const BoxShadow(
-              color: Color(0x4D000000),
-              offset: Offset(0, 10),
-              blurRadius: 18,
-            ),
-          ],
-        ),
-        child: Icon(icon, size: iconSize, color: const Color(0xFFFFFBE9)),
-      ),
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------

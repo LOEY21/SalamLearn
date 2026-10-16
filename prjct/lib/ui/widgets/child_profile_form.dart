@@ -629,7 +629,7 @@ class _ChildTextFieldState extends State<ChildTextField> {
   }
 }
 
-/// Grade 1–6 dropdown. A saved grade outside that list (older profiles
+/// Kinder + Grade 1–6 dropdown. A saved grade outside that list (older profiles
 /// stored free text) is kept as an extra option rather than dropped.
 class GradePicker extends StatelessWidget {
   const GradePicker({super.key, required this.value, required this.onChanged});
@@ -639,7 +639,7 @@ class GradePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final grades = [for (var g = 1; g <= 6; g++) 'Grade $g'];
+    final grades = ['Kinder', for (var g = 1; g <= 6; g++) 'Grade $g'];
     if (value != null && value!.isNotEmpty && !grades.contains(value)) {
       grades.insert(0, value!);
     }
@@ -783,7 +783,7 @@ class _AgePickerState extends State<AgePicker> {
   }
 }
 
-/// Amir / Zara companion picker. Side by side when there's room, stacked
+/// Amir / Amira companion picker. Side by side when there's room, stacked
 /// on the narrowest screens or at very large text sizes. The selected
 /// mascot gently floats (skipped under reduced motion and in tests).
 class CompanionPicker extends StatefulWidget {
@@ -846,7 +846,7 @@ class _CompanionPickerState extends State<CompanionPicker>
       ),
       _CompanionCard(
         imagePath: 'assets/images/girl_mascot_full_body.png',
-        name: 'Zara',
+        name: 'Amira',
         detail: 'Girl companion',
         selected: widget.avatar == 'girl_mascot',
         color: AppColors.gold,
