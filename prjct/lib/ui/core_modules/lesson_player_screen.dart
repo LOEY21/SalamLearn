@@ -8,6 +8,7 @@ import '../../data/repositories/progress_repository.dart';
 import '../../data/student_badges.dart';
 import '../../logic/auth/session.dart';
 import '../../logic/learner/learner_xp_provider.dart';
+import '../../logic/learner/noor_energy_provider.dart';
 import '../../logic/recent_module_provider.dart';
 import '../theme/app_colors.dart';
 import 'activities/fiqh_drag_activity.dart';
@@ -211,6 +212,9 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         if (_skipCompleteScreen) widget.onClose();
         return;
       }
+      // A lantern is spent only for a session actually finished, never for
+      // just opening a game.
+      ref.read(noorEnergyProvider.notifier).consume();
       ref.read(learnerXpProvider.notifier).addXp(next);
       ref.read(learnerStreakProvider.notifier).increment();
       ref
@@ -277,9 +281,21 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       strokeAccuracyPct: accuracyPct,
       sequencingErrors: errors,
       timeOnTaskSeconds: elapsed,
+      // The curriculum lesson this game came from, so reports can name its
+      // stage and session. Classroom records never count as lesson progress.
+      lessonId: _sourceLessonId(_activity.id),
       assignedByTeacher: true,
       isClassroomMode: true,
     );
+  }
+
+  static String? _sourceLessonId(String activityId) {
+    for (final destination in curriculum) {
+      for (final lesson in destination.lessons) {
+        if (lesson.activities.any((a) => a.id == activityId)) return lesson.id;
+      }
+    }
+    return null;
   }
 
   /// Mid-lesson quit — nothing is saved until the last activity completes

@@ -74,13 +74,6 @@ Color _hexColor(String hex) {
 /// pills, mascot, speech bubble): `cubic-bezier(0.34, 1.56, 0.64, 1)`.
 const _overshoot = Cubic(0.34, 1.56, 0.64, 1.0);
 
-const _debugUnlockAllModules = false;
-
-/// Shows the unlock-all test button — in every build while the app is being
-/// tested, release APKs included. For the final release to learners, build
-/// with `--dart-define=TEST_TOOLS=false` to hide it.
-const _showTestTools = bool.fromEnvironment('TEST_TOOLS', defaultValue: true);
-
 /// The painted road from each stage to the next, keyed by the stage it
 /// leaves from, in the same 1080x3060 art pixels as `mapX`/`mapY` — traced
 /// off the map art so the avatar walks on the road, not across scenery.
@@ -532,7 +525,7 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
         MascotTutorialOverlay.show(
           context,
           learnerName: learner.name,
-          isGirl: learner.avatar == 'girl_mascot',
+          isGirl: learner.avatar.startsWith('girl_mascot'),
           onFinished: () {
             _tutorialActive = false;
             ref.read(tutorialSeenProvider.notifier).markSeen();
@@ -554,7 +547,6 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
   /// Stage lock per the shared [isStageUnlocked] rule (previous stage
   /// complete, or teacher-assigned), unless a debug/teacher override is on.
   bool _isModuleAssigned(String moduleId) {
-    if (_debugUnlockAllModules) return true;
     if (ref.watch(progressionOverrideProvider)) return true;
     final module = coreModules.firstWhere((m) => m.id == moduleId);
     final destination = curriculum.firstWhere(
@@ -700,14 +692,11 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
       noorEnergy: ref.read(noorEnergyProvider).current,
       onStartLesson: (lesson, isNewLevel) {
         // Out of Noor Energy blocks every lesson, finished ones included.
-        // While lanterns remain, replaying a finished lesson is free and a
-        // new one costs one Noor.
+        // The lantern itself is spent by the lesson player, once a new
+        // lesson is actually finished; replays stay free.
         if (!ref.read(noorEnergyProvider).hasEnergy) {
           showNoorEnergyRestingSheet(context);
           return;
-        }
-        if (!_completedLessons.contains(lesson.id)) {
-          ref.read(noorEnergyProvider.notifier).consume();
         }
         ref.read(recentModuleProvider.notifier).interactWith(module.id);
         _covers++;
@@ -890,17 +879,6 @@ class _AdventureMapScreenState extends ConsumerState<AdventureMapScreen>
               // The map holds still while the avatar walks.
               if (_stageWalk != null)
                 const Positioned.fill(child: AbsorbPointer()),
-              if (_showTestTools)
-                Positioned(
-                  left: 12,
-                  bottom: 120,
-                  child: _UnlockAllTestButton(
-                    on: ref.watch(progressionOverrideProvider),
-                    onChanged: ref
-                        .read(progressionOverrideProvider.notifier)
-                        .toggle,
-                  ),
-                ),
               IgnorePointer(
                 ignoring: chromeFade < 0.5,
                 child: Opacity(
@@ -2609,42 +2587,6 @@ class _UnlockOverlay extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Debug-only testing switch: opens every stage, level and game on this
-/// device by flipping the same in-memory progression override teachers use.
-/// Saves nothing (no Hive, no Firestore) and resets when the app closes.
-class _UnlockAllTestButton extends StatelessWidget {
-  const _UnlockAllTestButton({required this.on, required this.onChanged});
-
-  final bool on;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return FloatingActionButton.small(
-      heroTag: 'unlock-all-test',
-      tooltip: on ? 'Testing: lock again' : 'Testing: unlock everything',
-      backgroundColor: on ? AppColors.gold : Colors.white,
-      foregroundColor: on ? Colors.white : AppColors.tealDark,
-      onPressed: () {
-        onChanged(!on);
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              content: Text(
-                on
-                    ? 'Testing: normal locks back on'
-                    : 'Testing: every stage, level and game unlocked',
-              ),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-      },
-      child: Icon(on ? Icons.lock_open_rounded : Icons.lock_rounded),
     );
   }
 }

@@ -61,6 +61,11 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
   late final _lastC = TextEditingController(text: _nameParts.last);
   late final _schoolC = TextEditingController(text: _profile?.school ?? '');
   late final _emailC = TextEditingController(text: _profile?.email ?? '');
+  late final TextEditingController? _employeeIdC = () {
+    if (!_isTeacher) return null;
+    final id = ref.read(sessionProvider.notifier).activeTeacherEmployeeId;
+    return id == null ? null : TextEditingController(text: id);
+  }();
 
   String? _firstError;
   String? _lastError;
@@ -92,6 +97,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
     _lastC.dispose();
     _schoolC.dispose();
     _emailC.dispose();
+    _employeeIdC?.dispose();
     super.dispose();
   }
 
@@ -213,6 +219,14 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (_employeeIdC != null) ...[
+                    const ChildFieldLabel(
+                      'Employee ID',
+                      helper: 'Given by your school administrator. Use it to sign in.',
+                    ),
+                    ChildTextField(controller: _employeeIdC, readOnly: true),
+                    const SizedBox(height: 16),
+                  ],
                   const ChildFieldLabel(
                     'Email address',
                     helper: 'Used to sign in, so it can\'t be changed here.',

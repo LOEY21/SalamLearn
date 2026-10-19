@@ -44,11 +44,13 @@ class RemoteTeacherRef {
     this.mobileNumber,
     this.firebaseUid,
     this.verificationStatus,
+    this.employeeId,
   });
 
   final String id;
   final String fullName;
   final String? verificationStatus;
+  final String? employeeId;
   final String? school;
   final String? mobileNumber;
   final String? firebaseUid;
@@ -160,7 +162,8 @@ class FirestoreMirror {
       // null if this account registered offline (see the registration
       // comment in ParentRepository.register).
       'firebaseUid': account.firebaseUid,
-    });
+      // Merge so the admin-assigned `parentCode` survives every push.
+    }, SetOptions(merge: true));
   }
 
   /// `verificationStatus` is admin-owned (firestore.rules): the first push
@@ -539,6 +542,7 @@ class FirestoreMirror {
         mobileNumber: data['mobileNumber'] as String?,
         firebaseUid: data['firebaseUid'] as String?,
         verificationStatus: data['verificationStatus'] as String?,
+        employeeId: data['employeeId'] as String?,
       );
     } catch (_) {
       return null; // fail-closed — caller falls back to local-only sign-in
@@ -795,6 +799,18 @@ class FirestoreMirror {
     return _db.collection(collection).doc(docId).delete();
   }
 
+  /// Deletes a learner's progress and badges. Must run before the learner
+  /// doc itself is deleted — the delete rule checks the parent via it.
+  Future<void> deleteProgressForLearner(String learnerId) async {
+    for (final collection in [HiveBoxes.progress, HiveBoxes.badges]) {
+      final snap = await _db
+          .collection(collection)
+          .where('learnerId', isEqualTo: learnerId)
+          .get();
+      await Future.wait(snap.docs.map((d) => d.reference.delete()));
+    }
+  }
+
   /// Real-time listener for account existence. Emits `true` as long as the
   /// document exists in Firestore; emits `false` when the document is
   /// deleted — used by [accountStreamProvider] so a dashboard user learns
@@ -818,6 +834,17 @@ class FirestoreMirror {
     return _db.collection('activatedTeachers').doc(email).set({
       'activatedAt': DateTime.now().toIso8601String(),
     });
+  }
+
+  /// Teacher email behind an admin-generated Employee ID (`teacherIds`,
+  /// written by admin-web's `reserveEmployeeId`), readable before sign-in.
+  /// Null = no such ID; throws when the server can't be reached.
+  Future<String?> emailForEmployeeId(String employeeId) async {
+    final doc = await _db
+        .collection('teacherIds')
+        .doc(employeeId)
+        .get(const GetOptions(source: Source.server));
+    return doc.data()?['email'] as String?;
   }
 
   /// Fail-open (false) so an unreachable check never blocks activation.

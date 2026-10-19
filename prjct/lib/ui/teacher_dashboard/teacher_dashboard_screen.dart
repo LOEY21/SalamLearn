@@ -305,6 +305,13 @@ class _TeacherShellState extends ConsumerState<_TeacherShell>
   ];
 
   @override
+  void initState() {
+    super.initState();
+    // Picks up an Employee ID the admin assigned after this teacher signed in.
+    ref.read(sessionProvider.notifier).refreshTeacherStatus();
+  }
+
+  @override
   void dispose() {
     _c.dispose();
     super.dispose();
@@ -326,6 +333,7 @@ class _TeacherShellState extends ConsumerState<_TeacherShell>
     final studentCount = ref.watch(teacherRosterProvider).length;
     final pending = _watchTeacherPending(ref);
     final locked = pending && _currentTab != 2;
+    final employeeId = ref.read(sessionProvider.notifier).activeTeacherEmployeeId;
 
     final panel = switch (_currentTab) {
       0 => HubTabBody(
@@ -414,6 +422,7 @@ class _TeacherShellState extends ConsumerState<_TeacherShell>
         },
         // Updates the moment a sync finishes (see syncStatusLabelProvider).
         statusLabel:
+            '${employeeId == null ? '' : 'ID $employeeId · '}'
             '$studentCount students · '
             '${ref.watch(syncStatusLabelProvider).value ?? 'Not synced yet'}',
         tabs: _tabs,

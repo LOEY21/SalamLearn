@@ -2,34 +2,43 @@ import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
 import '../theme/app_colors.dart';
 
-/// A reusable avatar widget that renders the high-quality mascot profile pictures
-/// or falls back to emoji characters for backwards compatibility.
-///
-/// For mascot avatars, it shows the dedicated round profile-pic assets
-/// (boy_avatar_profile.jpg / girl_avatar_profile.jpg) which are designed
-/// specifically for use as circular profile pictures.
+/// The selectable mascot looks, as stored avatar ids. Each set's first id is
+/// the original `boy_mascot` / `girl_mascot`, so existing learners keep a
+/// valid pick.
+const boyMascots = [
+  'boy_mascot',
+  'boy_mascot_2',
+  'boy_mascot_3',
+  'boy_mascot_4',
+];
+const girlMascots = [
+  'girl_mascot',
+  'girl_mascot_2',
+  'girl_mascot_3',
+  'girl_mascot_4',
+];
+
+/// The full-body art for a mascot avatar id ([face]: its round head-and-
+/// shoulders crop), or null for a legacy emoji avatar.
+String? mascotAsset(String avatar, {bool face = false}) {
+  final m = RegExp(r'^(boy|girl)_mascot(?:_([234]))?$').firstMatch(avatar);
+  if (m == null) return null;
+  return 'assets/images/mascot_${m[1]}_${m[2] ?? 1}'
+      '${face ? '_face.jpg' : '.png'}';
+}
+
+/// A reusable avatar widget that renders the mascot's round face crop or
+/// falls back to emoji characters for backwards compatibility.
 class LearnerAvatar extends StatelessWidget {
-  const LearnerAvatar({
-    super.key,
-    required this.avatar,
-    this.size = 44,
-  });
+  const LearnerAvatar({super.key, required this.avatar, this.size = 44});
 
   final String avatar;
   final double size;
 
   @override
   Widget build(BuildContext context) {
-    final isBoyMascot = avatar == 'boy_mascot';
-    final isGirlMascot = avatar == 'girl_mascot';
-
-    if (isBoyMascot || isGirlMascot) {
-      // Use the dedicated round profile-picture assets so the face always
-      // fills the circle perfectly — no cropping math needed.
-      final assetPath = isBoyMascot
-          ? 'assets/images/boy_avatar_profile.jpg'
-          : 'assets/images/girl_avatar_profile.jpg';
-
+    final assetPath = mascotAsset(avatar, face: true);
+    if (assetPath != null) {
       return Container(
         width: size,
         height: size,
@@ -65,10 +74,7 @@ class LearnerAvatar extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       child: Center(
-        child: Text(
-          avatar,
-          style: TextStyle(fontSize: size * 0.48),
-        ),
+        child: Text(avatar, style: TextStyle(fontSize: size * 0.48)),
       ),
     );
   }

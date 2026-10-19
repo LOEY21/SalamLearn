@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:flutter/services.dart';
@@ -10,6 +9,7 @@ import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../widgets/arc_text_painter.dart';
 import 'classroom_heroes_audio.dart';
 import '../../widgets/app_orientation.dart';
+import '../game_stage.dart';
 import '../game_ui_audio.dart';
 
 /// Classroom Heroes — pick the hero choice in three classroom scenarios.
@@ -558,9 +558,9 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
 
   @override
   Widget build(BuildContext context) {
-    final backdrop = _screen == _Screen.start
-        ? '$_kA/start_screen.png'
-        : _q.scenarioImage;
+    final start = _screen == _Screen.start;
+    final backdrop = start ? '$_kA/start_screen.png' : _q.scenarioImage;
+    const art = Rect.fromLTWH((_kW - _kArtW) / 2, 0, _kArtW, _kH);
     final game = SizedBox(
       width: _kW,
       height: _kH,
@@ -570,15 +570,10 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
         children: [
           // Full art height, centred: the 1870x841 art is wider than the
           // 16:9 frame, so it spills past the frame's sides and fills a
-          // wide phone edge to edge — still lined up with the frame.
-          Positioned(
-            left: (_kW - _kArtW) / 2,
-            top: 0,
-            width: _kArtW,
-            height: _kH,
-            child: _backdrop(backdrop),
-          ),
-          _screen == _Screen.start ? _buildStart() : _buildPlay(),
+          // wide phone edge to edge — still lined up with the frame, where
+          // the logo sits on its chalkboard.
+          if (start) Positioned.fromRect(rect: art, child: _backdrop(backdrop)),
+          start ? _buildStart() : _buildPlay(),
         ],
       ),
     );
@@ -589,11 +584,19 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
           return Stack(
             fit: StackFit.expand,
             children: [
-              ImageFiltered(
-                imageFilter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                child: _backdrop(backdrop),
-              ),
-              const ColoredBox(color: Color(0x33000000)),
+              // The start art must stay under the logo, so it stays in the
+              // frame and the bars a tablet leaves continue its edges. A
+              // question's scene has nothing on it to line up with, so it
+              // is drawn at screen size: on a wide phone exactly where the
+              // frame would put it, on a squarer tablet zoomed to fill.
+              if (start)
+                StageBands(
+                  asset: backdrop,
+                  design: const Size(_kW, _kH),
+                  art: art,
+                )
+              else
+                _backdrop(backdrop),
               Center(
                 child: AspectRatio(
                   aspectRatio: _kW / _kH,
@@ -615,10 +618,7 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
   /// The scene art's width at the frame's height (art is 1870x841).
   static const double _kArtW = _kH * 1870 / 841;
 
-  /// The scene art, animated as each screen needs. Drawn twice: inside the
-  /// frame, where the logo and vocab objects sit on its chalkboard, and —
-  /// blurred — behind it to fill the margins a non-phone screen leaves (a
-  /// lone full-screen copy moved the board out from under them on tablets).
+  /// The scene art, animated as each screen needs.
   Widget _backdrop(String backdrop) {
     return ColoredBox(
       color: _scenarioFallback,
@@ -805,36 +805,11 @@ class _ClassroomHeroesGameState extends State<ClassroomHeroesGame>
     return Stack(
       children: [
         if (!_finished) _buildChrome(),
-        if (!_finished && (_q.objectImage ?? _q.objectEmoji) != null)
-          _buildObject(),
         if (_narrating && !_finished) _buildNarrationBar(),
         if (!_narrating && !_finished) _buildPanel(),
         if (_mumtaz) _buildMumtaz(),
         if (_finished) _buildFinish(),
       ],
-    );
-  }
-
-  /// A vocabulary question's object, on the title classroom's chalkboard.
-  Widget _buildObject() {
-    final emoji = Text(
-      _q.objectEmoji ?? '',
-      style: const TextStyle(fontSize: 210, height: 1),
-    );
-    return Positioned(
-      top: 130,
-      left: 0,
-      right: 0,
-      height: 320,
-      child: Center(
-        child: _q.objectImage == null
-            ? emoji
-            : Image.asset(
-                _q.objectImage!,
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => emoji,
-              ),
-      ),
     );
   }
 

@@ -159,7 +159,9 @@ final parentGameResultsProvider = Provider<Map<String, ProgressRecord>>((ref) {
   final results = <String, ProgressRecord>{};
   // byLearnerId is newest-first, so the first hit per lesson wins.
   for (final r in ProgressRepository().byLearnerId(learnerId)) {
-    if (r.lessonId != null) results.putIfAbsent(r.lessonId!, () => r);
+    if (r.lessonId != null && !r.isClassroomMode) {
+      results.putIfAbsent(r.lessonId!, () => r);
+    }
   }
   return results;
 });

@@ -494,7 +494,7 @@ class _NoorRestingNote extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Noor Energy is resting — come back tomorrow to play again!',
+              'Noor Energy is resting — come back soon to play again!',
               style: hubText(13, HubWorld.onScene, weight: 700, height: 1.25),
             ),
           ),
@@ -563,7 +563,8 @@ class _LevelSection extends StatelessWidget {
                   unlockAll ||
                   (unlocked &&
                       (idx == 0 || completedLessons.contains(group[idx - 1].id)));
-              const energyBlocked = false;
+              // Out of Noor Energy rests every open game, finished ones too.
+              final energyBlocked = lessonUnlocked && noEnergy;
 
               return _LessonCard(
                 lesson: lesson,

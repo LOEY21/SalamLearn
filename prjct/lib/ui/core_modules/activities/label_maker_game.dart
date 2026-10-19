@@ -11,6 +11,7 @@ import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../widgets/arc_text_painter.dart';
 import 'bend_sprite.dart';
 import '../../widgets/app_orientation.dart';
+import '../game_stage.dart';
 import '../game_ui_audio.dart';
 
 const _kA = 'assets/images/label_maker';
@@ -796,6 +797,10 @@ class _LabelMakerGameState extends State<LabelMakerGame>
         ? _s.room
         : _s.bg;
     final size = _size;
+    // The round's room carries the drop targets edge to edge, so it stays
+    // whole and the bars around it continue its edges; every other screen's
+    // art has nothing to tap and zooms to fill the screen.
+    final round = _screen == _Screen.play || _screen == _Screen.congrats;
     return LayoutBuilder(
       builder: (context, box) {
         final scale = math.min(
@@ -807,13 +812,32 @@ class _LabelMakerGameState extends State<LabelMakerGame>
           children: [
             AnimatedSwitcher(
               duration: _kSwap,
-              child: Image.asset(
-                '$_kA/$bg.png',
-                key: ValueKey(bg),
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-              ),
+              child: round
+                  ? StageBands(
+                      key: ValueKey('bands$bg'),
+                      asset: '$_kA/$bg.png',
+                      design: size,
+                    )
+                  : _screen == _Screen.start
+                  ? StageCover(
+                      key: const ValueKey('start'),
+                      design: size,
+                      child: AnimatedBuilder(
+                        animation: _light,
+                        builder: (context, _) => _buildStartScene(
+                          MediaQuery.of(context).disableAnimations
+                              ? .2
+                              : _light.value,
+                        ),
+                      ),
+                    )
+                  : Image.asset(
+                      '$_kA/$bg.png',
+                      key: ValueKey(bg),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                    ),
             ),
             // Keyed by orientation: a landscape screen never cross-fades
             // inside the portrait stage (or the other way round).
@@ -1044,6 +1068,21 @@ class _LabelMakerGameState extends State<LabelMakerGame>
     ),
   ];
 
+  /// The start room with its plants painted out, the plants drawn back on
+  /// top as swaying sprites, and the two mascots — zoomed together to fill
+  /// the screen so everything stays on its table and rug.
+  Widget _buildStartScene(double light) => Stack(
+    children: [
+      Positioned.fill(child: _img('bg_plate')),
+      for (final pl in _kPlants.where((p) => !p.front)) _plant(pl, light),
+      ..._groundShadow(290, 255, 358, 480, 'girl'),
+      ..._groundShadow(1250, 240, 297, 500, 'boy'),
+      _at(290, 255, 358, 480, _img('girl')),
+      _at(1250, 240, 297, 500, _img('boy')),
+      for (final pl in _kPlants.where((p) => p.front)) _plant(pl, light),
+    ],
+  );
+
   Widget _buildStart(double t, double light) {
     Widget bob(double phase, double amp, Widget c) => Transform.translate(
       offset: Offset(0, amp * math.sin(t + phase)),
@@ -1053,10 +1092,6 @@ class _LabelMakerGameState extends State<LabelMakerGame>
 
     return Stack(
       children: [
-        // The room with its plants painted out; the plants are drawn back
-        // on top as sprites that sway. Inside the stage so they line up.
-        Positioned.fill(child: _img('bg_plate')),
-        for (final pl in _kPlants.where((p) => !p.front)) _plant(pl, light),
         _at(
           118,
           128,
@@ -1078,11 +1113,6 @@ class _LabelMakerGameState extends State<LabelMakerGame>
           114,
           bob(4, 6, _tag('label_book', 'book', 134, 69, 72, 29)),
         ),
-        ..._groundShadow(290, 255, 358, 480, 'girl'),
-        ..._groundShadow(1250, 240, 297, 500, 'boy'),
-        _at(290, 255, 358, 480, _img('girl')),
-        _at(1250, 240, 297, 500, _img('boy')),
-        for (final pl in _kPlants.where((p) => p.front)) _plant(pl, light),
         _at(
           615,
           88,
@@ -1219,9 +1249,6 @@ class _LabelMakerGameState extends State<LabelMakerGame>
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Positioned.fill(
-          child: Image.asset('$_kA/${_s.bg}.png', fit: BoxFit.fill),
-        ),
         _dim(const Color(0xB30E1A40)),
         _at(
           655,
@@ -2086,9 +2113,6 @@ class _LabelMakerGameState extends State<LabelMakerGame>
         return Stack(
           clipBehavior: Clip.none,
           children: [
-            Positioned.fill(
-              child: Image.asset('$_kA/${_s.bg}.png', fit: BoxFit.fill),
-            ),
             // Vignette: the room stays readable at the edges, darkest behind
             // the wall so the labels carry the screen. The edge tone covers
             // the whole screen; the centre darkens on top of it.

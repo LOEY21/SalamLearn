@@ -2,7 +2,6 @@ import 'package:flutter/material.dart' hide Text, TextSpan;
 import 'package:salamlearn/logic/localization/app_translations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lottie/lottie.dart';
 
 import '../../data/curriculum_data.dart';
 import '../../data/local/hive_boxes.dart';
@@ -26,6 +25,7 @@ import '../widgets/streak_tracker.dart';
 import 'hub_world.dart';
 import 'noor_energy_resting_sheet.dart';
 import 'notifications_sheet.dart';
+import '../widgets/child_profile_form.dart' show CompanionPicker;
 import '../widgets/learner_avatar.dart';
 
 import '../../data/student_badges.dart';
@@ -131,6 +131,14 @@ class ProfileScreen extends ConsumerWidget {
                   const _SectionTitle('Settings'),
                   const SizedBox(height: 10),
                   _SettingRow(
+                    icon: Icons.face_retouching_natural_rounded,
+                    label: 'My Mascot',
+                    sublabel: 'Change your mascot',
+                    color: AppColors.gold,
+                    onTap: () => _showMascotSheet(context),
+                  ),
+                  const SizedBox(height: 10),
+                  _SettingRow(
                     icon: Icons.switch_account_rounded,
                     label: 'Switch Account',
                     sublabel: 'Requires parent PIN',
@@ -148,6 +156,51 @@ class ProfileScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showMascotSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: HubWorld.parchment,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => Consumer(
+        builder: (context, ref, _) {
+          final learner = ref.watch(sessionProvider).learner;
+          if (learner == null) return const SizedBox.shrink();
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Choose your mascot',
+                    textAlign: TextAlign.center,
+                    style: hubText(22, HubWorld.goldDeep),
+                  ),
+                  const SizedBox(height: 16),
+                  CompanionPicker(
+                    avatar: learner.avatar,
+                    looksOnly: true,
+                    onChanged: (avatar) => ref
+                        .read(sessionProvider.notifier)
+                        .updateLearnerProfile(
+                          name: learner.name,
+                          age: learner.age,
+                          avatar: avatar,
+                          gradeLevel: learner.gradeLevel,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -414,48 +467,28 @@ class _MascotNote extends StatelessWidget {
       1 => 'You learned today. Come back tomorrow to grow your streak!',
       _ => 'You have learned $streakDays days in a row. Keep it going!',
     };
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        SizedBox(
-          width: 72,
-          height: 72,
-          child: Lottie.asset(
-            'assets/lottie/owl_idle.json',
-            animate: hubMotionOn(context),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.mintBorder, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Salam, $name! 👋',
+            style: hubText(17, AppColors.tealDark, height: 1.2),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-                bottomRight: Radius.circular(20),
-                bottomLeft: Radius.circular(6),
-              ),
-              border: Border.all(color: AppColors.mintBorder, width: 2),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Salam, $name! 👋',
-                  style: hubText(17, AppColors.tealDark, height: 1.2),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  message,
-                  style: hubText(14.5, AppColors.ink, weight: 600, height: 1.3),
-                ),
-              ],
-            ),
+          const SizedBox(height: 2),
+          Text(
+            message,
+            style: hubText(14.5, AppColors.ink, weight: 600, height: 1.3),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -936,17 +969,13 @@ class AssignedHomeworkScreen extends ConsumerWidget {
                                   onTap: () {
                                     // Same Noor Energy rule as the map: none
                                     // left blocks every game, finished ones
-                                    // too; otherwise only a new one costs 1.
+                                    // too; the lesson player spends one when
+                                    // a new one is finished.
                                     if (!ref
                                         .read(noorEnergyProvider)
                                         .hasEnergy) {
                                       showNoorEnergyRestingSheet(context);
                                       return;
-                                    }
-                                    if (!done) {
-                                      ref
-                                          .read(noorEnergyProvider.notifier)
-                                          .consume();
                                     }
                                     ref
                                         .read(recentModuleProvider.notifier)

@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../data/remote/firebase_auth_gateway.dart';
 import '../../data/remote/firestore_mirror.dart';
+import '../../logic/auth/employee_id.dart';
 import '../../logic/auth/session.dart';
 import '../../logic/parent/children_providers.dart';
 import '../theme/app_colors.dart';
@@ -1353,6 +1354,7 @@ class _ActivateViewState extends State<_ActivateView> {
   final _emailC = TextEditingController();
   bool _sending = false;
   bool _sent = false;
+  String? _sentTo;
   String? _error;
   bool _alreadyActivated = false;
 
@@ -1363,10 +1365,11 @@ class _ActivateViewState extends State<_ActivateView> {
   }
 
   Future<void> _send() async {
-    final email = _emailC.text.trim();
-    if (email.isEmpty || !email.contains('@')) {
+    final input = _emailC.text.trim();
+    if (input.isEmpty) {
       setState(
-        () => _error = 'Enter the email your school administrator used.',
+        () => _error =
+            'Enter your Employee ID or the email your school administrator used.',
       );
       return;
     }
@@ -1376,6 +1379,18 @@ class _ActivateViewState extends State<_ActivateView> {
       _alreadyActivated = false;
     });
     try {
+      final email = await resolveTeacherLoginEmail(input);
+      if (email == null) {
+        if (mounted) {
+          setState(() {
+            _sending = false;
+            _error =
+                "We couldn't find that Employee ID — check with your administrator.";
+          });
+        }
+        return;
+      }
+      _sentTo = email;
       final mirror = FirestoreMirror();
       if (await mirror.isTeacherActivated(
             FirebaseAuthGateway.teacherAuthEmail(email),
@@ -1444,7 +1459,7 @@ class _ActivateViewState extends State<_ActivateView> {
           Text(
             _sent
                 ? 'Check your inbox — tap the link to set your own password, then come back and sign in below.'
-                : 'Enter the email your school administrator registered for you.',
+                : 'Enter the Employee ID or email your school administrator gave you.',
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 12.5,
@@ -1452,16 +1467,29 @@ class _ActivateViewState extends State<_ActivateView> {
               height: 1.4,
             ),
           ),
+          if (_sent && _sentTo != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              '${'Sent to'.tr} ${maskEmail(_sentTo!)}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.ink,
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
           if (!_sent) ...[
             TextField(
               controller: _emailC,
-              keyboardType: TextInputType.emailAddress,
+              keyboardType: TextInputType.text,
+              autocorrect: false,
               onChanged: (_) {
                 if (_alreadyActivated) setState(() => _alreadyActivated = false);
               },
               decoration: InputDecoration(
-                labelText: 'Email'.tr,
+                labelText: 'Employee ID or email'.tr,
                 border: const OutlineInputBorder(),
                 errorText: _error?.tr,
                 errorMaxLines: 3,
@@ -1621,10 +1649,15 @@ class _GrownupSignInFormState extends ConsumerState<_GrownupSignInForm> {
   Future<void> _submit() async {
     if (_isLocked || _submitting) return;
 
-    final email = _emailC.text.trim();
+    final teacher = widget.role == UserRole.asatidz;
+    var email = _emailC.text.trim();
     final password = _passwordC.text;
     if (email.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Please enter your email and password');
+      setState(
+        () => _error = teacher
+            ? 'Please enter your Employee ID or email and password'
+            : 'Please enter your email and password',
+      );
       return;
     }
 
@@ -1632,6 +1665,32 @@ class _GrownupSignInFormState extends ConsumerState<_GrownupSignInForm> {
       _submitting = true;
       _error = null;
     });
+    if (teacher && !email.contains('@')) {
+      String? resolved;
+      try {
+        resolved = await resolveTeacherLoginEmail(email);
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _submitting = false;
+          _error =
+              'No internet connection. Connect to Wi-Fi or mobile '
+              'data and try again.';
+        });
+        return;
+      }
+      if (!mounted) return;
+      if (resolved == null) {
+        setState(() {
+          _submitting = false;
+          _error =
+              "We couldn't find that Employee ID. Check it with your "
+              'school administrator.';
+        });
+        return;
+      }
+      email = resolved;
+    }
     final result = await runWithAuthLoadingOverlay(
       AuthLoadingAction.signIn,
       () => ref
@@ -1664,6 +1723,13 @@ class _GrownupSignInFormState extends ConsumerState<_GrownupSignInForm> {
               'This account has been removed by an administrator and '
               'can no longer be used. Please contact your school '
               'administrator if you believe this was a mistake.';
+        });
+      case SignInResult.notActivated:
+        setState(() {
+          _submitting = false;
+          _error =
+              "This account hasn't been activated yet. Go back and tap "
+              '"New Account" to activate it first.';
         });
       case SignInResult.noProfileForRole:
         setState(() {
@@ -1711,8 +1777,12 @@ class _GrownupSignInFormState extends ConsumerState<_GrownupSignInForm> {
       children: [
         _TextField(
           controller: _emailC,
-          label: 'Email',
-          keyboardType: TextInputType.emailAddress,
+          label: widget.role == UserRole.asatidz
+              ? 'Employee ID or email'
+              : 'Email',
+          keyboardType: widget.role == UserRole.asatidz
+              ? TextInputType.text
+              : TextInputType.emailAddress,
         ),
         const SizedBox(height: 14),
         _TextField(
@@ -1829,9 +1899,13 @@ class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
   }
 
   Future<void> _send() async {
-    final email = _emailC.text.trim();
-    if (email.isEmpty || !email.contains('@')) {
-      setState(() => _error = 'Enter a valid email address.');
+    final input = _emailC.text.trim();
+    if (input.isEmpty || (!widget.teacher && !input.contains('@'))) {
+      setState(
+        () => _error = widget.teacher
+            ? 'Enter your Employee ID or email.'
+            : 'Enter a valid email address.',
+      );
       return;
     }
     setState(() {
@@ -1840,10 +1914,26 @@ class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
     });
     try {
       final gateway = FirebaseAuthGateway();
-      widget.teacher
-          ? await gateway.sendTeacherPasswordResetEmail(email)
-          : await gateway.sendPasswordResetEmail(email);
-      if (mounted) Navigator.of(context).pop(email);
+      if (widget.teacher) {
+        final email = await resolveTeacherLoginEmail(input);
+        if (email == null) {
+          if (!mounted) return;
+          setState(() {
+            _sending = false;
+            _error = "We couldn't find that Employee ID.";
+          });
+          return;
+        }
+        await gateway.sendTeacherPasswordResetEmail(email);
+        if (mounted) {
+          Navigator.of(context).pop(
+            input.contains('@') ? email : maskEmail(email),
+          );
+        }
+        return;
+      }
+      await gateway.sendPasswordResetEmail(input);
+      if (mounted) Navigator.of(context).pop(input);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -1869,17 +1959,21 @@ class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            "Enter your account email and we'll send you a link to reset your password.",
-            style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+          Text(
+            widget.teacher
+                ? "Enter your Employee ID or account email and we'll send you a link to reset your password."
+                : "Enter your account email and we'll send you a link to reset your password.",
+            style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _emailC,
-            keyboardType: TextInputType.emailAddress,
+            keyboardType: widget.teacher
+                ? TextInputType.text
+                : TextInputType.emailAddress,
             autofocus: true,
             decoration: InputDecoration(
-              labelText: 'Email'.tr,
+              labelText: (widget.teacher ? 'Employee ID or email' : 'Email').tr,
               border: const OutlineInputBorder(),
               errorText: _error?.tr,
             ),

@@ -9,18 +9,20 @@ import 'package:salamlearn/ui/core_modules/activities/classroom_heroes_audio.dar
 
 void main() {
   test('all Classroom Heroes recordings are bundled', () async {
-    // The four manners sessions; the colors and shapes recordings aren't
-    // supplied yet.
     expect(classroomAudio.length, 8);
-    final clips = <String>{'ambient.mp3'};
-    for (final session in classroomAudio.take(4)) {
-      expect(session.length, 3);
+    final voices = <String>{};
+    for (final session in classroomAudio) {
       for (final question in session) {
-        clips.addAll([question.prompt, question.correct, question.decoy]);
+        voices.addAll([question.prompt, question.correct, question.decoy]);
       }
     }
-    expect(clips.length, 37);
-    for (final clip in clips) {
+    // 36 manners clips + 18 vocab stories + 18 vocab words, in both languages.
+    expect(voices.length, 72);
+    for (final clip in {
+      'ambient.mp3',
+      ...voices,
+      ...voices.map((v) => 'fil/$v'),
+    }) {
       final data = await rootBundle.load('assets/audio/classroom_heroes/$clip');
       expect(data.lengthInBytes, greaterThan(0), reason: clip);
     }
@@ -181,28 +183,18 @@ void main() {
     }
   });
 
-  testWidgets('a vocabulary question shows its object on the board', (
-    tester,
-  ) async {
-    const session = heroesColors1Session;
-    await tester.pumpWidget(host(session));
-    await startSession(tester, session);
-
-    // No art bundled yet, so the emoji stands in for the apple.
-    await tester.pump();
-    expect(find.text('🍎'), findsOneWidget);
-
-    await tester.tap(find.text(session.questions.first.correctText));
-
-    await tester.pump();
-
-    await tester.tap(find.byKey(const ValueKey('ch-submit')));
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('Next'));
-    await tester.pump();
-    await skipNarration(tester);
-    await tester.pump();
-    expect(find.text('🌤️'), findsOneWidget);
+  test('every colors and shapes scene is bundled', () async {
+    for (final session in [
+      heroesColors1Session,
+      heroesColors2Session,
+      heroesShapes1Session,
+      heroesShapes2Session,
+    ]) {
+      for (final q in session.questions) {
+        final data = await rootBundle.load(q.scenarioImage);
+        expect(data.lengthInBytes, greaterThan(0), reason: q.scenarioImage);
+      }
+    }
   });
 
   test('the colors and shapes sessions sit in Destinations 1 and 2', () {

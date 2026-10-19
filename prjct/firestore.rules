@@ -116,7 +116,8 @@ service cloud.firestore {
     // the admin's own uid — that would let the admin masquerade as this
     // parent for the owner-scoped rules below).
     function isValidNewParent(data) {
-      return data.keys().hasOnly(['fullName', 'email', 'mobileNumber', 'createdAt', 'firebaseUid']) &&
+      return data.keys().hasOnly(['fullName', 'email', 'mobileNumber', 'createdAt', 'firebaseUid', 'parentCode']) &&
+        (!('parentCode' in data) || isValidEmployeeId(data.parentCode)) &&
         data.keys().hasAll(['fullName', 'email', 'createdAt', 'firebaseUid']) &&
         data.fullName is string && data.fullName.size() > 0 && data.fullName.size() < 100 &&
         isValidEmail(data.email) &&
@@ -125,8 +126,14 @@ service cloud.firestore {
         (data.firebaseUid == null || (data.firebaseUid is string && data.firebaseUid != request.auth.uid));
     }
 
+    // Admin-generated "YYYY-NNNNNN" sign-in ID (admin-web `generateEmployeeId`).
+    function isValidEmployeeId(id) {
+      return id is string && id.matches("^[0-9]{4}-[0-9]{6}$");
+    }
+
     function isValidNewTeacher(data) {
-      return data.keys().hasOnly(['fullName', 'school', 'email', 'firebaseUid', 'mobileNumber', 'createdAt', 'verificationStatus']) &&
+      return data.keys().hasOnly(['fullName', 'school', 'email', 'firebaseUid', 'mobileNumber', 'createdAt', 'verificationStatus', 'employeeId']) &&
+        (!('employeeId' in data) || isValidEmployeeId(data.employeeId)) &&
         data.keys().hasAll(['fullName', 'email', 'createdAt', 'firebaseUid']) &&
         (!('verificationStatus' in data) || data.verificationStatus == 'approved') &&
         data.fullName is string && data.fullName.size() > 0 && data.fullName.size() < 100 &&
@@ -212,9 +219,17 @@ service cloud.firestore {
       // the listener gets a permission error instead of `exists: false`,
       // breaking the real-time account-deletion warning.
       allow read: if isAdmin() || (isSignedIn() && (resource == null || resource.data.firebaseUid == request.auth.uid));
-      allow create: if (isSignedIn() && request.resource.data.firebaseUid == request.auth.uid) ||
+      // `parentCode` is the admin-only Parent ID (same format as a teacher
+      // Employee ID, shown only in admin-web): the owner can't set or change
+      // it, and the admin may only add one to a parent that has none yet.
+      allow create: if (isSignedIn() && request.resource.data.firebaseUid == request.auth.uid &&
+          !('parentCode' in request.resource.data)) ||
         (isAdmin() && isValidNewParent(request.resource.data));
-      allow update: if resource.data.firebaseUid == request.auth.uid;
+      allow update: if (resource.data.firebaseUid == request.auth.uid &&
+          request.resource.data.get('parentCode', null) == resource.data.get('parentCode', null)) ||
+        (isAdmin() && !('parentCode' in resource.data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['parentCode']) &&
+          isValidEmployeeId(request.resource.data.parentCode));
       allow delete: if isAdmin() || (resource != null && resource.data.firebaseUid == request.auth.uid);
     }
 
@@ -228,13 +243,20 @@ service cloud.firestore {
       // re-apply). A doc with no status at all is a pre-verification
       // (legacy) account, which the app treats as approved.
       allow create: if (isSignedIn() && request.resource.data.firebaseUid == request.auth.uid &&
-          request.resource.data.get('verificationStatus', null) == 'pending') ||
+          request.resource.data.get('verificationStatus', null) == 'pending' &&
+          !('employeeId' in request.resource.data)) ||
         (isAdmin() && isValidNewTeacher(request.resource.data));
+      // `employeeId` is admin-only too: the owner can't change it, and the
+      // admin may only add one to a teacher that has none yet (backfill).
       allow update: if (resource.data.firebaseUid == request.auth.uid &&
-          request.resource.data.get('verificationStatus', null) == resource.data.get('verificationStatus', null)) ||
+          request.resource.data.get('verificationStatus', null) == resource.data.get('verificationStatus', null) &&
+          request.resource.data.get('employeeId', null) == resource.data.get('employeeId', null)) ||
         (isAdmin() &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['verificationStatus']) &&
-          request.resource.data.verificationStatus in ['pending', 'approved', 'rejected']);
+          request.resource.data.verificationStatus in ['pending', 'approved', 'rejected']) ||
+        (isAdmin() && !('employeeId' in resource.data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['employeeId']) &&
+          isValidEmployeeId(request.resource.data.employeeId));
       allow delete: if isAdmin() || (resource != null && resource.data.firebaseUid == request.auth.uid);
     }
 
@@ -334,7 +356,8 @@ service cloud.firestore {
     // Admin create is the admin panel's trashbin restore.
     match /progress/{progressId} {
       allow read: if isAdmin() || canAccessLearner(resource.data.learnerId);
-      allow delete: if isAdmin();
+      // Parent may delete when deleting the child (before the learner doc).
+      allow delete: if isAdmin() || isParentOfLearner(resource.data.learnerId);
       allow create: if isAdmin() || canAccessLearner(request.resource.data.learnerId);
       allow update: if canAccessLearner(request.resource.data.learnerId) &&
         request.resource.data.learnerId == resource.data.learnerId;
@@ -343,7 +366,7 @@ service cloud.firestore {
     // Backpack badges — same access as /progress.
     match /badges/{badgeId} {
       allow read: if isAdmin() || canAccessLearner(resource.data.learnerId);
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || isParentOfLearner(resource.data.learnerId);
       allow create: if isAdmin() || canAccessLearner(request.resource.data.learnerId);
       allow update: if canAccessLearner(request.resource.data.learnerId) &&
         request.resource.data.learnerId == resource.data.learnerId;
@@ -396,6 +419,20 @@ service cloud.firestore {
     match /activatedTeachers/{email} {
       allow get: if true;
       allow create, update: if isSignedIn() && request.auth.token.email == email;
+      allow delete: if isAdmin();
+    }
+
+    // Employee ID -> teacher email, so a teacher can activate / sign in /
+    // reset their password with the ID before being signed in. Single-doc
+    // get only (no listing); IDs are random, so they can't be enumerated.
+    // Create-only for admins: a taken ID makes the write an update, which
+    // is denied, so an ID can never be reassigned.
+    match /teacherIds/{employeeId} {
+      allow get: if true;
+      allow create: if isAdmin() && isValidEmployeeId(employeeId) &&
+        request.resource.data.keys().hasOnly(['email', 'teacherId']) &&
+        isValidEmail(request.resource.data.email) &&
+        request.resource.data.teacherId is string;
       allow delete: if isAdmin();
     }
 

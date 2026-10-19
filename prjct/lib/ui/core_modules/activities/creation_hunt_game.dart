@@ -8,6 +8,7 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 import 'creation_hunt_audio.dart';
+import '../game_stage.dart';
 import '../game_ui_audio.dart';
 
 /// Allah's Creation Hunt — a hidden-object hunt across one illustrated
@@ -467,14 +468,15 @@ class _CreationHuntGameState extends State<CreationHuntGame>
   // Frame
   // -------------------------------------------------------------------------
 
+  /// True while the stage sits inside a screen of another shape (a tablet):
+  /// the title, How to Play and badge screens then leave their scenery out
+  /// of the stage, and it is drawn behind it zoomed to fill the screen.
+  bool _split = false;
+
   @override
   Widget build(BuildContext context) {
-    final backdrop = switch (_screen) {
-      _Screen.intro || _Screen.howTo => '$_kA/intro_explorers.png',
-      _ => _stage.background,
-    };
     final isTitle = _screen == _Screen.intro || _screen == _Screen.howTo;
-    final game = SizedBox(
+    Widget game() => SizedBox(
       width: _kW,
       height: _kH,
       child: switch (_screen) {
@@ -489,29 +491,46 @@ class _CreationHuntGameState extends State<CreationHuntGame>
       child: LayoutBuilder(
         builder: (context, box) {
           // Near-phone screens fill edge to edge (art is cropped a hair);
-          // very different shapes keep the whole canvas and get a backdrop.
+          // very different shapes keep the whole canvas.
           final diff = (box.maxWidth / box.maxHeight / (_kW / _kH) - 1).abs();
           if (diff < (isTitle ? 0.12 : 0.05)) {
+            _split = false;
             return ClipRect(
               child: SizedBox.expand(
-                child: FittedBox(fit: BoxFit.cover, child: game),
+                child: FittedBox(fit: BoxFit.cover, child: game()),
               ),
             );
           }
+          // A hunt scene holds the creatures to find, so it stays whole and
+          // the bars continue its edges; the other screens' scenery has
+          // nothing to tap and zooms to fill.
+          final play = _screen == _Screen.play;
+          _split = !play;
           return Stack(
             fit: StackFit.expand,
             children: [
-              // Fills the letterbox space so the art reaches the screen edges.
-              ImageFiltered(
-                imageFilter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                child: Image.asset(backdrop, fit: BoxFit.cover),
-              ),
-              const ColoredBox(color: Color(0x59000000)),
+              if (play)
+                StageBands(
+                  asset: _stage.background,
+                  design: const Size(_kW, _kH),
+                )
+              else
+                StageCover(
+                  design: const Size(_kW, _kH),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: switch (_screen) {
+                      _Screen.intro => [..._introScene(), _introCurtain()],
+                      _Screen.howTo => _howToScene(),
+                      _ => _doneScene(),
+                    },
+                  ),
+                ),
               Center(
                 child: AspectRatio(
                   aspectRatio: _kW / _kH,
                   child: ClipRect(
-                    child: FittedBox(fit: BoxFit.fill, child: game),
+                    child: FittedBox(fit: BoxFit.fill, child: game()),
                   ),
                 ),
               ),
@@ -540,6 +559,61 @@ class _CreationHuntGameState extends State<CreationHuntGame>
   // 01 — Title
   // =========================================================================
 
+  /// The title's living forest: drawn in the stage on a phone-shaped
+  /// screen, zoomed to fill the screen on any other (see [_split]).
+  List<Widget> _introScene() => [
+    _fx((t) {
+      final p = _easeOut.transform(_once(t, 1.2));
+      return Opacity(
+        opacity: p,
+        child: Transform.scale(
+          scale: 1.1 + (1.06 - 1.1) * p,
+          alignment: const Alignment(0, 0.1), // 50% 55%
+          child: _LiveScene(
+            '$_kA/intro_explorers.png',
+            time: _clock,
+            now: () => _now,
+          ),
+        ),
+      );
+    }),
+    // Shafts of light through the canopy.
+    const Positioned(
+      left: -0.1 * _kW,
+      top: -0.1 * _kH,
+      width: 1.2 * _kW,
+      height: 0.6 * _kH,
+      child: IgnorePointer(child: _GodRays(opacityScale: 1)),
+    ),
+    _blurDot(left: .18 * _kW, top: .12 * _kH, w: 44, h: 16, o: .55, b: 6),
+    _blurDot(left: .58 * _kW, top: .19 * _kH, w: 64, h: 20, o: .40, b: 8),
+    _firefly(0.14, 0.64, 6, 9, 2.6, 0, true),
+    _firefly(0.24, 0.71, 5, 11, 3.1, -1.4, false),
+    _firefly(0.33, 0.58, 4, 12.5, 2.2, -3, true),
+    _firefly(0.62, 0.67, 6, 10, 2.9, -2.2, false),
+    _firefly(0.74, 0.60, 5, 13, 3.4, -4.1, true),
+    _firefly(0.84, 0.73, 4, 9.5, 2.4, -5.3, false),
+    _leaf(0.18, 13, 9, const Color(0xFF5FA03A), 15, 0, false),
+    _leaf(0.46, 11, 8, const Color(0xFF7BB54A), 19, -6, true),
+    _leaf(0.69, 14, 10, const Color(0xFF4D8C33), 22, -12, false),
+    _leaf(0.88, 10, 7, const Color(0xFF86BF55), 17, -3, true),
+    const IgnorePointer(child: _Vignette()),
+  ];
+
+  /// The scene fading up out of black.
+  Widget _introCurtain() => _fx((t) {
+    final p = _easeOut.transform(_once(t, 1.1));
+    return IgnorePointer(
+      child: Opacity(
+        opacity: 1 - p,
+        child: const ColoredBox(
+          color: Color(0xFF0B1A10),
+          child: SizedBox.expand(),
+        ),
+      ),
+    );
+  });
+
   Widget _buildIntro() {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -547,58 +621,11 @@ class _CreationHuntGameState extends State<CreationHuntGame>
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          _fx((t) {
-            final p = _easeOut.transform(_once(t, 1.2));
-            return Opacity(
-              opacity: p,
-              child: Transform.scale(
-                scale: 1.1 + (1.06 - 1.1) * p,
-                alignment: const Alignment(0, 0.1), // 50% 55%
-                child: _LiveScene(
-                  '$_kA/intro_explorers.png',
-                  time: _clock,
-                  now: () => _now,
-                ),
-              ),
-            );
-          }),
-          // Shafts of light through the canopy.
-          const Positioned(
-            left: -0.1 * _kW,
-            top: -0.1 * _kH,
-            width: 1.2 * _kW,
-            height: 0.6 * _kH,
-            child: IgnorePointer(child: _GodRays(opacityScale: 1)),
-          ),
-          _blurDot(left: .18 * _kW, top: .12 * _kH, w: 44, h: 16, o: .55, b: 6),
-          _blurDot(left: .58 * _kW, top: .19 * _kH, w: 64, h: 20, o: .40, b: 8),
-          _firefly(0.14, 0.64, 6, 9, 2.6, 0, true),
-          _firefly(0.24, 0.71, 5, 11, 3.1, -1.4, false),
-          _firefly(0.33, 0.58, 4, 12.5, 2.2, -3, true),
-          _firefly(0.62, 0.67, 6, 10, 2.9, -2.2, false),
-          _firefly(0.74, 0.60, 5, 13, 3.4, -4.1, true),
-          _firefly(0.84, 0.73, 4, 9.5, 2.4, -5.3, false),
-          _leaf(0.18, 13, 9, const Color(0xFF5FA03A), 15, 0, false),
-          _leaf(0.46, 11, 8, const Color(0xFF7BB54A), 19, -6, true),
-          _leaf(0.69, 14, 10, const Color(0xFF4D8C33), 22, -12, false),
-          _leaf(0.88, 10, 7, const Color(0xFF86BF55), 17, -3, true),
-          const IgnorePointer(child: _Vignette()),
+          if (!_split) ..._introScene(),
           _buildTitleBlock(),
           _buildIntroFooter(),
           ..._topButtons(onBack: widget.onExit),
-          // Opening curtain — the scene fades up out of black.
-          _fx((t) {
-            final p = _easeOut.transform(_once(t, 1.1));
-            return IgnorePointer(
-              child: Opacity(
-                opacity: 1 - p,
-                child: const ColoredBox(
-                  color: Color(0xFF0B1A10),
-                  child: SizedBox.expand(),
-                ),
-              ),
-            );
-          }),
+          if (!_split) _introCurtain(),
         ],
       ),
     );
@@ -1033,6 +1060,37 @@ class _CreationHuntGameState extends State<CreationHuntGame>
     });
   }
 
+  /// The title forest, blurred and darkened behind the How to Play board.
+  List<Widget> _howToScene() => [
+    Positioned.fill(
+      child: RepaintBoundary(
+        child: ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(sigmaX: 3, sigmaY: 3),
+          child: Transform.scale(
+            scale: 1.08,
+            child: Image.asset(
+              '$_kA/intro_explorers.png',
+              width: _kW,
+              height: _kH,
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+      ),
+    ),
+    const Positioned.fill(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xC7081E0E), Color(0xE6081E0E)],
+          ),
+        ),
+      ),
+    ),
+  ];
+
   Widget _howToBody() {
     const panelW = 1.02 * _kW;
     const panelH = panelW; // blank board art is square (1254 x 1254)
@@ -1043,33 +1101,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Positioned.fill(
-          child: RepaintBoundary(
-            child: ImageFiltered(
-              imageFilter: ui.ImageFilter.blur(sigmaX: 3, sigmaY: 3),
-              child: Transform.scale(
-                scale: 1.08,
-                child: Image.asset(
-                  '$_kA/intro_explorers.png',
-                  width: _kW,
-                  height: _kH,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-          ),
-        ),
-        const Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xC7081E0E), Color(0xE6081E0E)],
-              ),
-            ),
-          ),
-        ),
+        if (!_split) ..._howToScene(),
         // Cropped "Hunt" wordmark riding the top of the board.
         Positioned(
           left: 0.25 * _kW,
@@ -2354,6 +2386,42 @@ class _CreationHuntGameState extends State<CreationHuntGame>
   // 04 — Badge
   // =========================================================================
 
+  /// The last stage's forest settling back under a warm vignette.
+  List<Widget> _doneScene() => [
+    Positioned.fill(
+      child: _fx((t) {
+        final p = _doneBgCurve.transform(_once(t, 2.4));
+        return Transform.scale(
+          scale: 1.12 + (1.02 - 1.12) * p,
+          child: _LiveScene(_stage.background, time: _clock, now: () => _now),
+        );
+      }),
+    ),
+    Positioned.fill(
+      child: _fx((t) {
+        final p = _easeOut.transform(_once(t, 0.8, 0.1));
+        return Opacity(
+          opacity: p,
+          child: const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(0, -0.4),
+                radius: 0.9,
+                colors: [
+                  Color(0x2EFFF0BE),
+                  Color(0x8C061A0C),
+                  Color(0xD1061A0C),
+                ],
+                stops: [0, 0.55, 1],
+              ),
+            ),
+            child: SizedBox.expand(),
+          ),
+        );
+      }),
+    ),
+  ];
+
   Widget _buildDone() {
     const signW = 310.0;
     const signH = signW * 724 / 2172;
@@ -2370,42 +2438,7 @@ class _CreationHuntGameState extends State<CreationHuntGame>
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          Positioned.fill(
-            child: _fx((t) {
-              final p = _doneBgCurve.transform(_once(t, 2.4));
-              return Transform.scale(
-                scale: 1.12 + (1.02 - 1.12) * p,
-                child: _LiveScene(
-                  _stage.background,
-                  time: _clock,
-                  now: () => _now,
-                ),
-              );
-            }),
-          ),
-          Positioned.fill(
-            child: _fx((t) {
-              final p = _easeOut.transform(_once(t, 0.8, 0.1));
-              return Opacity(
-                opacity: p,
-                child: const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: RadialGradient(
-                      center: Alignment(0, -0.4),
-                      radius: 0.9,
-                      colors: [
-                        Color(0x2EFFF0BE),
-                        Color(0x8C061A0C),
-                        Color(0xD1061A0C),
-                      ],
-                      stops: [0, 0.55, 1],
-                    ),
-                  ),
-                  child: SizedBox.expand(),
-                ),
-              );
-            }),
-          ),
+          if (!_split) ..._doneScene(),
           Positioned(
             left: _kW / 2 - 220,
             top: 0.15 * _kH - 220,

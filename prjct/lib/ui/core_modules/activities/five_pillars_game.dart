@@ -9,6 +9,7 @@ import 'package:salamlearn/logic/localization/app_translations.dart';
 import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../widgets/arc_text_painter.dart';
 import 'five_pillars_audio.dart';
+import '../game_stage.dart';
 import '../game_ui_audio.dart';
 
 /// The Five Pillars — drag the five pillar columns onto the mosque wall.
@@ -219,6 +220,7 @@ const List<String> _kQuestionClips = [
   'q5_makkah_hajj.mp3',
 ];
 const String _kInstructionClip = 'prompt_put_in_order.mp3';
+
 /// Each pillar's name, read aloud (English and Tagalog takes).
 String _pillarClip(String id) => '$id.mp3';
 
@@ -1710,10 +1712,20 @@ class _FivePillarsGameState extends State<FivePillarsGame>
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // Wider-than-phone screens: the scene art covers the sides
-              // the stage's own background doesn't reach.
+              // Wider-than-phone screens: the scene art's own edges carry on
+              // past the sides the stage's art doesn't reach.
               const ColoredBox(color: _sceneBase),
-              Image.asset(_kSceneArt, fit: BoxFit.cover),
+              StageBands(
+                asset: _kSceneArt,
+                design: const Size(_kW, _kH),
+                art: const Rect.fromLTWH(
+                  (_kW - _kBgW) * 0.5,
+                  _kBgTop,
+                  _kBgW,
+                  _kBgH,
+                ),
+                alignment: _sceneAlign,
+              ),
               _stage(
                 MouseRegion(
                   onHover: _onHover,

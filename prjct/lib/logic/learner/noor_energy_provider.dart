@@ -1,37 +1,99 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive/hive.dart';
+
+import '../../data/local/hive_boxes.dart';
+import '../auth/session.dart';
 
 /// Immutable snapshot of the Noor Energy lives system — 5 max, one spent
-/// per module opened from the Adventure Map, all refilled together at the
-/// start of every 4-hour window of the local day (12am, 4am, 8am, 12pm,
-/// 4pm, 8pm) rather than trickling back one at a time.
+/// per new lesson finished. Spent lanterns relight one at a time, one
+/// every 24 minutes, so an empty row is full again after 2 hours.
 class NoorEnergyState {
-  const NoorEnergyState({required this.current, required this.maxEnergy});
+  const NoorEnergyState({
+    required this.current,
+    required this.maxEnergy,
+    this.nextLanternAt,
+  });
 
   final int current;
   final int maxEnergy;
 
-  bool get hasEnergy => true;
+  /// When the next spent lantern relights; null while the row is full.
+  final DateTime? nextLanternAt;
+
+  bool get hasEnergy => current > 0;
 }
 
 class NoorEnergyNotifier extends Notifier<NoorEnergyState> {
   static const _maxEnergy = 5;
-  static const refillHours = 4;
+  static const perLantern = Duration(minutes: 24);
 
-  /// Start of the next refill window after [now].
-  static DateTime nextRefill(DateTime now) => DateTime(
-    now.year,
-    now.month,
-    now.day,
-    (now.hour ~/ refillHours + 1) * refillHours,
-  );
+  /// Swappable in tests.
+  static DateTime Function() clock = DateTime.now;
+
+  Box<dynamic> get _settings => Hive.box<dynamic>(HiveBoxes.settings);
+  Timer? _timer;
+
+  /// Each learner keeps their own lanterns, so a new child starts full and
+  /// never inherits another child's spent ones on a shared device.
+  String? _learnerId;
+  String get _currentKey => 'noorEnergyCurrent_$_learnerId';
+  String get _nextKey => 'noorEnergyNextAt_$_learnerId';
 
   @override
   NoorEnergyState build() {
-    return const NoorEnergyState(current: _maxEnergy, maxEnergy: _maxEnergy);
+    _learnerId = ref.watch(sessionProvider.select((s) => s.learner?.id));
+    _timer?.cancel();
+    ref.onDispose(() => _timer?.cancel());
+    if (_learnerId == null) {
+      return const NoorEnergyState(current: _maxEnergy, maxEnergy: _maxEnergy);
+    }
+    final stamp = _settings.get(_nextKey) as int?;
+    return _settle(
+      _settings.get(_currentKey) as int? ?? _maxEnergy,
+      stamp == null ? null : DateTime.fromMillisecondsSinceEpoch(stamp),
+    );
   }
 
-  /// Unlimited Noor Energy mode: energy is never consumed.
-  void consume() {}
+  /// Relights every lantern whose 24 minutes have passed, saves the result
+  /// and arms a timer for the next one while the app stays open.
+  NoorEnergyState _settle(int current, DateTime? nextAt) {
+    final now = clock();
+    while (nextAt != null && current < _maxEnergy && !now.isBefore(nextAt)) {
+      current++;
+      nextAt = current < _maxEnergy ? nextAt.add(perLantern) : null;
+    }
+    if (current >= _maxEnergy) nextAt = null;
+    _settings.put(_currentKey, current);
+    if (nextAt == null) {
+      _settings.delete(_nextKey);
+    } else {
+      _settings.put(_nextKey, nextAt.millisecondsSinceEpoch);
+      _timer?.cancel();
+      final at = nextAt;
+      _timer = Timer(at.difference(now), () {
+        state = _settle(state.current, at);
+      });
+    }
+    return NoorEnergyState(
+      current: current,
+      maxEnergy: _maxEnergy,
+      nextLanternAt: nextAt,
+    );
+  }
+
+  /// Called by the lesson player when a new lesson is finished — a
+  /// session-level cost, not a per-question one.
+  void consume() {
+    if (_learnerId == null || state.current <= 0) return;
+    // A full row starts its 24-minute clock now; otherwise the lantern
+    // already relighting keeps its time.
+    state = _settle(
+      state.current - 1,
+      state.nextLanternAt ?? clock().add(perLantern),
+    );
+  }
 }
 
 final noorEnergyProvider =

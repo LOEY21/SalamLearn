@@ -461,8 +461,6 @@ class ClassroomHeroesQuestion {
     required this.correctText,
     required this.decoyText,
     required this.successFeedback,
-    this.objectImage,
-    this.objectEmoji,
   });
 
   final String scenarioImage;
@@ -470,12 +468,6 @@ class ClassroomHeroesQuestion {
   final String correctText;
   final String decoyText;
   final String successFeedback;
-
-  /// Vocabulary sessions (colors, shapes): the single object shown on the
-  /// classroom's chalkboard over the reused [scenarioImage]. [objectEmoji]
-  /// stands in until the object's art is bundled.
-  final String? objectImage;
-  final String? objectEmoji;
 }
 
 /// One session of Classroom Heroes — a single good-manners theme (respect,

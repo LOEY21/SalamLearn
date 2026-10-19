@@ -171,7 +171,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
 
     expect(
-      find.text('Noor Energy is resting — come back tomorrow to play again!'),
+      find.text('Noor Energy is resting — come back soon to play again!'),
       findsOneWidget,
     );
     // The finished lesson shows the resting Noor moon, not its 'done' star.

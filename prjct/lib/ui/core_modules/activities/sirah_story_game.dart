@@ -10,6 +10,7 @@ import 'sirah_story_audio.dart';
 
 import '../../../data/models/curriculum/curriculum_models.dart';
 import '../../widgets/app_orientation.dart';
+import '../game_stage.dart';
 import '../game_ui_audio.dart';
 
 /// Sirah Story — listen to the scene, tap the thing that lights up, answer
@@ -140,11 +141,7 @@ const _panelTop = Color(0xFFFAF0D8);
 const _panelBottom = Color(0xFFEFDFBA);
 const _panelEdge = Color(0xFFC9A45E);
 const _ink = Color(0xFF4A3418);
-const _inkSoft = Color(0xFF5A4423);
 const _cream = Color(0xFFF6E9C9);
-const _optionTop = Color(0xFFF7ECD2);
-const _optionBottom = Color(0xFFE9D8B0);
-const _optionShade = Color(0xFFBFA06A);
 const _woodTop = Color(0xFF6B4A1E);
 const _woodBottom = Color(0xFF4A3113);
 const _woodEdge = Color(0xFFD9A441);
@@ -159,7 +156,6 @@ const _plateEyebrow = Color(0xFF8A5A17);
 const _endVeil = Color(0x3DFFE9B8); // warm daylight wash over the last scene
 const _sceneDim = Color(0x9E000000); // the scene behind a lit layer
 const _scrim = Color(0x9E181006); // rgba(24,16,6,.62)
-const _scrimDeep = Color(0xC7181006); // rgba(24,16,6,.78)
 
 const List<Color> _confettiColors = [
   Color(0xFFF0A92C),
@@ -331,7 +327,6 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   /// The card was answered with the decoy: marked wrong, no celebration.
   bool _missed = false;
   bool _shake = false;
-  bool _confirmExit = false;
   bool _finished = false;
 
   /// The prototype re-rolls which side the correct answer sits on for every
@@ -687,25 +682,13 @@ class _SirahStoryGameState extends State<SirahStoryGame>
     _advance();
   }
 
-  /// The prototype's back arrow: one page back, or — on the first page — the
-  /// "Leave the story?" confirm.
-  void _back() {
+  /// Home in the story: stops the narration and leaves the lesson (or back
+  /// to the start screen when nothing hosts the game).
+  void _home() {
+    final exit = widget.onExit;
+    if (exit == null) return _backToStart();
     if (_audio != null) unawaited(_audio!.stopVoice());
-    _openTimer?.cancel();
-    _wipeMidTimer?.cancel();
-    _curtain = false;
-    if (_page == 0) {
-      setState(() => _confirmExit = true);
-      return;
-    }
-    _advanceTimer?.cancel();
-    setState(() {
-      _page = _page - 1;
-      _showModal = false;
-      _answered = false;
-      _finished = false;
-    });
-    _beginPage();
+    exit();
   }
 
   void _backToStart() {
@@ -722,7 +705,6 @@ class _SirahStoryGameState extends State<SirahStoryGame>
       _curtain = false;
       _showModal = false;
       _answered = false;
-      _confirmExit = false;
       _narrating = false;
       _glowReady = false;
       _finished = false;
@@ -753,9 +735,13 @@ class _SirahStoryGameState extends State<SirahStoryGame>
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Fills the letterbox bands beside the stage with the same scene,
-          // so the frame never shows bare black at odd aspect ratios.
-          Image.asset(backdrop, fit: BoxFit.cover),
+          // The title square has nothing to tap and zooms to fill the
+          // screen; a story page keeps its tappable layer whole, so the bars
+          // a screen of another shape leaves continue the page's own edges.
+          if (_screen == _Screen.start)
+            StageCover(design: const Size(_kW, _kH), child: _buildStartScene())
+          else
+            StageBands(asset: backdrop, design: const Size(_kW, _kH)),
           // ...and darkens them exactly as the stage darkens its own scene,
           // so a dim or a scrim reaches the screen edge instead of stopping
           // at the stage's. The stage paints over these, so its own area is
@@ -807,7 +793,6 @@ class _SirahStoryGameState extends State<SirahStoryGame>
       curve: Curves.easeInOut,
       child: const ColoredBox(color: _scrim),
     ),
-    if (_confirmExit) const ColoredBox(color: _scrimDeep),
     if (_finished)
       FadeTransition(
         opacity: _inVeil,
@@ -828,51 +813,49 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   /// over the square, its ribbon tucked under it, and the PLAY button where
   /// the reference's blank board sits. Identical for all four sessions —
   /// which session is being opened is what the curtain plate announces.
+  /// The square in the wind: palms and plants sway, clouds drift behind
+  /// them, birds cross the open sky and sand blows over the paving. Drawn
+  /// behind the stage, zoomed to fill the screen.
+  Widget _buildStartScene() => IgnorePointer(
+    child: _fx((t) {
+      final gust = _gust(t);
+      final shader = _bgShader;
+      final sky = _skyShader;
+      final layers = _bgLayers;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          if (shader != null && sky != null && layers != null) ...[
+            CustomPaint(painter: _LiveBgPainter(shader, layers, t, gust, 0)),
+            CustomPaint(
+              painter: _SkyPainter(
+                t - _screenT0,
+                mask: _LiveBgPainter.configure(
+                  sky,
+                  layers,
+                  const Size(_kW, _kH),
+                  t,
+                  gust,
+                  1,
+                ),
+              ),
+            ),
+          ] else ...[
+            Image.asset(
+              'assets/images/sirah_story/start_bg.png',
+              fit: BoxFit.cover,
+            ),
+            CustomPaint(painter: _SkyPainter(t - _screenT0)),
+          ],
+          CustomPaint(painter: _SandPainter(t)),
+        ],
+      );
+    }),
+  );
+
   Widget _buildStart() {
     return Stack(
       children: [
-        // The square in the wind: palms and plants sway, clouds drift behind
-        // them, birds cross the open sky and sand blows over the paving.
-        Positioned.fill(
-          child: IgnorePointer(
-            child: _fx((t) {
-              final gust = _gust(t);
-              final shader = _bgShader;
-              final sky = _skyShader;
-              final layers = _bgLayers;
-              return Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (shader != null && sky != null && layers != null) ...[
-                    CustomPaint(
-                      painter: _LiveBgPainter(shader, layers, t, gust, 0),
-                    ),
-                    CustomPaint(
-                      painter: _SkyPainter(
-                        t - _screenT0,
-                        mask: _LiveBgPainter.configure(
-                          sky,
-                          layers,
-                          const Size(_kW, _kH),
-                          t,
-                          gust,
-                          1,
-                        ),
-                      ),
-                    ),
-                  ] else ...[
-                    Image.asset(
-                      'assets/images/sirah_story/start_bg.png',
-                      fit: BoxFit.cover,
-                    ),
-                    CustomPaint(painter: _SkyPainter(t - _screenT0)),
-                  ],
-                  CustomPaint(painter: _SandPainter(t)),
-                ],
-              );
-            }),
-          ),
-        ),
         // Logo eases down and settles — no bounce, it just comes to rest.
         Positioned(
           left: (_kW - _kLogoW) / 2,
@@ -1122,7 +1105,6 @@ class _SirahStoryGameState extends State<SirahStoryGame>
         if (_showModal && !_answered)
           Positioned(right: 110, bottom: 120, child: _submitButton()),
         if (_answered && !_missed) _buildConfetti(_badgeT0),
-        if (_confirmExit) _buildConfirmExit(),
         if (_finished) _buildFinish(),
       ],
     );
@@ -1644,9 +1626,9 @@ class _SirahStoryGameState extends State<SirahStoryGame>
       left: 44,
       top: 36,
       child: _artButton(
-        key: const ValueKey('sirah-back'),
-        onTap: _back,
-        asset: 'back_btn',
+        key: const ValueKey('sirah-home'),
+        onTap: _home,
+        asset: 'home_btn',
         width: _kBackW,
         aspect: _kBackAspect,
       ),
@@ -2279,82 +2261,8 @@ class _SirahStoryGameState extends State<SirahStoryGame>
   }
 
   // =========================================================================
-  // Leave-the-story confirm and Session Complete
+  // Session Complete
   // =========================================================================
-
-  Widget _buildConfirmExit() {
-    return Positioned.fill(
-      child: ColoredBox(
-        color: _scrimDeep,
-        child: Center(
-          child: Container(
-            width: 1010,
-            padding: const EdgeInsets.fromLTRB(60, 60, 60, 48),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [_panelTop, _panelBottom],
-              ),
-              border: Border.all(color: _panelEdge, width: 10),
-              borderRadius: BorderRadius.circular(48),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x73000000),
-                  offset: Offset(0, 36),
-                  blurRadius: 80,
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Leave the story? You will go back to the start screen.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontFamily: _kBaloo,
-                    fontSize: 42,
-                    fontWeight: FontWeight.w700,
-                    color: _ink,
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 44),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _chunkyButton(
-                        label: 'Keep Reading',
-                        onTap: () => setState(() => _confirmExit = false),
-                        top: _optionTop,
-                        bottom: _optionBottom,
-                        edge: _panelEdge,
-                        shade: _optionShade,
-                        ink: _inkSoft,
-                      ),
-                    ),
-                    const SizedBox(width: 28),
-                    Expanded(
-                      child: _chunkyButton(
-                        label: 'Go to Start',
-                        onTap: _backToStart,
-                        top: _green,
-                        bottom: _greenDeep,
-                        edge: _greenDeep,
-                        shade: _greenBtnShade,
-                        ink: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   /// The ending, laid out to the supplied reference — but staged on the
   /// scene that was just played rather than on the title screen's square, so
@@ -2636,49 +2544,6 @@ class _SirahStoryGameState extends State<SirahStoryGame>
       ),
     ),
   );
-
-  // -------------------------------------------------------------------------
-  // Shared chrome
-  // -------------------------------------------------------------------------
-
-  Widget _chunkyButton({
-    required String label,
-    required VoidCallback onTap,
-    required Color top,
-    required Color bottom,
-    required Color edge,
-    required Color shade,
-    required Color ink,
-  }) {
-    return _Push(
-      onTap: onTap,
-      dy: 5,
-      builder: (down) => Container(
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(vertical: 26),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [top, bottom],
-          ),
-          border: Border.all(color: edge, width: 6),
-          borderRadius: BorderRadius.circular(32),
-          boxShadow: [BoxShadow(color: shade, offset: Offset(0, down ? 4 : 9))],
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontFamily: _kBaloo,
-            fontSize: 38,
-            fontWeight: FontWeight.w700,
-            color: ink,
-            height: 1.1,
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------

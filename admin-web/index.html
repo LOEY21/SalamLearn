@@ -4,9 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SalamLearn Admin</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f6e56'/%3E%3Ctext x='16' y='22' font-size='16' font-family='sans-serif' font-weight='700' fill='white' text-anchor='middle'%3ES%3C/text%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400..800&family=Fredoka:wght@400..700&family=Outfit:wght@700;900&family=Scheherazade+New:wght@700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -192,6 +195,7 @@
         <section id="tab-teachers" class="tab-panel" hidden>
           <div class="panel-head">
             <input class="table-search" data-table="table-teachers" type="search" placeholder="Search teachers…" />
+            <button id="assign-employee-ids" class="btn-ghost btn-small" type="button" hidden>Assign missing Employee IDs</button>
             <button class="btn-primary btn-small" data-open-form="teacher">Add teacher</button>
           </div>
           <form id="form-teacher" class="add-form" hidden>
@@ -202,9 +206,6 @@
             </div>
             <label>School <input type="text" name="school" /></label>
             <label><span>Email <span class="req" aria-hidden="true">*</span></span> <input type="email" name="email" required /></label>
-            <label><span>Password <span class="req" aria-hidden="true">*</span></span> <input type="password" name="password" minlength="6" required /></label>
-            <label><span>Confirm password <span class="req" aria-hidden="true">*</span></span> <input type="password" name="confirmPassword" minlength="6" required /></label>
-            <label class="show-password"><input type="checkbox" data-show-password /> Show password</label>
             <div class="form-actions">
               <button type="submit" class="btn-primary btn-small">Create</button>
               <button type="button" class="btn-ghost btn-small" data-cancel-form="teacher">Cancel</button>
@@ -303,9 +304,18 @@
         <!-- Progress -->
         <section id="tab-progress" class="tab-panel" hidden>
           <div class="panel-head">
+            <div class="view-toggle" role="group" aria-label="Progress view">
+              <button type="button" class="view-toggle-btn active" data-progress-view="table" aria-pressed="true">Table</button>
+              <button type="button" class="view-toggle-btn" data-progress-view="hub" aria-pressed="false">Student Hub</button>
+            </div>
             <input class="table-search" data-table="table-progress" type="search" placeholder="Search progress…" />
+            <select id="hub-learner-select" class="hub-learner-select" aria-label="Learner" hidden></select>
           </div>
-          <div class="table-wrap"><table id="table-progress"></table></div>
+          <div id="progress-table-view" class="table-wrap"><table id="table-progress"></table></div>
+          <div id="progress-hub-view" class="hub-stage" hidden>
+            <div id="hub-phone" class="hub-phone"></div>
+            <p class="panel-note hub-stage-note">Read-only mirror of the learner's Student Hub. Stages, XP, streak, badges and homework come from synced records. Noor Energy is replayed from synced lesson completions, so it can differ slightly from a device that hasn't synced yet.</p>
+          </div>
         </section>
 
         <!-- Trashbin -->

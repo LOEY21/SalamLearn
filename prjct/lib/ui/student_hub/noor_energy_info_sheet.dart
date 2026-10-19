@@ -21,7 +21,7 @@ class _InfoSheetContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final energy = ref.watch(noorEnergyProvider);
-    final resetIn = formatTimeUntilReset(DateTime.now());
+    final resetIn = formatTimeUntilReset(energy, DateTime.now());
 
     return HubInfoSheet(
       title: 'Noor Energy',
@@ -37,28 +37,31 @@ class _InfoSheetContent extends ConsumerWidget {
         ),
       ),
       chips: [
-        WoodChip(label: '${energy.current} of ${energy.maxEnergy} lanterns lit'),
         WoodChip(
-          label: 'Refills in $resetIn',
-          icon: const Icon(
-            Icons.schedule_rounded,
-            size: 15,
-            color: AppColors.goldSoft,
-          ),
+          label: '${energy.current} of ${energy.maxEnergy} lanterns lit',
         ),
+        if (energy.current < energy.maxEnergy)
+          WoodChip(
+            label: 'Next lantern in $resetIn',
+            icon: const Icon(
+              Icons.schedule_rounded,
+              size: 15,
+              color: AppColors.goldSoft,
+            ),
+          ),
       ],
       rules: const [
         InfoRule(
           icon: Icons.map_rounded,
           color: HubWorld.goldDeep,
           title: '1 lantern = 1 adventure',
-          body: 'Starting a lesson uses 1 lantern. Trying again is free!',
+          body: 'Finishing a new lesson uses 1 lantern. Playing again is free!',
         ),
         InfoRule(
           icon: Icons.nightlight_round,
           color: AppColors.teal,
-          title: 'They all come back',
-          body: 'Every 4 hours, all 5 lanterns light up again.',
+          title: 'They come back',
+          body: 'A used lantern lights up again every 24 minutes.',
         ),
         InfoRule(
           icon: Icons.backpack_rounded,

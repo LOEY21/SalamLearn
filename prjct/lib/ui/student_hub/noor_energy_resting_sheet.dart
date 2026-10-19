@@ -6,11 +6,12 @@ import '../../logic/learner/noor_energy_provider.dart';
 import '../theme/app_colors.dart';
 import 'noor_energy_info_sheet.dart';
 
-/// How long until the next 4-hour refill window opens, formatted as
-/// "Xh Ym" (or just "Ym" once under an hour) — the same boundary
-/// `NoorEnergyNotifier` refills on (see `NoorEnergyNotifier.nextRefill`).
-String formatTimeUntilReset(DateTime now) {
-  final remaining = NoorEnergyNotifier.nextRefill(now).difference(now);
+/// How long until the next spent lantern relights (see
+/// `NoorEnergyState.nextLanternAt`), formatted as "Xh Ym" (or just "Ym"
+/// once under an hour).
+String formatTimeUntilReset(NoorEnergyState energy, DateTime now) {
+  final nextAt = energy.nextLanternAt ?? now.add(NoorEnergyNotifier.perLantern);
+  final remaining = nextAt.difference(now);
   final hours = remaining.inHours;
   final minutes = remaining.inMinutes % 60;
   if (hours <= 0) return '${minutes}m';
@@ -36,7 +37,7 @@ class _RestingSheetContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final energy = ref.watch(noorEnergyProvider);
-    final resetIn = formatTimeUntilReset(DateTime.now());
+    final resetIn = formatTimeUntilReset(energy, DateTime.now());
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -80,8 +81,8 @@ class _RestingSheetContent extends ConsumerWidget {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Every lantern is out for now. They\'ll all light back up '
-                  'in a few hours.',
+                  'Every lantern is out for now. One lights back up every '
+                  '24 minutes.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,
@@ -130,7 +131,7 @@ class _RestingSheetContent extends ConsumerWidget {
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(
-                          'Refills in $resetIn',
+                          'Next lantern in $resetIn',
                           style: const TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w800,

@@ -16,9 +16,11 @@ import '../../data/remote/firebase_auth_gateway.dart';
 import '../../data/remote/firebase_role_app.dart';
 import '../../data/remote/firestore_mirror.dart';
 import '../../data/repositories/parent_repository.dart';
+import '../../data/repositories/progress_repository.dart';
 import '../../data/repositories/teacher_repository.dart';
 import '../sync/sync_manager.dart';
 import '../connectivity/internet_access.dart';
+import 'employee_id.dart';
 
 enum UserRole { learner, parent, asatidz }
 
@@ -42,6 +44,11 @@ enum SignInResult {
   /// because the account was intentionally removed. The UI shows a
   /// distinct message instead of "wrong password".
   accountDeleted,
+
+  /// Teacher sign-in failed and the account has no `activatedTeachers`
+  /// marker — admin-created, but the teacher hasn't set their own password
+  /// via "Activate my account" yet.
+  notActivated,
 
   /// Firebase Auth accepted the email + password, but there's no cloud
   /// profile for the requested role (e.g. a Teacher email on the Parent tab,
@@ -827,7 +834,18 @@ class SessionNotifier extends Notifier<SessionState> {
             HiveBoxes.teachers,
             account.id,
           );
-          if (!remoteExists) return SignInResult.accountDeleted;
+          if (!remoteExists) {
+            // Admin deleted this account — drop the stale local copy so it
+            // stops shadowing a re-created account with the same email.
+            await _teachers.delete(account.id);
+            final retry = await _tryRemoteTeacherSignIn(
+              email: normalizedEmail,
+              password: password,
+            );
+            return retry == SignInResult.invalidCredentials
+                ? SignInResult.accountDeleted
+                : retry;
+          }
         }
         await _settings.put('activeRole', role.name);
         await _settings.put('activeTeacherId', account.id);
@@ -875,7 +893,16 @@ class SessionNotifier extends Notifier<SessionState> {
             HiveBoxes.parents,
             account.id,
           );
-          if (!remoteExists) return SignInResult.accountDeleted;
+          if (!remoteExists) {
+            await _parents.delete(account.id);
+            final retry = await _tryRemoteParentSignIn(
+              email: normalizedEmail,
+              password: password,
+            );
+            return retry == SignInResult.invalidCredentials
+                ? SignInResult.accountDeleted
+                : retry;
+          }
         }
         await _settings.put('activeRole', role.name);
         await _settings.put('activeParentId', account.id);
@@ -1073,12 +1100,21 @@ class SessionNotifier extends Notifier<SessionState> {
         remoteFirebaseUid: remote.firebaseUid,
         remoteVerificationStatus: remote.verificationStatus,
       );
+      await _cacheEmployeeId(remote.id, remote.employeeId, email);
       state = state.copyWith(activeRole: UserRole.asatidz, pinVerified: false);
       _markTeacherActivated(email);
       return SignInResult.needsLocalPinSetup;
     } catch (e) {
       debugPrint('SessionNotifier: remote teacher sign-in failed: $e');
-      return SignInResult.invalidCredentials;
+      final mirror = FirestoreMirror(teacher: true);
+      final activated =
+          await mirror.isTeacherActivated(
+            FirebaseAuthGateway.teacherAuthEmail(email),
+          ) ||
+          await mirror.isTeacherActivated(email);
+      return activated
+          ? SignInResult.invalidCredentials
+          : SignInResult.notActivated;
     }
   }
 
@@ -1119,8 +1155,29 @@ class SessionNotifier extends Notifier<SessionState> {
     if (account != null && uid != null) {
       final remote = await FirestoreMirror(teacher: true).fetchTeacherByFirebaseUid(uid);
       await _applyRemoteTeacherStatus(account, remote?.verificationStatus);
+      await _cacheEmployeeId(account.id, remote?.employeeId, account.email);
     }
     return activeTeacherStatus;
+  }
+
+  /// Admin-generated sign-in ID, cached from the teacher doc on sign-in /
+  /// status refresh (see `employee_id.dart`). Null until the admin assigns one.
+  String? get activeTeacherEmployeeId {
+    final id = state.activeTeacherId;
+    return id == null ? null : _settings.get(employeeIdKey(id)) as String?;
+  }
+
+  Future<void> _cacheEmployeeId(
+    String teacherId,
+    String? employeeId,
+    String? email,
+  ) async {
+    if (employeeId == null) return;
+    if (email != null) await _settings.put(employeeIdEmailKey(employeeId), email);
+    if (_settings.get(employeeIdKey(teacherId)) == employeeId) return;
+    await _settings.put(employeeIdKey(teacherId), employeeId);
+    // New instance so screens showing the ID (Settings account card) rebuild.
+    state = state.copyWith();
   }
 
   Future<void> _applyRemoteTeacherStatus(
@@ -1536,12 +1593,19 @@ class SessionNotifier extends Notifier<SessionState> {
   /// rather than [SessionState.copyWith] since `copyWith` has no way to
   /// null out an already-set field.
   Future<void> deleteLearner(String learnerId) async {
+    final mirror = FirestoreMirror();
     try {
-      await FirestoreMirror().deleteDoc(HiveBoxes.learners, learnerId);
+      await mirror.deleteProgressForLearner(learnerId);
+    } catch (e) {
+      debugPrint('deleteLearner: progress delete failed: $e');
+    }
+    try {
+      await mirror.deleteDoc(HiveBoxes.learners, learnerId);
     } catch (_) {
       // Offline, never-synced, or already gone — nothing to do, matching
       // deleteAccount's own best-effort remote-delete contract.
     }
+    await ProgressRepository().deleteForLearner(learnerId);
     await _learners.delete(learnerId);
 
     if (state.learner?.id != learnerId) return;
@@ -1571,6 +1635,7 @@ class SessionNotifier extends Notifier<SessionState> {
   /// already called [LearnerRepository.delete], but we re-delete here to
   /// cover race conditions) and re-picks the active learner if this was it.
   Future<void> onRemoteLearnerDeleted(String learnerId) async {
+    await ProgressRepository().deleteForLearner(learnerId);
     await _learners.delete(learnerId);
 
     if (state.learner?.id != learnerId) return;
@@ -1786,6 +1851,7 @@ class SessionNotifier extends Notifier<SessionState> {
         );
         if (remote != null) {
           await _applyRemoteTeacherStatus(account!, remote.verificationStatus);
+          await _cacheEmployeeId(account.id, remote.employeeId, account.email);
           return true;
         }
       } else {

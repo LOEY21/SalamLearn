@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:salamlearn/data/models/curriculum/curriculum_models.dart';
 import 'package:salamlearn/logic/auth/session.dart';
 import 'package:salamlearn/logic/learner/learner_xp_provider.dart';
+import 'package:salamlearn/logic/learner/noor_energy_provider.dart';
 import 'package:salamlearn/ui/core_modules/lesson_complete_screen.dart';
 import 'package:salamlearn/ui/core_modules/game_ui_audio.dart';
 import 'package:salamlearn/ui/core_modules/lesson_player_screen.dart';
@@ -48,6 +49,19 @@ class _FakeLearnerXpNotifier extends LearnerXpNotifier {
 class _FakeSessionNotifier extends SessionNotifier {
   @override
   SessionState build() => const SessionState();
+}
+
+/// Finishing a lesson spends a Noor lantern, which normally writes the real
+/// Hive `settings` box.
+class _FakeNoorEnergyNotifier extends NoorEnergyNotifier {
+  @override
+  NoorEnergyState build() => const NoorEnergyState(current: 5, maxEnergy: 5);
+
+  @override
+  void consume() => state = NoorEnergyState(
+    current: state.current - 1,
+    maxEnergy: state.maxEnergy,
+  );
 }
 
 Lesson _twoGreetingMatchActivityLesson() {
@@ -147,6 +161,7 @@ void main() {
           overrides: [
             learnerXpProvider.overrideWith(_FakeLearnerXpNotifier.new),
             sessionProvider.overrideWith(_FakeSessionNotifier.new),
+            noorEnergyProvider.overrideWith(_FakeNoorEnergyNotifier.new),
           ],
           child: MaterialApp(
             home: LessonPlayerScreen(
@@ -226,6 +241,8 @@ void main() {
         tester.element(find.byType(LessonPlayerScreen)),
       );
       expect(container.read(learnerXpProvider), 20);
+      // One lantern for the finished lesson, none for opening it.
+      expect(container.read(noorEnergyProvider).current, 4);
       expect(audio.taps, greaterThanOrEqualTo(4));
       expect(audio.levels, 2);
       expect(audio.stars, 1);

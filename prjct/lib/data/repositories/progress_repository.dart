@@ -100,6 +100,16 @@ class ProgressRepository {
     }
   }
 
+  /// Local half of deleting a learner — drops their records and badges.
+  Future<void> deleteForLearner(String learnerId) async {
+    await _progress.deleteAll(
+      _progress.keys.where((k) => _progress.get(k)?.learnerId == learnerId).toList(),
+    );
+    await _badges.deleteAll(
+      _badges.keys.where((k) => _badges.get(k)?.learnerId == learnerId).toList(),
+    );
+  }
+
   List<ProgressRecord> byLearnerId(String learnerId) =>
       _progress.values.where((p) => p.learnerId == learnerId).toList()
         ..sort((a, b) => b.completedAt.compareTo(a.completedAt));

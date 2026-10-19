@@ -4498,10 +4498,7 @@ const ClassroomHeroesSession heroesTeamworkSession = ClassroomHeroesSession(
 
 // Classroom Heroes' vocabulary sessions -- Colors and Shapes, one of each
 // per stage (Part 1s in Destination 1, Part 2s in Destination 2). Same two-
-// card game as the manners sessions, but each question shows one object on
-// the title classroom's chalkboard instead of a full scene.
-const String _heroesBoard = 'assets/images/classroom_heroes/start_screen.png';
-const String _heroesItems = 'assets/images/classroom_heroes/items';
+// card game and full-scene questions as the manners sessions.
 
 const ClassroomHeroesSession heroesColors1Session = ClassroomHeroesSession(
   number: 5,
@@ -4515,45 +4512,35 @@ const ClassroomHeroesSession heroesColors1Session = ClassroomHeroesSession(
       'You learned 5 colors in Arabic. Ahmad and Amina are proud of you!',
   questions: [
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/red_apple_minimal.png',
-      objectEmoji: '🍎',
+      scenarioImage: '$_heroesBg/color_red_apple.jpg',
       promptText: 'Ahmad is eating a tasty red apple. What is Red in Arabic?',
       correctText: 'أَحْمَر (Ahmar)',
       decoyText: 'أَزْرَق (Azraq)',
       successFeedback: 'Mumtaz! Ahmar means Red.',
     ),
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/blue_sky_minimal.png',
-      objectEmoji: '🌤️',
+      scenarioImage: '$_heroesBg/color_blue_sky.jpg',
       promptText: 'Look at the clear blue sky. What is Blue in Arabic?',
       correctText: 'أَزْرَق (Azraq)',
       decoyText: 'أَصْفَر (Asfar)',
       successFeedback: 'Mumtaz! Azraq means Blue.',
     ),
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/yellow_sun_minimal.png',
-      objectEmoji: '☀️',
+      scenarioImage: '$_heroesBg/color_yellow_sun.jpg',
       promptText: 'The bright yellow sun is shining! What is Yellow in Arabic?',
       correctText: 'أَصْفَر (Asfar)',
       decoyText: 'أَخْضَر (Akhdar)',
       successFeedback: 'Mumtaz! Asfar means Yellow.',
     ),
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/green_leaf_minimal.png',
-      objectEmoji: '🍃',
+      scenarioImage: '$_heroesBg/color_green_leaf.jpg',
       promptText: 'Amina found a pretty green leaf. What is Green in Arabic?',
       correctText: 'أَخْضَر (Akhdar)',
       decoyText: 'أَحْمَر (Ahmar)',
       successFeedback: 'Mumtaz! Akhdar means Green.',
     ),
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/orange_shirt_minimal.png',
-      objectEmoji: '👕',
+      scenarioImage: '$_heroesBg/color_orange_shirt.jpg',
       promptText:
           'Ahmad is wearing a bright orange shirt. What is Orange in Arabic?',
       correctText: 'بُرْتُقَالِيّ (Burtuqali)',
@@ -4575,9 +4562,7 @@ const ClassroomHeroesSession heroesColors2Session = ClassroomHeroesSession(
       'You learned 4 colors in Arabic. Ahmad and Amina are proud of you!',
   questions: [
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/purple_grape_minimal.png',
-      objectEmoji: '🍇',
+      scenarioImage: '$_heroesBg/color_purple_grapes.jpg',
       promptText:
           'Amina picked a bunch of purple grapes. What is Purple in Arabic?',
       correctText: 'بَنَفْسَجِيّ (Banafsaji)',
@@ -4585,9 +4570,7 @@ const ClassroomHeroesSession heroesColors2Session = ClassroomHeroesSession(
       successFeedback: 'Mumtaz! Banafsaji means Purple.',
     ),
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/black_night_minimal.png',
-      objectEmoji: '🌑',
+      scenarioImage: '$_heroesBg/color_black_sky.jpg',
       promptText:
           'The night sky is very dark and black. What is Black in Arabic?',
       correctText: 'أَسْوَد (Aswad)',
@@ -4595,9 +4578,7 @@ const ClassroomHeroesSession heroesColors2Session = ClassroomHeroesSession(
       successFeedback: 'Mumtaz! Aswad means Black.',
     ),
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/white_cloud_minimal.png',
-      objectEmoji: '☁️',
+      scenarioImage: '$_heroesBg/color_white_clouds.jpg',
       promptText:
           'The fluffy clouds are clean and white. What is White in Arabic?',
       correctText: 'أَبْيَض (Abyad)',
@@ -4605,9 +4586,7 @@ const ClassroomHeroesSession heroesColors2Session = ClassroomHeroesSession(
       successFeedback: 'Mumtaz! Abyad means White.',
     ),
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/brown_log_minimal.png',
-      objectEmoji: '🪵',
+      scenarioImage: '$_heroesBg/color_brown_trunk.jpg',
       promptText: 'The strong tree trunk is brown. What is Brown in Arabic?',
       correctText: 'بُنِّيّ (Bunni)',
       decoyText: 'بَنَفْسَجِيّ (Banafsaji)',
@@ -4628,9 +4607,7 @@ const ClassroomHeroesSession heroesShapes1Session = ClassroomHeroesSession(
       'You learned 5 shapes in Arabic. Ahmad and Amina are proud of you!',
   questions: [
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/ball_circle_minimal.png',
-      objectEmoji: '⚽',
+      scenarioImage: '$_heroesBg/shape_circle.jpg',
       promptText:
           'Ahmad is bouncing a ball that is a perfect circle. What is a Circle in Arabic?',
       correctText: "دَائِرَة (Da'irah)",
@@ -4638,9 +4615,7 @@ const ClassroomHeroesSession heroesShapes1Session = ClassroomHeroesSession(
       successFeedback: "Mumtaz! Da'irah means Circle.",
     ),
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/block_square_minimal.png',
-      objectEmoji: '🟧',
+      scenarioImage: '$_heroesBg/shape_square.jpg',
       promptText:
           'Amina is building with a square block. What is a Square in Arabic?',
       correctText: "مُرَبَّع (Murabba')",
@@ -4648,9 +4623,7 @@ const ClassroomHeroesSession heroesShapes1Session = ClassroomHeroesSession(
       successFeedback: "Mumtaz! Murabba' means Square.",
     ),
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/tent_triangle_minimal.png',
-      objectEmoji: '⛺',
+      scenarioImage: '$_heroesBg/shape_triangle.jpg',
       promptText:
           'Look at this triangular camping tent! What is a Triangle in Arabic?',
       correctText: 'مُثَلَّث (Muthallath)',
@@ -4658,9 +4631,7 @@ const ClassroomHeroesSession heroesShapes1Session = ClassroomHeroesSession(
       successFeedback: 'Mumtaz! Muthallath means Triangle.',
     ),
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/door_rectangle_minimal.png',
-      objectEmoji: '🚪',
+      scenarioImage: '$_heroesBg/shape_rectangle.jpg',
       promptText:
           'The tall classroom door is a rectangle. What is a Rectangle in Arabic?',
       correctText: 'مُسْتَطِيل (Mustatil)',
@@ -4668,9 +4639,7 @@ const ClassroomHeroesSession heroesShapes1Session = ClassroomHeroesSession(
       successFeedback: 'Mumtaz! Mustatil means Rectangle.',
     ),
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/star_minimal.png',
-      objectEmoji: '⭐',
+      scenarioImage: '$_heroesBg/shape_star.jpg',
       promptText:
           'There is a bright, glowing star in the sky. What is a Star in Arabic?',
       correctText: 'نَجْمَة (Najmah)',
@@ -4692,9 +4661,7 @@ const ClassroomHeroesSession heroesShapes2Session = ClassroomHeroesSession(
       'You learned 4 shapes in Arabic. Ahmad and Amina are proud of you!',
   questions: [
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/heart_minimal.png',
-      objectEmoji: '❤️',
+      scenarioImage: '$_heroesBg/shape_heart.jpg',
       promptText:
           'Amina drew a red heart shape to show love. What is a Heart in Arabic?',
       correctText: 'قَلْب (Qalb)',
@@ -4702,9 +4669,7 @@ const ClassroomHeroesSession heroesShapes2Session = ClassroomHeroesSession(
       successFeedback: 'Mumtaz! Qalb means Heart.',
     ),
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/kite_diamond_minimal.png',
-      objectEmoji: '🪁',
+      scenarioImage: '$_heroesBg/shape_diamond.jpg',
       promptText:
           'Ahmad is flying a diamond shaped kite in the park. What is a Diamond in Arabic?',
       correctText: "مُعَيَّن (Mu'ayyan)",
@@ -4712,9 +4677,7 @@ const ClassroomHeroesSession heroesShapes2Session = ClassroomHeroesSession(
       successFeedback: "Mumtaz! Mu'ayyan means Diamond.",
     ),
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/moon_crescent_minimal.png',
-      objectEmoji: '🌙',
+      scenarioImage: '$_heroesBg/shape_crescent.jpg',
       promptText:
           'The moon looks like a smiling crescent tonight. What is a Crescent in Arabic?',
       correctText: 'هِلَال (Hilal)',
@@ -4722,9 +4685,7 @@ const ClassroomHeroesSession heroesShapes2Session = ClassroomHeroesSession(
       successFeedback: 'Mumtaz! Hilal means Crescent.',
     ),
     ClassroomHeroesQuestion(
-      scenarioImage: _heroesBoard,
-      objectImage: '$_heroesItems/egg_oval_minimal.png',
-      objectEmoji: '🥚',
+      scenarioImage: '$_heroesBg/shape_oval.jpg',
       promptText: 'The bird laid a small oval egg. What is an Oval in Arabic?',
       correctText: 'بَيْضَوِيّ (Baydawi)',
       decoyText: 'مُسْتَطِيل (Mustatil)',
@@ -4900,7 +4861,7 @@ const List<QuranEtiquetteSession> etiquetteSessions = [
 /// Classroom Heroes' Colors and Shapes lessons are temporarily hidden from
 /// the curriculum (their sessions below stay intact). Flip back to `true`
 /// to restore them.
-const bool kHeroesVocabEnabled = false;
+const bool kHeroesVocabEnabled = true;
 
 const List<Destination> curriculum = [
   Destination(

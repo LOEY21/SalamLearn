@@ -10,6 +10,7 @@ import '../../../data/models/curriculum/curriculum_models.dart';
 import 'greeting_match_audio.dart';
 import '../../widgets/arc_text_painter.dart';
 import '../../widgets/app_orientation.dart';
+import '../game_stage.dart';
 import '../game_ui_audio.dart';
 
 enum _Screen { start, howTo, countdown, play, done }
@@ -942,314 +943,322 @@ class _GreetingMatchActivityState extends State<GreetingMatchActivity>
     return Container(
       width: double.infinity,
       height: double.infinity,
-      decoration: const BoxDecoration(
-        color: Color(0xFFFAF6EC),
-        image: DecorationImage(
-          image: AssetImage('assets/images/greeting_match/start_bg.png'),
-          fit: BoxFit.cover,
-        ),
-      ),
-      child: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return Center(
-              child: FittedBox(
-                fit: BoxFit.contain,
-                child: SizedBox(
-                  width: canvasW,
-                  height: canvasH,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      // Background scene layer
-                      Positioned.fill(
-                        child: Image.asset(
-                          'assets/images/greeting_match/start_bg.png',
-                          fit: BoxFit.fill,
-                        ),
-                      ),
+      color: const Color(0xFFFAF6EC),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // The square and the two friends standing in it, zoomed together
+          // to fill a screen of any shape; the title, buttons and Play stay
+          // whole on the canvas above.
+          StageCover(
+            design: const Size(canvasW, canvasH),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  child: Image.asset(
+                    'assets/images/greeting_match/start_bg.png',
+                    fit: BoxFit.fill,
+                  ),
+                ),
+                const Positioned(
+                  left: 306,
+                  top: 762,
+                  width: 300,
+                  height: 46,
+                  child: _FloorShadow(),
+                ),
+                const Positioned(
+                  left: 1239,
+                  top: 765,
+                  width: 300,
+                  height: 46,
+                  child: _FloorShadow(),
+                ),
 
-                      if (widget.onBack != null) ...[
-                        Positioned(
-                          left: 32,
-                          top: 14,
-                          width: 110,
-                          height: 110,
-                          child: _backButton(
-                            const Key('greeting-start-back'),
-                            widget.onBack!,
-                          ),
-                        ),
-                        Positioned(
-                          right: 32,
-                          top: 14,
-                          width: 110,
-                          height: 110,
-                          child: _homeButton(
-                            const Key('greeting-start-home'),
-                            widget.onBack!,
-                          ),
-                        ),
-                      ],
-                      Positioned(
-                        right: widget.onBack != null ? 162 : 32,
-                        top: 14,
-                        width: 110,
-                        height: 110,
-                        child: _musicButton(const Key('greeting-start-music')),
-                      ),
-
-                      // Floor shadows under the mascots' feet
-                      const Positioned(
-                        left: 306,
-                        top: 762,
-                        width: 300,
-                        height: 46,
-                        child: _FloorShadow(),
-                      ),
-                      const Positioned(
-                        left: 1239,
-                        top: 765,
-                        width: 300,
-                        height: 46,
-                        child: _FloorShadow(),
-                      ),
-
-                      // Zara (left) and Amir (right)
-                      Positioned(
-                        left: 241,
-                        top: 239,
-                        width: 422,
-                        height: 562,
-                        child: _Enter(
-                          delay: 250,
-                          from: const Offset(-0.5, 0),
-                          duration: 650,
-                          child: Image.asset(
-                            'assets/images/greeting_match/start_girl.png',
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 1165,
-                        top: 253,
-                        width: 413,
-                        height: 550,
-                        child: _Enter(
-                          delay: 330,
-                          from: const Offset(0.5, 0),
-                          duration: 650,
-                          child: Image.asset(
-                            'assets/images/greeting_match/start_boy.png',
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                      ),
-
-                      // Title logo with the session name on its ribbon
-                      AnimatedBuilder(
-                        animation: _idleController,
-                        builder: (context, child) {
-                          final t = _idleController.value;
-                          final dy = math.sin(t * 2 * math.pi) * 3.0;
-                          return Positioned(
-                            left: 620,
-                            top: 26 + dy,
-                            width: 560,
-                            height: 446,
-                            child: _Enter(
-                              from: const Offset(0, -0.3),
-                              scale: 0.85,
-                              duration: 700,
-                              curve: Curves.easeOutBack,
-                              child: child!,
-                            ),
-                          );
-                        },
-                        child: Stack(
-                          children: [
-                            Positioned.fill(
-                              child: Image.asset(
-                                'assets/images/greeting_match/start_logo.png',
-                                fit: BoxFit.fill,
+                // Zara (left) and Amir (right)
+                Positioned(
+                  left: 241,
+                  top: 239,
+                  width: 422,
+                  height: 562,
+                  child: _Enter(
+                    delay: 250,
+                    from: const Offset(-0.5, 0),
+                    duration: 650,
+                    child: Image.asset(
+                      'assets/images/greeting_match/start_girl.png',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 1165,
+                  top: 253,
+                  width: 413,
+                  height: 550,
+                  child: _Enter(
+                    delay: 330,
+                    from: const Offset(0.5, 0),
+                    duration: 650,
+                    child: Image.asset(
+                      'assets/images/greeting_match/start_boy.png',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Center(
+                  child: FittedBox(
+                    fit: BoxFit.contain,
+                    child: SizedBox(
+                      width: canvasW,
+                      height: canvasH,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          if (widget.onBack != null) ...[
+                            Positioned(
+                              left: 32,
+                              top: 14,
+                              width: 110,
+                              height: 110,
+                              child: _backButton(
+                                const Key('greeting-start-back'),
+                                widget.onBack!,
                               ),
                             ),
                             Positioned(
-                              // Centred on the ribbon's blue face (art
-                              // rows 810-930 of 1008, i.e. y 358-412 here).
-                              left: 84,
-                              right: 84,
-                              top: 356,
-                              bottom: 32,
-                              // Bent along the ribbon's own arch.
-                              child: CustomPaint(
-                                painter: ArcTextPainter(
-                                  widget.session.title.tr,
-                                  const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 27,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 0.3,
-                                    shadows: [
-                                      Shadow(
-                                        color: Color(0xCC0B2A7A),
-                                        offset: Offset(0, 2),
-                                        blurRadius: 3,
-                                      ),
-                                    ],
-                                  ),
-                                  radius: 990,
-                                ),
+                              right: 32,
+                              top: 14,
+                              width: 110,
+                              height: 110,
+                              child: _homeButton(
+                                const Key('greeting-start-home'),
+                                widget.onBack!,
                               ),
                             ),
                           ],
-                        ),
-                      ),
+                          Positioned(
+                            right: widget.onBack != null ? 162 : 32,
+                            top: 14,
+                            width: 110,
+                            height: 110,
+                            child: _musicButton(
+                              const Key('greeting-start-music'),
+                            ),
+                          ),
 
-                      // Subtitle pill: nine-slice keeps the rounded caps
-                      // round at the pill's much wider on-screen aspect.
-                      Positioned(
-                        left: 600,
-                        top: 480,
-                        width: 645,
-                        height: 53,
-                        child: _Enter(
-                          delay: 450,
-                          from: const Offset(0, 0.6),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Positioned.fill(
-                                child: FittedBox(
-                                  fit: BoxFit.fill,
-                                  child: SizedBox(
-                                    width: 5234,
-                                    height: 430,
-                                    child: Image.asset(
-                                      'assets/images/greeting_match/start_pill.png',
+                          // Title logo with the session name on its ribbon
+                          AnimatedBuilder(
+                            animation: _idleController,
+                            builder: (context, child) {
+                              final t = _idleController.value;
+                              final dy = math.sin(t * 2 * math.pi) * 3.0;
+                              return Positioned(
+                                left: 620,
+                                top: 26 + dy,
+                                width: 560,
+                                height: 446,
+                                child: _Enter(
+                                  from: const Offset(0, -0.3),
+                                  scale: 0.85,
+                                  duration: 700,
+                                  curve: Curves.easeOutBack,
+                                  child: child!,
+                                ),
+                              );
+                            },
+                            child: Stack(
+                              children: [
+                                Positioned.fill(
+                                  child: Image.asset(
+                                    'assets/images/greeting_match/start_logo.png',
+                                    fit: BoxFit.fill,
+                                  ),
+                                ),
+                                Positioned(
+                                  // Centred on the ribbon's blue face (art
+                                  // rows 810-930 of 1008, i.e. y 358-412 here).
+                                  left: 84,
+                                  right: 84,
+                                  top: 356,
+                                  bottom: 32,
+                                  // Bent along the ribbon's own arch.
+                                  child: CustomPaint(
+                                    painter: ArcTextPainter(
+                                      widget.session.title.tr,
+                                      const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 27,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.3,
+                                        shadows: [
+                                          Shadow(
+                                            color: Color(0xCC0B2A7A),
+                                            offset: Offset(0, 2),
+                                            blurRadius: 3,
+                                          ),
+                                        ],
+                                      ),
+                                      radius: 990,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Subtitle pill: nine-slice keeps the rounded caps
+                          // round at the pill's much wider on-screen aspect.
+                          Positioned(
+                            left: 600,
+                            top: 480,
+                            width: 645,
+                            height: 53,
+                            child: _Enter(
+                              delay: 450,
+                              from: const Offset(0, 0.6),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Positioned.fill(
+                                    child: FittedBox(
                                       fit: BoxFit.fill,
-                                      centerSlice: const Rect.fromLTRB(
-                                        240,
-                                        0,
-                                        1645,
-                                        430,
+                                      child: SizedBox(
+                                        width: 5234,
+                                        height: 430,
+                                        child: Image.asset(
+                                          'assets/images/greeting_match/start_pill.png',
+                                          fit: BoxFit.fill,
+                                          centerSlice: const Rect.fromLTRB(
+                                            240,
+                                            0,
+                                            1645,
+                                            430,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 26,
-                                ),
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    widget.session.subtitle,
-                                    textAlign: TextAlign.center,
-                                    maxLines: 1,
-                                    style: const TextStyle(
-                                      color: Color(0xFF5B3B1E),
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w800,
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 26,
+                                    ),
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        widget.session.subtitle,
+                                        textAlign: TextAlign.center,
+                                        maxLines: 1,
+                                        style: const TextStyle(
+                                          color: Color(0xFF5B3B1E),
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      // Ray bursts either side of Play
-                      Positioned(
-                        left: 628,
-                        top: 572,
-                        width: 56,
-                        height: 64,
-                        child: _Enter(
-                          delay: 700,
-                          from: Offset.zero,
-                          scale: 0.3,
-                          curve: Curves.easeOutBack,
-                          child: Image.asset(
-                            'assets/images/greeting_match/start_rays.png',
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 1186,
-                        top: 572,
-                        width: 56,
-                        height: 64,
-                        child: Transform.flip(
-                          flipX: true,
-                          child: _Enter(
-                            delay: 700,
-                            from: Offset.zero,
-                            scale: 0.3,
-                            curve: Curves.easeOutBack,
-                            child: Image.asset(
-                              'assets/images/greeting_match/start_rays.png',
-                              fit: BoxFit.contain,
                             ),
                           ),
-                        ),
-                      ),
 
-                      // Play Button with breathing pulse
-                      Positioned(
-                        left: 685,
-                        top: 554,
-                        width: 500,
-                        height: 177,
-                        child: AnimatedBuilder(
-                          animation: _idleController,
-                          builder: (context, child) {
-                            final t = _idleController.value;
-                            final pulseScale = _playDown
-                                ? 0.94
-                                : (1.0 + math.sin(t * 2 * math.pi) * 0.025);
-                            return Transform.scale(
-                              scale: pulseScale,
-                              child: child,
-                            );
-                          },
-                          child: _Enter(
-                            delay: 560,
-                            from: Offset.zero,
-                            scale: 0.6,
-                            duration: 600,
-                            curve: Curves.easeOutBack,
-                            child: GestureDetector(
-                              key: const Key('greeting-match-play-btn'),
-                              onTapDown: (_) =>
-                                  setState(() => _playDown = true),
-                              onTapUp: (_) {
-                                setState(() => _playDown = false);
-                                _startGame();
-                              },
-                              onTapCancel: () =>
-                                  setState(() => _playDown = false),
+                          // Ray bursts either side of Play
+                          Positioned(
+                            left: 628,
+                            top: 572,
+                            width: 56,
+                            height: 64,
+                            child: _Enter(
+                              delay: 700,
+                              from: Offset.zero,
+                              scale: 0.3,
+                              curve: Curves.easeOutBack,
                               child: Image.asset(
-                                _playDown
-                                    ? 'assets/images/greeting_match/start_play_down.png'
-                                    : 'assets/images/greeting_match/start_play.png',
+                                'assets/images/greeting_match/start_rays.png',
                                 fit: BoxFit.contain,
                               ),
                             ),
                           ),
-                        ),
+                          Positioned(
+                            left: 1186,
+                            top: 572,
+                            width: 56,
+                            height: 64,
+                            child: Transform.flip(
+                              flipX: true,
+                              child: _Enter(
+                                delay: 700,
+                                from: Offset.zero,
+                                scale: 0.3,
+                                curve: Curves.easeOutBack,
+                                child: Image.asset(
+                                  'assets/images/greeting_match/start_rays.png',
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          // Play Button with breathing pulse
+                          Positioned(
+                            left: 685,
+                            top: 554,
+                            width: 500,
+                            height: 177,
+                            child: AnimatedBuilder(
+                              animation: _idleController,
+                              builder: (context, child) {
+                                final t = _idleController.value;
+                                final pulseScale = _playDown
+                                    ? 0.94
+                                    : (1.0 + math.sin(t * 2 * math.pi) * 0.025);
+                                return Transform.scale(
+                                  scale: pulseScale,
+                                  child: child,
+                                );
+                              },
+                              child: _Enter(
+                                delay: 560,
+                                from: Offset.zero,
+                                scale: 0.6,
+                                duration: 600,
+                                curve: Curves.easeOutBack,
+                                child: GestureDetector(
+                                  key: const Key('greeting-match-play-btn'),
+                                  onTapDown: (_) =>
+                                      setState(() => _playDown = true),
+                                  onTapUp: (_) {
+                                    setState(() => _playDown = false);
+                                    _startGame();
+                                  },
+                                  onTapCancel: () =>
+                                      setState(() => _playDown = false),
+                                  child: Image.asset(
+                                    _playDown
+                                        ? 'assets/images/greeting_match/start_play_down.png'
+                                        : 'assets/images/greeting_match/start_play.png',
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-            );
-          },
-        ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

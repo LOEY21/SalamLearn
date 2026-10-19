@@ -792,10 +792,15 @@ class CompanionPicker extends StatefulWidget {
     required this.avatar,
     required this.onChanged,
     this.compact = false,
+    this.looksOnly = false,
   });
 
   final String avatar;
   final ValueChanged<String> onChanged;
+
+  /// Only the current mascot's looks, no Amir / Amira switch — for the
+  /// learner's own Me tab, where the gender set at setup stays fixed.
+  final bool looksOnly;
 
   /// Shorter mascot art — for the edit screen, where the picker shares the
   /// page with the rest of the form.
@@ -833,45 +838,136 @@ class _CompanionPickerState extends State<CompanionPicker>
 
   @override
   Widget build(BuildContext context) {
+    // Each card shows its set's current look (or the first), and tapping it
+    // picks that look; the chosen set's looks then appear below.
+    String shown(List<String> set) =>
+        set.contains(widget.avatar) ? widget.avatar : set.first;
+    final looks = girlMascots.contains(widget.avatar)
+        ? girlMascots
+        : boyMascots.contains(widget.avatar)
+        ? boyMascots
+        : null;
+    final lookColor = looks == girlMascots ? AppColors.gold : AppColors.teal;
     final cards = [
       _CompanionCard(
-        imagePath: 'assets/images/boy_mascot_full_body.png',
+        imagePath: mascotAsset(shown(boyMascots))!,
         name: 'Amir',
         detail: 'Boy companion',
-        selected: widget.avatar == 'boy_mascot',
+        selected: looks == boyMascots,
         color: AppColors.teal,
         float: _float,
         artHeight: widget.compact ? 120 : 170,
-        onTap: () => widget.onChanged('boy_mascot'),
+        onTap: () => widget.onChanged(shown(boyMascots)),
       ),
       _CompanionCard(
-        imagePath: 'assets/images/girl_mascot_full_body.png',
+        imagePath: mascotAsset(shown(girlMascots))!,
         name: 'Amira',
         detail: 'Girl companion',
-        selected: widget.avatar == 'girl_mascot',
+        selected: looks == girlMascots,
         color: AppColors.gold,
         float: _float,
         artHeight: widget.compact ? 120 : 170,
-        onTap: () => widget.onChanged('girl_mascot'),
+        onTap: () => widget.onChanged(shown(girlMascots)),
       ),
     ];
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (scaledExtent(context, constraints.maxWidth) < 260) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [cards[0], const SizedBox(height: 12), cards[1]],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: cards[0]),
-            const SizedBox(width: 12),
-            Expanded(child: cards[1]),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!widget.looksOnly)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (scaledExtent(context, constraints.maxWidth) < 260) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [cards[0], const SizedBox(height: 12), cards[1]],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: cards[0]),
+                  const SizedBox(width: 12),
+                  Expanded(child: cards[1]),
+                ],
+              );
+            },
+          ),
+        if (looks != null) ...[
+          if (!widget.looksOnly) ...[
+            const SizedBox(height: 14),
+            Text(
+              'Pick a look',
+              textAlign: TextAlign.center,
+              style: displayText(15, weight: 800),
+            ),
+            const SizedBox(height: 8),
           ],
-        );
-      },
+          Row(
+            children: [
+              for (final (i, id) in looks.indexed) ...[
+                if (i > 0) const SizedBox(width: 10),
+                Expanded(
+                  child: _LookChoice(
+                    imagePath: mascotAsset(id)!,
+                    label: 'Look ${i + 1}',
+                    selected: widget.avatar == id,
+                    color: lookColor,
+                    onTap: () => widget.onChanged(id),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _LookChoice extends StatelessWidget {
+  const _LookChoice({
+    required this.imagePath,
+    required this.label,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String imagePath;
+  final String label;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: Material(
+        color: selected
+            ? (color == AppColors.teal ? AppColors.mint : AppColors.goldTint)
+            : AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: selected ? color : AppColors.creamBorder,
+            width: selected ? 2.4 : 1.4,
+          ),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: SizedBox(
+              height: 84,
+              child: Image.asset(imagePath, fit: BoxFit.contain),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

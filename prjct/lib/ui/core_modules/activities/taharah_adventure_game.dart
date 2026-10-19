@@ -2545,10 +2545,10 @@ class _CleanOrDirtyState extends State<_CleanOrDirty> {
                         width: 116,
                         height: 105,
                         child: _roundButton(
-                          Icons.arrow_back_ios_new_rounded,
+                          Icons.home_rounded,
                           const Color(0xFF7A4A1E),
-                          52,
-                          () => _go(_S1.start),
+                          56,
+                          widget.onExit ?? () => _go(_S1.start),
                         ),
                       ),
                       Positioned(
@@ -4003,6 +4003,12 @@ class _WudhuState extends State<_Wudhu> {
   void _tap(String id) {
     if (_idx >= _steps.length) return;
     final step = _steps[_idx];
+    // Mid-pose the art no longer lines up with the tap zones, and a done
+    // step re-tapped isn't a mistake — neither counts as wrong.
+    if (id != step.id &&
+        (_pose != null || _steps.take(_idx).any((s) => s.id == id))) {
+      return;
+    }
     _toastT?.cancel();
     if (id == step.id) {
       final done = _idx + 1 >= _steps.length;
@@ -4982,7 +4988,7 @@ class _WudhuState extends State<_Wudhu> {
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
       child: Row(
         children: [
-          _wIconButton('back', _goStart),
+          _wIconButton('home', widget.onExit ?? _goStart),
           Expanded(
             // A gap on each side: the outline paints past the text box, so
             // a long (Tagalog) title would otherwise touch the buttons.

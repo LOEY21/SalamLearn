@@ -21,7 +21,11 @@ import {
   writeBatch,
   setDoc,
   updateDoc,
+  deleteDoc,
+  runTransaction,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { STAGES, GAMES, LESSONS } from "./curriculum-map.js";
+import { renderHubView } from "./hub-view.js";
 
 // Same public web config as prjct/lib/firebase_options.dart's `web` block —
 // safe to expose client-side; access is enforced by firestore.rules, not by
@@ -50,6 +54,8 @@ const loadingOverlay = document.getElementById("loading-overlay");
 const loadingMessage = document.getElementById("loading-message");
 const toastContainer = document.getElementById("toast-container");
 let currentLearners = [];
+let hubData = null;
+let lastParents = [];
 
 function showLoading(message) {
   loadingMessage.textContent = message || "Please wait...";
@@ -127,7 +133,16 @@ onAuthStateChanged(auth, async (user) => {
   // non-admin (e.g. a stray parent/teacher account) would see the dashboard
   // shell itself (tabs, layout) before every table came back empty from
   // permission-denied. Bounce them back to login instead.
-  const adminSnap = await getDoc(doc(db, "admins", user.uid));
+  let adminSnap;
+  try {
+    adminSnap = await getDoc(doc(db, "admins", user.uid));
+  } catch (err) {
+    console.error("Admin check failed:", err);
+    await signOut(auth);
+    loginError.textContent = `Couldn't verify admin access (${err.code ?? err.message}). Check your connection and try again.`;
+    loginError.hidden = false;
+    return;
+  }
   if (!adminSnap.exists()) {
     await signOut(auth);
     loginError.textContent = "This account isn't authorized for admin access.";
@@ -222,8 +237,8 @@ document.getElementById("print-report-btn").addEventListener("click", () => wind
 // ---- Data loading ----
 // Collection names mirror `HiveBoxes` constants in the Flutter app
 // (lib/data/local/hive_boxes.dart) — `firestore_mirror.dart` pushes to
-// these exact collection names, one per Hive box. `streaks`/`badges`
-// aren't mirrored yet, so they aren't read here either.
+// these exact collection names, one per Hive box. Streaks aren't stored —
+// the Student Hub view derives them from progress records like the app does.
 async function fetchAll(name) {
   const snap = await getDocs(collection(db, name));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -253,7 +268,7 @@ function formatDate(value) {
   });
 }
 
-function renderTable(tableEl, columns, rows, actions) {
+function renderTable(tableEl, columns, rows, actions, bulk) {
   const actionsList = Array.isArray(actions) ? actions : (actions ? [actions] : []);
   const allColumns = actionsList.length > 0 ? [...columns, { label: "Actions" }] : columns;
   if (rows.length === 0) {
@@ -261,15 +276,19 @@ function renderTable(tableEl, columns, rows, actions) {
       <thead><tr>${allColumns.map((c) => `<th>${c.label}</th>`).join("")}</tr></thead>
       <tbody><tr class="empty-row"><td colspan="${allColumns.length}">No records yet.</td></tr></tbody>
     `;
+    if (bulk) setupBulkSelect(tableEl, rows, bulk);
     return;
   }
   const head = `<tr>${allColumns.map((c) => `<th>${c.label}</th>`).join("")}</tr>`;
   tableEl.innerHTML = `<thead>${head}</thead><tbody></tbody>`;
+  tableEl.classList.add("cards");
+  tableEl.closest(".table-wrap")?.classList.add("cards-wrap");
   const tbody = tableEl.querySelector("tbody");
   rows.forEach((row) => {
     const tr = document.createElement("tr");
     columns.forEach((c) => {
       const td = document.createElement("td");
+      td.dataset.label = c.label;
       const text = c.value(row) ?? "—";
       if (c.badge) {
         const badge = document.createElement("span");
@@ -299,6 +318,162 @@ function renderTable(tableEl, columns, rows, actions) {
     }
     tbody.appendChild(tr);
   });
+  if (bulk) setupBulkSelect(tableEl, rows, bulk);
+}
+
+// Multi-select for a rendered table: "Select" / "Select all" in a bar above
+// it, or long-press (500 ms) a row. `bulk` is [{ label, className, run(rows) }].
+function setupBulkSelect(tableEl, rows, bulk) {
+  const wrap = tableEl.closest(".table-wrap") ?? tableEl;
+  let bar = wrap.previousElementSibling;
+  if (!bar?.classList.contains("bulk-bar")) {
+    bar = document.createElement("div");
+    bar.className = "bulk-bar";
+    wrap.before(bar);
+  }
+  tableEl.classList.add("bulk");
+  tableEl.classList.remove("selecting");
+  bar.hidden = rows.length === 0;
+  if (rows.length === 0) return;
+
+  const selected = new Set();
+  const trs = [...tableEl.tBodies[0].rows];
+  const makeBox = (label) => {
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.setAttribute("aria-label", label);
+    return box;
+  };
+  const allBox = makeBox("Select all");
+  const th = document.createElement("th");
+  th.className = "select-col";
+  th.append(allBox);
+  tableEl.tHead.rows[0].prepend(th);
+  const boxes = trs.map((tr) => {
+    const td = document.createElement("td");
+    td.className = "select-col";
+    const box = makeBox("Select row");
+    td.append(box);
+    tr.prepend(td);
+    return box;
+  });
+
+  const isSelecting = () => tableEl.classList.contains("selecting");
+  const visible = () => trs.map((_, i) => i).filter((i) => !trs[i].classList.contains("table-row-hidden"));
+  const allVisibleSelected = () => visible().every((i) => selected.has(i));
+  const button = (label, className, onClick) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = className;
+    b.textContent = label;
+    b.addEventListener("click", onClick);
+    return b;
+  };
+
+  const update = () => {
+    trs.forEach((tr, i) => {
+      boxes[i].checked = selected.has(i);
+      tr.classList.toggle("row-selected", selected.has(i));
+    });
+    allBox.checked = selected.size > 0 && allVisibleSelected();
+    bar.replaceChildren();
+    if (!isSelecting()) {
+      const hint = document.createElement("span");
+      hint.textContent = "or long-press a row";
+      bar.append(
+        button("Select", "btn-ghost btn-small", () => setSelecting(true)),
+        button("Select all", "btn-ghost btn-small", toggleAll),
+        hint
+      );
+      return;
+    }
+    const count = document.createElement("span");
+    count.className = "bulk-count";
+    count.textContent = `${selected.size} selected`;
+    bar.append(count);
+    bulk.forEach((act) => {
+      const b = button(act.label, act.className ?? "btn-view", () =>
+        act.run([...selected].map((i) => rows[i]))
+      );
+      b.disabled = selected.size === 0;
+      bar.append(b);
+    });
+    bar.append(
+      button(selected.size > 0 && allVisibleSelected() ? "Unselect all" : "Select all", "btn-ghost btn-small", toggleAll),
+      button("Cancel", "btn-ghost btn-small", () => setSelecting(false))
+    );
+  };
+  const setSelecting = (on) => {
+    tableEl.classList.toggle("selecting", on);
+    if (!on) selected.clear();
+    update();
+  };
+  const select = (i) => {
+    tableEl.classList.add("selecting");
+    selected.add(i);
+    update();
+  };
+  const toggle = (i) => {
+    if (selected.has(i)) selected.delete(i);
+    else selected.add(i);
+    update();
+  };
+  function toggleAll() {
+    const unselect = selected.size > 0 && allVisibleSelected();
+    visible().forEach((i) => (unselect ? selected.delete(i) : selected.add(i)));
+    tableEl.classList.add("selecting");
+    update();
+  }
+
+  allBox.addEventListener("change", toggleAll);
+  boxes.forEach((box, i) => box.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggle(i);
+  }));
+  trs.forEach((tr, i) => {
+    let timer = null;
+    let longPressed = false;
+    let startX = 0;
+    let startY = 0;
+    const cancel = () => {
+      clearTimeout(timer);
+      timer = null;
+    };
+    tr.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest("button, input")) return;
+      longPressed = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      timer = setTimeout(() => {
+        timer = null;
+        longPressed = true;
+        select(i);
+      }, 500);
+    });
+    tr.addEventListener("pointermove", (e) => {
+      if (timer && Math.hypot(e.clientX - startX, e.clientY - startY) > 10) cancel();
+    });
+    tr.addEventListener("pointerup", cancel);
+    tr.addEventListener("pointerleave", cancel);
+    tr.addEventListener("pointercancel", cancel);
+    // Touch browsers fire contextmenu on long-press, sometimes before the timer.
+    tr.addEventListener("contextmenu", (e) => {
+      if (timer) {
+        cancel();
+        longPressed = true;
+        select(i);
+      }
+      if (longPressed || isSelecting()) e.preventDefault();
+    });
+    tr.addEventListener("click", (e) => {
+      if (longPressed) {
+        longPressed = false;
+        return;
+      }
+      if (isSelecting() && !e.target.closest("button, input")) toggle(i);
+    });
+  });
+  update();
 }
 
 function computeInsights(data) {
@@ -683,7 +858,7 @@ function renderReport(data) {
 async function loadAllData() {
   accessDenied.hidden = true;
   try {
-    const [parents, teachers, principals, learners, classes, enrollments, progress, trashbin] =
+    const [parents, teachers, principals, learners, classes, enrollments, progress, trashbin, badges, assignments] =
       await Promise.all([
         fetchAll("parents"),
         fetchAll("teachers"),
@@ -693,9 +868,17 @@ async function loadAllData() {
         fetchAll("enrollments"),
         fetchAll("progress"),
         fetchAll("trashbin"),
+        fetchAll("badges"),
+        fetchAll("assigned_modules"),
       ]);
 
     currentLearners = learners;
+    lastParents = parents;
+    hubData = { learners, progress, badges, enrollments, assignments };
+    fillHubLearnerSelect();
+    await assignMissingParentCodes(parents);
+    const activatedIds = await activatedTeacherIds(teachers);
+    const isActivated = (r) => teacherStatus(r) === "approved" && activatedIds.has(r.id);
 
     renderDashboard({
       parents, teachers, learners, classes, enrollments, progress,
@@ -708,33 +891,46 @@ async function loadAllData() {
       document.getElementById("table-parents"),
       [
         { label: "Name", value: (r) => r.fullName },
+        { label: "Parent ID", value: (r) => r.parentCode },
         { label: "Email", value: (r) => r.email },
-        { label: "Mobile", value: (r) => r.mobileNumber },
+        { label: "Status", value: (r) => parentActivated(r) ? "Activated" : "Not activated", badge: (r) => parentActivated(r) ? "status-approved" : "status-pending" },
         { label: "Registered", value: (r) => formatDate(r.createdAt) },
       ],
       parents,
       [
         { label: "Reset Password", className: "btn-view", onClick: (row) => resetAccountPassword(row.email) },
         { label: "Remove", onClick: (row, btn) => confirmDeleteParent(row, btn) },
-      ]
+      ],
+      [bulkRemove("parents", removeParent, " This also deletes their learners and everything tied to them.")]
     );
 
     renderTable(
       document.getElementById("table-teachers"),
       [
         { label: "Name", value: (r) => r.fullName },
+        { label: "Employee ID", value: (r) => r.employeeId },
         { label: "School", value: (r) => r.school },
         { label: "Email", value: (r) => r.email },
-        { label: "Status", value: (r) => teacherStatus(r), badge: (r) => `status-${teacherStatus(r)}` },
+        { label: "Status", value: (r) => isActivated(r) ? "Activated" : "Not activated", badge: (r) => isActivated(r) ? "status-approved" : "status-pending" },
         { label: "Registered", value: (r) => formatDate(r.createdAt) },
       ],
       [...teachers].sort((a, b) => (teacherStatus(b) === "pending") - (teacherStatus(a) === "pending")),
       [
-        { label: "Approve", className: "btn-primary btn-small", show: (r) => teacherStatus(r) !== "approved", onClick: (row, btn) => setTeacherStatus(row, "approved", btn) },
-        { label: "Reject", show: (r) => teacherStatus(r) !== "rejected", onClick: (row, btn) => setTeacherStatus(row, "rejected", btn) },
-        { label: "Set pending", className: "btn-view", show: (r) => teacherStatus(r) === "rejected", onClick: (row, btn) => setTeacherStatus(row, "pending", btn) },
+        { label: "Activate", className: "btn-primary btn-small", show: (r) => teacherStatus(r) !== "approved", onClick: (row, btn) => setTeacherStatus(row, "approved", btn) },
         { label: "Reset Password", className: "btn-view", onClick: (row) => resetAccountPassword(row.email, row.email && teacherAuthEmail(row.email)) },
         { label: "Remove", onClick: (row, btn) => confirmDeleteTeacher(row, btn) },
+      ],
+      [
+        {
+          label: "Activate selected",
+          className: "btn-primary btn-small",
+          run: (rows) => runForRows(
+            rows.filter((r) => teacherStatus(r) !== "approved"),
+            (r) => updateDoc(doc(db, "teachers", r.id), { verificationStatus: "approved" }),
+            "Activating teachers...", "Selected teachers activated", "Failed to activate teacher"
+          ),
+        },
+        bulkRemove("teachers", removeTeacher, " This also deletes their classes and related enrollments/assignments."),
       ]
     );
 
@@ -752,6 +948,10 @@ async function loadAllData() {
       ]
     );
 
+    const assignIdsBtn = document.getElementById("assign-employee-ids");
+    assignIdsBtn.hidden = !teachers.some((t) => !t.employeeId && t.email);
+    assignIdsBtn.onclick = () => assignMissingEmployeeIds(teachers);
+
     const parentNameById = new Map(parents.map((p) => [p.id, p.fullName]));
     renderTable(
       document.getElementById("table-learners"),
@@ -764,7 +964,8 @@ async function loadAllData() {
         { label: "Added", value: (r) => formatDate(r.createdAt) },
       ],
       learners,
-      { label: "Remove", onClick: (row, btn) => confirmDeleteLearner(row, btn) }
+      { label: "Remove", onClick: (row, btn) => confirmDeleteLearner(row, btn) },
+      [bulkRemove("learners", removeLearner, " This also deletes their enrollments, progress, and assignments.")]
     );
 
     const teacherNameById = new Map(teachers.map((t) => [t.id, t.fullName]));
@@ -793,7 +994,8 @@ async function loadAllData() {
           className: "btn-danger",
           onClick: (row, btn) => confirmDeleteClass(row, btn)
         }
-      ]
+      ],
+      [bulkRemove("classes", removeClass, " This also deletes their enrollments and assignments.")]
     );
 
     const learnerNameById = new Map(learners.map((l) => [l.id, l.name]));
@@ -836,7 +1038,10 @@ async function loadAllData() {
         { label: "Last Activity", value: (r) => formatDate(r.lastActivity) },
       ],
       progressSummary,
-      { label: "View Progress", className: "btn-view", onClick: (row) => showLearnerProgress(row) }
+      [
+        { label: "View Progress", className: "btn-view", onClick: (row) => showLearnerProgress(row) },
+        { label: "View Hub", className: "btn-view", onClick: (row) => openLearnerHub(row.learnerId) },
+      ]
     );
 
     const trashbinUsers = trashbin.filter((r) => r.deletedBy !== "admin");
@@ -862,6 +1067,20 @@ async function loadAllData() {
           className: "btn-danger",
           onClick: (row, btn) => deleteTrashItemPermanently(row, btn)
         }
+      ],
+      [
+        {
+          label: "Restore selected",
+          run: (rows) => runForRows(rows, restoreTrashEntry, "Restoring items...", `${rows.length} item(s) restored`, "Failed to restore item"),
+        },
+        {
+          label: "Delete selected permanently",
+          className: "btn-danger",
+          run: async (rows) => {
+            if (!window.confirm(`Permanently delete ${rows.length} item(s) from the trashbin? This cannot be undone.`)) return;
+            await runForRows(rows, deleteTrashEntry, "Deleting items permanently...", `${rows.length} item(s) permanently deleted`, "Failed to delete item");
+          },
+        },
       ]
     );
 
@@ -1028,6 +1247,27 @@ async function createAuthAccountWithoutSignOut(email, password, writeProfile, { 
   }
 }
 
+// Teachers who finished activation in the app (`activatedTeachers/{email}`,
+// keyed by the plain or `+teacher` login email — see the app's
+// `_markTeacherActivated`). A Set, not a row field, so it never leaks into
+// trashbin copies of the teacher doc.
+async function activatedTeacherIds(teachers) {
+  const ids = new Set();
+  await Promise.all(teachers.filter((t) => t.email).map(async (t) => {
+    for (const key of new Set([t.email.trim().toLowerCase(), teacherAuthEmail(t.email)])) {
+      try {
+        if ((await getDoc(doc(db, "activatedTeachers", key))).exists()) {
+          ids.add(t.id);
+          return;
+        }
+      } catch (err) {
+        console.error(`Activation check for ${t.email} failed:`, err);
+      }
+    }
+  }));
+  return ids;
+}
+
 // Teacher logins on Gmail live under a "+teacher" alias so a parent and a
 // teacher can share one Gmail with different passwords (Firebase Auth allows
 // one login per email). Gmail delivers the alias to the same inbox. Must match
@@ -1041,6 +1281,79 @@ function teacherAuthEmail(email) {
   if (domain !== "gmail.com" && domain !== "googlemail.com") return normalized;
   if (local.endsWith("+teacher")) return normalized;
   return `${local}+teacher@${domain}`;
+}
+
+// Teacher Employee ID: "YYYY-NNNNNN" (year + 6 random digits). Random, not
+// sequential, because `teacherIds/{id}` is readable before sign-in (the app
+// resolves ID -> email for activation/login) — sequential IDs would let
+// anyone walk the whole list of teacher emails.
+function generateEmployeeId() {
+  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1000000;
+  return `${new Date().getFullYear()}-${String(n).padStart(6, "0")}`;
+}
+
+// Claims a fresh ID in `teacherIds` (retrying on the rare collision) and
+// returns it. Must match the app's `FirestoreMirror.emailForEmployeeId`.
+async function reserveEmployeeId(email, teacherId) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const id = generateEmployeeId();
+    const ref = doc(db, "teacherIds", id);
+    const claimed = await runTransaction(db, async (tx) => {
+      if ((await tx.get(ref)).exists()) return false;
+      tx.set(ref, { email, teacherId });
+      return true;
+    });
+    if (claimed) return id;
+  }
+  throw new Error("Could not generate a unique Employee ID");
+}
+
+// Parent ID: admin-web only (never shown in the app), so no public lookup
+// collection — uniqueness is checked against the loaded parents list.
+function newParentCode(parents) {
+  const taken = new Set(parents.map((p) => p.parentCode));
+  let code;
+  do code = generateEmployeeId(); while (taken.has(code));
+  return code;
+}
+
+// Silently gives every parent without a Parent ID one (app-registered
+// parents can't set their own — see firestore.rules).
+async function assignMissingParentCodes(parents) {
+  for (const p of parents.filter((p) => !p.parentCode)) {
+    const code = newParentCode(parents);
+    try {
+      await updateDoc(doc(db, "parents", p.id), { parentCode: code });
+      p.parentCode = code;
+    } catch (err) {
+      console.error(`Parent ID for ${p.email} failed:`, err);
+    }
+  }
+}
+
+async function assignMissingEmployeeIds(teachers) {
+  const missing = teachers.filter((t) => !t.employeeId && t.email);
+  if (missing.length === 0) return;
+  if (!window.confirm(`Generate Employee IDs for ${missing.length} teacher(s) without one?`)) return;
+  showLoading("Assigning Employee IDs...");
+  let failed = 0;
+  for (const t of missing) {
+    let id = null;
+    try {
+      id = await reserveEmployeeId(t.email, t.id);
+      await updateDoc(doc(db, "teachers", t.id), { employeeId: id });
+    } catch (err) {
+      console.error(`Employee ID for ${t.email} failed:`, err);
+      if (id) await deleteDoc(doc(db, "teacherIds", id)).catch(() => {});
+      failed++;
+    }
+  }
+  await loadAllData();
+  hideLoading();
+  showToast(
+    failed ? `${failed} of ${missing.length} Employee IDs failed — see console` : `Assigned ${missing.length} Employee ID(s)`,
+    failed ? "error" : "success"
+  );
 }
 
 function resetAccountPassword(email, authEmail = email) {
@@ -1082,6 +1395,7 @@ document.getElementById("form-parent").addEventListener("submit", async (event) 
       setDoc(doc(collection(db, "parents")), {
         fullName,
         email,
+        parentCode: newParentCode(lastParents),
         createdAt: new Date().toISOString(),
         firebaseUid,
       }),
@@ -1102,23 +1416,30 @@ document.getElementById("form-parent").addEventListener("submit", async (event) 
   }
 });
 
+// A parent counts as activated once they've signed in to the app: the app's
+// sync (FirestoreMirror.pushParent) always writes `mobileNumber`, even as
+// null, while admin-created parent docs never have it.
+// ponytail: inferred from that field; add an explicit flag if the admin form
+// ever starts writing mobileNumber.
+function parentActivated(row) {
+  return "mobileNumber" in row;
+}
+
 function teacherStatus(row) {
   return row.verificationStatus ?? "approved";
 }
 
-// Teacher verification (SL-TEA/ADM-02): only admins may change this field —
-// firestore.rules rejects it from the teacher's own app session. "pending"
-// is how an admin lets a rejected teacher re-apply.
+// Teacher activation (SL-TEA/ADM-02): only admins may change this field —
+// firestore.rules rejects it from the teacher's own app session.
 async function setTeacherStatus(row, status, btn) {
   if (teacherStatus(row) === status) return;
-  if (status === "rejected" && !window.confirm(`Reject ${row.fullName}? They can't use the teacher dashboard until approved.`)) return;
   btn.disabled = true;
   showLoading("Updating teacher status...");
   try {
     await updateDoc(doc(db, "teachers", row.id), { verificationStatus: status });
     await loadAllData();
     hideLoading();
-    showToast(`Teacher marked ${status}`, "success");
+    showToast("Teacher activated", "success");
   } catch (err) {
     console.error(err);
     hideLoading();
@@ -1150,21 +1471,37 @@ document.getElementById("form-teacher").addEventListener("submit", async (event)
   try {
     const email = data.get("email").trim().toLowerCase();
     const school = data.get("school").trim() || null;
-    await createAuthAccountWithoutSignOut(teacherAuthEmail(email), data.get("password"), (firebaseUid) =>
-      setDoc(doc(collection(db, "teachers")), {
-        fullName,
-        school,
-        email,
-        createdAt: new Date().toISOString(),
-        firebaseUid,
-        verificationStatus: "approved",
-      })
-    );
+    let employeeId = null;
+    // Random password nobody knows — the teacher can only get in by setting
+    // their own via the app's activation email.
+    const password = crypto.randomUUID();
+    await createAuthAccountWithoutSignOut(teacherAuthEmail(email), password, async (firebaseUid) => {
+      const teacherRef = doc(collection(db, "teachers"));
+      employeeId = await reserveEmployeeId(email, teacherRef.id);
+      try {
+        await setDoc(teacherRef, {
+          fullName,
+          school,
+          email,
+          createdAt: new Date().toISOString(),
+          firebaseUid,
+          verificationStatus: "approved",
+          employeeId,
+        });
+      } catch (err) {
+        await deleteDoc(doc(db, "teacherIds", employeeId)).catch(() => {});
+        throw err;
+      }
+    });
     form.hidden = true;
     form.reset();
     await loadAllData();
     hideLoading();
-    showToast("Teacher created successfully", "success");
+    window.alert(`Teacher created.
+
+Employee ID: ${employeeId}
+
+Give this ID to the teacher — they use it to activate their account and sign in.`);
   } catch (err) {
     console.error(err);
     hideLoading();
@@ -1325,164 +1662,138 @@ async function archiveAndDeleteDocsWhere(batch, collectionName, field, value, ba
   });
 }
 
-async function confirmDeleteLearner(row, btn) {
-  if (!window.confirm(`Remove learner "${row.name}"? This deletes their cloud record, enrollments, progress, and assignments. This will be moved to the trashbin.`)) {
-    return;
+// Runs `fn` on each row (one batch per row), then reloads once. Shared by
+// the single-row buttons and the bulk-selection bar.
+async function runForRows(rows, fn, loadingMsg, okMsg, failMsg) {
+  showLoading(loadingMsg);
+  let failed = 0;
+  for (const row of rows) {
+    try {
+      await fn(row);
+    } catch (err) {
+      console.error(err);
+      failed++;
+    }
   }
-  showLoading("Removing learner and related data...");
-  try {
-    const batchId = `cascade_${Date.now()}`;
-    const batch = writeBatch(db);
-    const learnerId = row.id;
-    
-    // Archive and delete dependent docs
+  await loadAllData();
+  hideLoading();
+  if (!failed) showToast(okMsg, "success");
+  else showToast(rows.length === 1 ? failMsg : `${failed} of ${rows.length} failed — see console`, "error");
+}
+
+async function removeLearner(row) {
+  const batchId = `cascade_${Date.now()}_${row.id}`;
+  const batch = writeBatch(db);
+  const learnerId = row.id;
+  await archiveAndDeleteDocsWhere(batch, "enrollments", "learnerId", learnerId, batchId);
+  await archiveAndDeleteDocsWhere(batch, "progress", "learnerId", learnerId, batchId);
+  await archiveAndDeleteDocsWhere(batch, "assigned_modules", "learnerId", learnerId, batchId);
+  const { id, ...learnerData } = row;
+  archiveDocToTrashbinBatch(batch, "learners", learnerId, learnerData, batchId);
+  batch.delete(doc(db, "learners", learnerId));
+  await batch.commit();
+}
+
+async function removeParent(row) {
+  const batchId = `cascade_${Date.now()}_${row.id}`;
+  const learners = await getDocs(query(collection(db, "learners"), where("parentId", "==", row.id)));
+  const batch = writeBatch(db);
+  for (const learnerDoc of learners.docs) {
+    const learnerId = learnerDoc.id;
     await archiveAndDeleteDocsWhere(batch, "enrollments", "learnerId", learnerId, batchId);
     await archiveAndDeleteDocsWhere(batch, "progress", "learnerId", learnerId, batchId);
     await archiveAndDeleteDocsWhere(batch, "assigned_modules", "learnerId", learnerId, batchId);
-    
-    // Archive and delete the learner itself
-    const { id, ...learnerData } = row;
-    archiveDocToTrashbinBatch(batch, "learners", learnerId, learnerData, batchId);
+    archiveDocToTrashbinBatch(batch, "learners", learnerId, learnerDoc.data(), batchId);
     batch.delete(doc(db, "learners", learnerId));
-    
-    await batch.commit();
-    await loadAllData();
-    hideLoading();
-    showToast("Learner removed and moved to trashbin", "success");
-  } catch (err) {
-    console.error(err);
-    hideLoading();
-    showToast("Failed to remove learner", "error");
   }
+  const { id, ...parentData } = row;
+  archiveDocToTrashbinBatch(batch, "parents", row.id, parentData, batchId);
+  batch.delete(doc(db, "parents", row.id));
+  await batch.commit();
 }
 
-async function confirmDeleteParent(row, btn) {
-  if (!window.confirm(`Remove parent "${row.fullName}"? This also deletes their learners and everything tied to those learners. This will be moved to the trashbin.`)) {
-    return;
-  }
-  showLoading("Removing parent and all related data...");
-  try {
-    const batchId = `cascade_${Date.now()}`;
-    const learners = await getDocs(query(collection(db, "learners"), where("parentId", "==", row.id)));
-    const batch = writeBatch(db);
-    
-    for (const learnerDoc of learners.docs) {
-      const learnerId = learnerDoc.id;
-      const learnerData = learnerDoc.data();
-      
-      await archiveAndDeleteDocsWhere(batch, "enrollments", "learnerId", learnerId, batchId);
-      await archiveAndDeleteDocsWhere(batch, "progress", "learnerId", learnerId, batchId);
-      await archiveAndDeleteDocsWhere(batch, "assigned_modules", "learnerId", learnerId, batchId);
-      
-      archiveDocToTrashbinBatch(batch, "learners", learnerId, learnerData, batchId);
-      batch.delete(doc(db, "learners", learnerId));
-    }
-    
-    const { id, ...parentData } = row;
-    archiveDocToTrashbinBatch(batch, "parents", row.id, parentData, batchId);
-    batch.delete(doc(db, "parents", row.id));
-    
-    await batch.commit();
-    await loadAllData();
-    hideLoading();
-    showToast("Parent and all related data moved to trashbin", "success");
-  } catch (err) {
-    console.error(err);
-    hideLoading();
-    showToast("Failed to remove parent", "error");
-  }
+async function removeClass(row) {
+  const batchId = `cascade_${Date.now()}_${row.id}`;
+  const batch = writeBatch(db);
+  const classId = row.id;
+  await archiveAndDeleteDocsWhere(batch, "enrollments", "classId", classId, batchId);
+  await archiveAndDeleteDocsWhere(batch, "assigned_modules", "classId", classId, batchId);
+  await archiveAndDeleteDocsWhere(batch, "custom_lessons", "classId", classId, batchId);
+  const { id, ...classData } = row;
+  archiveDocToTrashbinBatch(batch, "classes", classId, classData, batchId);
+  batch.delete(doc(db, "classes", classId));
+  await batch.commit();
 }
 
-async function confirmDeleteClass(row, btn) {
-  if (!window.confirm(`Remove class "${row.name}"? This also deletes its enrollments and assignments. This will be moved to the trashbin.`)) {
-    return;
-  }
-  showLoading("Removing class and related data...");
-  try {
-    const batchId = `cascade_${Date.now()}`;
-    const batch = writeBatch(db);
-    const classId = row.id;
-    
+async function removeTeacher(row) {
+  const batchId = `cascade_${Date.now()}_${row.id}`;
+  const classes = await getDocs(query(collection(db, "classes"), where("teacherId", "==", row.id)));
+  const batch = writeBatch(db);
+  for (const classDoc of classes.docs) {
+    const classId = classDoc.id;
     await archiveAndDeleteDocsWhere(batch, "enrollments", "classId", classId, batchId);
     await archiveAndDeleteDocsWhere(batch, "assigned_modules", "classId", classId, batchId);
     await archiveAndDeleteDocsWhere(batch, "custom_lessons", "classId", classId, batchId);
-    
-    const { id, ...classData } = row;
-    archiveDocToTrashbinBatch(batch, "classes", classId, classData, batchId);
+    archiveDocToTrashbinBatch(batch, "classes", classId, classDoc.data(), batchId);
     batch.delete(doc(db, "classes", classId));
-    
-    await batch.commit();
-    await loadAllData();
-    hideLoading();
-    showToast("Class removed and moved to trashbin", "success");
-  } catch (err) {
-    console.error(err);
-    hideLoading();
-    showToast("Failed to remove class", "error");
   }
+  const { id, ...teacherData } = row;
+  archiveDocToTrashbinBatch(batch, "teachers", row.id, teacherData, batchId);
+  batch.delete(doc(db, "teachers", row.id));
+  if (row.email) {
+    batch.delete(doc(db, "activatedTeachers", row.email.toLowerCase()));
+    batch.delete(doc(db, "activatedTeachers", teacherAuthEmail(row.email)));
+  }
+  if (row.employeeId) batch.delete(doc(db, "teacherIds", row.employeeId));
+  await batch.commit();
 }
 
-async function confirmDeleteTeacher(row, btn) {
-  if (!window.confirm(`Remove teacher "${row.fullName}"? This also deletes their classes and related enrollments/assignments. This will be moved to the trashbin.`)) {
-    return;
-  }
-  showLoading("Removing teacher and all related data...");
-  try {
-    const batchId = `cascade_${Date.now()}`;
-    const classes = await getDocs(query(collection(db, "classes"), where("teacherId", "==", row.id)));
-    const batch = writeBatch(db);
-    
-    for (const classDoc of classes.docs) {
-      const classId = classDoc.id;
-      const classData = classDoc.data();
-      
-      await archiveAndDeleteDocsWhere(batch, "enrollments", "classId", classId, batchId);
-      await archiveAndDeleteDocsWhere(batch, "assigned_modules", "classId", classId, batchId);
-      await archiveAndDeleteDocsWhere(batch, "custom_lessons", "classId", classId, batchId);
-      
-      archiveDocToTrashbinBatch(batch, "classes", classId, classData, batchId);
-      batch.delete(doc(db, "classes", classId));
-    }
-    
-    const { id, ...teacherData } = row;
-    archiveDocToTrashbinBatch(batch, "teachers", row.id, teacherData, batchId);
-    batch.delete(doc(db, "teachers", row.id));
-    if (row.email) {
-      batch.delete(doc(db, "activatedTeachers", row.email.toLowerCase()));
-      batch.delete(doc(db, "activatedTeachers", teacherAuthEmail(row.email)));
-    }
-
-    await batch.commit();
-    await loadAllData();
-    hideLoading();
-    showToast("Teacher and all related data moved to trashbin", "success");
-  } catch (err) {
-    console.error(err);
-    hideLoading();
-    showToast("Failed to remove teacher", "error");
-  }
+async function removePrincipal(row) {
+  const batch = writeBatch(db);
+  const { id, ...principalData } = row;
+  archiveDocToTrashbinBatch(batch, "principals", row.id, principalData, null);
+  batch.delete(doc(db, "principals", row.id));
+  await batch.commit();
 }
 
-async function confirmDeletePrincipal(row, btn) {
-  if (!window.confirm(`Remove principal "${row.fullName}"? This will be moved to the trashbin.`)) {
-    return;
-  }
-  showLoading("Removing principal...");
-  try {
-    const batch = writeBatch(db);
-    const { id, ...principalData } = row;
-    archiveDocToTrashbinBatch(batch, "principals", row.id, principalData, null);
-    batch.delete(doc(db, "principals", row.id));
-    await batch.commit();
-    await loadAllData();
-    hideLoading();
-    showToast("Principal removed and moved to trashbin", "success");
-  } catch (err) {
-    console.error(err);
-    hideLoading();
-    showToast("Failed to remove principal", "error");
-  }
+async function confirmDeleteLearner(row) {
+  if (!window.confirm(`Remove learner "${row.name}"? This deletes their cloud record, enrollments, progress, and assignments. This will be moved to the trashbin.`)) return;
+  await runForRows([row], removeLearner, "Removing learner and related data...", "Learner removed and moved to trashbin", "Failed to remove learner");
 }
+
+async function confirmDeleteParent(row) {
+  if (!window.confirm(`Remove parent "${row.fullName}"? This also deletes their learners and everything tied to those learners. This will be moved to the trashbin.`)) return;
+  await runForRows([row], removeParent, "Removing parent and all related data...", "Parent and all related data moved to trashbin", "Failed to remove parent");
+}
+
+async function confirmDeleteClass(row) {
+  if (!window.confirm(`Remove class "${row.name}"? This also deletes its enrollments and assignments. This will be moved to the trashbin.`)) return;
+  await runForRows([row], removeClass, "Removing class and related data...", "Class removed and moved to trashbin", "Failed to remove class");
+}
+
+async function confirmDeleteTeacher(row) {
+  if (!window.confirm(`Remove teacher "${row.fullName}"? This also deletes their classes and related enrollments/assignments. This will be moved to the trashbin.`)) return;
+  await runForRows([row], removeTeacher, "Removing teacher and all related data...", "Teacher and all related data moved to trashbin", "Failed to remove teacher");
+}
+
+async function confirmDeletePrincipal(row) {
+  if (!window.confirm(`Remove principal "${row.fullName}"? This will be moved to the trashbin.`)) return;
+  await runForRows([row], removePrincipal, "Removing principal...", "Principal removed and moved to trashbin", "Failed to remove principal");
+}
+
+// "Remove selected" for the bulk-selection bar — `what` is the plural noun
+// for the confirm ("parents"), `extra` the cascade warning.
+function bulkRemove(what, remover, extra = "") {
+  return {
+    label: "Remove selected",
+    className: "btn-danger",
+    run: async (rows) => {
+      if (!window.confirm(`Remove ${rows.length} ${what}?${extra} They will be moved to the trashbin.`)) return;
+      await runForRows(rows, remover, `Removing ${rows.length} ${what}...`, `${rows.length} ${what} moved to trashbin`, `Failed to remove ${what}`);
+    },
+  };
+}
+
 
 // ---- Trashbin Recovery Operations ----
 function getTrashDetails(row) {
@@ -1575,42 +1886,25 @@ function buildClassNode(cls, all) {
   return { entry: cls, children: kids };
 }
 
-async function restoreTrashItem(row, btn) {
-  showLoading("Restoring item...");
-  try {
-    const batch = writeBatch(db);
-    const targetRef = doc(db, row.collection, row.originalId);
-    batch.set(targetRef, row.data);
-    batch.delete(doc(db, "trashbin", row.id));
-    await batch.commit();
-    await loadAllData();
-    hideLoading();
-    showToast("Item restored successfully", "success");
-  } catch (err) {
-    console.error(err);
-    hideLoading();
-    showToast("Failed to restore item", "error");
-  }
+async function restoreTrashEntry(row) {
+  const batch = writeBatch(db);
+  batch.set(doc(db, row.collection, row.originalId), row.data);
+  restoreEmployeeIdLookup(batch, row);
+  batch.delete(doc(db, "trashbin", row.id));
+  await batch.commit();
 }
 
-async function deleteTrashItemPermanently(row, btn) {
-  if (!window.confirm("Permanently delete this item from the trashbin? This cannot be undone.")) {
-    return;
-  }
-  showLoading("Deleting item permanently...");
-  try {
-    const batch = writeBatch(db);
-    batch.delete(doc(db, "trashbin", row.id));
-    await batch.commit();
-    await loadAllData();
-    hideLoading();
-    showToast("Item permanently deleted", "success");
-  } catch (err) {
-    console.error(err);
-    hideLoading();
-    showToast("Failed to delete item", "error");
-  }
+const deleteTrashEntry = (row) => deleteDoc(doc(db, "trashbin", row.id));
+
+async function restoreTrashItem(row) {
+  await runForRows([row], restoreTrashEntry, "Restoring item...", "Item restored successfully", "Failed to restore item");
 }
+
+async function deleteTrashItemPermanently(row) {
+  if (!window.confirm("Permanently delete this item from the trashbin? This cannot be undone.")) return;
+  await runForRows([row], deleteTrashEntry, "Deleting item permanently...", "Item permanently deleted", "Failed to delete item");
+}
+
 
 // ---- Hierarchical Admin Trashbin (cascade-delete tree) ----
 
@@ -1879,6 +2173,14 @@ function renderTreeRow(tbody, node, batchId, depth, isRoot, parentCol) {
   }
 }
 
+// Removing a teacher deletes their `teacherIds` entry; restoring puts it back.
+function restoreEmployeeIdLookup(batch, entry) {
+  const d = entry.data || {};
+  if (entry.collection === "teachers" && d.employeeId && d.email) {
+    batch.set(doc(db, "teacherIds", d.employeeId), { email: d.email, teacherId: entry.originalId });
+  }
+}
+
 async function restoreBatch(batchId) {
   const snap = await getDocs(query(collection(db, "trashbin"), where("batchId", "==", batchId)));
   const entries = snap.docs.map((d) => ({ id: d.id, ...d.data(), ref: d.ref }));
@@ -1894,6 +2196,7 @@ async function restoreBatch(batchId) {
     const b = writeBatch(db);
     group.forEach((e) => {
       b.set(doc(db, e.collection, e.originalId), e.data);
+      restoreEmployeeIdLookup(b, e);
       b.delete(e.ref);
     });
     await b.commit();
@@ -2055,37 +2358,106 @@ function showClassStudents(classRow, enrollments, learners) {
   }
 }
 
+// ---- Progress: Student Hub view ----
+const hubSelect = document.getElementById("hub-learner-select");
+const progressSearch = document.querySelector('.table-search[data-table="table-progress"]');
+
+function setProgressView(view) {
+  document.querySelectorAll("[data-progress-view]").forEach((b) => {
+    const on = b.dataset.progressView === view;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+  document.getElementById("progress-table-view").hidden = view !== "table";
+  document.getElementById("progress-hub-view").hidden = view !== "hub";
+  progressSearch.hidden = view !== "table";
+  hubSelect.hidden = view !== "hub";
+  if (view === "hub") renderSelectedHub();
+}
+
+function fillHubLearnerSelect() {
+  const keep = hubSelect.value;
+  const sorted = [...hubData.learners].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+  hubSelect.innerHTML = sorted.length === 0
+    ? `<option value="">No learners yet</option>`
+    : sorted.map((l) => `<option value="${escapeAttr(l.id)}">${escapeAttr(l.name ?? l.id)} (${studentIdFor(l.id)})</option>`).join("");
+  if (sorted.some((l) => l.id === keep)) hubSelect.value = keep;
+  if (!document.getElementById("progress-hub-view").hidden) renderSelectedHub();
+}
+
+function renderSelectedHub() {
+  const phone = document.getElementById("hub-phone");
+  const learner = hubData?.learners.find((l) => l.id === hubSelect.value);
+  if (!learner) {
+    phone.innerHTML = `<p class="empty-text hub-empty">Select a learner to view their Student Hub.</p>`;
+    return;
+  }
+  renderHubView(phone, { ...hubData, learner }, studentIdFor(learner.id));
+}
+
+function openLearnerHub(learnerId) {
+  if (hubData?.learners.some((l) => l.id === learnerId)) hubSelect.value = learnerId;
+  setProgressView("hub");
+}
+
+document.querySelectorAll("[data-progress-view]").forEach((b) =>
+  b.addEventListener("click", () => setProgressView(b.dataset.progressView))
+);
+hubSelect.addEventListener("change", renderSelectedHub);
+
+// Stage / game / session for a progress record. Lesson ids resolve through
+// curriculum-map.js; older classroom records only carry `cast_<game>` (or
+// `hot_seat_<letter>`), so their stage and session are unknown.
+function progressPlace(r) {
+  const lesson = r.lessonId ? LESSONS[r.lessonId] : null;
+  if (lesson) {
+    return {
+      stage: `Stage ${lesson.stage}: ${STAGES[lesson.stage]}`,
+      game: GAMES[lesson.game] ?? lesson.game,
+      session: `Session ${lesson.session}`,
+      title: lesson.title,
+    };
+  }
+  const id = String(r.moduleId ?? "");
+  if (id.startsWith("hot_seat_")) {
+    return { stage: "—", game: `${GAMES.trace} (Hot Seat)`, session: `Letter ${id.slice(9)}`, title: "" };
+  }
+  if (id.startsWith("cast_")) {
+    return { stage: "—", game: GAMES[id.slice(5)] ?? id.slice(5), session: "—", title: "" };
+  }
+  return {
+    stage: STAGES[id] ? `Stage ${id}: ${STAGES[id]}` : "—",
+    game: r.lessonId ? "Custom lesson" : "—",
+    session: "—",
+    title: "",
+  };
+}
+
 function showLearnerProgress(row) {
   const modalOverlay = document.createElement("div");
   modalOverlay.className = "modal-overlay";
 
   const total = row.classroomCount + row.homeCount;
 
-  const classroomRows = row.classroom.length === 0
-    ? `<tr><td colspan="5" class="empty-row">No classroom-mode records.</td></tr>`
-    : row.classroom
+  const rowsFor = (records, emptyText) => records.length === 0
+    ? `<tr><td colspan="7" class="empty-row">${emptyText}</td></tr>`
+    : records
         .sort((a, b) => new Date(b.completedAt ?? 0) - new Date(a.completedAt ?? 0))
-        .map((r) => `<tr>
-          <td>${escapeAttr(r.moduleId)}</td>
-          <td>${r.strokeAccuracyPct != null ? `${r.strokeAccuracyPct}%` : "—"}</td>
+        .map((r) => {
+          const place = progressPlace(r);
+          return `<tr>
+          <td>${escapeAttr(place.stage)}</td>
+          <td>${escapeAttr(place.game)}</td>
+          <td title="${escapeAttr(place.title)}">${escapeAttr(place.session)}</td>
+          <td>${r.strokeAccuracyPct != null ? `${Math.round(r.strokeAccuracyPct)}%` : "—"}</td>
           <td>${r.sequencingErrors ?? "—"}</td>
           <td>${r.timeOnTaskSeconds != null ? `${r.timeOnTaskSeconds}s` : "—"}</td>
           <td>${formatDate(r.completedAt)}</td>
-        </tr>`)
+        </tr>`;
+        })
         .join("");
-
-  const homeRows = row.home.length === 0
-    ? `<tr><td colspan="5" class="empty-row">No home-mode records.</td></tr>`
-    : row.home
-        .sort((a, b) => new Date(b.completedAt ?? 0) - new Date(a.completedAt ?? 0))
-        .map((r) => `<tr>
-          <td>${escapeAttr(r.moduleId)}</td>
-          <td>${r.strokeAccuracyPct != null ? `${r.strokeAccuracyPct}%` : "—"}</td>
-          <td>${r.sequencingErrors ?? "—"}</td>
-          <td>${r.timeOnTaskSeconds != null ? `${r.timeOnTaskSeconds}s` : "—"}</td>
-          <td>${formatDate(r.completedAt)}</td>
-        </tr>`)
-        .join("");
+  const classroomRows = rowsFor(row.classroom, "No classroom-mode records.");
+  const homeRows = rowsFor(row.home, "No home-mode records.");
 
   modalOverlay.innerHTML = `
     <div class="modal-card modal-wide">
@@ -2098,7 +2470,7 @@ function showLearnerProgress(row) {
         <div class="table-wrap modal-table">
           <table>
             <thead><tr>
-              <th>Module</th><th>Accuracy</th><th>Errors</th><th>Time on Task</th><th>Completed</th>
+              <th>Stage</th><th>Game</th><th>Session</th><th>Accuracy</th><th>Errors</th><th>Time on Task</th><th>Completed</th>
             </tr></thead>
             <tbody>${classroomRows}</tbody>
           </table>
@@ -2107,7 +2479,7 @@ function showLearnerProgress(row) {
         <div class="table-wrap">
           <table>
             <thead><tr>
-              <th>Module</th><th>Accuracy</th><th>Errors</th><th>Time on Task</th><th>Completed</th>
+              <th>Stage</th><th>Game</th><th>Session</th><th>Accuracy</th><th>Errors</th><th>Time on Task</th><th>Completed</th>
             </tr></thead>
             <tbody>${homeRows}</tbody>
           </table>

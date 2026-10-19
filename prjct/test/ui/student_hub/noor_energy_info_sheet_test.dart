@@ -54,7 +54,7 @@ void main() {
 
     expect(find.text('Noor Energy'), findsOneWidget);
     expect(find.text('3 of 5 lanterns lit'), findsOneWidget);
-    expect(find.textContaining('Refills in'), findsOneWidget);
+    expect(find.textContaining('Next lantern in'), findsOneWidget);
     await _dismiss(tester);
   });
 

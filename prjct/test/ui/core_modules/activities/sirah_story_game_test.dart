@@ -338,7 +338,7 @@ void main() {
     expect(blocked(), isFalse);
   });
 
-  testWidgets('back and replay swap to their pressed art while held', (
+  testWidgets('home and replay swap to their pressed art while held', (
     tester,
   ) async {
     const session = sirahBirthSession;
@@ -357,7 +357,7 @@ void main() {
             .assetName;
 
     for (final key in const [
-      ValueKey('sirah-back'),
+      ValueKey('sirah-home'),
       ValueKey('sirah-replay'),
     ]) {
       final rest = artOf(key);
@@ -369,8 +369,8 @@ void main() {
       await tester.pump();
       expect(artOf(key), endsWith('_btn_down.png'), reason: '\$key held');
 
-      // Cancelled, not released — a real tap on Back would open the
-      // leave-the-story confirm and cover the next button.
+      // Cancelled, not released — a real tap on Home would leave the
+      // story and take the next button with it.
       await press.cancel();
       await tester.pump(const Duration(milliseconds: 100));
       expect(artOf(key), rest, reason: '\$key released');
@@ -726,7 +726,19 @@ void main() {
     expect(accuracy, 0.0);
   });
 
-  testWidgets('backing out of the first page asks before leaving', (
+  testWidgets('home leaves the story mid-page', (tester) async {
+    const session = sirahBirthSession;
+    var exits = 0;
+    await tester.pumpWidget(host(session, onExit: () => exits++));
+    await start(tester);
+    await hearOut(tester, session.pages.first);
+
+    await tester.tap(find.byKey(const ValueKey('sirah-home')));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(exits, 1);
+  });
+
+  testWidgets('home goes back to the start screen when nothing hosts the game', (
     tester,
   ) async {
     const session = sirahBirthSession;
@@ -734,22 +746,8 @@ void main() {
     await start(tester);
     await hearOut(tester, session.pages.first);
 
-    await tester.tap(find.byKey(const ValueKey('sirah-back')));
+    await tester.tap(find.byKey(const ValueKey('sirah-home')));
     await tester.pump(const Duration(milliseconds: 200));
-    expect(
-      find.text('Leave the story? You will go back to the start screen.'),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.text('Keep Reading'));
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(find.text(session.pages.first.narration), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('sirah-back')));
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.tap(find.text('Go to Start'));
-    await tester.pump(const Duration(milliseconds: 200));
-
     expect(find.byKey(const ValueKey('sirah-play')), findsOneWidget);
   });
 }
