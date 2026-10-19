@@ -2254,8 +2254,8 @@ function showClassStudents(classRow, enrollments, learners) {
       }
     }
     studentsListHtml = `
-      <div class="table-wrap">
-        <table>
+      <div class="table-wrap cards-wrap">
+        <table class="cards">
           <thead>
             <tr>
               <th>Name</th>
@@ -2269,10 +2269,10 @@ function showClassStudents(classRow, enrollments, learners) {
               .map(
                 (l) => `
               <tr>
-                <td>${escapeAttr(l.name)}</td>
-                <td>${l.age}</td>
-                <td>${escapeAttr(l.gradeLevel)}</td>
-                <td>${formatDate(l.enrolledAt)}</td>
+                <td data-label="Name">${escapeAttr(l.name)}</td>
+                <td data-label="Age">${l.age}</td>
+                <td data-label="Grade">${escapeAttr(l.gradeLevel)}</td>
+                <td data-label="Enrolled Date">${formatDate(l.enrolledAt)}</td>
               </tr>
             `
               )
@@ -2440,19 +2440,19 @@ function showLearnerProgress(row) {
   const total = row.classroomCount + row.homeCount;
 
   const rowsFor = (records, emptyText) => records.length === 0
-    ? `<tr><td colspan="7" class="empty-row">${emptyText}</td></tr>`
+    ? `<tr class="empty-row"><td colspan="7">${emptyText}</td></tr>`
     : records
         .sort((a, b) => new Date(b.completedAt ?? 0) - new Date(a.completedAt ?? 0))
         .map((r) => {
           const place = progressPlace(r);
           return `<tr>
-          <td>${escapeAttr(place.stage)}</td>
-          <td>${escapeAttr(place.game)}</td>
-          <td title="${escapeAttr(place.title)}">${escapeAttr(place.session)}</td>
-          <td>${r.strokeAccuracyPct != null ? `${Math.round(r.strokeAccuracyPct)}%` : "—"}</td>
-          <td>${r.sequencingErrors ?? "—"}</td>
-          <td>${r.timeOnTaskSeconds != null ? `${r.timeOnTaskSeconds}s` : "—"}</td>
-          <td>${formatDate(r.completedAt)}</td>
+          <td data-label="Stage">${escapeAttr(place.stage)}</td>
+          <td data-label="Game">${escapeAttr(place.game)}</td>
+          <td data-label="Session" title="${escapeAttr(place.title)}">${escapeAttr(place.session)}</td>
+          <td data-label="Accuracy">${r.strokeAccuracyPct != null ? `${Math.round(r.strokeAccuracyPct)}%` : "—"}</td>
+          <td data-label="Errors">${r.sequencingErrors ?? "—"}</td>
+          <td data-label="Time on Task">${r.timeOnTaskSeconds != null ? `${r.timeOnTaskSeconds}s` : "—"}</td>
+          <td data-label="Completed">${formatDate(r.completedAt)}</td>
         </tr>`;
         })
         .join("");
@@ -2467,8 +2467,8 @@ function showLearnerProgress(row) {
       </div>
       <div class="modal-body">
         <h4 class="mode-section-title">Classroom Mode (${row.classroomCount})</h4>
-        <div class="table-wrap modal-table">
-          <table>
+        <div class="table-wrap cards-wrap modal-table">
+          <table class="cards">
             <thead><tr>
               <th>Stage</th><th>Game</th><th>Session</th><th>Accuracy</th><th>Errors</th><th>Time on Task</th><th>Completed</th>
             </tr></thead>
@@ -2476,8 +2476,8 @@ function showLearnerProgress(row) {
           </table>
         </div>
         <h4 class="mode-section-title">Home Mode (${row.homeCount})</h4>
-        <div class="table-wrap">
-          <table>
+        <div class="table-wrap cards-wrap">
+          <table class="cards">
             <thead><tr>
               <th>Stage</th><th>Game</th><th>Session</th><th>Accuracy</th><th>Errors</th><th>Time on Task</th><th>Completed</th>
             </tr></thead>

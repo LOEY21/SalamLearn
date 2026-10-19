@@ -1265,6 +1265,31 @@ table tbody tr.row-selected { background: var(--mint); }
   .toast-container { left: 12px; right: 12px; bottom: 12px; }
   .toast { max-width: none; }
   .report-table { min-width: 0; }
+
+  .page-title { font-size: 1.05rem; }
+  .page-subtitle { font-size: 0.74rem; }
+  .login-card { padding: 28px 20px 22px; }
+
+  .dash-table td { white-space: normal; overflow-wrap: anywhere; padding: 8px 12px; }
+  .dash-table td.dash-date { white-space: nowrap; }
+
+  .modal-header { padding: 14px 16px; gap: 10px; }
+  .modal-header h3 { font-size: 0.95rem; min-width: 0; overflow-wrap: anywhere; }
+  .modal-footer { padding: 12px 16px; flex-wrap: wrap; }
+  .modal-footer > button { flex: 1 1 auto; }
+  .enroll-form label { flex-basis: 100%; }
+
+  .report-header { flex-wrap: wrap; }
+  .report-header-text { min-width: 0; }
+  .report-meta { flex-basis: 100%; text-align: left; }
+  .report-header h1 { font-size: 18px; }
+  .report-table { font-size: 13px; }
+  .report-table th, .report-table td { white-space: normal; overflow-wrap: anywhere; padding: 8px 6px; }
+  .report-legend { min-width: 0; }
+
+  .view-toggle { flex-basis: 100%; }
+  .view-toggle-btn { flex: 1; padding: 8px 10px; }
+  .hub-learner-select { flex-basis: 100%; max-width: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2038,5 +2063,10 @@ table tbody tr.row-selected { background: var(--mint); }
   .hub-phone *, .hub-phone *::before { animation: none !important; transition: none !important; }
 }
 @media (max-width: 480px) {
-  .hub-phone { border-width: 6px; border-radius: 30px; }
+  .hub-phone {
+    border-width: 0;
+    border-radius: var(--radius-lg);
+    height: calc(100dvh - 210px);
+    min-height: 520px;
+  }
 }

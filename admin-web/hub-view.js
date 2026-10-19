@@ -621,7 +621,16 @@ export function renderHubView(phone, data, studentId) {
       scroller.scrollTop = Math.max(0, Number(scroller.dataset.currentY) - 300);
     }
     ui.keepScroll = false;
+    ui.width = W;
   };
+
+  // Map pins are laid out in pixels from the frame width, so redraw when a
+  // phone rotates or the window is resized.
+  window.removeEventListener("resize", phone.hubResize);
+  phone.hubResize = () => {
+    if (phone.clientWidth && phone.clientWidth !== ui.width) draw();
+  };
+  window.addEventListener("resize", phone.hubResize);
 
   phone.onclick = (e) => {
     const el = e.target.closest("[data-action], [data-stop]");
