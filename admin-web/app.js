@@ -257,14 +257,15 @@ function studentIdFor(learnerId) {
   return `${digits.slice(0, 4)}-${digits.slice(4)}`;
 }
 
-function formatDate(value) {
+function formatDate(value, withTime = false) {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleString(undefined, {
     year: "numeric",
     month: "short",
     day: "numeric",
+    ...(withTime && { hour: "numeric", minute: "2-digit" }),
   });
 }
 
@@ -883,6 +884,10 @@ async function loadAllData() {
     renderDashboard({
       parents, teachers, learners, classes, enrollments, progress,
     });
+    const totals = { parents, teachers, learners, classes };
+    document.querySelectorAll("[data-total]").forEach((el) => {
+      el.textContent = `Total: ${totals[el.dataset.total].length}`;
+    });
     renderReport({
       parents, teachers, principals, learners, classes, enrollments, progress,
     });
@@ -1035,7 +1040,7 @@ async function loadAllData() {
         { label: "Classroom", value: (r) => r.classroomCount },
         { label: "Home", value: (r) => r.homeCount },
         { label: "Total", value: (r) => r.totalCount },
-        { label: "Last Activity", value: (r) => formatDate(r.lastActivity) },
+        { label: "Last Activity", value: (r) => formatDate(r.lastActivity, true) },
       ],
       progressSummary,
       [
@@ -2452,7 +2457,7 @@ function showLearnerProgress(row) {
           <td data-label="Accuracy">${r.strokeAccuracyPct != null ? `${Math.round(r.strokeAccuracyPct)}%` : "—"}</td>
           <td data-label="Errors">${r.sequencingErrors ?? "—"}</td>
           <td data-label="Time on Task">${r.timeOnTaskSeconds != null ? `${r.timeOnTaskSeconds}s` : "—"}</td>
-          <td data-label="Completed">${formatDate(r.completedAt)}</td>
+          <td data-label="Completed">${formatDate(r.completedAt, true)}</td>
         </tr>`;
         })
         .join("");
