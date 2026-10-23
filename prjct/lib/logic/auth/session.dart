@@ -894,7 +894,7 @@ class SessionNotifier extends Notifier<SessionState> {
             account.id,
           );
           if (!remoteExists) {
-            await _parents.delete(account.id);
+            await _dropLocalParent(account.id);
             final retry = await _tryRemoteParentSignIn(
               email: normalizedEmail,
               password: password,
@@ -1824,6 +1824,34 @@ class SessionNotifier extends Notifier<SessionState> {
     }
     await HiveService.eraseEverything();
     state = const SessionState();
+  }
+
+  /// The admin web panel deleted the active parent/teacher account. Logging
+  /// out alone left the local copy on disk, so it could still be signed
+  /// into (offline the remote check fails open) and sync would push it back
+  /// to Firestore. Drops it from this device, then signs out; the other
+  /// role's account on a shared device is left alone.
+  Future<void> onRemoteAccountDeleted() async {
+    if (state.activeRole == UserRole.asatidz) {
+      final id = state.activeTeacherId;
+      if (id != null) await _teachers.delete(id);
+    } else {
+      final id = state.activeParentId;
+      if (id != null) await _dropLocalParent(id);
+    }
+    await logout();
+  }
+
+  /// A parent account plus its children and their progress — local only.
+  Future<void> _dropLocalParent(String parentId) async {
+    for (final learner in _learners.byParentId(parentId)) {
+      final id = learner.id;
+      if (id == null) continue;
+      await ProgressRepository().deleteForLearner(id);
+      await _learners.delete(id);
+    }
+    await _settings.delete('lastSelectedLearner_$parentId');
+    await _parents.delete(parentId);
   }
 
   /// Detects the "removed via the admin web panel" case: Hive is this

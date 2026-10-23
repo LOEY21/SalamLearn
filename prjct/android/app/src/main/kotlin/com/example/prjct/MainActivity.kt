@@ -13,9 +13,23 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "salamlearn/cast")
             .setMethodCallHandler { call, result ->
-                if (call.method == "isCasting") result.success(isCasting())
-                else result.notImplemented()
+                when (call.method) {
+                    "isCasting" -> result.success(isCasting())
+                    "stopCasting" -> {
+                        stopCasting()
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
             }
+    }
+
+    /// Selecting the phone's own route drops a Miracast/Smart View mirror
+    /// (Android lets any app disconnect a wifi display). Chromecast mirroring
+    /// can't be stopped by another app; the Dart side falls back to the picker.
+    private fun stopCasting() {
+        val router = getSystemService(Context.MEDIA_ROUTER_SERVICE) as MediaRouter
+        router.selectRoute(MediaRouter.ROUTE_TYPE_LIVE_VIDEO, router.defaultRoute)
     }
 
     /// True while the screen is mirrored to a TV/projector: the mirror shows

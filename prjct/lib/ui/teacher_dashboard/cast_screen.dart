@@ -187,6 +187,39 @@ class _CastScreenState extends ConsumerState<CastScreen>
     }
   }
 
+  /// Ending the session stops the TV mirror too. When Android won't let the
+  /// app stop it (Chromecast mirroring), open the Cast picker so the teacher
+  /// can tap Disconnect.
+  Future<void> _endCast() async {
+    _checkN++;
+    restoreAppOrientations();
+    if (_canDetect) {
+      try {
+        await _castChannel.invokeMethod<void>('stopCasting');
+      } catch (_) {}
+      var casting = await _isCasting();
+      for (var i = 0; i < 6 && casting == true; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        casting = await _isCasting();
+      }
+      if (casting == true && mounted) {
+        final messenger = ScaffoldMessenger.of(context);
+        try {
+          await const AndroidIntent(
+            action: 'android.settings.CAST_SETTINGS',
+            flags: [Flag.FLAG_ACTIVITY_NEW_TASK],
+          ).launch();
+          messenger.showSnackBar(
+            const SnackBar(content: Text('Tap Disconnect to stop the TV.')),
+          );
+        } on PlatformException {
+          // No picker: the teacher stops it from the quick settings.
+        }
+      }
+    }
+    if (mounted) context.go('/teacher');
+  }
+
   void _confirmEndCast() {
     showDialog<void>(
       context: context,
@@ -203,9 +236,8 @@ class _CastScreenState extends ConsumerState<CastScreen>
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.coral),
             onPressed: () {
-              restoreAppOrientations();
               Navigator.of(dialogContext).pop();
-              context.go('/teacher');
+              _endCast();
             },
             child: const Text('End Cast'),
           ),

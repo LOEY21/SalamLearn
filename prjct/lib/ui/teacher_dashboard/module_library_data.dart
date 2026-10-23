@@ -142,12 +142,6 @@ const Map<ActivityType, ActivityTypeStyle> activityTypeStyles = {
     color: AppColors.ink,
     bg: AppColors.neutralTint,
   ),
-  ActivityType.fiqhDrag: ActivityTypeStyle(
-    label: 'Fiqh Sort',
-    icon: Icons.mosque_outlined,
-    color: AppColors.mintGreen,
-    bg: AppColors.mint,
-  ),
   ActivityType.quiz: ActivityTypeStyle(
     label: 'Quiz',
     icon: Icons.quiz_outlined,
@@ -200,4 +194,3 @@ String? gameIconAssetFor(ActivityType type) {
   };
   return name == null ? null : 'assets/images/game_icons/$name.webp';
 }
-

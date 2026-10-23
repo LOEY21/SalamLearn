@@ -16,7 +16,6 @@ class GameGroup {
   bool get isStage => type == null;
 }
 
-
 /// Groups the curriculum's lessons by game, ordered by where each game
 /// first appears on the map. Lesson titles read "Game - Session N (Topic)",
 /// so the game name is the part before " - ".
@@ -91,8 +90,6 @@ String gameSkill(ActivityType type) => switch (type) {
     'Knowing which Islamic greeting or phrase fits each everyday moment.',
   ActivityType.quranSync => "Following along with a Qur'an recitation.",
   ActivityType.story => 'Listening to a story and understanding its lesson.',
-  ActivityType.fiqhDrag =>
-    'Sorting everyday actions into the right Islamic rule.',
   ActivityType.quiz => 'Remembering what was taught in the lesson.',
   ActivityType.harakatPop =>
     'Recognising the vowel marks (harakat) that change how letters sound.',
@@ -122,8 +119,6 @@ String gameHomeTip(ActivityType type) => switch (type) {
   ActivityType.quranSync =>
     'Recite the same surah together slowly, pointing at each word.',
   ActivityType.story => 'Ask them to retell the story in their own words.',
-  ActivityType.fiqhDrag =>
-    'During the day, ask "Is this allowed?" about simple everyday actions.',
   ActivityType.quiz => 'Ask them two or three of the questions over dinner.',
   ActivityType.harakatPop =>
     'Say a letter with fatha, kasra and damma and let them repeat after you.',

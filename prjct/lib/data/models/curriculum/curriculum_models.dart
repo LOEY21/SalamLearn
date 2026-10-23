@@ -3,8 +3,9 @@
 //
 // `flashcard`/`match`/`sort` (Wireframe 0.3 port) retired in favor of the
 // capstone spec's real 5 core modules (FR-4.1–4.5): `trace` (FR-4.1),
-// `pronounce` (FR-4.2), `story` (FR-4.4, unchanged — already matched),
-// `fiqhDrag` (FR-4.5). `quiz` isn't one of the 5 FR modules but is kept as
+// `pronounce` (FR-4.2), `story` (FR-4.4, unchanged — already matched).
+// FR-4.5's original `fiqhDrag` was retired in favor of `taharahAdventure`
+// and removed. `quiz` isn't one of the 5 FR modules but is kept as
 // an optional 6th assessment layer per the project owner's call. FR-4.3's
 // original `quranSync` ("Supplication Stepping Stones") was retired in
 // favor of `ayahBuilder` (Ayah Builder).
@@ -12,7 +13,6 @@ enum ActivityType {
   trace,
   pronounce,
   story,
-  fiqhDrag,
   quiz,
   harakatPop,
   ayahBuilder,
@@ -213,40 +213,6 @@ class StoryPanel {
   final StoryBubble? bubble;
   final String caption;
   final String? captionAr;
-}
-
-/// FR-4.5's "validates if a dragged item ID matches a target drop-zone ID"
-/// — one draggable chip. [correctZoneId] must equal a [FiqhDropZone.id] in
-/// the same activity's `fiqhZones` list. Covers both of the FR's own
-/// example shapes with one model: an *ordered array* (zones are numbered
-/// slots, e.g. Wudu steps 1→4) and a *binary sort* (zones are two named
-/// buckets, e.g. Halal/Haram) — the distinction lives entirely in how
-/// `fiqhZones` is authored, not in a separate class.
-class FiqhDragItem {
-  const FiqhDragItem({
-    required this.id,
-    required this.emoji,
-    required this.label,
-    this.labelAr,
-    required this.correctZoneId,
-  });
-
-  final String id;
-  final String emoji;
-  final String label;
-  final String? labelAr;
-  final String correctZoneId;
-}
-
-class FiqhDropZone {
-  const FiqhDropZone({required this.id, required this.label, this.icon});
-
-  final String id;
-  final String label;
-
-  /// Optional leading glyph for the zone chip itself (e.g. an order number
-  /// "1", or a small icon like "✅"/"❌" for binary zones).
-  final String? icon;
 }
 
 /// FR-4.3's "highlights text strings ... synchronously with audio
@@ -674,8 +640,6 @@ class Activity {
     this.questions,
     this.panels,
     this.quranLine,
-    this.fiqhItems,
-    this.fiqhZones,
     this.ayahSession,
     this.huntStage,
     this.heroesSession,
@@ -702,8 +666,6 @@ class Activity {
   final List<QuizQ>? questions;
   final List<StoryPanel>? panels;
   final QuranSyncLine? quranLine;
-  final List<FiqhDragItem>? fiqhItems;
-  final List<FiqhDropZone>? fiqhZones;
 
   /// Used by `ayahBuilder` — the session this lesson opens on.
   final AyahBuilderSession? ayahSession;

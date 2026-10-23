@@ -11,7 +11,6 @@ import '../../logic/learner/learner_xp_provider.dart';
 import '../../logic/learner/noor_energy_provider.dart';
 import '../../logic/recent_module_provider.dart';
 import '../theme/app_colors.dart';
-import 'activities/fiqh_drag_activity.dart';
 import 'activities/greeting_match_activity.dart';
 import 'activities/quiz_activity.dart';
 import 'activities/quran_sync_activity.dart';
@@ -376,12 +375,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
       _activity.type == ActivityType.goodDeedTree ||
       _activity.type == ActivityType.taharahAdventure ||
       _activity.type == ActivityType.labelMaker ||
-      _activity.type == ActivityType.soundDetective ||
-      _isWudhuActivity;
-
-  bool get _isWudhuActivity =>
-      _activity.type == ActivityType.fiqhDrag &&
-      FiqhDragActivity.modeFor(_activity.id) == FiqhMode.wudhu;
+      _activity.type == ActivityType.soundDetective;
 
   @override
   Widget build(BuildContext context) {
@@ -436,8 +430,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
             ActivityType.goodDeedTree ||
             ActivityType.taharahAdventure ||
             ActivityType.labelMaker ||
-            ActivityType.soundDetective ||
-            ActivityType.fiqhDrag when _isFullBleedActivity =>
+            ActivityType.soundDetective when _isFullBleedActivity =>
               _buildActivityContent(lessonColor),
             _ => Column(
               children: [
@@ -660,16 +653,6 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen>
         panels: activity.panels!,
         xp: activity.xp,
         onComplete: onComplete,
-      ),
-      ActivityType.fiqhDrag => FiqhDragActivity(
-        key: ValueKey(activity.id),
-        activityId: activity.id,
-        items: activity.fiqhItems!,
-        zones: activity.fiqhZones!,
-        xp: activity.xp,
-        color: lessonColor,
-        onComplete: onComplete,
-        onBack: _confirmExit,
       ),
       ActivityType.quiz => QuizActivity(
         key: ValueKey(activity.id),

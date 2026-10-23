@@ -368,6 +368,7 @@ const Map<String, String> filipinoStrings = {
   'Cover his ears.': 'Takpan ang kanyang tainga.',
   'Create Asatidz PIN': 'Gumawa ng Asatidz PIN',
   'Create Class': 'Gumawa ng Klase',
+  'Create': 'Gumawa',
   'Create New Profile': 'Gumawa ng Bagong Profile',
   'Create Parent PIN': 'Gumawa ng Parent PIN',
   'Create Parent Profile': 'Gumawa ng Profile ng Magulang',

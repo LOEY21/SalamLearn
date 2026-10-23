@@ -28,6 +28,7 @@ class LetterTraceCanvas extends StatefulWidget {
     required this.onDirectionViolation,
     required this.coverTolerance,
     this.showPassBurst = true,
+    this.strictDirection = false,
     this.glyphBuilder,
   });
 
@@ -51,6 +52,12 @@ class LetterTraceCanvas extends StatefulWidget {
   /// Activity wants it; Hot Seat doesn't gate on a pass threshold, so it
   /// opts out.
   final bool showPassBurst;
+
+  /// Also treat tracing back along a stroke, or reaching for a later stroke
+  /// first, as a direction violation, and stop that stroke's ink until the
+  /// finger lifts. Trace Activity's numbers session uses it so numerals
+  /// follow their written direction.
+  final bool strictDirection;
 
   /// The letter's real outline, scaled to the canvas. When given, it's the
   /// double mask: the faint letter drawn under everything, and the
@@ -166,6 +173,34 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
   /// of just on stroke updates.
   List<List<bool>> _coveredMask = [];
 
+  /// Per guide stroke, per point: the distance to the letter's nearest
+  /// edge, so the traced fill can span the stroke's whole thickness there.
+  /// Cached per canvas size; empty without a glyph.
+  (Size, List<List<double>>)? _reach;
+
+  List<List<double>> _reachFor(Size size) {
+    final cached = _reach;
+    if (cached != null && cached.$1 == size) return cached.$2;
+    final glyph = widget.glyphBuilder?.call(size);
+    final edge = <Offset>[
+      if (glyph != null)
+        for (final m in glyph.computeMetrics())
+          for (var t = 0.0; t < m.length; t += 3)
+            m.getTangentForOffset(t)!.position,
+    ];
+    final reach = [
+      for (final stroke in widget.guidePointsBuilder(size))
+        [
+          for (final p in stroke)
+            edge.isEmpty
+                ? 0.0
+                : edge.map((e) => (e - p).distance).reduce(math.min),
+        ],
+    ];
+    _reach = (size, reach);
+    return reach;
+  }
+
   void _recomputeCoveredMask(Size size) {
     final guideStrokes = widget.guidePointsBuilder(size);
     _coveredMask = [
@@ -234,7 +269,71 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
     }
   }
 
+  /// [LetterTraceCanvas.strictDirection] only: furthest point index reached
+  /// per guide stroke, and whether a violation has stopped the stroke in
+  /// progress (until the next touch).
+  final _progress = <int, int>{};
+  var _locked = false;
+
+  void _violate() {
+    if (widget.strictDirection) _locked = true;
+    widget.onDirectionViolation();
+  }
+
+  /// Whether the finger moving [prev] → [point] runs back along guide
+  /// stroke [g] (a closed loop wraps). Looks ahead only as far as the
+  /// finger moved, and prefers going forward, so a stroke that retraces
+  /// itself (٣'s middle tooth goes up and straight back down) doesn't read
+  /// the second pass as going back.
+  bool _goesBack(Offset point, Offset prev, int g, List<Offset> guide) {
+    final n = guide.length;
+    if (n < 2) return false;
+    final closed = (guide.first - guide.last).distance < 20;
+    final p = _progress[g] ?? 0;
+    var len = 0.0;
+    for (var i = 1; i < n; i++) {
+      len += (guide[i] - guide[i - 1]).distance;
+    }
+    final step = math.max(len / (n - 1), 1.0);
+    final ahead = ((point - prev).distance * 2 / step).ceil().clamp(4, 12);
+    int? at(int k) {
+      final j = closed ? (p + k) % n : p + k;
+      return j < 0 || j >= n ? null : j;
+    }
+
+    var fwd = 0, fwdD = double.infinity;
+    for (var k = 0; k <= ahead; k++) {
+      final j = at(k);
+      if (j == null) break;
+      final d = (point - guide[j]).distance;
+      if (d < fwdD) (fwd, fwdD) = (k, d);
+    }
+    int? back;
+    var backD = double.infinity;
+    for (var k = -1; k >= -12; k--) {
+      final j = at(k);
+      if (j == null) break;
+      final d = (point - guide[j]).distance;
+      if (d < backD) (back, backD) = (j, d);
+    }
+
+    final tol = widget.coverTolerance * 2;
+    if (fwdD <= tol && fwdD <= backD + 10) {
+      if (fwd > 0) _progress[g] = math.min(p + fwd, n - 1);
+      return false;
+    }
+    if (back == null ||
+        backD > tol ||
+        (guide[p] - guide[back]).distance <= 30) {
+      return false;
+    }
+    // Carry on from where the finger turned back, after it lifts.
+    _progress[g] = back;
+    return true;
+  }
+
   void _onPointerDown(PointerDownEvent event) {
+    _locked = false;
     final size = _canvasSize;
     final startPt = event.localPosition;
 
@@ -279,10 +378,20 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
           // later checkpoint, like a dot, reached for out of order) — a
           // stray touch like that isn't a reversed attempt on THIS stroke,
           // so don't misread it as one.
-          if (distToStart >= 60 && distToEnd >= 60) return;
+          if (distToStart >= 60 && distToEnd >= 60) {
+            if (widget.strictDirection &&
+                guideStrokes
+                    .skip(currentStrokeIdx + 1)
+                    .any(
+                      (s) => s.isNotEmpty && (startPt - s.first).distance <= 60,
+                    )) {
+              _violate();
+            }
+            return;
+          }
           final guideLen = (guide.first - guide.last).distance;
           if (guideLen > 60 && distToEnd < distToStart - 40) {
-            widget.onDirectionViolation();
+            _violate();
             return;
           }
         }
@@ -306,10 +415,20 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
   }
 
   void _onPointerMove(PointerMoveEvent event) {
-    if (_strokes.isEmpty) return;
+    if (_strokes.isEmpty || _locked) return;
     final size = _canvasSize;
     final newPoint = event.localPosition;
     final currentStroke = _strokes.last;
+
+    if (widget.strictDirection && size != null) {
+      final g = _strokeGuide.last;
+      final guides = widget.guidePointsBuilder(size);
+      if (g < guides.length &&
+          _goesBack(newPoint, currentStroke.last, g, guides[g])) {
+        _violate();
+        return;
+      }
+    }
 
     setState(() {
       final prev = currentStroke.last;
@@ -329,6 +448,8 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
     _strokeGuide.clear();
     _active = 0;
     _coveredMask = [];
+    _progress.clear();
+    _locked = false;
   });
 
   @override
@@ -370,6 +491,8 @@ class _LetterTraceCanvasState extends State<LetterTraceCanvas>
                         badgeHitAt: _badgeHitAt,
                         coveredMask: _coveredMask,
                         glyphBuilder: widget.glyphBuilder,
+                        reachFor: _reachFor,
+                        filled: widget.passed,
                         grains: _grains,
                       ),
                       child: widget.passed && widget.showPassBurst
@@ -450,10 +573,20 @@ class _TracePainter extends CustomPainter {
     required this.badgeHitAt,
     required this.coveredMask,
     this.glyphBuilder,
+    this.reachFor,
+    this.filled = false,
     this.grains = const [],
   });
 
   final List<_Grain> grains;
+
+  /// `_LetterTraceCanvasState._reachFor`: per guide point, the distance to
+  /// the letter's edge, sizing [_paintReachReveal]'s fill.
+  final List<List<double>> Function(Size size)? reachFor;
+
+  /// The trace has passed: mask two fills the whole letter, including bits
+  /// no stroke runs through (tips, ٣'s middle tooth).
+  final bool filled;
   final List<List<Offset>> Function(Size size) guideBuilder;
   final Path Function(Size size)? glyphBuilder;
   final List<List<Offset>> userStrokes;
@@ -557,6 +690,39 @@ class _TracePainter extends CustomPainter {
             canvas.drawPath(path, paint..style = PaintingStyle.stroke);
           }
           runStart = -1;
+        }
+      }
+    }
+  }
+
+  /// [_paintGuideReveal] for the glyph mask: each traced point fills out to
+  /// the letter's edges there ([reach], at least [minRadius]), so a traced
+  /// part fills its whole thickness instead of a fixed-width band.
+  void _paintReachReveal(
+    Canvas canvas,
+    List<List<Offset>> guideStrokes,
+    List<List<double>> reach,
+    double minRadius,
+  ) {
+    final paint = Paint()
+      ..color = strokeColor.withValues(alpha: 0.92)
+      ..strokeCap = StrokeCap.round;
+    for (var i = 0; i < guideStrokes.length; i++) {
+      final stroke = guideStrokes[i];
+      final covered = i < coveredMask.length ? coveredMask[i] : const <bool>[];
+      final r = i < reach.length ? reach[i] : const <double>[];
+      if (covered.length != stroke.length) continue;
+      double radius(int j) =>
+          math.max(minRadius, j < r.length ? r[j] + _glyphSpread / 2 + 3 : 0);
+      for (var j = 0; j < stroke.length; j++) {
+        if (!covered[j]) continue;
+        canvas.drawCircle(stroke[j], radius(j), paint);
+        if (j > 0 && covered[j - 1]) {
+          canvas.drawLine(
+            stroke[j - 1],
+            stroke[j],
+            paint..strokeWidth = 2 * math.min(radius(j - 1), radius(j)),
+          );
         }
       }
     }
@@ -777,10 +943,10 @@ class _TracePainter extends CustomPainter {
   /// child's finger fits comfortably inside even the thinner strokes.
   static const _glyphSpread = 12.0;
 
-  /// Width of the traced fill as a fraction of the letter's longer side —
-  /// wide enough to cover a stroke's full thickness (the fill is cut to the
-  /// letter's shape anyway), narrow enough not to reach a neighbouring dot.
-  static const _fillFraction = 0.16;
+  /// Width of the learner's own ink as a fraction of the letter's longer
+  /// side — about a fingertip; the traced reveal fills out to the letter's
+  /// edges on its own ([_paintReachReveal]).
+  static const _fillFraction = 0.08;
 
   static void _drawGlyph(Canvas canvas, Path glyph, Paint paint) {
     canvas.drawPath(glyph, paint..style = PaintingStyle.fill);
@@ -813,7 +979,19 @@ class _TracePainter extends CustomPainter {
     final fillWidth =
         glyph.getBounds().longestSide * _fillFraction + _glyphSpread;
     canvas.saveLayer(bounds, Paint());
-    _paintGuideReveal(canvas, guideStrokes, width: fillWidth);
+    if (filled) {
+      canvas.drawRect(
+        bounds,
+        Paint()..color = strokeColor.withValues(alpha: 0.92),
+      );
+    } else {
+      _paintReachReveal(
+        canvas,
+        guideStrokes,
+        reachFor?.call(size) ?? const [],
+        _glyphSpread,
+      );
+    }
     canvas.drawPath(
       _path(userStrokes),
       Paint()
@@ -835,5 +1013,6 @@ class _TracePainter extends CustomPainter {
       oldDelegate.strokeColor != strokeColor ||
       oldDelegate.guideOpacity != guideOpacity ||
       oldDelegate.demoProgress != demoProgress ||
-      oldDelegate.coveredMask != coveredMask;
+      oldDelegate.coveredMask != coveredMask ||
+      oldDelegate.filled != filled;
 }

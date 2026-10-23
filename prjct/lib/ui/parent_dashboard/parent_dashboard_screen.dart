@@ -27,6 +27,7 @@ import '../../logic/teacher/teacher_providers.dart';
 import '../theme/app_colors.dart';
 import '../widgets/auth_loading_overlay.dart';
 import '../widgets/child_profile_form.dart';
+import '../widgets/delete_account_dialog.dart';
 import '../widgets/hub_kit.dart';
 import '../settings/settings_screen.dart' show LanguageSettingRow;
 import '../widgets/change_pin_card.dart';
@@ -105,36 +106,17 @@ class ParentDashboardScreen extends ConsumerWidget {
       next.whenData((stillExists) async {
         if (stillExists || prev?.asData?.value == false) return;
         if (!context.mounted) return;
-        await showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (dialogContext) => AlertDialog(
-            icon: const Icon(
-              Icons.info_outline_rounded,
-              color: AppColors.coral,
-              size: 44,
-            ),
-            title: const Text('Account no longer available'),
-            content: const Text(
-              'This account was removed by an administrator. '
-              'Your data will no longer sync. Please contact your school '
-              'administrator if you believe this was a mistake.',
-            ),
-            actions: [
-              FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: AppColors.teal),
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-        if (!context.mounted) return;
+        // Wipe before the warning, so quitting the app while it shows
+        // can't leave the deleted account signed in on this device.
+        final notifier = ref.read(sessionProvider.notifier);
+        final navigator = Navigator.of(context, rootNavigator: true);
         // Navigate to a gate path first so the router redirect (triggered by
         // the logout below) doesn't land on /pin/setup — gate paths skip the
         // PIN check, so the user lands on the role picker instead.
         context.go('/roles');
-        await ref.read(sessionProvider.notifier).logout();
+        await notifier.onRemoteAccountDeleted();
+        if (!navigator.mounted) return;
+        await showAccountRemovedDialog(navigator.context);
       });
     });
     // Watches the Firestore learners collection for remote deletions (admin
@@ -1043,11 +1025,15 @@ class _ClassSectionState extends ConsumerState<_ClassSection> {
   }
 }
 
-class _CreateNewProfileCard extends StatelessWidget {
+class _CreateNewProfileCard extends ConsumerWidget {
   const _CreateNewProfileCard();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // First profile is "Create"; once a child exists it's "Add" another.
+    final hasProfile = ref.watch(
+      sessionProvider.select((s) => s.learner != null),
+    );
     return HubActionRow(
       icon: Icons.person_add_alt_1_rounded,
       iconColor: AppColors.gold,
@@ -1055,7 +1041,7 @@ class _CreateNewProfileCard extends StatelessWidget {
       subtitle:
           'Set up a new learning journey for another child on this device.',
       trailing: HubRowButton(
-        label: 'Add',
+        label: hasProfile ? 'Add' : 'Create',
         onPressed: () => context.go('/learner-setup?from=parent'),
       ),
     );
@@ -2198,14 +2184,13 @@ class _AdventureLevelSectionState extends State<_AdventureLevelSection> {
 }
 
 /// Parent-friendly label for an [ActivityType] — the raw enum name
-/// (`quranSync`, `fiqhDrag`) is camelCase code, not something to show a
+/// (`quranSync`, `taharahAdventure`) is camelCase code, not something to show a
 /// parent.
 String _activityTypeLabel(ActivityType type) => switch (type) {
   ActivityType.trace => 'Magic Sand Tracer',
   ActivityType.pronounce => 'The Greeting Match',
   ActivityType.quranSync => "Qur'an Sync",
   ActivityType.story => 'Story',
-  ActivityType.fiqhDrag => 'Fiqh Match',
   ActivityType.quiz => 'Quiz',
   ActivityType.harakatPop => 'Harakat Pop',
   ActivityType.ayahBuilder => 'Ayah Builder',
@@ -3958,11 +3943,7 @@ class _SettingsTab extends ConsumerWidget {
             radius: 20,
             padding: EdgeInsets.symmetric(vertical: 4),
             child: Column(
-              children: [
-                _SyncCard(),
-                HubRowDivider(),
-                _ExitSettingsCard(),
-              ],
+              children: [_SyncCard(), HubRowDivider(), _ExitSettingsCard()],
             ),
           ),
         ),

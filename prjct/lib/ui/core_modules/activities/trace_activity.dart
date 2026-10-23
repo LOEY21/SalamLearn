@@ -414,7 +414,10 @@ class _TraceActivityState extends State<TraceActivity>
     final acc = _computeAccuracy(userStrokes, canvasSize);
     setState(() => _accuracy = acc);
     if (acc >= _autoPassThreshold && !_passed) {
+      // Scoring stops the moment the auto-pass line is crossed, so a clean
+      // trace always froze just over it; crossing it counts as perfect.
       setState(() {
+        _accuracy = 1.0;
         _checked = true;
         _passed = true;
       });
@@ -2277,6 +2280,7 @@ class _TraceActivityState extends State<TraceActivity>
       breathe: _breathe,
       guidePointsBuilder: (size) => _guideStrokesFor(t, size),
       onStroke: _handleStroke,
+      strictDirection: _numbers,
       onDirectionViolation: () {
         _wobble.forward(from: 0);
       },

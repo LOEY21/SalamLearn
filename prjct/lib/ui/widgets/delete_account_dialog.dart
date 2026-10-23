@@ -28,6 +28,35 @@ Future<void> showDeleteAccountDialog(
   );
 }
 
+/// Shown by the Parent/Teacher dashboards once the admin web panel has
+/// deleted the signed-in account and its local copy has been wiped.
+Future<void> showAccountRemovedDialog(BuildContext context) {
+  return showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) => AlertDialog(
+      icon: const Icon(
+        Icons.info_outline_rounded,
+        color: AppColors.coral,
+        size: 44,
+      ),
+      title: const Text('Account no longer available'),
+      content: const Text(
+        'This account has been removed by an administrator and can no '
+        'longer be used. Please contact your school administrator if you '
+        'believe this was a mistake.',
+      ),
+      actions: [
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: AppColors.teal),
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('OK'),
+        ),
+      ],
+    ),
+  );
+}
+
 class _DeleteAccountDialog extends ConsumerStatefulWidget {
   const _DeleteAccountDialog();
 

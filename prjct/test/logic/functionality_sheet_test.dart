@@ -9,6 +9,7 @@ import 'package:salamlearn/data/models/progress_record.dart';
 import 'package:salamlearn/data/models/streak_state.dart';
 import 'package:salamlearn/data/repositories/class_repository.dart';
 import 'package:salamlearn/data/repositories/learner_repository.dart';
+import 'package:salamlearn/data/repositories/parent_repository.dart';
 import 'package:salamlearn/data/repositories/progress_repository.dart';
 import 'package:salamlearn/data/repositories/teacher_repository.dart';
 import 'package:salamlearn/logic/auth/session.dart';
@@ -133,6 +134,31 @@ void main() {
       final afterRestart = newContainer().read(sessionProvider);
       expect(afterRestart.activeParentId, isNull);
       expect(afterRestart.pinVerified, isFalse);
+    });
+
+    test('an admin-deleted account is wiped locally and cannot sign in again', () async {
+      final c = newContainer();
+      final n = await registeredParent(c);
+      final learner = await n.createLearner(name: 'Aisha', age: 6, username: 'aisha6');
+      await ProgressRepository().writeProgress(
+        learnerId: learner.id!,
+        moduleId: 'm1',
+        strokeAccuracyPct: 90,
+        sequencingErrors: 0,
+        timeOnTaskSeconds: 30,
+      );
+
+      await n.onRemoteAccountDeleted();
+
+      expect(c.read(sessionProvider).activeParentId, isNull);
+      expect(LearnerRepository().findById(learner.id!), isNull);
+      expect(ProgressRepository().byLearnerId(learner.id!), isEmpty);
+      expect(
+        ParentRepository().findByEmail('parent@example.com'),
+        isNull,
+        reason: 'no local copy left to sign into or sync back up',
+      );
+      expect(newContainer().read(sessionProvider).activeParentId, isNull);
     });
 
     test('SET-02: PIN is required again after a restart even without logout', () async {

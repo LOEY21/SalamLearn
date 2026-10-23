@@ -20,6 +20,7 @@ import '../theme/app_colors.dart';
 import '../widgets/auth_loading_overlay.dart';
 import '../settings/settings_screen.dart' show LanguageSettingRow;
 import '../widgets/change_pin_card.dart';
+import '../widgets/delete_account_dialog.dart';
 import '../widgets/mock_icons.dart';
 import '../widgets/account_email_card.dart';
 import '../settings/account_security_screen.dart' show AccountSecurityRow;
@@ -104,33 +105,13 @@ class TeacherDashboardScreen extends ConsumerWidget {
       next.whenData((stillExists) async {
         if (stillExists || prev?.asData?.value == false) return;
         if (!context.mounted) return;
-        await showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (dialogContext) => AlertDialog(
-            icon: const Icon(
-              Icons.info_outline_rounded,
-              color: AppColors.coral,
-              size: 44,
-            ),
-            title: const Text('Account no longer available'),
-            content: const Text(
-              'This account was removed by an administrator. '
-              'Your data will no longer sync. Please contact your school '
-              'administrator if you believe this was a mistake.',
-            ),
-            actions: [
-              FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: AppColors.teal),
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-        if (!context.mounted) return;
+        // See the matching comment in `parent_dashboard_screen.dart`.
+        final notifier = ref.read(sessionProvider.notifier);
+        final navigator = Navigator.of(context, rootNavigator: true);
         context.go('/roles');
-        await ref.read(sessionProvider.notifier).logout();
+        await notifier.onRemoteAccountDeleted();
+        if (!navigator.mounted) return;
+        await showAccountRemovedDialog(navigator.context);
       });
     });
 
