@@ -42,8 +42,12 @@ class _CastScreenState extends ConsumerState<CastScreen>
   /// tests) the presentation view just shows.
   static final bool _canDetect = !kIsWeb && Platform.isAndroid;
 
+  // TEMP: open the presentation view without requiring a screen cast.
+  // Set back to false to restore the cast check + picker.
+  static const _skipCastRequirement = true;
+
   /// Shown only while actually casting: null while that is being checked.
-  late bool? _casting = _canDetect ? null : true;
+  late bool? _casting = _canDetect && !_skipCastRequirement ? null : true;
 
   /// The Cast picker is open; check for a cast once the app is back.
   bool _awaitingPicker = false;
@@ -58,7 +62,7 @@ class _CastScreenState extends ConsumerState<CastScreen>
     // The hub's Cast button starts casting straight away (unless the screen
     // is already mirrored); the in-screen button stays for reconnecting.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
+      if (!mounted || _skipCastRequirement) return;
       if (_canDetect && await _isCasting() == true) {
         if (mounted) setState(() => _casting = true);
         return;
